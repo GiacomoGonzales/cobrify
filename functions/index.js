@@ -38,6 +38,7 @@ export const sendInvoiceToSunat = onRequest(
     region: 'us-central1',
     timeoutSeconds: 300,
     memory: '512MiB',
+    invoker: 'public', // Permite acceso público - la autenticación se maneja con Firebase Auth
   },
   async (req, res) => {
     // Manejar preflight OPTIONS request
