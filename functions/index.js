@@ -23,7 +23,12 @@ const db = getFirestore()
  */
 export const sendInvoiceToSunat = onCall(
   {
-    cors: true, // CORS habilitado para todas las origins
+    cors: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://cobrify-phi.vercel.app',
+      /\.vercel\.app$/ // Permite cualquier preview deployment de Vercel
+    ],
     region: 'us-central1',
   },
   async (request) => {
