@@ -13,8 +13,7 @@ import {
   limit,
   serverTimestamp,
 } from 'firebase/firestore'
-import { httpsCallable } from 'firebase/functions'
-import { db, functions } from '@/lib/firebase'
+import { db, auth } from '@/lib/firebase'
 
 /**
  * Servicio para interactuar con Firestore
@@ -378,46 +377,56 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
   try {
     console.log(`📤 Enviando factura ${invoiceId} a SUNAT...`)
 
-    // Obtener referencia a la Cloud Function
-    const sendToSunatFunction = httpsCallable(functions, 'sendInvoiceToSunat')
+    // Obtener token de autenticación del usuario actual
+    const user = auth.currentUser
+    if (!user) {
+      throw new Error('Usuario no autenticado')
+    }
 
-    // Llamar a la Cloud Function
-    const result = await sendToSunatFunction({
-      userId,
-      invoiceId,
+    const idToken = await user.getIdToken()
+
+    // Determinar URL de la Cloud Function (emulador o producción)
+    const useEmulator = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true'
+
+    const functionUrl = useEmulator
+      ? 'http://127.0.0.1:5001/cobrify-395fe/us-central1/sendInvoiceToSunat'
+      : 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendInvoiceToSunat'
+
+    console.log(`🌐 Llamando a: ${functionUrl}`)
+
+    // Llamar a la Cloud Function con fetch
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        userId,
+        invoiceId,
+      })
     })
 
-    console.log('✅ Respuesta de SUNAT:', result.data)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ Respuesta de SUNAT:', result)
 
     return {
-      success: result.data.success,
-      status: result.data.status,
-      message: result.data.message,
-      observations: result.data.observations || [],
+      success: result.success,
+      status: result.status,
+      message: result.message,
+      observations: result.observations || [],
     }
   } catch (error) {
     console.error('❌ Error al enviar a SUNAT:', error)
 
-    // Extraer mensaje de error más específico
-    let errorMessage = 'Error al enviar a SUNAT'
-
-    if (error.code === 'functions/not-found') {
-      errorMessage = 'Cloud Function no encontrada. Asegúrate de que las funciones estén desplegadas.'
-    } else if (error.code === 'functions/unauthenticated') {
-      errorMessage = 'No estás autenticado. Inicia sesión nuevamente.'
-    } else if (error.code === 'functions/permission-denied') {
-      errorMessage = 'No tienes permisos para realizar esta operación.'
-    } else if (error.code === 'functions/failed-precondition') {
-      errorMessage = error.message || 'Precondición fallida'
-    } else if (error.code === 'functions/invalid-argument') {
-      errorMessage = error.message || 'Argumentos inválidos'
-    } else if (error.message) {
-      errorMessage = error.message
-    }
-
     return {
       success: false,
-      error: errorMessage,
+      error: error.message || 'Error al enviar a SUNAT',
     }
   }
 }
