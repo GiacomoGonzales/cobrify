@@ -56,6 +56,7 @@ export async function sendToSunat(signedXML, config) {
     })
 
     console.log('✅ Respuesta recibida de SUNAT')
+    console.log('📄 Primeros 500 chars de respuesta:', response.data.substring(0, 500))
 
     // Parsear respuesta SOAP
     const result = await parseSunatResponse(response.data)
@@ -151,6 +152,23 @@ async function parseSunatResponse(soapResponse) {
       throw new Error('No se pudo encontrar el SOAP Body')
     }
 
+    // Verificar si hay un SOAP Fault (error)
+    const fault = body['soap-env:Fault'] || body['soap:Fault'] || body['soapenv:Fault'] || body.Fault
+
+    if (fault) {
+      const faultcode = fault.faultcode || 'UNKNOWN'
+      const faultstring = fault.faultstring || 'Error desconocido'
+
+      console.log(`🚨 SUNAT devolvió SOAP Fault: [${faultcode}] ${faultstring}`)
+
+      return {
+        accepted: false,
+        code: faultcode,
+        description: faultstring,
+        observations: []
+      }
+    }
+
     // Respuesta de sendBill (SUNAT usa diferentes prefijos: ns2, br, etc.)
     const sendBillResponse = body['br:sendBillResponse'] || body['ns2:sendBillResponse'] || body.sendBillResponse
 
@@ -192,7 +210,9 @@ async function parseSunatResponse(soapResponse) {
       }
     }
 
-    // Si no hay applicationResponse, puede ser un error
+    // Si no hay applicationResponse ni Fault, registrar la estructura para debugging
+    console.log('⚠️ Respuesta SUNAT sin applicationResponse ni Fault')
+    console.log('Body keys:', Object.keys(body))
     throw new Error('Respuesta SUNAT sin applicationResponse')
 
   } catch (error) {

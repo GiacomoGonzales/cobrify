@@ -156,6 +156,17 @@ export const sendInvoiceToSunat = onRequest(
       console.log(`🏢 Empresa: ${businessData.businessName} - RUC: ${businessData.ruc}`)
       console.log(`⚙️ Ambiente SUNAT: ${sunatConfig.environment}`)
 
+      // Debug del certificado
+      const hasCert = !!sunatConfig.certificateData
+      const hasPass = !!sunatConfig.certificatePassword
+      const certLength = sunatConfig.certificateData ? sunatConfig.certificateData.length : 0
+      const passLength = sunatConfig.certificatePassword ? sunatConfig.certificatePassword.length : 0
+
+      console.log(`🔍 Certificado: ${hasCert}, Longitud: ${certLength}`)
+      console.log(`🔍 Password: ${hasPass}, Longitud: ${passLength}`)
+      console.log(`🔍 Nombre: ${sunatConfig.certificateName || 'N/A'}`)
+      console.log(`🔍 Keys en sunatConfig: ${Object.keys(sunatConfig).join(', ')}`)
+
       // 3. Generar XML UBL 2.1
       console.log('📝 Generando XML UBL 2.1...')
       const xmlData = generateInvoiceXML(invoiceData, businessData)

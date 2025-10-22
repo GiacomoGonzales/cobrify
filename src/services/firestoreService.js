@@ -408,7 +408,14 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
     })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
+      const errorText = await response.text()
+      console.error('❌ Error HTTP Response:', errorText)
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: errorText }
+      }
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
     }
 
