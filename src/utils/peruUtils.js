@@ -48,16 +48,21 @@ export function calculateTotal(subtotal) {
 
 /**
  * Calcula los montos de una factura
- * @param {Array} items - Array de items con precio y cantidad
+ * Los precios de los items YA incluyen IGV
+ * @param {Array} items - Array de items con precio (con IGV incluido) y cantidad
  * @returns {Object} - Objeto con subtotal, igv y total
  */
 export function calculateInvoiceAmounts(items) {
-  const subtotal = items.reduce((sum, item) => {
+  // El total es la suma de los precios (que ya incluyen IGV)
+  const total = items.reduce((sum, item) => {
     return sum + item.price * item.quantity
   }, 0)
 
-  const igv = calculateIGV(subtotal)
-  const total = subtotal + igv
+  // Calcular el subtotal (sin IGV) a partir del total
+  const subtotal = total / (1 + IGV_RATE)
+
+  // El IGV es la diferencia entre el total y el subtotal
+  const igv = total - subtotal
 
   return {
     subtotal: Number(subtotal.toFixed(2)),

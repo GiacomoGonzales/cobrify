@@ -3,13 +3,13 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import Alert from '@/components/ui/Alert'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { customerSchema } from '@/utils/schemas'
 import { ID_TYPES } from '@/utils/peruUtils'
@@ -22,6 +22,7 @@ import {
 
 export default function Customers() {
   const { user } = useAuth()
+  const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -29,7 +30,6 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [deletingCustomer, setDeletingCustomer] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [message, setMessage] = useState(null)
 
   const {
     register,
@@ -113,7 +113,6 @@ export default function Customers() {
     if (!user?.uid) return
 
     setIsSaving(true)
-    setMessage(null)
 
     try {
       let result
@@ -127,24 +126,19 @@ export default function Customers() {
       }
 
       if (result.success) {
-        setMessage({
-          type: 'success',
-          text: editingCustomer
-            ? '✓ Cliente actualizado exitosamente'
-            : '✓ Cliente creado exitosamente',
-        })
+        toast.success(
+          editingCustomer
+            ? 'Cliente actualizado exitosamente'
+            : 'Cliente creado exitosamente'
+        )
         closeModal()
         loadCustomers()
-        setTimeout(() => setMessage(null), 3000)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Error al guardar cliente:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al guardar el cliente. Inténtalo nuevamente.',
-      })
+      toast.error('Error al guardar el cliente. Inténtalo nuevamente.')
     } finally {
       setIsSaving(false)
     }
@@ -158,22 +152,15 @@ export default function Customers() {
       const result = await deleteCustomer(user.uid, deletingCustomer.id)
 
       if (result.success) {
-        setMessage({
-          type: 'success',
-          text: '✓ Cliente eliminado exitosamente',
-        })
+        toast.success('Cliente eliminado exitosamente')
         setDeletingCustomer(null)
         loadCustomers()
-        setTimeout(() => setMessage(null), 3000)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Error al eliminar cliente:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al eliminar el cliente. Inténtalo nuevamente.',
-      })
+      toast.error('Error al eliminar el cliente. Inténtalo nuevamente.')
     } finally {
       setIsSaving(false)
     }
@@ -226,16 +213,6 @@ export default function Customers() {
           Nuevo Cliente
         </Button>
       </div>
-
-      {/* Messages */}
-      {message && (
-        <Alert
-          variant={message.type === 'success' ? 'success' : 'danger'}
-          title={message.type === 'success' ? 'Éxito' : 'Error'}
-        >
-          {message.text}
-        </Alert>
-      )}
 
       {/* Search */}
       <Card>

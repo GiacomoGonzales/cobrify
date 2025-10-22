@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Search,
   Plus,
@@ -12,12 +12,13 @@ import {
   CheckCircle,
   AlertTriangle,
   ShoppingCart,
+  Folder,
+  Tag,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import Modal from '@/components/ui/Modal'
-import Alert from '@/components/ui/Alert'
 import Select from '@/components/ui/Select'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
@@ -28,6 +29,7 @@ import {
   updateProduct,
   getNextDocumentNumber,
   getCompanySettings,
+  getProductCategories,
 } from '@/services/firestoreService'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
@@ -41,8 +43,46 @@ const PAYMENT_METHODS = {
   PLIN: 'Plin',
 }
 
+// Helper functions for category hierarchy
+const migrateLegacyCategories = (cats) => {
+  if (!cats || cats.length === 0) return []
+  if (typeof cats[0] === 'object' && cats[0].id) return cats
+  return cats.map((name) => ({
+    id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    name: name,
+    parentId: null,
+  }))
+}
+
+const getRootCategories = (categories) => {
+  return categories.filter(cat => cat.parentId === null)
+}
+
+const getSubcategories = (categories, parentId) => {
+  return categories.filter(cat => cat.parentId === parentId)
+}
+
+const getCategoryById = (categories, id) => {
+  return categories.find(cat => cat.id === id)
+}
+
+// Obtener todas las subcategorías de una categoría (incluyendo subcategorías de subcategorías)
+const getAllSubcategoryIds = (categories, parentId) => {
+  const directSubcats = getSubcategories(categories, parentId)
+  let allIds = directSubcats.map(cat => cat.id)
+
+  // Recursivamente obtener subcategorías de las subcategorías
+  directSubcats.forEach(subcat => {
+    const nestedIds = getAllSubcategoryIds(categories, subcat.id)
+    allIds = [...allIds, ...nestedIds]
+  })
+
+  return allIds
+}
+
 export default function POS() {
   const { user } = useAuth()
+  const toast = useToast()
   const ticketRef = useRef(null)
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
@@ -53,12 +93,15 @@ export default function POS() {
   const [documentType, setDocumentType] = useState('boleta')
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [message, setMessage] = useState(null)
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [isLookingUp, setIsLookingUp] = useState(false)
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+
+  // Categories
+  const [categories, setCategories] = useState([])
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
 
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: '', amount: '' }])
@@ -102,31 +145,48 @@ export default function POS() {
       if (settingsResult.success && settingsResult.data) {
         setCompanySettings(settingsResult.data)
       }
+
+      // Cargar categorías
+      const categoriesResult = await getProductCategories(user.uid)
+      if (categoriesResult.success) {
+        const migratedCategories = migrateLegacyCategories(categoriesResult.data || [])
+        setCategories(migratedCategories)
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al cargar los datos. Por favor, recarga la página.',
-      })
+      toast.error('Error al cargar los datos. Por favor, recarga la página.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const filteredProducts = products.filter(
-    p =>
+  const filteredProducts = products.filter(p => {
+    const matchesSearch =
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.code?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+
+    // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
+    let matchesCategory = false
+
+    if (selectedCategoryFilter === 'all') {
+      matchesCategory = true
+    } else if (selectedCategoryFilter === 'sin-categoria') {
+      matchesCategory = !p.category
+    } else {
+      // Verifica si el producto está en la categoría seleccionada O en alguna de sus subcategorías
+      const subcategoryIds = getAllSubcategoryIds(categories, selectedCategoryFilter)
+      matchesCategory =
+        p.category === selectedCategoryFilter ||
+        subcategoryIds.includes(p.category)
+    }
+
+    return matchesSearch && matchesCategory
+  })
 
   const addToCart = product => {
     // Verificar stock
     if (product.stock !== null && product.stock <= 0) {
-      setMessage({
-        type: 'error',
-        text: 'Producto sin stock disponible',
-      })
-      setTimeout(() => setMessage(null), 3000)
+      toast.error('Producto sin stock disponible')
       return
     }
 
@@ -135,11 +195,7 @@ export default function POS() {
     if (existingItem) {
       // Verificar si hay suficiente stock
       if (product.stock !== null && existingItem.quantity >= product.stock) {
-        setMessage({
-          type: 'error',
-          text: 'No hay suficiente stock disponible',
-        })
-        setTimeout(() => setMessage(null), 3000)
+        toast.error('No hay suficiente stock disponible')
         return
       }
 
@@ -162,11 +218,7 @@ export default function POS() {
 
             // Verificar stock
             if (item.stock !== null && newQuantity > item.stock) {
-              setMessage({
-                type: 'error',
-                text: 'No hay suficiente stock disponible',
-              })
-              setTimeout(() => setMessage(null), 3000)
+              toast.error('No hay suficiente stock disponible')
               return item
             }
 
@@ -196,7 +248,7 @@ export default function POS() {
       phone: ''
     })
     setPayments([{ method: '', amount: '' }])
-    setMessage(null)
+    setLastInvoiceData(null)
   }
 
   // Buscar datos de DNI o RUC automáticamente
@@ -204,16 +256,11 @@ export default function POS() {
     const docNumber = customerData.documentNumber
 
     if (!docNumber) {
-      setMessage({
-        type: 'error',
-        text: 'Ingrese un número de documento para buscar'
-      })
-      setTimeout(() => setMessage(null), 3000)
+      toast.error('Ingrese un número de documento para buscar')
       return
     }
 
     setIsLookingUp(true)
-    setMessage(null)
 
     try {
       let result
@@ -224,11 +271,7 @@ export default function POS() {
       } else if (docNumber.length === 11) {
         result = await consultarRUC(docNumber)
       } else {
-        setMessage({
-          type: 'error',
-          text: 'El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)'
-        })
-        setTimeout(() => setMessage(null), 3000)
+        toast.error('El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)')
         return
       }
 
@@ -240,10 +283,7 @@ export default function POS() {
             ...prev,
             name: result.data.nombreCompleto || '',
           }))
-          setMessage({
-            type: 'success',
-            text: `✓ Datos encontrados: ${result.data.nombreCompleto}`
-          })
+          toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
         } else {
           // Datos de RUC
           setCustomerData(prev => ({
@@ -252,26 +292,14 @@ export default function POS() {
             name: result.data.nombreComercial || '',
             address: result.data.direccion || '',
           }))
-          setMessage({
-            type: 'success',
-            text: `✓ Datos encontrados: ${result.data.razonSocial}`
-          })
+          toast.success(`Datos encontrados: ${result.data.razonSocial}`)
         }
-        setTimeout(() => setMessage(null), 3000)
       } else {
-        setMessage({
-          type: 'error',
-          text: result.error || 'No se encontraron datos para este documento'
-        })
-        setTimeout(() => setMessage(null), 5000)
+        toast.error(result.error || 'No se encontraron datos para este documento', 5000)
       }
     } catch (error) {
       console.error('Error al buscar documento:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al consultar el documento. Verifique su conexión.'
-      })
-      setTimeout(() => setMessage(null), 5000)
+      toast.error('Error al consultar el documento. Verifique su conexión.', 5000)
     } finally {
       setIsLookingUp(false)
     }
@@ -340,33 +368,24 @@ export default function POS() {
     }
   }
 
-  const handleOpenPaymentModal = () => {
-    // Validaciones
+
+  const handleCheckout = async () => {
+    if (!user?.uid) return
+
+    // Validar carrito no vacío
     if (cart.length === 0) {
-      setMessage({
-        type: 'error',
-        text: 'El carrito está vacío',
-      })
-      setTimeout(() => setMessage(null), 3000)
+      toast.error('El carrito está vacío')
       return
     }
 
     // Si es factura, validar datos de RUC
     if (documentType === 'factura') {
       if (!customerData.documentNumber || customerData.documentNumber.length !== 11) {
-        setMessage({
-          type: 'error',
-          text: 'Las facturas requieren un RUC válido (11 dígitos)',
-        })
-        setTimeout(() => setMessage(null), 3000)
+        toast.error('Las facturas requieren un RUC válido (11 dígitos)')
         return
       }
       if (!customerData.businessName) {
-        setMessage({
-          type: 'error',
-          text: 'La razón social es requerida para facturas',
-        })
-        setTimeout(() => setMessage(null), 3000)
+        toast.error('La razón social es requerida para facturas')
         return
       }
     }
@@ -374,30 +393,14 @@ export default function POS() {
     // Si es boleta, validar datos mínimos (opcional, puede ser cliente general)
     if (documentType === 'boleta' && customerData.documentNumber) {
       if (customerData.documentNumber.length !== 8) {
-        setMessage({
-          type: 'error',
-          text: 'El DNI debe tener 8 dígitos',
-        })
-        setTimeout(() => setMessage(null), 3000)
+        toast.error('El DNI debe tener 8 dígitos')
         return
       }
     }
 
-    // Resetear pagos al abrir el modal
-    setPayments([{ method: '', amount: '' }])
-    setShowPaymentModal(true)
-  }
-
-  const handleCheckout = async () => {
-    if (!user?.uid) return
-
     // Validar que se haya cubierto el total
     if (totalPaid < amounts.total) {
-      setMessage({
-        type: 'error',
-        text: `Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`
-      })
-      setTimeout(() => setMessage(null), 3000)
+      toast.error(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
 
@@ -411,16 +414,11 @@ export default function POS() {
       }))
 
     if (allPayments.length === 0) {
-      setMessage({
-        type: 'error',
-        text: 'Debes seleccionar al menos un método de pago'
-      })
-      setTimeout(() => setMessage(null), 3000)
+      toast.error('Debes seleccionar al menos un método de pago')
       return
     }
 
     setIsProcessing(true)
-    setMessage(null)
 
     try {
       // 1. Obtener siguiente número de documento
@@ -500,32 +498,22 @@ export default function POS() {
       // 5. Mostrar éxito
       setLastInvoiceNumber(numberResult.number)
       setLastInvoiceData(invoiceData)
-      setShowPaymentModal(false)
-      setShowSuccessModal(true)
+
+      // Mostrar mensaje de éxito con toast
+      const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
+      toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
 
       // Recargar productos para actualizar stock
       const productsResult = await getProducts(user.uid)
       if (productsResult.success) {
-        const availableProducts = (productsResult.data || []).filter(
-          p => p.stock === null || p.stock > 0
-        )
-        setProducts(availableProducts)
+        setProducts(productsResult.data || [])
       }
     } catch (error) {
       console.error('Error al procesar venta:', error)
-      setMessage({
-        type: 'error',
-        text: error.message || 'Error al procesar la venta. Inténtalo nuevamente.',
-      })
-      setShowPaymentModal(false)
+      toast.error(error.message || 'Error al procesar la venta. Inténtalo nuevamente.')
     } finally {
       setIsProcessing(false)
     }
-  }
-
-  const handleCloseSuccessModal = () => {
-    setShowSuccessModal(false)
-    clearCart()
   }
 
   const handlePrintTicket = () => {
@@ -576,16 +564,6 @@ export default function POS() {
             </Button>
           </div>
 
-          {/* Messages */}
-          {message && (
-            <Alert
-              variant={message.type === 'success' ? 'success' : 'danger'}
-              title={message.type === 'success' ? 'Éxito' : 'Error'}
-            >
-              {message.text}
-            </Alert>
-          )}
-
           {/* Customer and Document Type Selection */}
           <Card>
             <CardContent className="p-4">
@@ -604,6 +582,131 @@ export default function POS() {
                     <option value="nota_venta">Nota de Venta</option>
                   </Select>
                 </div>
+
+                {/* Buscador de Cliente Registrado */}
+                {customers.length > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Buscar Cliente Registrado (Opcional)
+                    </label>
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={customerSearchTerm}
+                          onChange={e => {
+                            setCustomerSearchTerm(e.target.value)
+                            setShowCustomerDropdown(true)
+                          }}
+                          onFocus={() => setShowCustomerDropdown(true)}
+                          placeholder="Buscar por nombre o documento..."
+                          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        {(customerSearchTerm || selectedCustomer) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerSearchTerm('')
+                              setSelectedCustomer(null)
+                              setShowCustomerDropdown(false)
+                              setCustomerData({
+                                documentType: documentType === 'factura' ? ID_TYPES.RUC : ID_TYPES.DNI,
+                                documentNumber: '',
+                                name: '',
+                                businessName: '',
+                                address: '',
+                                email: '',
+                                phone: ''
+                              })
+                            }}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown de resultados */}
+                      {showCustomerDropdown && customerSearchTerm && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {(() => {
+                            const filteredCustomers = customers.filter(c => {
+                              // Filtrar según tipo de documento
+                              const matchesDocType = documentType === 'factura'
+                                ? c.documentNumber?.length === 11
+                                : true
+
+                              // Filtrar según búsqueda
+                              const searchLower = customerSearchTerm.toLowerCase()
+                              const matchesSearch =
+                                c.name?.toLowerCase().includes(searchLower) ||
+                                c.businessName?.toLowerCase().includes(searchLower) ||
+                                c.documentNumber?.includes(customerSearchTerm)
+
+                              return matchesDocType && matchesSearch
+                            })
+
+                            if (filteredCustomers.length === 0) {
+                              return (
+                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                  No se encontraron clientes
+                                </div>
+                              )
+                            }
+
+                            return filteredCustomers.map(customer => (
+                              <button
+                                key={customer.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomer(customer)
+                                  setCustomerSearchTerm(customer.name || customer.businessName || customer.documentNumber)
+                                  setShowCustomerDropdown(false)
+                                  setCustomerData({
+                                    documentType: customer.documentType || ID_TYPES.DNI,
+                                    documentNumber: customer.documentNumber || '',
+                                    name: customer.name || '',
+                                    businessName: customer.businessName || '',
+                                    address: customer.address || '',
+                                    email: customer.email || '',
+                                    phone: customer.phone || ''
+                                  })
+                                }}
+                                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0"
+                              >
+                                <div className="font-medium text-gray-900">
+                                  {customer.name || customer.businessName || 'Sin nombre'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {customer.documentNumber}
+                                  {customer.email && ` • ${customer.email}`}
+                                </div>
+                              </button>
+                            ))
+                          })()}
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedCustomer && (
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            <span className="text-green-800 font-medium">
+                              Cliente seleccionado: {selectedCustomer.name || selectedCustomer.businessName}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 mt-2">
+                      Busca y selecciona un cliente registrado o deja vacío para ingresar datos manualmente
+                    </p>
+                  </div>
+                )}
 
                 {/* Campos para BOLETA */}
                 {documentType === 'boleta' && (
@@ -900,6 +1003,65 @@ export default function POS() {
             />
           </div>
 
+          {/* Category Filter Chips */}
+          {categories.length > 0 && (
+            <div className="flex flex-wrap gap-2 bg-white p-3 rounded-lg border border-gray-200">
+              <button
+                onClick={() => setSelectedCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedCategoryFilter === 'all'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5 inline mr-1" />
+                Todas
+              </button>
+              {getRootCategories(categories).map((category) => {
+                const subcats = getSubcategories(categories, category.id)
+                return (
+                  <React.Fragment key={category.id}>
+                    <button
+                      onClick={() => setSelectedCategoryFilter(category.id)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                        selectedCategoryFilter === category.id
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Folder className="w-3.5 h-3.5 inline mr-1" />
+                      {category.name}
+                    </button>
+                    {subcats.map((subcat) => (
+                      <button
+                        key={subcat.id}
+                        onClick={() => setSelectedCategoryFilter(subcat.id)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                          selectedCategoryFilter === subcat.id
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        <Folder className="w-3.5 h-3.5 inline mr-1" />
+                        └─ {subcat.name}
+                      </button>
+                    ))}
+                  </React.Fragment>
+                )
+              })}
+              <button
+                onClick={() => setSelectedCategoryFilter('sin-categoria')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  selectedCategoryFilter === 'sin-categoria'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Sin categoría
+              </button>
+            </div>
+          )}
+
           {/* Products Grid */}
           {filteredProducts.length === 0 ? (
             <Card>
@@ -1034,9 +1196,84 @@ export default function POS() {
                 </div>
               </div>
 
+              {/* Payment Methods Section */}
+              {cart.length > 0 && (
+                <div className="border-t pt-4 mt-4 space-y-3">
+                  <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
+                  {payments.map((payment, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      {/* Método de pago */}
+                      <Select
+                        value={payment.method}
+                        onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
+                        className="flex-1 text-sm"
+                      >
+                        <option value="">Seleccionar</option>
+                        <option value="CASH">Efectivo</option>
+                        <option value="CARD">Tarjeta</option>
+                        <option value="TRANSFER">Transferencia</option>
+                        <option value="YAPE">Yape</option>
+                        <option value="PLIN">Plin</option>
+                      </Select>
+
+                      {/* Monto */}
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={payment.amount}
+                        onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
+                        placeholder="0.00"
+                        disabled={!payment.method}
+                        className="w-24 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                      />
+
+                      {/* Botón eliminar */}
+                      {payments.length > 1 && (
+                        <button
+                          onClick={() => handleRemovePaymentMethod(index)}
+                          className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                          disabled={isProcessing}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Botón agregar método */}
+                  <button
+                    onClick={handleAddPaymentMethod}
+                    disabled={isProcessing}
+                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Agregar método</span>
+                  </button>
+
+                  {/* Resumen de pagos */}
+                  {totalPaid > 0 && (
+                    <div className="p-3 bg-gray-50 rounded-lg space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total pagado:</span>
+                        <span className="font-semibold text-gray-900">{formatCurrency(totalPaid)}</span>
+                      </div>
+                      {remaining !== 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">{remaining > 0 ? 'Falta:' : 'Cambio:'}</span>
+                          <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatCurrency(Math.abs(remaining))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Checkout Button */}
               <Button
-                onClick={handleOpenPaymentModal}
+                onClick={handleCheckout}
                 disabled={cart.length === 0 || isProcessing}
                 className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg"
               >
@@ -1052,176 +1289,52 @@ export default function POS() {
                   </>
                 )}
               </Button>
+
+              {/* Print/PDF Buttons - Show after successful sale */}
+              {lastInvoiceData && (
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Descargar comprobante:</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      onClick={handlePrintTicket}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Imprimir Ticket
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        try {
+                          generateInvoicePDF(lastInvoiceData, companySettings)
+                        } catch (error) {
+                          console.error('Error al generar PDF:', error)
+                          toast.error('Error al generar el PDF')
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Descargar PDF
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearCart}
+                    className="w-full mt-2"
+                  >
+                    Nueva Venta
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
-
-      {/* Payment Modal */}
-      <Modal
-        isOpen={showPaymentModal}
-        onClose={() => !isProcessing && setShowPaymentModal(false)}
-        title="Método de Pago"
-        size="md"
-      >
-        <div className="space-y-4">
-          {/* Total a pagar */}
-          <div className="p-4 bg-primary-50 border border-primary-200 rounded-lg">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-700 font-medium">Total a pagar:</span>
-              <span className="text-2xl font-bold text-primary-600">{formatCurrency(amounts.total)}</span>
-            </div>
-          </div>
-
-          {/* Lista de métodos de pago - vertical y simple */}
-          <div className="space-y-3">
-            {payments.map((payment, index) => (
-              <div key={index} className="flex items-center gap-2">
-                {/* Método de pago */}
-                <Select
-                  value={payment.method}
-                  onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
-                  className="flex-1"
-                >
-                  <option value="">Seleccionar método</option>
-                  <option value="CASH">Efectivo</option>
-                  <option value="CARD">Tarjeta</option>
-                  <option value="TRANSFER">Transferencia</option>
-                  <option value="YAPE">Yape</option>
-                  <option value="PLIN">Plin</option>
-                </Select>
-
-                {/* Monto */}
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={payment.amount}
-                  onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
-                  placeholder="0.00"
-                  disabled={!payment.method}
-                  className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
-                />
-
-                {/* Botón eliminar */}
-                {payments.length > 1 && (
-                  <button
-                    onClick={() => handleRemovePaymentMethod(index)}
-                    className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                    disabled={isProcessing}
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-            ))}
-
-            {/* Botón agregar método */}
-            <button
-              onClick={handleAddPaymentMethod}
-              disabled={isProcessing}
-              className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Agregar otro método</span>
-            </button>
-          </div>
-
-          {/* Resumen de pagos */}
-          {totalPaid > 0 && (
-            <div className="p-3 bg-gray-50 rounded-lg space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Total pagado:</span>
-                <span className="font-semibold text-gray-900">{formatCurrency(totalPaid)}</span>
-              </div>
-              {remaining !== 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">{remaining > 0 ? 'Falta:' : 'Cambio:'}</span>
-                  <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatCurrency(Math.abs(remaining))}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Botón confirmar */}
-          <Button
-            onClick={handleCheckout}
-            disabled={totalPaid < amounts.total || isProcessing}
-            className="w-full h-12"
-            variant="success"
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Procesando...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="w-5 h-5 mr-2" />
-                {totalPaid >= amounts.total ? 'Confirmar Venta' : 'Selecciona método de pago'}
-              </>
-            )}
-          </Button>
-        </div>
-      </Modal>
-
-      {/* Success Modal */}
-      <Modal
-        isOpen={showSuccessModal}
-        onClose={handleCloseSuccessModal}
-        title="¡Venta Exitosa!"
-        size="md"
-      >
-        <div className="text-center space-y-4">
-          <div className="flex items-center justify-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-10 h-10 text-green-600" />
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
-              {documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'} generada correctamente
-            </h3>
-            <p className="text-3xl font-bold text-primary-600 mb-2">{lastInvoiceNumber}</p>
-            <p className="text-gray-600">
-              Total: <span className="font-bold">{formatCurrency(amounts.total)}</span>
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 pt-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                onClick={handlePrintTicket}
-                variant="success"
-                className="flex-1"
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                Imprimir Ticket
-              </Button>
-              <Button
-                onClick={() => {
-                  try {
-                    generateInvoicePDF(lastInvoiceData, companySettings)
-                  } catch (error) {
-                    console.error('Error al generar PDF:', error)
-                    alert('Error al generar el PDF')
-                  }
-                }}
-                className="flex-1"
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                Descargar PDF
-              </Button>
-            </div>
-            <Button variant="outline" onClick={handleCloseSuccessModal} className="w-full">
-              Nueva Venta
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Ticket Oculto para Impresión */}
       {lastInvoiceData && (

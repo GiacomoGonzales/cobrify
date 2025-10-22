@@ -221,20 +221,12 @@ export default function Dashboard() {
             Bienvenido a Cobrify - Resumen de tu negocio
           </p>
         </div>
-        <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
-          <Link to="/pos" className="w-full sm:w-auto">
-            <Button variant="secondary" className="w-full sm:w-auto">
-              <Package className="w-4 h-4 mr-2" />
-              Punto de Venta
-            </Button>
-          </Link>
-          <Link to="/facturas/nueva" className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Factura
-            </Button>
-          </Link>
-        </div>
+        <Link to="/pos" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto">
+            <Package className="w-4 h-4 mr-2" />
+            Punto de Venta
+          </Button>
+        </Link>
       </div>
 
       {/* Stats Grid */}

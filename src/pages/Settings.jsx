@@ -3,24 +3,27 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import Alert from '@/components/ui/Alert'
 import { companySettingsSchema } from '@/utils/schemas'
 
 export default function Settings() {
   const { user } = useAuth()
+  const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [message, setMessage] = useState(null)
+  const [activeTab, setActiveTab] = useState('informacion')
   const [series, setSeries] = useState({
     factura: { serie: 'F001', lastNumber: 0 },
     boleta: { serie: 'B001', lastNumber: 0 },
     nota_venta: { serie: 'N001', lastNumber: 0 },
+    nota_credito: { serie: 'FC01', lastNumber: 0 },
+    nota_debito: { serie: 'FD01', lastNumber: 0 },
   })
   const [editingSeries, setEditingSeries] = useState(false)
 
@@ -86,6 +89,8 @@ export default function Settings() {
             factura: businessData.series.factura || { serie: 'F001', lastNumber: 0 },
             boleta: businessData.series.boleta || { serie: 'B001', lastNumber: 0 },
             nota_venta: businessData.series.nota_venta || { serie: 'N001', lastNumber: 0 },
+            nota_credito: businessData.series.nota_credito || { serie: 'FC01', lastNumber: 0 },
+            nota_debito: businessData.series.nota_debito || { serie: 'FD01', lastNumber: 0 },
           })
         }
 
@@ -104,10 +109,7 @@ export default function Settings() {
       }
     } catch (error) {
       console.error('Error al cargar configuración:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al cargar la configuración. Por favor, recarga la página.',
-      })
+      toast.error('Error al cargar la configuración. Por favor, recarga la página.')
     } finally {
       setIsLoading(false)
     }
@@ -117,7 +119,6 @@ export default function Settings() {
     if (!user?.uid) return
 
     setIsSaving(true)
-    setMessage(null)
 
     try {
       // Actualizar datos de la empresa usando userId como businessId
@@ -139,19 +140,10 @@ export default function Settings() {
         updatedAt: serverTimestamp(),
       })
 
-      setMessage({
-        type: 'success',
-        text: '✓ Configuración guardada exitosamente',
-      })
-
-      // Ocultar mensaje después de 3 segundos
-      setTimeout(() => setMessage(null), 3000)
+      toast.success('Configuración guardada exitosamente')
     } catch (error) {
       console.error('Error al guardar:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al guardar la configuración. Inténtalo nuevamente.',
-      })
+      toast.error('Error al guardar la configuración. Inténtalo nuevamente.')
     } finally {
       setIsSaving(false)
     }
@@ -161,7 +153,6 @@ export default function Settings() {
     if (!user?.uid) return
 
     setIsSaving(true)
-    setMessage(null)
 
     try {
       // Actualizar series usando userId como businessId
@@ -172,19 +163,11 @@ export default function Settings() {
         updatedAt: serverTimestamp(),
       })
 
-      setMessage({
-        type: 'success',
-        text: '✓ Series actualizadas exitosamente',
-      })
+      toast.success('Series actualizadas exitosamente')
       setEditingSeries(false)
-
-      setTimeout(() => setMessage(null), 3000)
     } catch (error) {
       console.error('Error al guardar series:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al actualizar las series. Inténtalo nuevamente.',
-      })
+      toast.error('Error al actualizar las series. Inténtalo nuevamente.')
     } finally {
       setIsSaving(false)
     }
@@ -222,11 +205,7 @@ export default function Settings() {
           certificateName: file.name,
         }))
       } else {
-        setMessage({
-          type: 'error',
-          text: 'El archivo debe ser un certificado .pfx o .p12',
-        })
-        setTimeout(() => setMessage(null), 3000)
+        toast.error('El archivo debe ser un certificado .pfx o .p12')
       }
     }
   }
@@ -244,7 +223,6 @@ export default function Settings() {
     if (!user?.uid) return
 
     setIsSaving(true)
-    setMessage(null)
 
     try {
       const businessRef = doc(db, 'businesses', user.uid)
@@ -291,20 +269,12 @@ export default function Settings() {
         updatedAt: serverTimestamp(),
       })
 
-      setMessage({
-        type: 'success',
-        text: '✓ Configuración SUNAT guardada exitosamente',
-      })
+      toast.success('Configuración SUNAT guardada exitosamente')
       setEditingSunat(false)
       setCertificateFile(null) // Limpiar archivo temporal
-
-      setTimeout(() => setMessage(null), 3000)
     } catch (error) {
       console.error('Error al guardar configuración SUNAT:', error)
-      setMessage({
-        type: 'error',
-        text: error.message || 'Error al guardar la configuración SUNAT. Inténtalo nuevamente.',
-      })
+      toast.error(error.message || 'Error al guardar la configuración SUNAT. Inténtalo nuevamente.')
     } finally {
       setIsSaving(false)
     }
@@ -321,6 +291,13 @@ export default function Settings() {
     )
   }
 
+  // Tabs configuration
+  const tabs = [
+    { id: 'informacion', label: 'Información', icon: Building2 },
+    { id: 'series', label: 'Series', icon: FileText },
+    { id: 'sunat', label: 'SUNAT', icon: Shield },
+  ]
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -331,17 +308,36 @@ export default function Settings() {
         </p>
       </div>
 
-      {/* Messages */}
-      {message && (
-        <Alert
-          variant={message.type === 'success' ? 'success' : 'danger'}
-          title={message.type === 'success' ? 'Éxito' : 'Error'}
-        >
-          {message.text}
-        </Alert>
-      )}
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8 overflow-x-auto">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                ${activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <tab.icon
+                className={`
+                  -ml-0.5 mr-2 h-5 w-5
+                  ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}
+                `}
+              />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {/* Tab Content - Información */}
+      {activeTab === 'informacion' && (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Company Info */}
         <Card>
           <CardHeader>
@@ -471,10 +467,12 @@ export default function Settings() {
             )}
           </Button>
         </div>
-      </form>
+        </form>
+      )}
 
-      {/* Document Series */}
-      <Card>
+      {/* Tab Content - Series */}
+      {activeTab === 'series' && (
+        <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -654,12 +652,110 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+
+            {/* Notas de Crédito */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Notas de Crédito (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.nota_credito.serie}
+                    onChange={e => handleSeriesChange('nota_credito', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="FC01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.nota_credito.lastNumber}
+                    onChange={e => handleSeriesChange('nota_credito', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.nota_credito.serie, series.nota_credito.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para anular, corregir o devolver facturas/boletas aceptadas por SUNAT
+              </p>
+            </div>
+
+            {/* Notas de Débito */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Notas de Débito (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.nota_debito.serie}
+                    onChange={e => handleSeriesChange('nota_debito', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="FD01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.nota_debito.lastNumber}
+                    onChange={e => handleSeriesChange('nota_debito', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.nota_debito.serie, series.nota_debito.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para aumentar el valor de facturas/boletas aceptadas por SUNAT (intereses, penalidades, etc.)
+              </p>
+            </div>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      )}
 
-      {/* SUNAT Configuration */}
-      <Card>
+      {/* Tab Content - SUNAT */}
+      {activeTab === 'sunat' && (
+        <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -940,7 +1036,8 @@ export default function Settings() {
             )}
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      )}
     </div>
   )
 }

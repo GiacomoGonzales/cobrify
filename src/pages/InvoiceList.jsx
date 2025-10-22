@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus,
   Search,
@@ -16,13 +16,16 @@ import {
   Clock,
   XCircle,
   Ban,
+  FileMinus,
+  FilePlus,
+  MoreVertical,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
-import Alert from '@/components/ui/Alert'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -32,6 +35,8 @@ import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/s
 
 export default function InvoiceList() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -42,7 +47,7 @@ export default function InvoiceList() {
   const [deletingInvoice, setDeletingInvoice] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
-  const [message, setMessage] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
 
   useEffect(() => {
     loadInvoices()
@@ -82,22 +87,15 @@ export default function InvoiceList() {
       const result = await deleteInvoice(user.uid, deletingInvoice.id)
 
       if (result.success) {
-        setMessage({
-          type: 'success',
-          text: '✓ Factura eliminada exitosamente',
-        })
+        toast.success('Factura eliminada exitosamente')
         setDeletingInvoice(null)
         loadInvoices()
-        setTimeout(() => setMessage(null), 3000)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Error al eliminar factura:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al eliminar la factura. Inténtalo nuevamente.',
-      })
+      toast.error('Error al eliminar la factura. Inténtalo nuevamente.')
     } finally {
       setIsDeleting(false)
     }
@@ -110,21 +108,14 @@ export default function InvoiceList() {
       const result = await updateInvoice(user.uid, invoiceId, { status: newStatus })
 
       if (result.success) {
-        setMessage({
-          type: 'success',
-          text: '✓ Estado actualizado exitosamente',
-        })
+        toast.success('Estado actualizado exitosamente')
         loadInvoices()
-        setTimeout(() => setMessage(null), 3000)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Error al actualizar estado:', error)
-      setMessage({
-        type: 'error',
-        text: 'Error al actualizar el estado.',
-      })
+      toast.error('Error al actualizar el estado.')
     }
   }
 
@@ -138,10 +129,7 @@ export default function InvoiceList() {
       const result = await sendInvoiceToSunat(user.uid, invoiceId)
 
       if (result.success) {
-        setMessage({
-          type: 'success',
-          text: `✓ ${result.message}`,
-        })
+        toast.success(result.message, 5000)
 
         // Si hay observaciones, mostrarlas
         if (result.observations && result.observations.length > 0) {
@@ -150,17 +138,12 @@ export default function InvoiceList() {
 
         // Recargar facturas para ver el estado actualizado
         loadInvoices()
-        setTimeout(() => setMessage(null), 5000)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Error al enviar a SUNAT:', error)
-      setMessage({
-        type: 'error',
-        text: error.message || 'Error al enviar a SUNAT. Inténtalo nuevamente.',
-      })
-      setTimeout(() => setMessage(null), 5000)
+      toast.error(error.message || 'Error al enviar a SUNAT. Inténtalo nuevamente.', 5000)
     } finally {
       setSendingToSunat(null)
     }
@@ -198,7 +181,10 @@ export default function InvoiceList() {
   const getDocumentTypeName = type => {
     if (type === 'factura') return 'Factura'
     if (type === 'nota_venta') return 'Nota de Venta'
-    return 'Boleta'
+    if (type === 'boleta') return 'Boleta'
+    if (type === 'nota_credito') return 'Nota de Crédito'
+    if (type === 'nota_debito') return 'Nota de Débito'
+    return type
   }
 
   const getSunatStatusBadge = sunatStatus => {
@@ -273,16 +259,6 @@ export default function InvoiceList() {
         </Link>
       </div>
 
-      {/* Messages */}
-      {message && (
-        <Alert
-          variant={message.type === 'success' ? 'success' : 'danger'}
-          title={message.type === 'success' ? 'Éxito' : 'Error'}
-        >
-          {message.text}
-        </Alert>
-      )}
-
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -345,6 +321,8 @@ export default function InvoiceList() {
               <option value="all">Todos los tipos</option>
               <option value="factura">Facturas</option>
               <option value="boleta">Boletas</option>
+              <option value="nota_credito">Notas de Crédito</option>
+              <option value="nota_debito">Notas de Débito</option>
               <option value="nota_venta">Notas de Venta</option>
             </Select>
             <Select
@@ -433,37 +411,105 @@ export default function InvoiceList() {
                       {getSunatStatusBadge(invoice.sunatStatus || 'pending')}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end space-x-1">
-                        {/* Botón Enviar a SUNAT - solo para facturas y boletas pendientes */}
-                        {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                         invoice.sunatStatus === 'pending' && (
+                      <div className="flex items-center justify-end">
+                        <div className="relative">
                           <button
-                            onClick={() => handleSendToSunat(invoice.id)}
-                            disabled={sendingToSunat === invoice.id}
-                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Enviar a SUNAT"
+                            onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
+                            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Acciones"
                           >
-                            {sendingToSunat === invoice.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Send className="w-4 h-4" />
-                            )}
+                            <MoreVertical className="w-4 h-4" />
                           </button>
-                        )}
-                        <button
-                          onClick={() => setViewingInvoice(invoice)}
-                          className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                          title="Ver detalles"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeletingInvoice(invoice)}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+
+                          {/* Dropdown Menu */}
+                          {openMenuId === invoice.id && (
+                            <>
+                              {/* Backdrop para cerrar al hacer clic fuera */}
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setOpenMenuId(null)}
+                              />
+
+                              {/* Menu */}
+                              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                                {/* Enviar a SUNAT */}
+                                {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                                 invoice.sunatStatus === 'pending' && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      handleSendToSunat(invoice.id)
+                                    }}
+                                    disabled={sendingToSunat === invoice.id}
+                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {sendingToSunat === invoice.id ? (
+                                      <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                                    ) : (
+                                      <Send className="w-4 h-4 text-green-600" />
+                                    )}
+                                    <span>Enviar a SUNAT</span>
+                                  </button>
+                                )}
+
+                                {/* Crear Nota de Crédito */}
+                                {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                                 invoice.sunatStatus === 'accepted' && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setOpenMenuId(null)
+                                        navigate(`/nota-credito?invoiceId=${invoice.id}`)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                    >
+                                      <FileMinus className="w-4 h-4 text-orange-600" />
+                                      <span>Crear Nota de Crédito</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setOpenMenuId(null)
+                                        navigate(`/nota-debito?invoiceId=${invoice.id}`)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                    >
+                                      <FilePlus className="w-4 h-4 text-blue-600" />
+                                      <span>Crear Nota de Débito</span>
+                                    </button>
+
+                                    <div className="border-t border-gray-100 my-1" />
+                                  </>
+                                )}
+
+                                {/* Ver detalles */}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    setViewingInvoice(invoice)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Eye className="w-4 h-4 text-primary-600" />
+                                  <span>Ver detalles</span>
+                                </button>
+
+                                {/* Eliminar */}
+                                <div className="border-t border-gray-100 my-1" />
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    setDeletingInvoice(invoice)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  <span>Eliminar</span>
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -607,11 +653,7 @@ export default function InvoiceList() {
                 onClick={async () => {
                   // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
-                    setMessage({
-                      type: 'error',
-                      text: '⚠️ Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa'
-                    })
-                    setTimeout(() => setMessage(null), 5000)
+                    toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
                     return
                   }
 
@@ -620,21 +662,13 @@ export default function InvoiceList() {
 
                     if (result.success) {
                       await downloadCompressedXML(result.xml, result.fileName)
-                      setMessage({
-                        type: 'success',
-                        text: '✓ XML SUNAT descargado exitosamente'
-                      })
-                      setTimeout(() => setMessage(null), 3000)
+                      toast.success('XML SUNAT descargado exitosamente')
                     } else {
                       throw new Error(result.error)
                     }
                   } catch (error) {
                     console.error('Error al generar XML:', error)
-                    setMessage({
-                      type: 'error',
-                      text: 'Error al generar el XML: ' + error.message
-                    })
-                    setTimeout(() => setMessage(null), 3000)
+                    toast.error('Error al generar el XML: ' + error.message)
                   }
                 }}
               >
@@ -645,28 +679,16 @@ export default function InvoiceList() {
                 onClick={() => {
                   // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
-                    setMessage({
-                      type: 'error',
-                      text: '⚠️ Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa'
-                    })
-                    setTimeout(() => setMessage(null), 5000)
+                    toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
                     return
                   }
 
                   try {
                     generateInvoicePDF(viewingInvoice, companySettings)
-                    setMessage({
-                      type: 'success',
-                      text: '✓ PDF generado exitosamente'
-                    })
-                    setTimeout(() => setMessage(null), 3000)
+                    toast.success('PDF generado exitosamente')
                   } catch (error) {
                     console.error('Error al generar PDF:', error)
-                    setMessage({
-                      type: 'error',
-                      text: 'Error al generar el PDF'
-                    })
-                    setTimeout(() => setMessage(null), 3000)
+                    toast.error('Error al generar el PDF')
                   }
                 }}
               >

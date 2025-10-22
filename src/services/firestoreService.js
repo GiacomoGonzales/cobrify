@@ -437,3 +437,42 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
     }
   }
 }
+
+// ==================== CATEGORÍAS ====================
+
+/**
+ * Obtener categorías de productos
+ */
+export const getProductCategories = async userId => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      const data = docSnap.data()
+      return { success: true, data: data.productCategories || [] }
+    } else {
+      return { success: true, data: [] }
+    }
+  } catch (error) {
+    console.error('Error al obtener categorías:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Guardar categorías de productos
+ */
+export const saveProductCategories = async (userId, categories) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    await updateDoc(docRef, {
+      productCategories: categories,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar categorías:', error)
+    return { success: false, error: error.message }
+  }
+}

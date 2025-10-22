@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -9,6 +10,7 @@ import { forwardRef } from 'react'
  * - Datos del cliente
  * - Detalle de productos/servicios
  * - Subtotal, IGV (18%), Total
+ * - Código QR para validación
  * - Representación impresa
  */
 const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
@@ -24,6 +26,38 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
     if (invoice.documentType === 'factura') return '01'
     if (invoice.documentType === 'boleta') return '03'
     return 'NV'
+  }
+
+  // Generar código QR según formato SUNAT
+  // Formato: RUC_EMISOR|TIPO_DOC|SERIE|NUMERO|IGV|TOTAL|FECHA_EMISION|TIPO_DOC_CLIENTE|NUM_DOC_CLIENTE|
+  const generateQRData = () => {
+    const ruc = companySettings?.ruc || '00000000000'
+    const tipoDoc = getDocumentTypeCode()
+    const serie = invoice.series || 'B001'
+    const numero = invoice.number || '1'
+    const igv = (invoice.tax || 0).toFixed(2)
+    const total = (invoice.total || 0).toFixed(2)
+
+    // Formatear fecha en formato ISO (YYYY-MM-DD)
+    const formatDateISO = (timestamp) => {
+      if (!timestamp) return new Date().toISOString().split('T')[0]
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+      return date.toISOString().split('T')[0]
+    }
+    const fecha = formatDateISO(invoice.createdAt)
+
+    // Tipo de documento del cliente (6=RUC, 1=DNI, 4=Carnet Extranjería, 7=Pasaporte, -=Sin documento)
+    const getClientDocType = () => {
+      const docNumber = invoice.customerDocumentNumber || ''
+      if (docNumber.length === 11) return '6' // RUC
+      if (docNumber.length === 8) return '1' // DNI
+      return '-' // Sin documento
+    }
+    const tipoDocCliente = getClientDocType()
+    const numDocCliente = invoice.customerDocumentNumber || '-'
+
+    // Construir el string del QR
+    return `${ruc}|${tipoDoc}|${serie}|${numero}|${igv}|${total}|${fecha}|${tipoDocCliente}|${numDocCliente}|`
   }
 
   // Formatear fecha
@@ -216,11 +250,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           font-weight: bold;
         }
 
-        .qr-placeholder {
+        .qr-container {
           margin: 10px auto;
           text-align: center;
-          font-size: 8px;
-          color: #666;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .qr-code {
+          margin: 5px 0;
         }
       `}</style>
 
@@ -378,10 +417,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
         {invoice.documentType !== 'nota_venta' && (
           <>
-            <div className="qr-placeholder">
-              [Código QR aquí]
-              <br />
-              (Para validar en SUNAT)
+            <div className="qr-container">
+              <QRCodeSVG
+                value={generateQRData()}
+                size={80}
+                level="M"
+                className="qr-code"
+                includeMargin={true}
+              />
+              <div style={{ fontSize: '8px', color: '#666', marginTop: '5px' }}>
+                Escanea para validar
+              </div>
             </div>
             <div className="footer-text">
               Consulte su comprobante en:
