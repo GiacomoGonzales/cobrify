@@ -53,6 +53,36 @@ export const customerSchema = z.object({
   }
 })
 
+// Schema para variante de producto
+export const productVariantSchema = z.object({
+  sku: z.string().min(1, 'SKU es requerido'),
+  attributes: z.record(z.string()), // { size: "M", color: "Rojo" }
+  price: z
+    .number({ required_error: 'Precio es requerido' })
+    .positive('El precio debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .min(1, 'Precio es requerido')
+        .transform(val => parseFloat(val))
+        .pipe(z.number().positive('El precio debe ser mayor a 0'))
+    ),
+  stock: z
+    .union([
+      z.number().int().nonnegative('El stock no puede ser negativo'),
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseInt(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable(),
+    ])
+    .nullable()
+    .optional(),
+})
+
 // Schema para Producto/Servicio
 export const productSchema = z.object({
   code: z.string().min(1, 'Código es requerido'),
@@ -67,7 +97,8 @@ export const productSchema = z.object({
         .min(1, 'Precio es requerido')
         .transform(val => parseFloat(val))
         .pipe(z.number().positive('El precio debe ser mayor a 0'))
-    ),
+    )
+    .optional(), // Optional when hasVariants is true
   unit: z.string().default('UNIDAD'),
   category: z.string().optional(),
   stock: z
@@ -85,6 +116,38 @@ export const productSchema = z.object({
     .nullable()
     .optional(),
   noStock: z.boolean().optional(),
+  // Campos para sistema de variantes
+  hasVariants: z.boolean().optional(),
+  basePrice: z.number().positive().optional(), // Precio de referencia cuando hasVariants es true
+  variantAttributes: z.array(z.string()).optional(), // ["size", "color", "material"]
+  variants: z.array(productVariantSchema).optional(), // Array de variantes
+}).superRefine((data, ctx) => {
+  // Si hasVariants es true, validar que tenga variantes y atributos
+  if (data.hasVariants) {
+    if (!data.variants || data.variants.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Debes agregar al menos una variante',
+        path: ['variants'],
+      })
+    }
+    if (!data.variantAttributes || data.variantAttributes.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Debes definir al menos un atributo de variante',
+        path: ['variantAttributes'],
+      })
+    }
+  } else {
+    // Si no tiene variantes, price es requerido
+    if (!data.price) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Precio es requerido',
+        path: ['price'],
+      })
+    }
+  }
 })
 
 // Schema para Item de Factura

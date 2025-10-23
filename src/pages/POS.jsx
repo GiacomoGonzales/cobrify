@@ -20,6 +20,8 @@ import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
+import Modal from '@/components/ui/Modal'
+import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import {
@@ -106,6 +108,10 @@ export default function POS() {
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: '', amount: '' }])
 
+  // Variant selection modal
+  const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
+  const [showVariantModal, setShowVariantModal] = useState(false)
+
   // Datos del cliente para captura inline
   const [customerData, setCustomerData] = useState({
     documentType: ID_TYPES.DNI,
@@ -184,6 +190,13 @@ export default function POS() {
   })
 
   const addToCart = product => {
+    // If product has variants, show variant selection modal
+    if (product.hasVariants) {
+      setSelectedProductForVariant(product)
+      setShowVariantModal(true)
+      return
+    }
+
     // Verificar stock
     if (product.stock !== null && product.stock <= 0) {
       toast.error('Producto sin stock disponible')
@@ -209,11 +222,59 @@ export default function POS() {
     }
   }
 
-  const updateQuantity = (productId, change) => {
+  const addVariantToCart = (product, variant) => {
+    // Check stock for variant
+    if (variant.stock !== null && variant.stock <= 0) {
+      toast.error('Variante sin stock disponible')
+      return
+    }
+
+    // Create unique ID for variant (product ID + variant SKU)
+    const variantCartId = `${product.id}-${variant.sku}`
+
+    // Find existing variant in cart
+    const existingItem = cart.find(item => item.cartId === variantCartId)
+
+    if (existingItem) {
+      // Check stock
+      if (variant.stock !== null && existingItem.quantity >= variant.stock) {
+        toast.error('No hay suficiente stock disponible para esta variante')
+        return
+      }
+
+      setCart(
+        cart.map(item =>
+          item.cartId === variantCartId ? { ...item, quantity: item.quantity + 1 } : item
+        )
+      )
+    } else {
+      // Add new variant to cart with unique cartId and variant info
+      const cartItem = {
+        cartId: variantCartId,
+        id: product.id,
+        code: variant.sku,
+        name: product.name,
+        variantSku: variant.sku,
+        variantAttributes: variant.attributes,
+        price: variant.price,
+        stock: variant.stock,
+        quantity: 1,
+        isVariant: true,
+      }
+      setCart([...cart, cartItem])
+    }
+
+    // Close modal
+    setShowVariantModal(false)
+    setSelectedProductForVariant(null)
+  }
+
+  const updateQuantity = (itemId, change) => {
     setCart(
       cart
         .map(item => {
-          if (item.id === productId) {
+          const matchId = item.cartId || item.id
+          if (matchId === itemId) {
             const newQuantity = item.quantity + change
 
             // Verificar stock
@@ -230,8 +291,8 @@ export default function POS() {
     )
   }
 
-  const removeFromCart = productId => {
-    setCart(cart.filter(item => item.id !== productId))
+  const removeFromCart = itemId => {
+    setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
   }
 
   const clearCart = () => {
@@ -1083,27 +1144,40 @@ export default function POS() {
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
-                  disabled={product.stock === 0}
+                  disabled={!product.hasVariants && product.stock === 0}
                   className={`p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left ${
-                    product.stock === 0
+                    !product.hasVariants && product.stock === 0
                       ? 'border-gray-200 opacity-50 cursor-not-allowed'
                       : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
                 >
                   <div className="flex flex-col h-full">
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900 mb-1 line-clamp-2 text-sm sm:text-base">
-                        {product.name}
-                      </p>
-                      {product.code && (
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="font-semibold text-gray-900 line-clamp-2 text-sm sm:text-base flex-1">
+                          {product.name}
+                        </p>
+                        {product.hasVariants && (
+                          <Badge variant="secondary" className="text-xs flex-shrink-0">
+                            {product.variants?.length || 0} vars
+                          </Badge>
+                        )}
+                      </div>
+                      {product.code && !product.hasVariants && (
                         <p className="text-xs text-gray-500 mb-2">{product.code}</p>
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       <p className="text-base sm:text-lg font-bold text-primary-600">
-                        {formatCurrency(product.price)}
+                        {product.hasVariants
+                          ? formatCurrency(product.basePrice)
+                          : formatCurrency(product.price)
+                        }
                       </p>
-                      {getStockBadge(product)}
+                      {!product.hasVariants && getStockBadge(product)}
+                      {product.hasVariants && (
+                        <span className="text-xs text-gray-500">Ver opciones</span>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -1137,46 +1211,58 @@ export default function POS() {
                     <p className="text-sm">No hay productos en el carrito</p>
                   </div>
                 ) : (
-                  cart.map(item => (
-                    <div key={item.id} className="p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 pr-2">
-                          <p className="font-medium text-sm text-gray-900 line-clamp-2">
-                            {item.name}
+                  cart.map(item => {
+                    const itemId = item.cartId || item.id
+                    return (
+                      <div key={itemId} className="p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 pr-2">
+                            <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                              {item.name}
+                            </p>
+                            {item.isVariant && item.variantAttributes && (
+                              <p className="text-xs text-gray-600 mt-1">
+                                {Object.entries(item.variantAttributes).map(([key, value]) => (
+                                  <span key={key} className="mr-2">
+                                    {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+                                  </span>
+                                ))}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-500">{formatCurrency(item.price)}</p>
+                          </div>
+                          <button
+                            onClick={() => removeFromCart(itemId)}
+                            className="text-red-600 hover:text-red-800 flex-shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => updateQuantity(itemId, -1)}
+                              className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="w-8 text-center font-semibold text-sm">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(itemId, 1)}
+                              className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <p className="font-bold text-gray-900 text-sm">
+                            {formatCurrency(item.price * item.quantity)}
                           </p>
-                          <p className="text-xs text-gray-500">{formatCurrency(item.price)}</p>
                         </div>
-                        <button
-                          onClick={() => removeFromCart(item.id)}
-                          className="text-red-600 hover:text-red-800 flex-shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-8 text-center font-semibold text-sm">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, 1)}
-                            className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                        </div>
-                        <p className="font-bold text-gray-900 text-sm">
-                          {formatCurrency(item.price * item.quantity)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
 
@@ -1335,6 +1421,81 @@ export default function POS() {
           </Card>
         </div>
       </div>
+
+      {/* Variant Selection Modal */}
+      <Modal
+        isOpen={showVariantModal}
+        onClose={() => {
+          setShowVariantModal(false)
+          setSelectedProductForVariant(null)
+        }}
+        title={`Seleccionar variante - ${selectedProductForVariant?.name || ''}`}
+        size="md"
+      >
+        {selectedProductForVariant && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Selecciona la variante del producto que deseas agregar al carrito:
+            </p>
+
+            {/* Variants Grid */}
+            <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
+              {selectedProductForVariant.variants?.map((variant, index) => (
+                <button
+                  key={index}
+                  onClick={() => addVariantToCart(selectedProductForVariant, variant)}
+                  disabled={variant.stock !== null && variant.stock <= 0}
+                  className={`p-4 border-2 rounded-lg text-left transition-all ${
+                    variant.stock !== null && variant.stock <= 0
+                      ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                      : 'border-gray-200 hover:border-primary-500 hover:bg-primary-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {Object.entries(variant.attributes).map(([key, value]) => (
+                          <Badge key={key} variant="default" className="text-xs">
+                            {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="text-lg font-bold text-primary-600">
+                          {formatCurrency(variant.price)}
+                        </p>
+                        {variant.stock !== null && (
+                          <span
+                            className={`text-xs font-semibold ${
+                              variant.stock > 10
+                                ? 'text-green-600'
+                                : variant.stock > 0
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                            }`}
+                          >
+                            {variant.stock > 0 ? `Stock: ${variant.stock}` : 'Sin stock'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {variant.stock === null || variant.stock > 0 ? (
+                      <Plus className="w-5 h-5 text-primary-600 flex-shrink-0" />
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {selectedProductForVariant.variants?.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No hay variantes disponibles para este producto.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* Ticket Oculto para Impresión */}
       {lastInvoiceData && (

@@ -369,53 +369,55 @@ export default function InvoiceList() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="hidden md:table-cell">Fecha</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="hidden lg:table-cell">SUNAT</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead className="py-2.5 px-3">Número</TableHead>
+                  <TableHead className="py-2.5 px-3">Tipo</TableHead>
+                  <TableHead className="py-2.5 px-3">Cliente</TableHead>
+                  <TableHead className="py-2.5 px-3">Fecha</TableHead>
+                  <TableHead className="py-2.5 px-3">Total</TableHead>
+                  <TableHead className="py-2.5 px-2">Estado</TableHead>
+                  <TableHead className="py-2.5 px-1 w-20">SUNAT</TableHead>
+                  <TableHead className="py-2.5 px-1 text-right w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredInvoices.map(invoice => (
                   <TableRow key={invoice.id}>
-                    <TableCell>
-                      <span className="font-medium text-primary-600 text-sm">
+                    <TableCell className="py-2.5 px-3">
+                      <span className="font-medium text-primary-600 text-sm whitespace-nowrap">
                         {invoice.number}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{getDocumentTypeName(invoice.documentType)}</span>
+                    <TableCell className="py-2.5 px-3">
+                      <span className="text-sm whitespace-nowrap">{getDocumentTypeName(invoice.documentType)}</span>
                     </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium text-sm">{invoice.customer?.name}</p>
-                        <p className="text-xs text-gray-500">{invoice.customer?.documentNumber}</p>
+                    <TableCell className="py-2.5 px-3">
+                      <div className="max-w-[140px]">
+                        <p className="font-medium text-sm truncate">{invoice.customer?.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{invoice.customer?.documentNumber}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <span className="text-sm">
+                    <TableCell className="py-2.5 px-3">
+                      <span className="text-sm whitespace-nowrap">
                         {invoice.createdAt
                           ? formatDate(invoice.createdAt.toDate())
                           : 'N/A'}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <span className="font-semibold text-sm">{formatCurrency(invoice.total)}</span>
+                    <TableCell className="py-2.5 px-3">
+                      <span className="font-semibold text-sm whitespace-nowrap">{formatCurrency(invoice.total)}</span>
                     </TableCell>
-                    <TableCell>{getStatusBadge(invoice.status)}</TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {getSunatStatusBadge(invoice.sunatStatus || 'pending')}
+                    <TableCell className="py-2.5 px-2">
+                      <div className="scale-90 origin-left">{getStatusBadge(invoice.status)}</div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-2.5 px-1 w-20">
+                      <div className="scale-75 origin-left">{getSunatStatusBadge(invoice.sunatStatus || 'pending')}</div>
+                    </TableCell>
+                    <TableCell className="py-2.5 px-1 w-12">
                       <div className="flex items-center justify-end">
                         <div className="relative">
                           <button
                             onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
-                            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                             title="Acciones"
                           >
                             <MoreVertical className="w-4 h-4" />
