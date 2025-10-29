@@ -70,6 +70,20 @@ const getCategoryById = (categories, id) => {
   return categories.find(cat => cat.id === id)
 }
 
+// Get all descendant category IDs (children, grandchildren, etc.)
+const getAllDescendantCategoryIds = (categories, parentId) => {
+  const descendants = []
+  const children = categories.filter(cat => cat.parentId === parentId)
+
+  for (const child of children) {
+    descendants.push(child.id)
+    // Recursively get descendants of this child
+    descendants.push(...getAllDescendantCategoryIds(categories, child.id))
+  }
+
+  return descendants
+}
+
 export default function Products() {
   const { user } = useAuth()
   const toast = useToast()
@@ -510,10 +524,19 @@ export default function Products() {
       product.description?.toLowerCase().includes(search)
 
     // Check category filter (backward compatible with old string-based categories)
-    const matchesCategory =
-      selectedCategoryFilter === 'all' ||
-      (selectedCategoryFilter === 'sin-categoria' && !product.category) ||
-      product.category === selectedCategoryFilter
+    let matchesCategory = false
+
+    if (selectedCategoryFilter === 'all') {
+      matchesCategory = true
+    } else if (selectedCategoryFilter === 'sin-categoria') {
+      matchesCategory = !product.category
+    } else {
+      // Check if product is in selected category OR any of its descendant categories
+      const descendantIds = getAllDescendantCategoryIds(categories, selectedCategoryFilter)
+      matchesCategory =
+        product.category === selectedCategoryFilter ||
+        descendantIds.includes(product.category)
+    }
 
     return matchesSearch && matchesCategory
   })
