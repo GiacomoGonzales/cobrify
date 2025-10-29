@@ -96,7 +96,7 @@ export default function Sidebar() {
       <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200">
         <div className="flex items-center space-x-2">
           <img
-            src="/src/assets/images/logo.png"
+            src="/logo.png"
             alt="Cobrify Logo"
             className="w-8 h-8 object-contain"
           />

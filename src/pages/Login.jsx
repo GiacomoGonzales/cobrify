@@ -72,7 +72,7 @@ export default function Login() {
           {/* Logo and Brand */}
           <div className="mb-12 text-center">
             <img
-              src="/src/assets/images/logo.png"
+              src="/logo.png"
               alt="Cobrify Logo"
               className="w-32 h-32 object-contain mb-6 drop-shadow-2xl mx-auto"
             />
@@ -141,7 +141,7 @@ export default function Login() {
           {/* Logo móvil (solo visible en pantallas pequeñas) */}
           <div className="text-center mb-8 lg:hidden">
             <img
-              src="/src/assets/images/logo.png"
+              src="/logo.png"
               alt="Cobrify Logo"
               className="w-32 h-32 object-contain mx-auto mb-4 drop-shadow-2xl"
             />
