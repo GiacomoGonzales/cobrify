@@ -300,42 +300,45 @@ export default function InvoiceList() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar por número, cliente..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
+          <div className="space-y-4">
+            {/* Barra de búsqueda */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por número, cliente, RUC/DNI..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
-            <Select
-              value={filterType}
-              onChange={e => setFilterType(e.target.value)}
-              className="sm:w-48"
-            >
-              <option value="all">Todos los tipos</option>
-              <option value="factura">Facturas</option>
-              <option value="boleta">Boletas</option>
-              <option value="nota_credito">Notas de Crédito</option>
-              <option value="nota_debito">Notas de Débito</option>
-              <option value="nota_venta">Notas de Venta</option>
-            </Select>
-            <Select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="sm:w-48"
-            >
-              <option value="all">Todos los estados</option>
-              <option value="paid">Pagadas</option>
-              <option value="pending">Pendientes</option>
-              <option value="overdue">Vencidas</option>
-              <option value="cancelled">Anuladas</option>
-            </Select>
+
+            {/* Filtros alineados a la derecha */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <Select
+                value={filterType}
+                onChange={e => setFilterType(e.target.value)}
+                className="w-full sm:w-56"
+              >
+                <option value="all">Todos los tipos</option>
+                <option value="factura">Facturas</option>
+                <option value="boleta">Boletas</option>
+                <option value="nota_credito">Notas de Crédito</option>
+                <option value="nota_debito">Notas de Débito</option>
+                <option value="nota_venta">Notas de Venta</option>
+              </Select>
+              <Select
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value)}
+                className="w-full sm:w-56"
+              >
+                <option value="all">Todos los estados</option>
+                <option value="paid">Pagadas</option>
+                <option value="pending">Pendientes</option>
+                <option value="overdue">Vencidas</option>
+                <option value="cancelled">Anuladas</option>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
