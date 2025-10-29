@@ -73,8 +73,11 @@ export default function Login() {
           <div className="mb-12 text-center">
             <img
               src="/logo.png"
-              alt="Cobrify Logo"
+              alt="Cobrify - Sistema de facturación electrónica SUNAT homologado para negocios en Perú"
               className="w-32 h-32 object-contain mb-6 drop-shadow-2xl mx-auto"
+              width="128"
+              height="128"
+              loading="eager"
             />
             <h1 className="text-5xl font-bold text-white mb-4">Cobrify</h1>
             <p className="text-xl text-primary-100">
@@ -142,8 +145,11 @@ export default function Login() {
           <div className="text-center mb-8 lg:hidden">
             <img
               src="/logo.png"
-              alt="Cobrify Logo"
+              alt="Cobrify - Sistema de facturación electrónica SUNAT homologado para negocios en Perú"
               className="w-32 h-32 object-contain mx-auto mb-4 drop-shadow-2xl"
+              width="128"
+              height="128"
+              loading="eager"
             />
             <h1 className="text-4xl font-bold text-white mb-2">Cobrify</h1>
             <p className="text-primary-100">Sistema de facturación y cobranza para Perú</p>

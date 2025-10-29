@@ -1,0 +1,18 @@
+# robots.txt for Cobrify - Sistema de Facturación Electrónica
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://cobrify.com/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 10
+
+# Disallow admin and API routes
+Disallow: /api/
+Disallow: /admin/
+
+# Allow logo and assets
+Allow: /logo.png
+Allow: /assets/

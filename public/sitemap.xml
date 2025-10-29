@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <!-- Homepage -->
+  <url>
+    <loc>https://cobrify.com/</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://cobrify.com/logo.png</image:loc>
+      <image:title>Cobrify Logo - Sistema de Facturación Electrónica</image:title>
+      <image:caption>Logo oficial de Cobrify, sistema de facturación electrónica homologado con SUNAT para negocios en Perú</image:caption>
+    </image:image>
+  </url>
+
+  <!-- Dashboard -->
+  <url>
+    <loc>https://cobrify.com/dashboard</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- POS -->
+  <url>
+    <loc>https://cobrify.com/pos</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Facturas -->
+  <url>
+    <loc>https://cobrify.com/facturas</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Clientes -->
+  <url>
+    <loc>https://cobrify.com/clientes</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Productos -->
+  <url>
+    <loc>https://cobrify.com/productos</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Inventario -->
+  <url>
+    <loc>https://cobrify.com/inventario</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Reportes -->
+  <url>
+    <loc>https://cobrify.com/reportes</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Configuración -->
+  <url>
+    <loc>https://cobrify.com/configuracion</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- Control de Caja -->
+  <url>
+    <loc>https://cobrify.com/caja</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Proveedores -->
+  <url>
+    <loc>https://cobrify.com/proveedores</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Compras -->
+  <url>
+    <loc>https://cobrify.com/compras</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>

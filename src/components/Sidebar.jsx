@@ -97,8 +97,11 @@ export default function Sidebar() {
         <div className="flex items-center space-x-2">
           <img
             src="/logo.png"
-            alt="Cobrify Logo"
+            alt="Cobrify - Sistema de facturación electrónica"
             className="w-8 h-8 object-contain"
+            width="32"
+            height="32"
+            loading="eager"
           />
           <span className="text-xl font-bold text-gray-900">Cobrify</span>
         </div>
