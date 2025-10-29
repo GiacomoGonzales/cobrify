@@ -296,7 +296,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
     lineItem.ele('cbc:Description').txt(itemDescription)
 
     const sellersItemId = lineItem.ele('cac:SellersItemIdentification')
-    sellersItemId.ele('cbc:ID').txt(item.productId || String(index + 1))
+    // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
+    sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio sin IGV
     const price = invoiceLine.ele('cac:Price')
@@ -568,7 +569,8 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     lineItem.ele('cbc:Description').txt(itemDescription)
 
     const sellersItemId = lineItem.ele('cac:SellersItemIdentification')
-    sellersItemId.ele('cbc:ID').txt(item.productId || String(index + 1))
+    // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
+    sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio sin IGV
     const price = creditNoteLine.ele('cac:Price')
@@ -839,7 +841,8 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     lineItem.ele('cbc:Description').txt(itemDescription)
 
     const sellersItemId = lineItem.ele('cac:SellersItemIdentification')
-    sellersItemId.ele('cbc:ID').txt(item.productId || String(index + 1))
+    // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
+    sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio sin IGV
     const price = debitNoteLine.ele('cac:Price')

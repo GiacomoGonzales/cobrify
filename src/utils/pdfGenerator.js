@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 /**
@@ -71,9 +71,16 @@ export const generateInvoicePDF = (invoice, companySettings) => {
   doc.setFontSize(9)
   doc.setTextColor(...grayMedium)
 
-  const invoiceDate = invoice.createdAt
-    ? formatDate(invoice.createdAt.toDate())
-    : 'N/A'
+  let invoiceDate = 'N/A'
+  if (invoice.createdAt) {
+    if (invoice.createdAt.toDate) {
+      // Es un Timestamp de Firestore
+      invoiceDate = formatDate(invoice.createdAt.toDate())
+    } else {
+      // Es un objeto Date normal
+      invoiceDate = formatDate(invoice.createdAt)
+    }
+  }
   doc.text(`Fecha: ${invoiceDate}`, 200, yPos, { align: 'right' })
 
   yPos += 10
@@ -141,7 +148,7 @@ export const generateInvoicePDF = (invoice, companySettings) => {
     formatCurrency(item.subtotal || (item.quantity * item.unitPrice))
   ]) || []
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: yPos,
     head: [['#', 'Descripción', 'Cant.', 'Unidad', 'P. Unit.', 'Subtotal']],
     body: tableData,

@@ -13,6 +13,11 @@ import Inventory from './pages/Inventory'
 import BusinessCreate from './pages/BusinessCreate'
 import CreateCreditNote from './pages/CreateCreditNote'
 import CreateDebitNote from './pages/CreateDebitNote'
+import Reports from './pages/Reports'
+import Suppliers from './pages/Suppliers'
+import Purchases from './pages/Purchases'
+import CreatePurchase from './pages/CreatePurchase'
+import CashRegister from './pages/CashRegister'
 
 function App() {
   return (
@@ -34,6 +39,11 @@ function App() {
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
+              <Route path="proveedores" element={<Suppliers />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="business/new" element={<BusinessCreate />} />
             </Route>

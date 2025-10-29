@@ -7,6 +7,10 @@ import {
   Settings,
   ShoppingCart,
   Warehouse,
+  BarChart3,
+  Truck,
+  ShoppingBag,
+  Wallet,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 
@@ -21,6 +25,11 @@ const menuItems = [
     icon: ShoppingCart,
     label: 'Punto de Venta',
     badge: 'POS',
+  },
+  {
+    path: '/caja',
+    icon: Wallet,
+    label: 'Control de Caja',
   },
   {
     path: '/facturas',
@@ -41,6 +50,21 @@ const menuItems = [
     path: '/inventario',
     icon: Warehouse,
     label: 'Inventario',
+  },
+  {
+    path: '/proveedores',
+    icon: Truck,
+    label: 'Proveedores',
+  },
+  {
+    path: '/compras',
+    icon: ShoppingBag,
+    label: 'Compras',
+  },
+  {
+    path: '/reportes',
+    icon: BarChart3,
+    label: 'Reportes',
   },
   {
     path: '/configuracion',
@@ -71,9 +95,11 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200">
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-            <FileText className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/src/assets/images/logo.png"
+            alt="Cobrify Logo"
+            className="w-8 h-8 object-contain"
+          />
           <span className="text-xl font-bold text-gray-900">Cobrify</span>
         </div>
       </div>

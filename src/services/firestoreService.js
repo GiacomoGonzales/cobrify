@@ -163,6 +163,53 @@ export const deleteCustomer = async (userId, customerId) => {
   }
 }
 
+/**
+ * Obtener estadísticas de clientes (pedidos y totales)
+ */
+export const getCustomersWithStats = async userId => {
+  try {
+    // Obtener clientes
+    const customersResult = await getCustomers(userId)
+    if (!customersResult.success) {
+      return customersResult
+    }
+
+    // Obtener facturas
+    const invoicesResult = await getInvoices(userId)
+    if (!invoicesResult.success) {
+      return invoicesResult
+    }
+
+    const customers = customersResult.data || []
+    const invoices = invoicesResult.data || []
+
+    // Calcular estadísticas por cliente
+    const customersWithStats = customers.map(customer => {
+      // Filtrar facturas del cliente - comparar por documentNumber ya que no se guarda el ID
+      const customerInvoices = invoices.filter(
+        invoice => invoice.customer?.documentNumber === customer.documentNumber
+      )
+
+      // Calcular total gastado
+      const totalSpent = customerInvoices.reduce(
+        (sum, invoice) => sum + (invoice.total || 0),
+        0
+      )
+
+      return {
+        ...customer,
+        ordersCount: customerInvoices.length,
+        totalSpent: totalSpent,
+      }
+    })
+
+    return { success: true, data: customersWithStats }
+  } catch (error) {
+    console.error('Error al obtener clientes con estadísticas:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // ==================== PRODUCTOS ====================
 
 /**
@@ -438,6 +485,146 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
   }
 }
 
+// ==================== PROVEEDORES ====================
+
+/**
+ * Crear un nuevo proveedor
+ */
+export const createSupplier = async (userId, supplierData) => {
+  try {
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'suppliers'), {
+      ...supplierData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al crear proveedor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener proveedores de un usuario
+ */
+export const getSuppliers = async userId => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'businesses', userId, 'suppliers'))
+    const suppliers = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+    return { success: true, data: suppliers }
+  } catch (error) {
+    console.error('Error al obtener proveedores:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar un proveedor
+ */
+export const updateSupplier = async (userId, supplierId, updates) => {
+  try {
+    const docRef = doc(db, 'businesses', userId, 'suppliers', supplierId)
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar proveedor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Eliminar un proveedor
+ */
+export const deleteSupplier = async (userId, supplierId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', userId, 'suppliers', supplierId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar proveedor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// ==================== COMPRAS ====================
+
+/**
+ * Crear una nueva compra/orden de compra
+ */
+export const createPurchase = async (userId, purchaseData) => {
+  try {
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'purchases'), {
+      ...purchaseData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al crear compra:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener compras de un usuario
+ */
+export const getPurchases = async userId => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'businesses', userId, 'purchases'))
+    const purchases = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+
+    // Ordenar por fecha de creación (más reciente primero)
+    purchases.sort((a, b) => {
+      if (!a.createdAt) return 1
+      if (!b.createdAt) return -1
+      return b.createdAt.seconds - a.createdAt.seconds
+    })
+
+    return { success: true, data: purchases }
+  } catch (error) {
+    console.error('Error al obtener compras:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar una compra
+ */
+export const updatePurchase = async (userId, purchaseId, updates) => {
+  try {
+    const docRef = doc(db, 'businesses', userId, 'purchases', purchaseId)
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar compra:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Eliminar una compra
+ */
+export const deletePurchase = async (userId, purchaseId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', userId, 'purchases', purchaseId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar compra:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // ==================== CATEGORÍAS ====================
 
 /**
@@ -473,6 +660,149 @@ export const saveProductCategories = async (userId, categories) => {
     return { success: true }
   } catch (error) {
     console.error('Error al guardar categorías:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// ==================== CONTROL DE CAJA ====================
+
+/**
+ * Obtener sesión de caja actual (abierta)
+ */
+export const getCashRegisterSession = async userId => {
+  try {
+    const q = query(
+      collection(db, 'businesses', userId, 'cashSessions'),
+      where('status', '==', 'open')
+    )
+    const snapshot = await getDocs(q)
+
+    if (snapshot.empty) {
+      return { success: true, data: null }
+    }
+
+    // Si hay múltiples sesiones abiertas (no debería pasar), tomar la más reciente
+    let mostRecentSession = snapshot.docs[0]
+    snapshot.docs.forEach(doc => {
+      const currentOpenedAt = doc.data().openedAt?.toDate?.() || new Date(0)
+      const mostRecentOpenedAt = mostRecentSession.data().openedAt?.toDate?.() || new Date(0)
+      if (currentOpenedAt > mostRecentOpenedAt) {
+        mostRecentSession = doc
+      }
+    })
+
+    return {
+      success: true,
+      data: {
+        id: mostRecentSession.id,
+        ...mostRecentSession.data(),
+      },
+    }
+  } catch (error) {
+    console.error('Error al obtener sesión de caja:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Abrir caja
+ */
+export const openCashRegister = async (userId, openingAmount) => {
+  try {
+    // Verificar que no haya una caja abierta
+    const currentSession = await getCashRegisterSession(userId)
+    if (currentSession.success && currentSession.data) {
+      return { success: false, error: 'Ya hay una caja abierta' }
+    }
+
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'cashSessions'), {
+      openingAmount,
+      status: 'open',
+      openedAt: serverTimestamp(),
+      openedBy: userId,
+      createdAt: serverTimestamp(),
+    })
+
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al abrir caja:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Cerrar caja
+ */
+export const closeCashRegister = async (userId, sessionId, closingData) => {
+  try {
+    const { cash, card, transfer } = closingData
+    const closingAmount = cash + card + transfer
+
+    await updateDoc(doc(db, 'businesses', userId, 'cashSessions', sessionId), {
+      closingAmount,
+      closingCash: cash,
+      closingCard: card,
+      closingTransfer: transfer,
+      status: 'closed',
+      closedAt: serverTimestamp(),
+      closedBy: userId,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al cerrar caja:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Agregar movimiento de caja
+ */
+export const addCashMovement = async (userId, sessionId, movementData) => {
+  try {
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'cashMovements'), {
+      sessionId,
+      type: movementData.type, // 'income' o 'expense'
+      amount: movementData.amount,
+      description: movementData.description,
+      category: movementData.category || 'Otros',
+      createdAt: serverTimestamp(),
+      createdBy: userId,
+    })
+
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al agregar movimiento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener movimientos de una sesión
+ */
+export const getCashMovements = async (userId, sessionId) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', userId, 'cashMovements'),
+      where('sessionId', '==', sessionId)
+    )
+    const snapshot = await getDocs(q)
+
+    // Ordenar en el cliente para evitar índice compuesto
+    const movements = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0)
+        const dateB = b.createdAt?.toDate?.() || new Date(0)
+        return dateB - dateA // Más reciente primero
+      })
+
+    return { success: true, data: movements }
+  } catch (error) {
+    console.error('Error al obtener movimientos:', error)
     return { success: false, error: error.message }
   }
 }

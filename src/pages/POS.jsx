@@ -24,16 +24,16 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
+import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import {
   getProducts,
   getCustomers,
   createInvoice,
+  getCompanySettings,
   updateProduct,
   getNextDocumentNumber,
-  getCompanySettings,
   getProductCategories,
 } from '@/services/firestoreService'
-import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
@@ -491,7 +491,7 @@ export default function POS() {
       // 2. Preparar items de la factura
       const items = cart.map(item => ({
         productId: item.id,
-        code: item.code || '',
+        code: item.code || item.id, // Si no tiene código asignado, usar el ID
         name: item.name,
         quantity: item.quantity,
         unitPrice: item.price,
@@ -564,7 +564,7 @@ export default function POS() {
       const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
       toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
 
-      // Recargar productos para actualizar stock
+      // 6. Recargar productos para actualizar stock
       const productsResult = await getProducts(user.uid)
       if (productsResult.success) {
         setProducts(productsResult.data || [])

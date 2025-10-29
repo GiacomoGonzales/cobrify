@@ -496,6 +496,18 @@ export default function InvoiceList() {
                                   <span>Ver detalles</span>
                                 </button>
 
+                                {/* Descargar PDF */}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    generateInvoicePDF(invoice, companySettings)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Download className="w-4 h-4 text-green-600" />
+                                  <span>Descargar PDF</span>
+                                </button>
+
                                 {/* Eliminar */}
                                 <div className="border-t border-gray-100 my-1" />
                                 <button
