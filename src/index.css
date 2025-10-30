@@ -5,10 +5,8 @@
 @tailwind utilities;
 
 @layer base {
-  /* Prevenir overscroll/bounce en toda la página */
+  /* Base styles - sin restricciones de overflow para permitir scroll en Login */
   html {
-    overscroll-behavior: none;
-    overflow: hidden;
     height: 100%;
     /* Usar viewport dinámico para iOS Safari */
     height: 100dvh;
@@ -16,26 +14,16 @@
 
   body {
     @apply bg-gray-50 text-gray-900 font-sans;
-    overscroll-behavior: none;
-    position: fixed;
-    overflow: hidden;
+    margin: 0;
+    padding: 0;
     width: 100%;
     height: 100%;
     height: 100dvh;
-    -webkit-overflow-scrolling: touch;
-    /* Padding para iOS safe area */
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  /* Prevenir pull-to-refresh en móviles */
-  body {
-    touch-action: pan-y;
   }
 
   /* Root app container */
   #root {
     height: 100%;
-    overflow: hidden;
   }
 }
 

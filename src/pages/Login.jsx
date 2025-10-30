@@ -65,9 +65,9 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex">
+    <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex" style={{ minHeight: '100dvh' }}>
       {/* Left Section - Informative */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center px-12 xl:px-20">
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center px-12 xl:px-20 overflow-y-auto">
         <div className="max-w-xl">
           {/* Logo and Brand */}
           <div className="mb-12 text-center">
@@ -139,7 +139,7 @@ export default function Login() {
       </div>
 
       {/* Right Section - Login/Register Forms */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 bg-white/5 lg:bg-transparent">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 py-8 bg-white/5 lg:bg-transparent overflow-y-auto" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
         <div className="w-full max-w-md">
           {/* Logo móvil (solo visible en pantallas pequeñas) */}
           <div className="text-center mb-8 lg:hidden">
