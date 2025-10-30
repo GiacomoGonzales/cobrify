@@ -16,6 +16,7 @@ export default function MainLayout() {
   // Verificar si el usuario tiene un negocio creado
   useEffect(() => {
     let isMounted = true
+    let timeoutId
 
     const checkBusiness = async () => {
       if (!user?.uid) {
@@ -28,17 +29,28 @@ export default function MainLayout() {
 
       if (isMounted) setCheckingBusiness(true)
 
+      // Timeout de seguridad
+      timeoutId = setTimeout(() => {
+        if (isMounted) {
+          console.warn('⚠️ Business check timeout - continuando sin datos')
+          setCheckingBusiness(false)
+          setHasBusiness(true) // Asumir que existe para no bloquear
+        }
+      }, 5000)
+
       try {
         const businessRef = doc(db, 'businesses', user.uid)
         const businessDoc = await getDoc(businessRef)
 
         if (isMounted) {
+          clearTimeout(timeoutId)
           setHasBusiness(businessDoc.exists())
         }
       } catch (error) {
         console.error('Error al verificar negocio:', error)
         if (isMounted) {
-          setHasBusiness(false)
+          clearTimeout(timeoutId)
+          setHasBusiness(true) // Asumir que existe en caso de error
         }
       } finally {
         if (isMounted) {
@@ -56,6 +68,7 @@ export default function MainLayout() {
 
     return () => {
       isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [user?.uid, isAuthenticated, location.pathname])
 
@@ -65,8 +78,10 @@ export default function MainLayout() {
       // Dar un pequeño tiempo para que la suscripción se cargue
       const timer = setTimeout(() => {
         setSubscriptionLoading(false)
-      }, 500)
+      }, 300) // Reducido de 500 a 300ms
       return () => clearTimeout(timer)
+    } else if (!isAuthenticated) {
+      setSubscriptionLoading(false)
     }
   }, [isLoading, isAuthenticated])
 

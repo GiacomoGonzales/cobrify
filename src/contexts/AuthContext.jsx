@@ -16,49 +16,79 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate()
 
   useEffect(() => {
+    // Timeout de seguridad para evitar loading infinito
+    const safetyTimeout = setTimeout(() => {
+      console.warn('⚠️ Auth timeout - forzando fin de loading')
+      setIsLoading(false)
+    }, 10000) // 10 segundos máximo
+
     // Observar cambios en el estado de autenticación de Firebase
     const unsubscribe = onAuthChange(async (firebaseUser) => {
-      if (firebaseUser) {
-        // Usuario autenticado
-        const userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
+      try {
+        if (firebaseUser) {
+          // Usuario autenticado
+          const userData = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+          }
+          setUser(userData)
+          setIsAuthenticated(true)
+
+          // Verificar si es administrador con timeout
+          let adminStatus = false
+          try {
+            const adminPromise = Promise.race([
+              isUserAdmin(firebaseUser.uid),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Admin check timeout')), 5000))
+            ])
+            adminStatus = await adminPromise
+          } catch (error) {
+            console.error('Error al verificar admin:', error)
+            adminStatus = false
+          }
+          setIsAdmin(adminStatus)
+
+          // Obtener suscripción con timeout
+          try {
+            const subscriptionPromise = Promise.race([
+              getSubscription(firebaseUser.uid),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Subscription timeout')), 5000))
+            ])
+            const userSubscription = await subscriptionPromise
+            setSubscription(userSubscription)
+
+            // Verificar acceso activo (admin siempre tiene acceso)
+            const accessStatus = adminStatus ? true : hasActiveAccess(userSubscription)
+            setHasAccess(accessStatus)
+          } catch (error) {
+            console.error('Error al obtener suscripción:', error)
+            // Si es admin, darle acceso aunque falle la suscripción
+            setHasAccess(adminStatus)
+            setSubscription(null)
+          }
+        } else {
+          // Usuario no autenticado
+          setUser(null)
+          setIsAuthenticated(false)
+          setIsAdmin(false)
+          setSubscription(null)
+          setHasAccess(false)
         }
-        setUser(userData)
-        setIsAuthenticated(true)
-
-        // Verificar si es administrador
-        const adminStatus = await isUserAdmin(firebaseUser.uid)
-        setIsAdmin(adminStatus)
-
-        // Obtener suscripción
-        try {
-          const userSubscription = await getSubscription(firebaseUser.uid)
-          setSubscription(userSubscription)
-
-          // Verificar acceso activo (admin siempre tiene acceso)
-          const accessStatus = adminStatus ? true : hasActiveAccess(userSubscription)
-          setHasAccess(accessStatus)
-        } catch (error) {
-          console.error('Error al obtener suscripción:', error)
-          // Si es admin, darle acceso aunque falle la suscripción
-          setHasAccess(adminStatus)
-        }
-      } else {
-        // Usuario no autenticado
-        setUser(null)
-        setIsAuthenticated(false)
-        setIsAdmin(false)
-        setSubscription(null)
-        setHasAccess(false)
+      } catch (error) {
+        console.error('Error en AuthContext:', error)
+      } finally {
+        clearTimeout(safetyTimeout)
+        setIsLoading(false)
       }
-      setIsLoading(false)
     })
 
     // Cleanup subscription
-    return () => unsubscribe()
+    return () => {
+      unsubscribe()
+      clearTimeout(safetyTimeout)
+    }
   }, [])
 
   const login = async (email, password) => {
