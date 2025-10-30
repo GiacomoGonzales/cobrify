@@ -13,6 +13,28 @@ export default function MainLayout() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(true)
   const location = useLocation()
 
+  // Forzar reflow cuando el layout se monta para evitar conflictos de estilos después de Login
+  useEffect(() => {
+    // Forzar recálculo de layout
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    // Asegurar que #root también tenga overflow hidden
+    const root = document.getElementById('root')
+    if (root) {
+      root.style.overflow = 'hidden'
+    }
+
+    // Cleanup: restaurar cuando se desmonte (ej. al volver a Login)
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+      if (root) {
+        root.style.overflow = ''
+      }
+    }
+  }, [])
+
   // Verificar si el usuario tiene un negocio creado
   useEffect(() => {
     let isMounted = true
