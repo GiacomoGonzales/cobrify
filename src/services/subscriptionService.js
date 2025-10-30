@@ -30,11 +30,58 @@ export const PLANS = {
       multiUser: false
     }
   },
-  plan_3_months: {
-    name: "Plan 3 Meses",
+  // PLAN ESTÁNDAR (100 comprobantes/mes)
+  standard_3_months: {
+    name: "Plan Estándar - 3 Meses",
+    category: "standard",
     months: 3,
-    pricePerMonth: 39,
-    totalPrice: 117, // 3 x 39
+    pricePerMonth: 39.90,
+    totalPrice: 119.70,
+    limits: {
+      maxInvoicesPerMonth: 100,
+      maxCustomers: -1, // ilimitado
+      maxProducts: -1, // ilimitado
+      sunatIntegration: true,
+      multiUser: false
+    }
+  },
+  standard_6_months: {
+    name: "Plan Estándar - 6 Meses",
+    category: "standard",
+    months: 6,
+    pricePerMonth: 29.90,
+    totalPrice: 179.40,
+    limits: {
+      maxInvoicesPerMonth: 100,
+      maxCustomers: -1,
+      maxProducts: -1,
+      sunatIntegration: true,
+      multiUser: false
+    },
+    badge: "Ahorro 25%"
+  },
+  standard_12_months: {
+    name: "Plan Estándar - 12 Meses",
+    category: "standard",
+    months: 12,
+    pricePerMonth: 19.90,
+    totalPrice: 238.80,
+    limits: {
+      maxInvoicesPerMonth: 100,
+      maxCustomers: -1,
+      maxProducts: -1,
+      sunatIntegration: true,
+      multiUser: false
+    },
+    badge: "Ahorro 50%"
+  },
+  // PLAN ILIMITADO (Comprobantes sin límite)
+  unlimited_3_months: {
+    name: "Plan Ilimitado - 3 Meses",
+    category: "unlimited",
+    months: 3,
+    pricePerMonth: 49.90,
+    totalPrice: 149.70,
     limits: {
       maxInvoicesPerMonth: -1, // ilimitado
       maxCustomers: -1,
@@ -43,11 +90,12 @@ export const PLANS = {
       multiUser: false
     }
   },
-  plan_6_months: {
-    name: "Plan 6 Meses",
+  unlimited_6_months: {
+    name: "Plan Ilimitado - 6 Meses",
+    category: "unlimited",
     months: 6,
-    pricePerMonth: 29,
-    totalPrice: 174, // 6 x 29
+    pricePerMonth: 39.90,
+    totalPrice: 239.40,
     limits: {
       maxInvoicesPerMonth: -1, // ilimitado
       maxCustomers: -1,
@@ -55,13 +103,14 @@ export const PLANS = {
       sunatIntegration: true,
       multiUser: false
     },
-    badge: "Popular"
+    badge: "Ahorro 20%"
   },
-  plan_12_months: {
-    name: "Plan 12 Meses (1 Año)",
+  unlimited_12_months: {
+    name: "Plan Ilimitado - 12 Meses",
+    category: "unlimited",
     months: 12,
-    pricePerMonth: 19,
-    totalPrice: 228, // 12 x 19
+    pricePerMonth: 29.90,
+    totalPrice: 358.80,
     limits: {
       maxInvoicesPerMonth: -1, // ilimitado
       maxCustomers: -1,
@@ -69,11 +118,13 @@ export const PLANS = {
       sunatIntegration: true,
       multiUser: true
     },
-    badge: "Mejor Precio"
+    badge: "Ahorro 40%"
   },
-  custom: {
-    name: "Plan Personalizado",
-    months: 1,
+  // Plan Enterprise (para casos especiales/admin)
+  enterprise: {
+    name: "Plan Enterprise",
+    category: "enterprise",
+    months: 12,
     pricePerMonth: 0,
     totalPrice: 0,
     limits: {
@@ -81,7 +132,7 @@ export const PLANS = {
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true
     }
   }
 };
