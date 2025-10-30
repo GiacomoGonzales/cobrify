@@ -154,7 +154,7 @@ export default function NotificationPanel({ userId, isOpen, onClose }) {
       />
 
       {/* Panel de notificaciones */}
-      <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-[600px] flex flex-col">
+      <div className="fixed sm:absolute right-0 sm:right-0 top-16 sm:top-full left-0 sm:left-auto sm:mt-2 w-full sm:w-96 bg-white sm:rounded-lg shadow-xl border-t sm:border border-gray-200 z-50 max-h-[calc(100vh-4rem)] sm:max-h-[600px] flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
           <div className="flex items-center gap-2">
