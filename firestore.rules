@@ -13,9 +13,11 @@ service cloud.firestore {
 
     // Helper function to check if user has active subscription
     function hasActiveSubscription(userId) {
-      let subscription = get(/databases/$(database)/documents/subscriptions/$(userId));
-      return subscription.data.status == 'active' &&
-             subscription.data.accessBlocked == false;
+      let subscriptionPath = /databases/$(database)/documents/subscriptions/$(userId);
+      // If subscription doesn't exist yet, allow access (for initial setup)
+      return !exists(subscriptionPath) ? true :
+             get(subscriptionPath).data.status == 'active' &&
+             get(subscriptionPath).data.accessBlocked == false;
     }
 
     // Helper function to check if user is admin
@@ -33,8 +35,10 @@ service cloud.firestore {
     match /subscriptions/{userId} {
       // Users can read their own subscription, admins can read all
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      // Only admins can write subscriptions
-      allow write: if isAdmin();
+      // Users can create their own subscription (for trial), admins can modify any
+      allow create: if isAuthenticated() && isOwner(userId);
+      // Only admins can update/delete subscriptions
+      allow update, delete: if isAdmin();
     }
 
     // Admins collection (lista de UIDs de administradores)
@@ -84,6 +88,18 @@ service cloud.firestore {
 
       // Subcollection: Cash Movements (Movimientos de Caja)
       match /cashMovements/{movementId} {
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Suppliers (Proveedores)
+      match /suppliers/{supplierId} {
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Purchases (Compras)
+      match /purchases/{purchaseId} {
         allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
       }
