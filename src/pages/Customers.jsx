@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -21,6 +21,7 @@ import {
   deleteCustomer,
 } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
+import { generateCustomersExcel } from '@/services/customerExportService'
 
 export default function Customers() {
   const { user } = useAuth()
@@ -169,6 +170,27 @@ export default function Customers() {
     }
   }
 
+  const handleExportToExcel = async () => {
+    try {
+      if (customers.length === 0) {
+        toast.error('No hay clientes para exportar');
+        return;
+      }
+
+      // Obtener datos del negocio
+      const { getCompanySettings } = await import('@/services/firestoreService');
+      const settingsResult = await getCompanySettings(user.uid);
+      const businessData = settingsResult.success ? settingsResult.data : null;
+
+      // Generar Excel
+      generateCustomersExcel(customers, businessData);
+      toast.success(`${customers.length} cliente(s) exportado(s) exitosamente`);
+    } catch (error) {
+      console.error('Error al exportar clientes:', error);
+      toast.error('Error al generar el archivo Excel');
+    }
+  }
+
   // Filtrar y ordenar clientes
   const filteredCustomers = customers
     .filter(customer => {
@@ -223,10 +245,20 @@ export default function Customers() {
             Gestiona tu cartera de clientes
           </p>
         </div>
-        <Button onClick={openCreateModal} className="w-full sm:w-auto">
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Cliente
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={handleExportToExcel}
+            className="w-full sm:w-auto"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel
+          </Button>
+          <Button onClick={openCreateModal} className="w-full sm:w-auto">
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Cliente
+          </Button>
+        </div>
       </div>
 
       {/* Search & Sort */}

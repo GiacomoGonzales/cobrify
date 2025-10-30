@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -15,7 +15,9 @@ import {
   addCashMovement,
   getCashMovements,
   getInvoices,
+  getCompanySettings,
 } from '@/services/firestoreService'
+import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
 export default function CashRegister() {
   const { user } = useAuth()
@@ -125,13 +127,87 @@ export default function CashRegister() {
         toast.success('Caja cerrada correctamente')
         setShowCloseModal(false)
         setClosingCounts({ cash: '', card: '', transfer: '' })
-        loadData()
+
+        // Actualizar el estado local inmediatamente para evitar problemas de caché
+        setCurrentSession(null)
+        setMovements([])
+
+        // Recargar datos después de un breve delay para asegurar que Firestore se actualizó
+        setTimeout(() => {
+          loadData()
+        }, 500)
       } else {
         toast.error(result.error || 'Error al cerrar la caja')
       }
     } catch (error) {
       console.error('Error al cerrar caja:', error)
       toast.error('Error al cerrar la caja')
+    }
+  }
+
+  const handleDownloadExcel = async () => {
+    try {
+      // Obtener datos del negocio
+      const businessResult = await getCompanySettings(user.uid)
+      const businessData = businessResult.success ? businessResult.data : null
+
+      // Calcular los valores de cierre si están disponibles en closingCounts
+      const cash = parseFloat(closingCounts.cash) || currentSession.closingCash || 0
+      const card = parseFloat(closingCounts.card) || currentSession.closingCard || 0
+      const transfer = parseFloat(closingCounts.transfer) || currentSession.closingTransfer || 0
+      const totalCounted = cash + card + transfer
+
+      // Preparar datos de la sesión con los totales
+      const sessionDataWithTotals = {
+        ...currentSession,
+        totalSales: totals.sales,
+        totalIncome: totals.income,
+        totalExpense: totals.expense,
+        expectedAmount: totals.expected,
+        closingCash: cash,
+        closingCard: card,
+        closingTransfer: transfer,
+        closingAmount: totalCounted,
+      }
+
+      generateCashReportExcel(sessionDataWithTotals, movements, todayInvoices, businessData)
+      toast.success('Reporte Excel descargado correctamente')
+    } catch (error) {
+      console.error('Error al generar Excel:', error)
+      toast.error('Error al generar el reporte Excel')
+    }
+  }
+
+  const handleDownloadPDF = async () => {
+    try {
+      // Obtener datos del negocio
+      const businessResult = await getCompanySettings(user.uid)
+      const businessData = businessResult.success ? businessResult.data : null
+
+      // Calcular los valores de cierre si están disponibles en closingCounts
+      const cash = parseFloat(closingCounts.cash) || currentSession.closingCash || 0
+      const card = parseFloat(closingCounts.card) || currentSession.closingCard || 0
+      const transfer = parseFloat(closingCounts.transfer) || currentSession.closingTransfer || 0
+      const totalCounted = cash + card + transfer
+
+      // Preparar datos de la sesión con los totales
+      const sessionDataWithTotals = {
+        ...currentSession,
+        totalSales: totals.sales,
+        totalIncome: totals.income,
+        totalExpense: totals.expense,
+        expectedAmount: totals.expected,
+        closingCash: cash,
+        closingCard: card,
+        closingTransfer: transfer,
+        closingAmount: totalCounted,
+      }
+
+      generateCashReportPDF(sessionDataWithTotals, movements, todayInvoices, businessData)
+      toast.success('Reporte PDF descargado correctamente')
+    } catch (error) {
+      console.error('Error al generar PDF:', error)
+      toast.error('Error al generar el reporte PDF')
     }
   }
 
@@ -218,26 +294,26 @@ export default function CashRegister() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Control de Caja</h1>
-          <p className="text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Caja</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
         </div>
 
         {!currentSession ? (
-          <Button onClick={() => setShowOpenModal(true)}>
+          <Button onClick={() => setShowOpenModal(true)} className="w-full sm:w-auto">
             <Unlock className="w-4 h-4 mr-2" />
             Abrir Caja
           </Button>
         ) : (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowMovementModal(true)}>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowMovementModal(true)} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Movimiento
             </Button>
-            <Button variant="danger" onClick={() => setShowCloseModal(true)}>
+            <Button variant="danger" onClick={() => setShowCloseModal(true)} className="w-full sm:w-auto">
               <Lock className="w-4 h-4 mr-2" />
               Cerrar Caja
             </Button>
@@ -317,33 +393,33 @@ export default function CashRegister() {
           </div>
 
           {/* Resumen y Movimientos */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* Resumen */}
             <Card>
               <CardHeader>
-                <CardTitle>Resumen de Caja</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Resumen de Caja</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-gray-600">Monto Inicial:</span>
-                    <span className="font-semibold">{formatCurrency(currentSession.openingAmount)}</span>
+                    <span className="text-xs sm:text-sm text-gray-600">Monto Inicial:</span>
+                    <span className="text-sm sm:text-base font-semibold">{formatCurrency(currentSession.openingAmount)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-green-600">+ Ventas:</span>
-                    <span className="font-semibold text-green-600">{formatCurrency(totals.sales)}</span>
+                    <span className="text-xs sm:text-sm text-green-600">+ Ventas:</span>
+                    <span className="text-sm sm:text-base font-semibold text-green-600">{formatCurrency(totals.sales)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-blue-600">+ Otros Ingresos:</span>
-                    <span className="font-semibold text-blue-600">{formatCurrency(totals.income)}</span>
+                    <span className="text-xs sm:text-sm text-blue-600">+ Otros Ingresos:</span>
+                    <span className="text-sm sm:text-base font-semibold text-blue-600">{formatCurrency(totals.income)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-sm text-red-600">- Egresos:</span>
-                    <span className="font-semibold text-red-600">{formatCurrency(totals.expense)}</span>
+                    <span className="text-xs sm:text-sm text-red-600">- Egresos:</span>
+                    <span className="text-sm sm:text-base font-semibold text-red-600">{formatCurrency(totals.expense)}</span>
                   </div>
                   <div className="flex justify-between items-center py-3 bg-primary-50 px-3 rounded-lg mt-3">
-                    <span className="font-semibold text-primary-900">Efectivo Esperado:</span>
-                    <span className="text-xl font-bold text-primary-600">
+                    <span className="text-sm sm:text-base font-semibold text-primary-900">Efectivo Esperado:</span>
+                    <span className="text-lg sm:text-xl font-bold text-primary-600">
                       {formatCurrency(totals.expected)}
                     </span>
                   </div>
@@ -358,11 +434,11 @@ export default function CashRegister() {
             {/* Movimientos */}
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle>Movimientos del Día</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Movimientos del Día</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-blue-800">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 mb-4">
+                  <p className="text-xs sm:text-sm text-blue-800">
                     <strong>Nota:</strong> Las ventas del POS se registran automáticamente.
                     Aquí se muestran solo los movimientos adicionales (pagos, cobros, gastos, etc.)
                     que registres con el botón "Movimiento".
@@ -370,19 +446,19 @@ export default function CashRegister() {
                 </div>
                 {movements.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    <p>No hay movimientos adicionales registrados</p>
-                    <p className="text-sm mt-1">Haz clic en "Movimiento" para registrar ingresos o egresos</p>
+                    <p className="text-sm sm:text-base">No hay movimientos adicionales registrados</p>
+                    <p className="text-xs sm:text-sm mt-1">Haz clic en "Movimiento" para registrar ingresos o egresos</p>
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
                     {movements.map((movement) => (
                       <div
                         key={movement.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
                       >
                         <div className="flex items-center gap-3">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            className={`w-10 h-10 flex-shrink-0 rounded-full flex items-center justify-center ${
                               movement.type === 'income'
                                 ? 'bg-green-100'
                                 : 'bg-red-100'
@@ -394,14 +470,14 @@ export default function CashRegister() {
                               <TrendingDown className="w-5 h-5 text-red-600" />
                             )}
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{movement.description}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{movement.description}</p>
                             <p className="text-xs text-gray-500">{movement.category}</p>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-0 sm:text-right ml-13 sm:ml-0">
                           <p
-                            className={`font-bold ${
+                            className={`text-base sm:text-lg font-bold ${
                               movement.type === 'income' ? 'text-green-600' : 'text-red-600'
                             }`}
                           >
@@ -552,20 +628,48 @@ export default function CashRegister() {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowCloseModal(false)
-                setClosingCounts({ cash: '', card: '', transfer: '' })
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button variant="danger" onClick={handleCloseCashRegister}>
-              <Lock className="w-4 h-4 mr-2" />
-              Cerrar Caja
-            </Button>
+          <div className="flex flex-col gap-3 pt-4">
+            {/* Download Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-3 border-b border-gray-200">
+              <Button
+                variant="outline"
+                onClick={handleDownloadExcel}
+                className="w-full"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Descargar Excel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDownloadPDF}
+                className="w-full"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Descargar PDF
+              </Button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCloseModal(false)
+                  setClosingCounts({ cash: '', card: '', transfer: '' })
+                }}
+                className="w-full"
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleCloseCashRegister}
+                className="w-full"
+              >
+                <Lock className="w-4 h-4 mr-2" />
+                Cerrar Caja
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>

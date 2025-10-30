@@ -5,10 +5,12 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useStore } from '@/stores/useStore'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
+import NotificationPanel from './NotificationPanel'
 import Button from './ui/Button'
 
 export default function Navbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, subscription } = useAuth()
   const { toggleMobileMenu } = useStore()
   const navigate = useNavigate()
 
@@ -17,9 +19,37 @@ export default function Navbar() {
   const [isSearching, setIsSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const desktopSearchRef = useRef(null)
   const mobileSearchRef = useRef(null)
+  const notificationRef = useRef(null)
+
+  // Cargar notificaciones no leídas
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      if (!user?.uid) return;
+
+      try {
+        const unreadNotifications = await getUnreadNotifications(user.uid);
+        setUnreadCount(unreadNotifications.length);
+      } catch (error) {
+        console.error('Error al cargar notificaciones:', error);
+      }
+    };
+
+    loadUnreadCount();
+
+    // Verificar y crear notificaciones de suscripción
+    if (user?.uid && subscription) {
+      checkAndCreateSubscriptionNotifications(user.uid, subscription);
+    }
+
+    // Actualizar cada 5 minutos
+    const interval = setInterval(loadUnreadCount, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user?.uid, subscription]);
 
   // Click outside to close
   useEffect(() => {
@@ -288,10 +318,24 @@ export default function Navbar() {
         </button>
 
         {/* Notifications */}
-        <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-          <Bell className="w-5 h-5 text-gray-600" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-        </button>
+        <div className="relative" ref={notificationRef}>
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <Bell className="w-5 h-5 text-gray-600" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            )}
+          </button>
+
+          {/* Panel de notificaciones */}
+          <NotificationPanel
+            userId={user?.uid}
+            isOpen={showNotifications}
+            onClose={() => setShowNotifications(false)}
+          />
+        </div>
 
         {/* User Menu */}
         <div className="flex items-center space-x-2 sm:space-x-3 pl-2 sm:pl-4 border-l border-gray-200">

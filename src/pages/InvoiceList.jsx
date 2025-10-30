@@ -19,6 +19,7 @@ import {
   FileMinus,
   FilePlus,
   MoreVertical,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -28,10 +29,12 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
+import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat } from '@/services/firestoreService'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
+import { generateInvoicesExcel } from '@/services/invoiceExportService'
 
 export default function InvoiceList() {
   const { user } = useAuth()
@@ -48,6 +51,14 @@ export default function InvoiceList() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
   const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
+
+  // Estados para exportación
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportFilters, setExportFilters] = useState({
+    type: 'all',
+    startDate: '',
+    endDate: '',
+  })
 
   useEffect(() => {
     loadInvoices()
@@ -98,6 +109,50 @@ export default function InvoiceList() {
       toast.error('Error al eliminar la factura. Inténtalo nuevamente.')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const handleExportToExcel = () => {
+    try {
+      // Filtrar facturas según los criterios seleccionados
+      let filteredInvoices = [...invoices];
+
+      // Filtrar por tipo
+      if (exportFilters.type && exportFilters.type !== 'all') {
+        filteredInvoices = filteredInvoices.filter(inv => inv.type === exportFilters.type);
+      }
+
+      // Filtrar por rango de fechas
+      if (exportFilters.startDate) {
+        const startDate = new Date(exportFilters.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        filteredInvoices = filteredInvoices.filter(inv => {
+          const invDate = inv.createdAt?.toDate();
+          return invDate && invDate >= startDate;
+        });
+      }
+
+      if (exportFilters.endDate) {
+        const endDate = new Date(exportFilters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        filteredInvoices = filteredInvoices.filter(inv => {
+          const invDate = inv.createdAt?.toDate();
+          return invDate && invDate <= endDate;
+        });
+      }
+
+      if (filteredInvoices.length === 0) {
+        toast.error('No hay comprobantes que coincidan con los filtros seleccionados');
+        return;
+      }
+
+      // Generar Excel
+      generateInvoicesExcel(filteredInvoices, exportFilters, companySettings);
+      toast.success(`${filteredInvoices.length} comprobante(s) exportado(s) exitosamente`);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error al exportar a Excel:', error);
+      toast.error('Error al generar el archivo Excel');
     }
   }
 
@@ -251,12 +306,22 @@ export default function InvoiceList() {
             Visualiza y gestiona todas tus facturas y boletas emitidas
           </p>
         </div>
-        <Link to="/pos" className="w-full sm:w-auto">
-          <Button className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Venta
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setShowExportModal(true)}
+            className="w-full sm:w-auto"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel
           </Button>
-        </Link>
+          <Link to="/pos" className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto">
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva Venta
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
@@ -756,6 +821,69 @@ export default function InvoiceList() {
               ) : (
                 <>Eliminar</>
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Export Modal */}
+      <Modal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Exportar Comprobantes a Excel"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Selecciona los filtros para exportar tus comprobantes a Excel
+          </p>
+
+          <Select
+            label="Tipo de Comprobante"
+            value={exportFilters.type}
+            onChange={(e) => setExportFilters({ ...exportFilters, type: e.target.value })}
+          >
+            <option value="all">Todos los tipos</option>
+            <option value="factura">Solo Facturas</option>
+            <option value="boleta">Solo Boletas</option>
+            <option value="nota-credito">Solo Notas de Crédito</option>
+            <option value="nota-debito">Solo Notas de Débito</option>
+          </Select>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              type="date"
+              label="Fecha Desde"
+              value={exportFilters.startDate}
+              onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })}
+            />
+            <Input
+              type="date"
+              label="Fecha Hasta"
+              value={exportFilters.endDate}
+              onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })}
+            />
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-sm text-blue-800">
+              <strong>Nota:</strong> Si no seleccionas fechas, se exportarán todos los comprobantes del tipo seleccionado.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowExportModal(false)}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleExportToExcel}
+              className="w-full sm:flex-1"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Exportar a Excel
             </Button>
           </div>
         </div>

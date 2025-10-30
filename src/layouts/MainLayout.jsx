@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const location = useLocation()
@@ -72,8 +72,21 @@ export default function MainLayout() {
     return <Navigate to="/login" replace />
   }
 
-  // Redirigir a crear negocio si no existe (excepto si ya está en esa página)
-  if (hasBusiness === false && location.pathname !== '/business/new') {
+  // Verificar acceso a suscripción
+  // IMPORTANTE: Los administradores SIEMPRE tienen acceso completo, sin importar su suscripción
+  const isAdminRoute = location.pathname.startsWith('/admin')
+  const isSubscriptionRoute = location.pathname === '/mi-suscripcion'
+  const isBusinessNewRoute = location.pathname === '/business/new'
+
+  // Solo bloquear si NO es admin Y NO tiene acceso Y NO está en rutas especiales
+  const shouldBlockAccess = !isAdmin && !hasAccess && !isAdminRoute && !isSubscriptionRoute && !isBusinessNewRoute
+
+  if (shouldBlockAccess) {
+    return <Navigate to="/account-suspended" replace />
+  }
+
+  // Redirigir a crear negocio si no existe (excepto si ya está en esa página o es admin)
+  if (hasBusiness === false && location.pathname !== '/business/new' && !isAdmin) {
     return <Navigate to="/business/new" replace />
   }
 

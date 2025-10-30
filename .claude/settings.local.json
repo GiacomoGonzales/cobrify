@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: Use product code instead of Firestore ID in SUNAT XML documents\n\nFixed critical issue where product codes were appearing as Firestore IDs in SUNAT electronic invoices. Updated XML generation for invoices, credit notes, and debit notes to prioritize product codes.\n\nChanges:\n- Updated xmlGenerator.js to use item.code instead of item.productId\n- Applied fix to generateInvoiceXML, generateCreditNoteXML, and generateDebitNoteXML\n- Added fallback chain: code -> productId -> index\n- Fixed PDF generation to handle both Firestore Timestamps and Date objects\n- Removed automatic PDF download after POS sale completion\n- Added PDF download button to invoice details\n- Fixed customer statistics calculations (orders count and total spent)\n- Implemented Cash Register (Control de Caja) feature with opening/closing functionality\n- Added cash movement tracking with income/expense categories\n- Enhanced customer list with sorting and statistics display\n- Added routes for Reports, Suppliers, and Purchases pages\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(node --check:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(gcloud functions add-invoker-policy-binding:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node setup-admin-simple.js:*)"
     ],
     "deny": [],
     "ask": []

@@ -8,9 +8,11 @@ import {
   DollarSign,
   Loader2,
   Plus,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -18,11 +20,14 @@ import Alert from '@/components/ui/Alert'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
-import { getProducts } from '@/services/firestoreService'
+import { getProducts, getProductCategories } from '@/services/firestoreService'
+import { generateProductsExcel } from '@/services/productExportService'
 
 export default function Inventory() {
   const { user } = useAuth()
+  const toast = useToast()
   const [products, setProducts] = useState([])
+  const [productCategories, setProductCategories] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
@@ -30,6 +35,7 @@ export default function Inventory() {
 
   useEffect(() => {
     loadProducts()
+    loadCategories()
   }, [user])
 
   const loadProducts = async () => {
@@ -45,6 +51,40 @@ export default function Inventory() {
       console.error('Error al cargar productos:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadCategories = async () => {
+    if (!user?.uid) return
+
+    try {
+      const result = await getProductCategories(user.uid)
+      if (result.success) {
+        setProductCategories(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar categorías:', error)
+    }
+  }
+
+  const handleExportToExcel = async () => {
+    try {
+      if (products.length === 0) {
+        toast.error('No hay productos en el inventario para exportar');
+        return;
+      }
+
+      // Obtener datos del negocio
+      const { getCompanySettings } = await import('@/services/firestoreService');
+      const settingsResult = await getCompanySettings(user.uid);
+      const businessData = settingsResult.success ? settingsResult.data : null;
+
+      // Generar Excel
+      generateProductsExcel(products, productCategories, businessData);
+      toast.success(`${products.length} producto(s) exportado(s) exitosamente`);
+    } catch (error) {
+      console.error('Error al exportar inventario:', error);
+      toast.error('Error al generar el archivo Excel');
     }
   }
 
@@ -116,12 +156,22 @@ export default function Inventory() {
             Gestiona el stock de tus productos
           </p>
         </div>
-        <Link to="/productos" className="w-full sm:w-auto">
-          <Button className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Agregar Producto
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={handleExportToExcel}
+            className="w-full sm:w-auto"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel
           </Button>
-        </Link>
+          <Link to="/productos" className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto">
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar Producto
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}

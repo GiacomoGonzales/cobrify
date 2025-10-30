@@ -21,27 +21,18 @@ import CashRegister from './pages/CashRegister'
 import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
 import UserManagement from './pages/admin/UserManagement'
-import GetMyUID from './pages/GetMyUID'
 
 function App() {
   return (
-    <Router
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true
-      }}
-    >
+    <Router>
       <AuthProvider>
         <ToastProvider>
           <Routes>
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
-
+            
             {/* Ruta de cuenta suspendida (sin layout) */}
             <Route path="/account-suspended" element={<AccountSuspended />} />
-
-            {/* Ruta especial para obtener UID (sin layout) */}
-            <Route path="/get-my-uid" element={<GetMyUID />} />
 
             {/* Rutas protegidas con layout */}
             <Route path="/" element={<MainLayout />}>
@@ -62,7 +53,7 @@ function App() {
               <Route path="configuracion" element={<Settings />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />
               <Route path="business/new" element={<BusinessCreate />} />
-
+              
               {/* Rutas de administración */}
               <Route path="admin/users" element={<UserManagement />} />
             </Route>

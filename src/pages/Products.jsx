@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -21,6 +21,7 @@ import {
   getProductCategories,
   saveProductCategories,
 } from '@/services/firestoreService'
+import { generateProductsExcel } from '@/services/productExportService'
 
 // Unidades de medida
 const UNITS = [
@@ -321,6 +322,27 @@ export default function Products() {
     }
   }
 
+  const handleExportToExcel = async () => {
+    try {
+      if (products.length === 0) {
+        toast.error('No hay productos para exportar');
+        return;
+      }
+
+      // Obtener datos del negocio
+      const { getCompanySettings } = await import('@/services/firestoreService');
+      const settingsResult = await getCompanySettings(user.uid);
+      const businessData = settingsResult.success ? settingsResult.data : null;
+
+      // Generar Excel
+      generateProductsExcel(products, categories, businessData);
+      toast.success(`${products.length} producto(s) exportado(s) exitosamente`);
+    } catch (error) {
+      console.error('Error al exportar productos:', error);
+      toast.error('Error al generar el archivo Excel');
+    }
+  }
+
   // Category management functions
   const openCategoryModal = () => {
     setNewCategoryName('')
@@ -572,19 +594,29 @@ export default function Products() {
             Gestiona tu catálogo de productos y servicios
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
-            onClick={openCategoryModal}
-            className="flex-1 sm:flex-initial"
+            onClick={handleExportToExcel}
+            className="w-full sm:w-auto"
           >
-            <FolderPlus className="w-4 h-4 mr-2" />
-            Categorías
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel
           </Button>
-          <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
-            <Plus className="w-4 h-4 mr-2" />
-            Nuevo Producto
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={openCategoryModal}
+              className="flex-1 sm:flex-initial"
+            >
+              <FolderPlus className="w-4 h-4 mr-2" />
+              Categorías
+            </Button>
+            <Button onClick={openCreateModal} className="flex-1 sm:flex-initial">
+              <Plus className="w-4 h-4 mr-2" />
+              Nuevo Producto
+            </Button>
+          </div>
         </div>
       </div>
 

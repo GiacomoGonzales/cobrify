@@ -11,24 +11,81 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
+    // Helper function to check if user has active subscription
+    function hasActiveSubscription(userId) {
+      let subscription = get(/databases/$(database)/documents/subscriptions/$(userId));
+      return subscription.data.status == 'active' &&
+             subscription.data.accessBlocked == false;
+    }
+
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Helper function to check access (admin OR active subscription)
+    function hasAccess(userId) {
+      return isAdmin() || hasActiveSubscription(userId);
+    }
+
+    // Subscriptions collection
+    match /subscriptions/{userId} {
+      // Users can read their own subscription, admins can read all
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      // Only admins can write subscriptions
+      allow write: if isAdmin();
+    }
+
+    // Admins collection (lista de UIDs de administradores)
+    match /admins/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Solo se gestiona manualmente desde consola Firebase
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // Users can only read/write their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
     // Businesses (Negocios)
     // Cada usuario tiene un solo negocio con su userId como ID
+    // IMPORTANTE: Los administradores tienen acceso sin importar su suscripción
     match /businesses/{userId} {
-      allow read, write: if isAuthenticated() && isOwner(userId);
+      allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+      allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
 
       // Subcollection: Invoices (Facturas/Boletas)
       match /invoices/{invoiceId} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
       }
 
       // Subcollection: Customers (Clientes)
       match /customers/{customerId} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
       }
 
       // Subcollection: Products (Productos)
       match /products/{productId} {
-        allow read, write: if isAuthenticated() && isOwner(userId);
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Cash Register Sessions (Sesiones de Caja)
+      match /cashSessions/{sessionId} {
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Cash Movements (Movimientos de Caja)
+      match /cashMovements/{movementId} {
+        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
       }
     }
   }

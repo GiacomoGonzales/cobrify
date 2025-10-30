@@ -4,6 +4,31 @@ import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 
+// Silenciar warnings internos de Firestore en desarrollo
+if (import.meta.env.DEV) {
+  const originalWarn = console.warn;
+  const originalError = console.error;
+
+  console.warn = (...args) => {
+    const message = args[0]?.toString() || '';
+    // Filtrar warnings específicos de BloomFilter y otros internos de Firestore
+    if (message.includes('BloomFilter') ||
+        message.includes('@firebase/firestore') && message.includes('error:')) {
+      return;
+    }
+    originalWarn.apply(console, args);
+  };
+
+  console.error = (...args) => {
+    const message = args[0]?.toString() || '';
+    // Filtrar errores específicos de BloomFilter
+    if (message.includes('BloomFilter')) {
+      return;
+    }
+    originalError.apply(console, args);
+  };
+}
+
 // Configuración de Firebase desde variables de entorno
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
