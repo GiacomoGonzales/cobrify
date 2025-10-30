@@ -21,12 +21,12 @@ export const PLANS = {
     months: 0,
     pricePerMonth: 0,
     totalPrice: 0,
-    duration: 14, // días
+    duration: 1, // días
     limits: {
-      maxInvoicesPerMonth: 10,
-      maxCustomers: 5,
-      maxProducts: 20,
-      sunatIntegration: false,
+      maxInvoicesPerMonth: -1, // ilimitado
+      maxCustomers: -1, // ilimitado
+      maxProducts: -1, // ilimitado
+      sunatIntegration: false, // Bloqueado en prueba
       multiUser: false
     }
   },

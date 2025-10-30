@@ -85,10 +85,11 @@ export default function MainLayout() {
     return <Navigate to="/account-suspended" replace />
   }
 
-  // Redirigir a crear negocio si no existe (excepto si ya está en esa página o es admin)
-  if (hasBusiness === false && location.pathname !== '/business/new' && !isAdmin) {
-    return <Navigate to="/business/new" replace />
-  }
+  // No redirigir a crear negocio - permitir acceso directo al dashboard
+  // Los usuarios pueden configurar su negocio más tarde desde Configuración
+  // if (hasBusiness === false && location.pathname !== '/business/new' && !isAdmin) {
+  //   return <Navigate to="/business/new" replace />
+  // }
 
   return (
     <div className="flex h-screen bg-gray-50">

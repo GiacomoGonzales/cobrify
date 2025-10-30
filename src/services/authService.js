@@ -7,6 +7,7 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
+import { createSubscription } from './subscriptionService'
 
 /**
  * Servicio de autenticación con Firebase
@@ -35,6 +36,20 @@ export const registerUser = async (email, password, displayName) => {
     // Actualizar perfil con nombre
     if (displayName) {
       await updateProfile(userCredential.user, { displayName })
+    }
+
+    // Crear suscripción de prueba de 1 día automáticamente
+    try {
+      await createSubscription(
+        userCredential.user.uid,
+        email,
+        displayName || email,
+        'trial'
+      )
+      console.log('✅ Suscripción de prueba creada automáticamente')
+    } catch (subscriptionError) {
+      console.error('Error al crear suscripción de prueba:', subscriptionError)
+      // No fallar el registro si hay error en la suscripción
     }
 
     return { success: true, user: userCredential.user }

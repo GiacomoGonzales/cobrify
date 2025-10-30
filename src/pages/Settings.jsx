@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -11,6 +11,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { companySettingsSchema } from '@/utils/schemas'
+import { getSubscription } from '@/services/subscriptionService'
 
 export default function Settings() {
   const { user } = useAuth()
@@ -18,6 +19,7 @@ export default function Settings() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('informacion')
+  const [subscription, setSubscription] = useState(null)
   const [series, setSeries] = useState({
     factura: { serie: 'F001', lastNumber: 0 },
     boleta: { serie: 'B001', lastNumber: 0 },
@@ -61,6 +63,12 @@ export default function Settings() {
 
     setIsLoading(true)
     try {
+      // Cargar suscripción del usuario
+      const subResult = await getSubscription(user.uid)
+      if (subResult) {
+        setSubscription(subResult)
+      }
+
       // Cargar datos de la empresa usando userId como businessId
       const businessRef = doc(db, 'businesses', user.uid)
       const businessDoc = await getDoc(businessRef)
@@ -291,11 +299,20 @@ export default function Settings() {
     )
   }
 
+  // Check if user is on trial plan
+  const isTrialUser = subscription?.plan === 'trial'
+
   // Tabs configuration
   const tabs = [
     { id: 'informacion', label: 'Información', icon: Building2 },
     { id: 'series', label: 'Series', icon: FileText },
-    { id: 'sunat', label: 'SUNAT', icon: Shield },
+    {
+      id: 'sunat',
+      label: 'SUNAT',
+      icon: Shield,
+      disabled: isTrialUser,
+      tooltip: isTrialUser ? 'Disponible al actualizar tu plan' : null
+    },
   ]
 
   return (
@@ -314,10 +331,14 @@ export default function Settings() {
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => !tab.disabled && setActiveTab(tab.id)}
+              disabled={tab.disabled}
+              title={tab.tooltip || ''}
               className={`
                 group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
-                ${activeTab === tab.id
+                ${tab.disabled
+                  ? 'border-transparent text-gray-400 cursor-not-allowed opacity-60'
+                  : activeTab === tab.id
                   ? 'border-primary-500 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }
@@ -326,10 +347,18 @@ export default function Settings() {
               <tab.icon
                 className={`
                   -ml-0.5 mr-2 h-5 w-5
-                  ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}
+                  ${tab.disabled
+                    ? 'text-gray-400'
+                    : activeTab === tab.id
+                    ? 'text-primary-500'
+                    : 'text-gray-400 group-hover:text-gray-500'
+                  }
                 `}
               />
               {tab.label}
+              {tab.disabled && (
+                <Lock className="ml-1.5 h-4 w-4 text-gray-400" />
+              )}
             </button>
           ))}
         </nav>
