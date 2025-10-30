@@ -7,9 +7,10 @@ import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true)
   const location = useLocation()
 
   // Verificar si el usuario tiene un negocio creado
@@ -58,8 +59,19 @@ export default function MainLayout() {
     }
   }, [user?.uid, isAuthenticated, location.pathname])
 
-  // Mostrar loading mientras carga auth
-  if (isLoading || checkingBusiness) {
+  // Esperar a que la suscripción se cargue antes de verificar acceso
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      // Dar un pequeño tiempo para que la suscripción se cargue
+      const timer = setTimeout(() => {
+        setSubscriptionLoading(false)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [isLoading, isAuthenticated])
+
+  // Mostrar loading mientras carga auth o suscripción
+  if (isLoading || checkingBusiness || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>

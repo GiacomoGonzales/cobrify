@@ -105,21 +105,21 @@ export default function AccountSuspended() {
                 <p>
                   <span className="font-medium">WhatsApp:</span>{' '}
                   <a
-                    href="https://wa.me/51123456789"
+                    href="https://wa.me/51900434988"
                     className="text-blue-600 hover:underline"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    +51 123 456 789
+                    +51 900 434 988
                   </a>
                 </p>
                 <p>
                   <span className="font-medium">Email:</span>{' '}
                   <a
-                    href="mailto:soporte@cobrify.com"
+                    href="mailto:soporte@cobrifyperu.com"
                     className="text-blue-600 hover:underline"
                   >
-                    soporte@cobrify.com
+                    soporte@cobrifyperu.com
                   </a>
                 </p>
               </div>
@@ -128,7 +128,7 @@ export default function AccountSuspended() {
             {/* Botones de acción */}
             <div className="flex flex-col sm:flex-row gap-3 mt-8">
               <a
-                href="https://wa.me/51123456789?text=Hola,%20necesito%20reactivar%20mi%20cuenta%20de%20Cobrify"
+                href="https://wa.me/51900434988?text=Hola,%20necesito%20reactivar%20mi%20cuenta%20de%20Cobrify"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-6 rounded-lg transition-colors text-center"
