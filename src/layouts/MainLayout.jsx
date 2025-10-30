@@ -119,17 +119,17 @@ export default function MainLayout() {
   // }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden md:ml-64">
-        {/* Navbar */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden md:ml-64">
+        {/* Navbar - Siempre fijo */}
         <Navbar />
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+        {/* Page Content - Solo esta área hace scroll */}
+        <main className="flex-1 overflow-y-auto overscroll-none p-4 sm:p-6 custom-scrollbar">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>
