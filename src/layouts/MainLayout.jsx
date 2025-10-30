@@ -119,7 +119,7 @@ export default function MainLayout() {
   // }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
       {/* Sidebar */}
       <Sidebar />
 
@@ -129,7 +129,7 @@ export default function MainLayout() {
         <Navbar />
 
         {/* Page Content - Solo esta área hace scroll */}
-        <main className="flex-1 overflow-y-auto overscroll-none p-4 sm:p-6 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto overscroll-none p-4 sm:p-6 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>
