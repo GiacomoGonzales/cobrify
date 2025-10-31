@@ -22,6 +22,8 @@ import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
 import UserManagement from './pages/admin/UserManagement'
 import GetMyUID from './pages/GetMyUID'
+import Quotations from './pages/Quotations'
+import CreateQuotation from './pages/CreateQuotation'
 
 function App() {
   return (
@@ -51,6 +53,8 @@ function App() {
               <Route path="facturas" element={<InvoiceList />} />
               <Route path="nota-credito" element={<CreateCreditNote />} />
               <Route path="nota-debito" element={<CreateDebitNote />} />
+              <Route path="cotizaciones" element={<Quotations />} />
+              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />

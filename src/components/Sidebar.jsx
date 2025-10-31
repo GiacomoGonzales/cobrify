@@ -13,6 +13,7 @@ import {
   Wallet,
   CreditCard,
   Shield,
+  FileCheck,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAuth } from '@/contexts/AuthContext'
@@ -42,6 +43,11 @@ export default function Sidebar() {
       path: '/facturas',
       icon: FileText,
       label: 'Facturas',
+    },
+    {
+      path: '/cotizaciones',
+      icon: FileCheck,
+      label: 'Cotizaciones',
     },
     {
       path: '/clientes',
