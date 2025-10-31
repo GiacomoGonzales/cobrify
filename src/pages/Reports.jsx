@@ -22,6 +22,12 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomersWithStats, getProducts } from '@/services/firestoreService'
 import {
+  exportGeneralReport,
+  exportSalesReport,
+  exportProductsReport,
+  exportCustomersReport,
+} from '@/services/reportExportService'
+import {
   BarChart,
   Bar,
   XAxis,
@@ -410,6 +416,17 @@ export default function Reports() {
       {/* Resumen General */}
       {selectedReport === 'overview' && (
         <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => exportGeneralReport({ stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange })}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte General (Excel)
+            </button>
+          </div>
+
           {/* KPIs principales */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
@@ -610,6 +627,17 @@ export default function Reports() {
       {/* Reporte de Ventas */}
       {selectedReport === 'sales' && (
         <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => exportSalesReport({ stats, salesByMonth, filteredInvoices, dateRange })}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Ventas (Excel)
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card>
               <CardContent className="p-6">
@@ -743,6 +771,17 @@ export default function Reports() {
       {/* Reporte de Productos */}
       {selectedReport === 'products' && (
         <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => exportProductsReport({ topProducts, dateRange })}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Productos (Excel)
+            </button>
+          </div>
+
           {/* Gráfico de Top 5 Productos */}
           <Card>
             <CardHeader>
@@ -825,6 +864,17 @@ export default function Reports() {
       {/* Reporte de Clientes */}
       {selectedReport === 'customers' && (
         <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => exportCustomersReport({ topCustomers, dateRange })}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Clientes (Excel)
+            </button>
+          </div>
+
           {/* Gráfico de Top 10 Clientes */}
           <Card>
             <CardHeader>
