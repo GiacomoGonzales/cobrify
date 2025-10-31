@@ -21,6 +21,25 @@ import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomersWithStats, getProducts } from '@/services/firestoreService'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart as RePieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+} from 'recharts'
+
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export default function Reports() {
   const { user } = useAuth()
@@ -182,7 +201,6 @@ export default function Reports() {
           }
         }
         productSales[key].quantity += item.quantity || 0
-        // Calcular revenue usando unitPrice o subtotal
         const itemRevenue = item.subtotal || ((item.quantity || 0) * (item.unitPrice || 0))
         productSales[key].revenue += itemRevenue
       })
@@ -193,19 +211,16 @@ export default function Reports() {
       .slice(0, 10)
   }, [filteredInvoices])
 
-  // Top clientes - recalcular con facturas filtradas
+  // Top clientes
   const topCustomers = useMemo(() => {
-    // Recalcular estadísticas de clientes basado en facturas filtradas
     const customerStats = {}
 
     filteredInvoices.forEach(invoice => {
-      // Intentar obtener el ID del cliente de diferentes formas
       const customerId = invoice.customer?.id || invoice.customerId
       const customerName = invoice.customer?.name || invoice.customerName || 'Cliente General'
       const customerDocType = invoice.customer?.documentType || invoice.customerDocumentType || '1'
       const customerDocNumber = invoice.customer?.documentNumber || invoice.customerDocumentNumber || '00000000'
 
-      // Usar documento como clave si no hay ID
       const key = customerId || customerDocNumber
 
       if (!customerStats[key]) {
@@ -258,6 +273,55 @@ export default function Reports() {
 
     return Object.values(monthsData)
   }, [invoices])
+
+  // Datos para gráfico de torta de tipos de documentos
+  const documentTypesData = useMemo(() => {
+    return [
+      { name: 'Facturas', value: stats.facturas, color: COLORS[0] },
+      { name: 'Boletas', value: stats.boletas, color: COLORS[1] },
+    ].filter(item => item.value > 0)
+  }, [stats])
+
+  // Datos para gráfico de torta de estados de pago
+  const paymentStatusData = useMemo(() => {
+    const paid = filteredInvoices.filter(inv => inv.status === 'paid').length
+    const pending = filteredInvoices.filter(inv => inv.status === 'pending').length
+
+    return [
+      { name: 'Pagadas', value: paid, color: COLORS[1] },
+      { name: 'Pendientes', value: pending, color: COLORS[2] },
+    ].filter(item => item.value > 0)
+  }, [filteredInvoices])
+
+  // Datos para gráfico de productos top 5
+  const top5ProductsData = useMemo(() => {
+    return topProducts.slice(0, 5).map((product, index) => ({
+      name: product.name.length > 15 ? product.name.substring(0, 15) + '...' : product.name,
+      fullName: product.name,
+      ventas: product.revenue,
+      cantidad: product.quantity,
+      color: COLORS[index % COLORS.length]
+    }))
+  }, [topProducts])
+
+  // Custom tooltip para los gráficos
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-semibold text-gray-900">{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {entry.name}: {entry.name.includes('ventas') || entry.name.includes('Ingresos')
+                ? formatCurrency(entry.value)
+                : entry.value}
+            </p>
+          ))}
+        </div>
+      )
+    }
+    return null
+  }
 
   if (isLoading) {
     return (
@@ -429,36 +493,117 @@ export default function Reports() {
             </Card>
           </div>
 
-          {/* Ventas por mes */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Tendencia de Ventas (Últimos 12 Meses)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mes</TableHead>
-                      <TableHead className="text-right">Comprobantes</TableHead>
-                      <TableHead className="text-right">Ingresos</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {salesByMonth.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{item.month}</TableCell>
-                        <TableCell className="text-right">{item.count}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(item.revenue)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Gráficos principales */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de Ventas por Mes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Tendencia de Ventas (Últimos 12 Meses)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={salesByMonth}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke={COLORS[0]}
+                      fillOpacity={1}
+                      fill="url(#colorRevenue)"
+                      name="Ingresos"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Tipos de Documentos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución de Comprobantes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <RePieChart>
+                    <Pie
+                      data={documentTypesData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {documentTypesData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </RePieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Gráficos secundarios */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de Estados de Pago */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Estados de Pago</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <RePieChart>
+                    <Pie
+                      data={paymentStatusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {paymentStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </RePieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Cantidad de Ventas por Mes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Cantidad de Ventas por Mes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={salesByMonth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="count" fill={COLORS[2]} name="Comprobantes" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
 
@@ -506,6 +651,32 @@ export default function Reports() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Gráfico de área de ingresos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Evolución de Ingresos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={salesByMonth}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke={COLORS[0]}
+                    strokeWidth={3}
+                    dot={{ fill: COLORS[0], r: 6 }}
+                    name="Ingresos"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -571,131 +742,177 @@ export default function Reports() {
 
       {/* Reporte de Productos */}
       {selectedReport === 'products' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Productos Más Vendidos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Posición</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead className="text-right">Cantidad Vendida</TableHead>
-                    <TableHead className="text-right">Ingresos Generados</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topProducts.length === 0 ? (
+        <>
+          {/* Gráfico de Top 5 Productos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 Productos Más Vendidos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={top5ProductsData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="ventas" fill={COLORS[0]} name="Ventas" radius={[0, 8, 8, 0]}>
+                    {top5ProductsData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de productos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Todos los Productos Vendidos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-gray-500">
-                        No hay datos de productos en este período
-                      </TableCell>
+                      <TableHead>Posición</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-right">Cantidad Vendida</TableHead>
+                      <TableHead className="text-right">Ingresos Generados</TableHead>
                     </TableRow>
-                  ) : (
-                    topProducts.map((product, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
-                          <div
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                              index === 0
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : index === 1
-                                ? 'bg-gray-200 text-gray-700'
-                                : index === 2
-                                ? 'bg-orange-100 text-orange-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {index + 1}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(product.revenue)}
+                  </TableHeader>
+                  <TableBody>
+                    {topProducts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                          No hay datos de productos en este período
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                    ) : (
+                      topProducts.map((product, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            <div
+                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                index === 0
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : index === 1
+                                  ? 'bg-gray-200 text-gray-700'
+                                  : index === 2
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {index + 1}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{product.name}</TableCell>
+                          <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(product.revenue)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Reporte de Clientes */}
       {selectedReport === 'customers' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Top 10 Clientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Posición</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Documento</TableHead>
-                    <TableHead className="text-right">Pedidos</TableHead>
-                    <TableHead className="text-right">Total Gastado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topCustomers.length === 0 ? (
+        <>
+          {/* Gráfico de Top 10 Clientes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 10 Clientes por Ingresos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={topCustomers}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={100} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="totalSpent" fill={COLORS[4]} name="Total Gastado" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de clientes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalles de Clientes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                        No hay datos de clientes
-                      </TableCell>
+                      <TableHead>Posición</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Documento</TableHead>
+                      <TableHead className="text-right">Pedidos</TableHead>
+                      <TableHead className="text-right">Total Gastado</TableHead>
                     </TableRow>
-                  ) : (
-                    topCustomers.map((customer, index) => (
-                      <TableRow key={customer.id}>
-                        <TableCell>
-                          <div
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
-                              index === 0
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : index === 1
-                                ? 'bg-gray-200 text-gray-700'
-                                : index === 2
-                                ? 'bg-orange-100 text-orange-700'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {index + 1}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{customer.name}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              customer.documentType === '6' ? 'primary' : 'default'
-                            }
-                          >
-                            {customer.documentType === '6' ? 'RUC' : 'DNI'}
-                          </Badge>
-                          <span className="ml-2 text-sm">{customer.documentNumber}</span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
-                            <span className="text-sm font-semibold">{customer.ordersCount || 0}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(customer.totalSpent || 0)}
+                  </TableHeader>
+                  <TableBody>
+                    {topCustomers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                          No hay datos de clientes
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                    ) : (
+                      topCustomers.map((customer, index) => (
+                        <TableRow key={customer.id}>
+                          <TableCell>
+                            <div
+                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                index === 0
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : index === 1
+                                  ? 'bg-gray-200 text-gray-700'
+                                  : index === 2
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {index + 1}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{customer.name}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                customer.documentType === '6' ? 'primary' : 'default'
+                              }
+                            >
+                              {customer.documentType === '6' ? 'RUC' : 'DNI'}
+                            </Badge>
+                            <span className="ml-2 text-sm">{customer.documentNumber}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
+                              <span className="text-sm font-semibold">{customer.ordersCount || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(customer.totalSpent || 0)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   )
