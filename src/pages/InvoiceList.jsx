@@ -21,7 +21,7 @@ import {
   MoreVertical,
   FileSpreadsheet,
 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -37,7 +37,7 @@ import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/s
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 
 export default function InvoiceList() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
@@ -69,6 +69,14 @@ export default function InvoiceList() {
 
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        // Cargar datos de demo
+        setInvoices(demoData.invoices || [])
+        setCompanySettings(demoData.business || null)
+        setIsLoading(false)
+        return
+      }
+
       const [invoicesResult, settingsResult] = await Promise.all([
         getInvoices(user.uid),
         getCompanySettings(user.uid)

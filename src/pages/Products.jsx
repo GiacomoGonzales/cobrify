@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -87,7 +87,7 @@ const getAllDescendantCategoryIds = (categories, parentId) => {
 }
 
 export default function Products() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -147,6 +147,14 @@ export default function Products() {
 
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        // Cargar datos de demo
+        setProducts(demoData.products || [])
+        setCategories([]) // Demo no necesita categorías por ahora
+        setIsLoading(false)
+        return
+      }
+
       const [productsResult, categoriesResult] = await Promise.all([
         getProducts(user.uid),
         getProductCategories(user.uid)

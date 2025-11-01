@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -24,7 +24,7 @@ import { formatCurrency } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 
 export default function Customers() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -66,6 +66,18 @@ export default function Customers() {
 
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        // Cargar datos de demo con stats simulados
+        const customersWithStats = demoData.customers.map(customer => ({
+          ...customer,
+          ordersCount: 0,
+          totalSpent: 0
+        }))
+        setCustomers(customersWithStats)
+        setIsLoading(false)
+        return
+      }
+
       const result = await getCustomersWithStats(user.uid)
       if (result.success) {
         setCustomers(result.data || [])
