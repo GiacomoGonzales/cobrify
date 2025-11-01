@@ -27,6 +27,12 @@ export default function CashRegister() {
   const [movements, setMovements] = useState([])
   const [todayInvoices, setTodayInvoices] = useState([])
 
+  // Helper para convertir fechas (Firestore Timestamp o Date)
+  const getDateFromTimestamp = (timestamp) => {
+    if (!timestamp) return null
+    return timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  }
+
   // Modal states
   const [showOpenModal, setShowOpenModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
@@ -471,7 +477,7 @@ export default function CashRegister() {
                   </div>
                   <div className="text-xs text-gray-500 mt-2">
                     <Calendar className="w-3 h-3 inline mr-1" />
-                    Abierto: {currentSession.openedAt ? formatDate(currentSession.openedAt.toDate()) : 'Hoy'}
+                    Abierto: {getDateFromTimestamp(currentSession.openedAt) ? formatDate(getDateFromTimestamp(currentSession.openedAt)) : 'Hoy'}
                   </div>
                 </div>
               </CardContent>
@@ -530,7 +536,7 @@ export default function CashRegister() {
                             {movement.type === 'income' ? '+' : '-'} {formatCurrency(movement.amount)}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {movement.createdAt ? formatDate(movement.createdAt.toDate()) : 'Hoy'}
+                            {getDateFromTimestamp(movement.createdAt) ? formatDate(getDateFromTimestamp(movement.createdAt)) : 'Hoy'}
                           </p>
                         </div>
                       </div>
