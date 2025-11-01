@@ -24,6 +24,7 @@ import UserManagement from './pages/admin/UserManagement'
 import GetMyUID from './pages/GetMyUID'
 import Quotations from './pages/Quotations'
 import CreateQuotation from './pages/CreateQuotation'
+import Demo from './pages/Demo'
 
 function App() {
   return (
@@ -38,6 +39,9 @@ function App() {
           <Routes>
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
+
+            {/* Ruta de demo (sin autenticación) */}
+            <Route path="/demo" element={<Demo />} />
 
             {/* Ruta de cuenta suspendida (sin layout) */}
             <Route path="/account-suspended" element={<AccountSuspended />} />

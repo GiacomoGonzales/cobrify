@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useDemo } from '@/contexts/DemoContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -19,8 +20,11 @@ import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 
-export default function Dashboard() {
-  const { user } = useAuth()
+export default function Dashboard({ isDemoMode = false }) {
+  const authContext = useAuth()
+  const demoContext = isDemoMode ? useDemo() : null
+
+  const user = isDemoMode ? demoContext?.demoData?.user : authContext?.user
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -28,9 +32,18 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData()
-  }, [user])
+  }, [user, isDemoMode])
 
   const loadDashboardData = async () => {
+    if (isDemoMode && demoContext?.demoData) {
+      // Load demo data
+      setInvoices(demoContext.demoData.invoices || [])
+      setCustomers(demoContext.demoData.customers || [])
+      setProducts(demoContext.demoData.products || [])
+      setIsLoading(false)
+      return
+    }
+
     if (!user?.uid) return
 
     setIsLoading(true)
@@ -80,11 +93,17 @@ export default function Dashboard() {
     return date
   }
 
+  // Helper to get date from invoice (handles both Firestore timestamp and regular Date)
+  const getInvoiceDate = (inv) => {
+    if (!inv.createdAt) return null
+    return inv.createdAt.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
+  }
+
   // Calcular ventas del día
   const todaysSales = invoices
     .filter(inv => {
-      if (!inv.createdAt) return false
-      const invDate = inv.createdAt.toDate()
+      const invDate = getInvoiceDate(inv)
+      if (!invDate) return false
       return invDate >= getStartOfToday()
     })
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
@@ -92,8 +111,8 @@ export default function Dashboard() {
   // Calcular ventas del mes
   const monthSales = invoices
     .filter(inv => {
-      if (!inv.createdAt) return false
-      const invDate = inv.createdAt.toDate()
+      const invDate = getInvoiceDate(inv)
+      if (!invDate) return false
       return invDate >= getStartOfMonth()
     })
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
@@ -115,8 +134,8 @@ export default function Dashboard() {
 
     const daySales = invoices
       .filter(inv => {
-        if (!inv.createdAt) return false
-        const invDate = inv.createdAt.toDate()
+        const invDate = getInvoiceDate(inv)
+        if (!invDate) return false
         return invDate >= dayStart && invDate <= dayEnd
       })
       .reduce((sum, inv) => sum + (inv.total || 0), 0)
@@ -130,8 +149,8 @@ export default function Dashboard() {
   // Calcular cambio del día anterior
   const yesterdaySales = invoices
     .filter(inv => {
-      if (!inv.createdAt) return false
-      const invDate = inv.createdAt.toDate()
+      const invDate = getInvoiceDate(inv)
+      if (!invDate) return false
       const yesterday = getDaysAgo(1)
       const yesterdayEnd = new Date(yesterday)
       yesterdayEnd.setHours(23, 59, 59, 999)
@@ -157,8 +176,8 @@ export default function Dashboard() {
       value: formatCurrency(monthSales),
       icon: TrendingUp,
       change: `${invoices.filter(inv => {
-        if (!inv.createdAt) return false
-        const invDate = inv.createdAt.toDate()
+        const invDate = getInvoiceDate(inv)
+        if (!invDate) return false
         return invDate >= getStartOfMonth()
       }).length} comprobantes`,
       changeType: 'positive',
@@ -182,8 +201,10 @@ export default function Dashboard() {
   // Últimas 5 facturas
   const recentInvoices = [...invoices]
     .sort((a, b) => {
-      if (!a.createdAt || !b.createdAt) return 0
-      return b.createdAt.toDate() - a.createdAt.toDate()
+      const dateA = getInvoiceDate(a)
+      const dateB = getInvoiceDate(b)
+      if (!dateA || !dateB) return 0
+      return dateB - dateA
     })
     .slice(0, 5)
 
@@ -401,7 +422,7 @@ export default function Dashboard() {
                         {formatCurrency(invoice.total)}
                       </p>
                       <p className="text-xs sm:text-sm text-gray-600">
-                        {invoice.createdAt ? formatDate(invoice.createdAt.toDate()) : 'N/A'}
+                        {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : 'N/A'}
                       </p>
                     </div>
                     <div className="flex-shrink-0">{getStatusBadge(invoice.status)}</div>
