@@ -93,23 +93,27 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         @media print {
+          /* Configuración específica para POS-8330 80mm thermal printer */
           @page {
-            size: 80mm auto;
+            size: 80mm 297mm;
             margin: 0;
           }
 
           * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
-          html, body {
-            width: 80mm;
-            height: auto;
+          html {
             margin: 0;
             padding: 0;
-            overflow: visible;
+          }
+
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 80mm;
+            height: auto;
           }
 
           body * {
@@ -122,36 +126,68 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           }
 
           .ticket-container {
-            position: relative;
+            position: absolute;
             left: 0;
             top: 0;
             width: 80mm !important;
             max-width: 80mm !important;
+            min-width: 80mm !important;
             margin: 0 !important;
-            padding: 5mm !important;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            font-size: 9pt;
-            line-height: 1.3;
-            background: transparent;
-            page-break-after: auto;
+            padding: 3mm 4mm !important;
+            font-family: 'Courier New', 'Courier', monospace;
+            font-size: 11px;
+            line-height: 1.2;
+            color: #000;
+            background: #fff;
+            page-break-after: avoid;
+            page-break-before: avoid;
           }
 
-          /* Evitar saltos de página innecesarios */
-          .ticket-header,
-          .ticket-section,
-          .ticket-items table,
-          .totals-section,
-          .ticket-footer {
+          /* Compactar secciones */
+          .ticket-header {
+            margin-bottom: 8px !important;
+            padding-bottom: 8px !important;
+          }
+
+          .ticket-section {
+            margin: 6px 0 !important;
+            padding: 4px 0 !important;
             page-break-inside: avoid;
           }
 
-          /* Eliminar márgenes adicionales */
-          .ticket-header,
-          .ticket-section,
-          .totals-section,
+          .totals-section {
+            margin-top: 8px !important;
+            padding-top: 8px !important;
+            page-break-inside: avoid;
+          }
+
           .ticket-footer {
-            margin-top: 0 !important;
-            margin-bottom: 8px !important;
+            margin-top: 8px !important;
+            padding-top: 8px !important;
+            page-break-inside: avoid;
+          }
+
+          .item-row {
+            margin: 4px 0 !important;
+            padding: 3px 0 !important;
+          }
+
+          .qr-container {
+            margin: 6px auto !important;
+          }
+
+          /* Reducir espacios en elementos específicos */
+          .company-logo {
+            max-height: 50px !important;
+            margin-bottom: 3px !important;
+          }
+
+          .info-row {
+            margin: 2px 0 !important;
+          }
+
+          .total-row {
+            margin: 3px 0 !important;
           }
         }
 
