@@ -123,16 +123,17 @@ export default function MainLayout() {
 
   // Verificar acceso a suscripción
   // IMPORTANTE: Los administradores SIEMPRE tienen acceso completo, sin importar su suscripción
-  const isAdminRoute = location.pathname.startsWith('/admin')
-  const isSubscriptionRoute = location.pathname === '/mi-suscripcion'
-  const isBusinessNewRoute = location.pathname === '/business/new'
+  // TEMPORALMENTE DESHABILITADO: No redirigir a account-suspended
+  // const isAdminRoute = location.pathname.startsWith('/admin')
+  // const isSubscriptionRoute = location.pathname === '/mi-suscripcion'
+  // const isBusinessNewRoute = location.pathname === '/business/new'
 
   // Solo bloquear si NO es admin Y NO tiene acceso Y NO está en rutas especiales
-  const shouldBlockAccess = !isAdmin && !hasAccess && !isAdminRoute && !isSubscriptionRoute && !isBusinessNewRoute
+  // const shouldBlockAccess = !isAdmin && !hasAccess && !isAdminRoute && !isSubscriptionRoute && !isBusinessNewRoute
 
-  if (shouldBlockAccess) {
-    return <Navigate to="/account-suspended" replace />
-  }
+  // if (shouldBlockAccess) {
+  //   return <Navigate to="/account-suspended" replace />
+  // }
 
   // No redirigir a crear negocio - permitir acceso directo al dashboard
   // Los usuarios pueden configurar su negocio más tarde desde Configuración
