@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { db, storage } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -43,6 +44,11 @@ export default function Settings() {
   const [showSolPassword, setShowSolPassword] = useState(false)
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [certificateFile, setCertificateFile] = useState(null)
+
+  // Estados para logo
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoFile, setLogoFile] = useState(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   const {
     register,
@@ -114,6 +120,11 @@ export default function Settings() {
             homologated: businessData.sunat.homologated || false,
           })
         }
+
+        // Cargar logo
+        if (businessData.logoUrl) {
+          setLogoUrl(businessData.logoUrl)
+        }
       }
     } catch (error) {
       console.error('Error al cargar configuración:', error)
@@ -123,12 +134,87 @@ export default function Settings() {
     }
   }
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Validar tipo de archivo
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('El archivo debe ser una imagen (JPG, PNG o WEBP)')
+      return
+    }
+
+    // Validar tamaño (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('La imagen no debe superar los 2MB')
+      return
+    }
+
+    setLogoFile(file)
+
+    // Mostrar preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setLogoUrl(e.target.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveLogo = async () => {
+    if (!user?.uid) return
+
+    try {
+      // Si hay un logo en storage, eliminarlo
+      if (logoUrl && logoUrl.includes('firebase')) {
+        try {
+          const logoRef = ref(storage, `businesses/${user.uid}/logo`)
+          await deleteObject(logoRef)
+        } catch (error) {
+          console.log('No se pudo eliminar el logo anterior:', error)
+        }
+      }
+
+      // Actualizar Firestore
+      const businessRef = doc(db, 'businesses', user.uid)
+      await updateDoc(businessRef, {
+        logoUrl: null,
+        updatedAt: serverTimestamp(),
+      })
+
+      setLogoUrl('')
+      setLogoFile(null)
+      toast.success('Logo eliminado exitosamente')
+    } catch (error) {
+      console.error('Error al eliminar logo:', error)
+      toast.error('Error al eliminar el logo')
+    }
+  }
+
   const onSubmit = async data => {
     if (!user?.uid) return
 
     setIsSaving(true)
 
     try {
+      let uploadedLogoUrl = logoUrl
+
+      // Si hay un nuevo archivo de logo, subirlo a Storage
+      if (logoFile) {
+        setUploadingLogo(true)
+        try {
+          const logoRef = ref(storage, `businesses/${user.uid}/logo`)
+          await uploadBytes(logoRef, logoFile)
+          uploadedLogoUrl = await getDownloadURL(logoRef)
+          console.log('✅ Logo subido exitosamente')
+        } catch (logoError) {
+          console.error('Error al subir logo:', logoError)
+          toast.error('Error al subir el logo. Se guardará el resto de la configuración.')
+        } finally {
+          setUploadingLogo(false)
+        }
+      }
+
       // Actualizar datos de la empresa usando userId como businessId
       const businessRef = doc(db, 'businesses', user.uid)
 
@@ -145,9 +231,11 @@ export default function Settings() {
         province: data.province,
         department: data.department,
         ubigeo: data.ubigeo,
+        logoUrl: uploadedLogoUrl || null,
         updatedAt: serverTimestamp(),
       })
 
+      setLogoFile(null) // Limpiar archivo temporal
       toast.success('Configuración guardada exitosamente')
     } catch (error) {
       console.error('Error al guardar:', error)
@@ -376,14 +464,72 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="RUC"
-                required
-                placeholder="20123456789"
-                error={errors.ruc?.message}
-                {...register('ruc')}
-              />
+            <div className="space-y-6">
+              {/* Logo Upload Section */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Logo de la Empresa
+                </label>
+                <div className="flex items-start gap-4">
+                  {/* Logo Preview */}
+                  {logoUrl ? (
+                    <div className="relative group">
+                      <img
+                        src={logoUrl}
+                        alt="Logo"
+                        className="w-32 h-32 object-contain border-2 border-gray-200 rounded-lg p-2 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Eliminar logo"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                      <Image className="w-12 h-12 text-gray-400" />
+                    </div>
+                  )}
+
+                  {/* Upload Button */}
+                  <div className="flex-1">
+                    <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                      <Upload className="w-4 h-4 mr-2 text-gray-600" />
+                      <span className="text-sm text-gray-700">
+                        {logoUrl ? 'Cambiar logo' : 'Subir logo'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Formatos: JPG, PNG, WEBP. Tamaño máximo: 2MB
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      El logo aparecerá en tus facturas y boletas impresas
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Company Info Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="RUC"
+                  required
+                  placeholder="20123456789"
+                  error={errors.ruc?.message}
+                  {...register('ruc')}
+                />
 
               <Input
                 label="Razón Social"
@@ -476,17 +622,18 @@ export default function Settings() {
                 maxLength={6}
                 helperText="Código de ubicación geográfica (6 dígitos) - Consultar en SUNAT"
               />
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Actions for Company Info */}
         <div className="flex justify-end">
-          <Button type="submit" disabled={isSaving}>
-            {isSaving ? (
+          <Button type="submit" disabled={isSaving || uploadingLogo}>
+            {isSaving || uploadingLogo ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Guardando...
+                {uploadingLogo ? 'Subiendo logo...' : 'Guardando...'}
               </>
             ) : (
               <>

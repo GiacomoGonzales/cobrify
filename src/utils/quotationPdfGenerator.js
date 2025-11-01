@@ -3,13 +3,40 @@ import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 /**
+ * Carga una imagen desde una URL y la convierte a base64
+ * @param {string} url - URL de la imagen
+ * @returns {Promise<string>} - Imagen en formato base64
+ */
+const loadImageAsBase64 = (url) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'Anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      try {
+        const dataURL = canvas.toDataURL('image/png')
+        resolve(dataURL)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+/**
  * Genera un PDF para una cotización
  * @param {Object} quotation - Datos de la cotización
  * @param {Object} companySettings - Configuración de la empresa
  * @param {boolean} download - Si se debe descargar automáticamente (default: true)
  * @returns {jsPDF} - El documento PDF generado
  */
-export const generateQuotationPDF = (quotation, companySettings, download = true) => {
+export const generateQuotationPDF = async (quotation, companySettings, download = true) => {
   const doc = new jsPDF()
 
   // Colores
@@ -23,11 +50,92 @@ export const generateQuotationPDF = (quotation, companySettings, download = true
 
   // ========== ENCABEZADO ==========
 
-  // Logo o nombre de empresa (izquierda)
-  doc.setFontSize(18)
-  doc.setTextColor(...primaryColor)
-  doc.setFont('helvetica', 'bold')
-  doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
+  // Logo de empresa (si existe)
+  if (companySettings?.logoUrl) {
+    try {
+      // Cargar logo como imagen
+      const imgData = await loadImageAsBase64(companySettings.logoUrl)
+      doc.addImage(imgData, 'PNG', 20, yPos, 30, 30)
+
+      // Mover texto a la derecha del logo
+      doc.setFontSize(18)
+      doc.setTextColor(...primaryColor)
+      doc.setFont('helvetica', 'bold')
+      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 55, yPos + 5)
+
+      // Ajustar posición para información de empresa
+      const companyInfoX = 55
+      yPos += 13
+
+      // Información de empresa (debajo del nombre)
+      doc.setFontSize(9)
+      doc.setTextColor(...grayMedium)
+      doc.setFont('helvetica', 'normal')
+
+      if (companySettings?.ruc) {
+        doc.text(`RUC: ${companySettings.ruc}`, companyInfoX, yPos)
+        yPos += 4
+      }
+
+      if (companySettings?.address) {
+        const addressLines = doc.splitTextToSize(companySettings.address, 80)
+        doc.text(addressLines, companyInfoX, yPos)
+        yPos += 4 * addressLines.length
+      }
+
+      if (companySettings?.phone) {
+        doc.text(`Tel: ${companySettings.phone}`, companyInfoX, yPos)
+        yPos += 4
+      }
+
+      if (companySettings?.email) {
+        doc.text(`Email: ${companySettings.email}`, companyInfoX, yPos)
+      }
+
+      // Resetear yPos para continuar
+      yPos = 20
+    } catch (error) {
+      console.error('Error cargando logo:', error)
+      // Si falla, usar el diseño sin logo
+      doc.setFontSize(18)
+      doc.setTextColor(...primaryColor)
+      doc.setFont('helvetica', 'bold')
+      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
+    }
+  } else {
+    // Diseño sin logo (original)
+    doc.setFontSize(18)
+    doc.setTextColor(...primaryColor)
+    doc.setFont('helvetica', 'bold')
+    doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
+
+    yPos += 8
+
+    // Información de empresa (izquierda)
+    doc.setFontSize(9)
+    doc.setTextColor(...grayMedium)
+    doc.setFont('helvetica', 'normal')
+
+    if (companySettings?.ruc) {
+      doc.text(`RUC: ${companySettings.ruc}`, 20, yPos)
+      yPos += 4
+    }
+
+    if (companySettings?.address) {
+      const addressLines = doc.splitTextToSize(companySettings.address, 80)
+      doc.text(addressLines, 20, yPos)
+      yPos += 4 * addressLines.length
+    }
+
+    if (companySettings?.phone) {
+      doc.text(`Tel: ${companySettings.phone}`, 20, yPos)
+      yPos += 4
+    }
+
+    if (companySettings?.email) {
+      doc.text(`Email: ${companySettings.email}`, 20, yPos)
+    }
+  }
 
   // Tipo de documento (derecha)
   doc.setFontSize(16)
@@ -346,10 +454,10 @@ export const generateQuotationPDF = (quotation, companySettings, download = true
  * Obtiene el PDF como blob para enviar por WhatsApp
  * @param {Object} quotation - Datos de la cotización
  * @param {Object} companySettings - Configuración de la empresa
- * @returns {Blob} - El PDF como blob
+ * @returns {Promise<Blob>} - El PDF como blob
  */
-export const getQuotationPDFBlob = (quotation, companySettings) => {
-  const doc = generateQuotationPDF(quotation, companySettings, false)
+export const getQuotationPDFBlob = async (quotation, companySettings) => {
+  const doc = await generateQuotationPDF(quotation, companySettings, false)
   return doc.output('blob')
 }
 
@@ -357,9 +465,9 @@ export const getQuotationPDFBlob = (quotation, companySettings) => {
  * Obtiene el PDF como base64 para enviar por WhatsApp
  * @param {Object} quotation - Datos de la cotización
  * @param {Object} companySettings - Configuración de la empresa
- * @returns {string} - El PDF en base64
+ * @returns {Promise<string>} - El PDF en base64
  */
-export const getQuotationPDFBase64 = (quotation, companySettings) => {
-  const doc = generateQuotationPDF(quotation, companySettings, false)
+export const getQuotationPDFBase64 = async (quotation, companySettings) => {
+  const doc = await generateQuotationPDF(quotation, companySettings, false)
   return doc.output('datauristring')
 }

@@ -3,11 +3,38 @@ import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 /**
+ * Carga una imagen desde una URL y la convierte a base64
+ * @param {string} url - URL de la imagen
+ * @returns {Promise<string>} - Imagen en formato base64
+ */
+const loadImageAsBase64 = (url) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'Anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      try {
+        const dataURL = canvas.toDataURL('image/png')
+        resolve(dataURL)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+/**
  * Genera un PDF para una factura o boleta
  * @param {Object} invoice - Datos de la factura
  * @param {Object} companySettings - Configuración de la empresa
  */
-export const generateInvoicePDF = (invoice, companySettings) => {
+export const generateInvoicePDF = async (invoice, companySettings, download = true) => {
   const doc = new jsPDF()
 
   // Colores
@@ -20,11 +47,92 @@ export const generateInvoicePDF = (invoice, companySettings) => {
 
   // ========== ENCABEZADO ==========
 
-  // Logo o nombre de empresa (izquierda)
-  doc.setFontSize(18)
-  doc.setTextColor(...primaryColor)
-  doc.setFont('helvetica', 'bold')
-  doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
+  // Logo de empresa (si existe)
+  if (companySettings?.logoUrl) {
+    try {
+      // Cargar logo como imagen
+      const imgData = await loadImageAsBase64(companySettings.logoUrl)
+      doc.addImage(imgData, 'PNG', 20, yPos, 30, 30)
+
+      // Mover texto a la derecha del logo
+      doc.setFontSize(18)
+      doc.setTextColor(...primaryColor)
+      doc.setFont('helvetica', 'bold')
+      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 55, yPos + 5)
+
+      // Ajustar posición para información de empresa
+      const companyInfoX = 55
+      yPos += 13
+
+      // Información de empresa (debajo del nombre)
+      doc.setFontSize(9)
+      doc.setTextColor(...grayMedium)
+      doc.setFont('helvetica', 'normal')
+
+      if (companySettings?.ruc) {
+        doc.text(`RUC: ${companySettings.ruc}`, companyInfoX, yPos)
+        yPos += 4
+      }
+
+      if (companySettings?.address) {
+        const addressLines = doc.splitTextToSize(companySettings.address, 80)
+        doc.text(addressLines, companyInfoX, yPos)
+        yPos += 4 * addressLines.length
+      }
+
+      if (companySettings?.phone) {
+        doc.text(`Tel: ${companySettings.phone}`, companyInfoX, yPos)
+        yPos += 4
+      }
+
+      if (companySettings?.email) {
+        doc.text(`Email: ${companySettings.email}`, companyInfoX, yPos)
+      }
+
+      // Resetear yPos para continuar
+      yPos = 20
+    } catch (error) {
+      console.error('Error cargando logo:', error)
+      // Si falla, usar el diseño sin logo
+      doc.setFontSize(18)
+      doc.setTextColor(...primaryColor)
+      doc.setFont('helvetica', 'bold')
+      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
+    }
+  } else {
+    // Diseño sin logo (original)
+    doc.setFontSize(18)
+    doc.setTextColor(...primaryColor)
+    doc.setFont('helvetica', 'bold')
+    doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
+
+    yPos += 8
+
+    // Información de empresa (izquierda)
+    doc.setFontSize(9)
+    doc.setTextColor(...grayMedium)
+    doc.setFont('helvetica', 'normal')
+
+    if (companySettings?.ruc) {
+      doc.text(`RUC: ${companySettings.ruc}`, 20, yPos)
+      yPos += 4
+    }
+
+    if (companySettings?.address) {
+      const addressLines = doc.splitTextToSize(companySettings.address, 80)
+      doc.text(addressLines, 20, yPos)
+      yPos += 4 * addressLines.length
+    }
+
+    if (companySettings?.phone) {
+      doc.text(`Tel: ${companySettings.phone}`, 20, yPos)
+      yPos += 4
+    }
+
+    if (companySettings?.email) {
+      doc.text(`Email: ${companySettings.email}`, 20, yPos)
+    }
+  }
 
   // Tipo de documento (derecha)
   doc.setFontSize(16)
@@ -260,15 +368,19 @@ export const generateInvoicePDF = (invoice, companySettings) => {
 
   // ========== GENERAR PDF ==========
 
-  const fileName = `${invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}_${invoice.number.replace(/\//g, '-')}.pdf`
-  doc.save(fileName)
+  if (download) {
+    const fileName = `${invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}_${invoice.number.replace(/\//g, '-')}.pdf`
+    doc.save(fileName)
+  }
+
+  return doc
 }
 
 /**
  * Genera un PDF simple para vista previa
  * @param {Object} invoice - Datos de la factura
  */
-export const generateSimpleInvoicePDF = (invoice) => {
+export const generateSimpleInvoicePDF = async (invoice) => {
   const companySettings = {
     businessName: 'MI EMPRESA',
     ruc: '20123456789',
@@ -277,5 +389,16 @@ export const generateSimpleInvoicePDF = (invoice) => {
     phone: '01-2345678'
   }
 
-  generateInvoicePDF(invoice, companySettings)
+  return await generateInvoicePDF(invoice, companySettings)
+}
+
+/**
+ * Exporta el PDF como blob para enviar por WhatsApp u otros usos
+ * @param {Object} invoice - Datos de la factura
+ * @param {Object} companySettings - Configuración de la empresa
+ * @returns {Promise<Blob>} - PDF en formato blob
+ */
+export const getInvoicePDFBlob = async (invoice, companySettings) => {
+  const doc = await generateInvoicePDF(invoice, companySettings, false)
+  return doc.output('blob')
 }
