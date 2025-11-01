@@ -113,8 +113,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             max-height: 200mm;
             margin: 0;
             padding: 3mm;
-            font-family: 'Courier New', monospace;
-            font-size: 10pt;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 12pt;
+            font-weight: 700;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
 
@@ -122,17 +125,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           max-width: 80mm;
           margin: 0 auto;
           padding: 10px;
-          font-family: 'Courier New', monospace;
-          font-size: 12px;
-          line-height: 1.4;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.5;
           background: white;
-          color: black;
+          color: #000;
         }
 
         .ticket-header {
           text-align: center;
           margin-bottom: 15px;
-          border-bottom: 2px dashed #000;
+          border-bottom: 3px solid #000;
           padding-bottom: 10px;
         }
 
@@ -145,32 +149,41 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .company-name {
-          font-size: 14px;
-          font-weight: bold;
-          margin-bottom: 3px;
+          font-size: 18pt;
+          font-weight: 900;
+          margin-bottom: 5px;
+          color: #000;
         }
 
         .company-info {
-          font-size: 10px;
-          margin: 2px 0;
+          font-size: 12pt;
+          font-weight: 700;
+          margin: 3px 0;
+          color: #000;
         }
 
         .document-type {
-          font-size: 13px;
-          font-weight: bold;
-          margin: 10px 0 5px 0;
+          font-size: 16pt;
+          font-weight: 900;
+          margin: 12px 0 8px 0;
+          padding: 8px;
+          background: #000;
+          color: #fff;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
         .document-number {
-          font-size: 12px;
-          font-weight: bold;
-          margin-bottom: 5px;
+          font-size: 16pt;
+          font-weight: 900;
+          margin-bottom: 8px;
+          color: #000;
         }
 
         .ticket-section {
-          margin: 10px 0;
-          border-bottom: 1px dashed #000;
-          padding-bottom: 10px;
+          margin: 12px 0;
+          border-bottom: 2px dashed #000;
+          padding-bottom: 12px;
         }
 
         .ticket-section:last-child {
@@ -178,93 +191,109 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .section-title {
-          font-weight: bold;
-          font-size: 11px;
-          margin-bottom: 5px;
+          font-weight: 900;
+          font-size: 13pt;
+          margin-bottom: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          color: #000;
         }
 
         .info-row {
           display: flex;
           justify-content: space-between;
-          margin: 3px 0;
-          font-size: 10px;
+          margin: 5px 0;
+          font-size: 12pt;
+          font-weight: 700;
         }
 
         .info-label {
-          font-weight: bold;
+          font-weight: 900;
+          text-transform: uppercase;
         }
 
         .items-table {
           width: 100%;
-          margin: 10px 0;
-          font-size: 10px;
+          margin: 12px 0;
+          font-size: 12pt;
         }
 
         .items-header {
-          border-bottom: 1px solid #000;
-          padding-bottom: 5px;
-          margin-bottom: 5px;
-          font-weight: bold;
+          border-bottom: 2px solid #000;
+          padding-bottom: 8px;
+          margin-bottom: 8px;
+          font-weight: 900;
         }
 
         .item-row {
-          margin: 8px 0;
-          padding: 5px 0;
-          border-bottom: 1px dotted #ccc;
+          margin: 10px 0;
+          padding: 8px 0;
+          border-bottom: 1px solid #000;
         }
 
         .item-desc {
-          font-weight: bold;
-          margin-bottom: 3px;
+          font-weight: 900;
+          font-size: 13pt;
+          margin-bottom: 5px;
+          color: #000;
         }
 
         .item-details {
           display: flex;
           justify-content: space-between;
-          font-size: 9px;
+          font-size: 12pt;
+          font-weight: 800;
         }
 
         .totals-section {
-          margin-top: 10px;
-          padding-top: 10px;
-          border-top: 2px solid #000;
+          margin-top: 12px;
+          padding: 12px 8px;
+          background: #f0f0f0;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
 
         .total-row {
           display: flex;
           justify-content: space-between;
-          margin: 5px 0;
-          font-size: 11px;
+          margin: 6px 0;
+          font-size: 13pt;
+          font-weight: 800;
         }
 
         .total-row.final {
-          font-size: 13px;
-          font-weight: bold;
-          margin-top: 8px;
-          padding-top: 8px;
-          border-top: 1px solid #000;
+          font-size: 18pt;
+          font-weight: 900;
+          margin-top: 10px;
+          padding: 12px 8px;
+          background: #000;
+          color: #fff;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
 
         .ticket-footer {
           margin-top: 15px;
-          padding-top: 10px;
-          border-top: 2px dashed #000;
+          padding-top: 12px;
+          border-top: 3px solid #000;
           text-align: center;
-          font-size: 9px;
+          font-size: 11pt;
+          font-weight: 700;
         }
 
         .footer-text {
-          margin: 3px 0;
+          margin: 5px 0;
+          font-weight: 700;
         }
 
         .representation-text {
-          font-size: 8px;
-          margin-top: 10px;
-          font-weight: bold;
+          font-size: 11pt;
+          margin-top: 12px;
+          font-weight: 900;
         }
 
         .qr-container {
-          margin: 10px auto;
+          margin: 12px auto;
           text-align: center;
           display: flex;
           flex-direction: column;
@@ -272,7 +301,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .qr-code {
-          margin: 5px 0;
+          margin: 8px 0;
         }
       `}</style>
 
