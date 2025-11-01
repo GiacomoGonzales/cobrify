@@ -15,7 +15,7 @@ import {
   Folder,
   Tag,
 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -83,7 +83,7 @@ const getAllSubcategoryIds = (categories, parentId) => {
 }
 
 export default function POS() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const ticketRef = useRef(null)
   const [products, setProducts] = useState([])
@@ -133,6 +133,16 @@ export default function POS() {
 
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        // Cargar datos de demo
+        setProducts(demoData.products || [])
+        setCustomers(demoData.customers || [])
+        setCompanySettings(demoData.business || null)
+        setCategories([])
+        setIsLoading(false)
+        return
+      }
+
       // Cargar productos
       const productsResult = await getProducts(user.uid)
       if (productsResult.success) {
