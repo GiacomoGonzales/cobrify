@@ -443,6 +443,8 @@ export default function POS() {
   const handleCheckout = async () => {
     if (!user?.uid) return
 
+    console.log('🔍 POS handleCheckout - isDemoMode:', isDemoMode, 'demoData:', !!demoData)
+
     // Validar carrito no vacío
     if (cart.length === 0) {
       toast.error('El carrito está vacío')
@@ -494,6 +496,7 @@ export default function POS() {
     try {
       // MODO DEMO: Simular venta sin guardar en Firebase
       if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Procesando venta simulada...')
         // Simular un delay para hacer más realista
         await new Promise(resolve => setTimeout(resolve, 1000))
 
@@ -569,11 +572,12 @@ export default function POS() {
           address: '',
         })
         setPayments([{ id: Date.now(), method: '', amount: '' }])
-        setSelectedCustomerId('')
+        setSelectedCustomer(null)
 
         setIsProcessing(false)
         return
       }
+
       // 1. Obtener siguiente número de documento
       const numberResult = await getNextDocumentNumber(user.uid, documentType)
       if (!numberResult.success) {
