@@ -37,7 +37,6 @@ import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
-import { useReactToPrint } from 'react-to-print'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData } = useAppContext()
@@ -71,13 +70,57 @@ export default function InvoiceList() {
   })
 
   // Función para imprimir ticket
-  const handlePrintTicket = useReactToPrint({
-    content: () => ticketRef.current,
-    documentTitle: viewingInvoice?.number || 'Ticket',
-    onAfterPrint: () => {
-      toast.success('Ticket enviado a la impresora')
-    },
-  })
+  const handlePrintTicket = () => {
+    if (!ticketRef.current) return
+
+    // Crear una ventana nueva
+    const printWindow = window.open('', '_blank', 'width=300,height=600')
+
+    if (!printWindow) {
+      toast.error('Por favor permite las ventanas emergentes para imprimir')
+      return
+    }
+
+    // Escribir el contenido del ticket en la ventana nueva
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${viewingInvoice?.number || 'Ticket'}</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              width: 80mm;
+            }
+            * {
+              box-sizing: border-box;
+            }
+          </style>
+        </head>
+        <body>
+          ${ticketRef.current.innerHTML}
+        </body>
+      </html>
+    `)
+
+    printWindow.document.close()
+
+    // Esperar a que cargue y luego imprimir
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.focus()
+        printWindow.print()
+        printWindow.close()
+        toast.success('Ticket enviado a la impresora')
+      }, 250)
+    }
+  }
 
   useEffect(() => {
     loadInvoices()
