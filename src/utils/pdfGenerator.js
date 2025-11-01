@@ -138,34 +138,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(16)
   doc.setTextColor(...grayDark)
   const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA'
-  doc.text(documentTitle, 200, yPos, { align: 'right' })
-
-  yPos += 8
-
-  // Información de empresa (izquierda)
-  doc.setFontSize(9)
-  doc.setTextColor(...grayMedium)
-  doc.setFont('helvetica', 'normal')
-
-  if (companySettings?.ruc) {
-    doc.text(`RUC: ${companySettings.ruc}`, 20, yPos)
-    yPos += 4
-  }
-
-  if (companySettings?.address) {
-    const addressLines = doc.splitTextToSize(companySettings.address, 80)
-    doc.text(addressLines, 20, yPos)
-    yPos += 4 * addressLines.length
-  }
-
-  if (companySettings?.phone) {
-    doc.text(`Tel: ${companySettings.phone}`, 20, yPos)
-    yPos += 4
-  }
-
-  if (companySettings?.email) {
-    doc.text(`Email: ${companySettings.email}`, 20, yPos)
-  }
+  doc.text(documentTitle, 200, 28, { align: 'right' })
 
   // Número de documento y fecha (derecha)
   yPos = 28
