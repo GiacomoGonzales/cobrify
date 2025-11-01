@@ -19,7 +19,7 @@ import {
   Share2,
   Receipt,
 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -40,7 +40,7 @@ import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/serv
 import { generateQuotationPDF } from '@/utils/quotationPdfGenerator'
 
 export default function Quotations() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [quotations, setQuotations] = useState([])
@@ -56,13 +56,19 @@ export default function Quotations() {
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 })
 
+  // Helper para manejar fechas de Firestore y Date objects
+  const getDateFromTimestamp = (timestamp) => {
+    if (!timestamp) return null
+    return timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  }
+
   useEffect(() => {
     loadQuotations()
   }, [user])
 
   // Verificar cotizaciones expiradas
   useEffect(() => {
-    if (quotations.length === 0) return
+    if (quotations.length === 0 || isDemoMode) return // No ejecutar en modo demo
 
     const checkExpiredQuotations = () => {
       const now = new Date()
@@ -73,9 +79,7 @@ export default function Quotations() {
           quotation.status !== 'converted' &&
           quotation.status !== 'rejected'
         ) {
-          const expiryDate = quotation.expiryDate.toDate
-            ? quotation.expiryDate.toDate()
-            : new Date(quotation.expiryDate)
+          const expiryDate = getDateFromTimestamp(quotation.expiryDate)
 
           if (expiryDate < now) {
             updateQuotationStatus(user.uid, quotation.id, 'expired')
@@ -88,13 +92,21 @@ export default function Quotations() {
     const interval = setInterval(checkExpiredQuotations, 60000) // Revisar cada minuto
 
     return () => clearInterval(interval)
-  }, [quotations, user])
+  }, [quotations, user, isDemoMode])
 
   const loadQuotations = async () => {
     if (!user?.uid) return
 
     setIsLoading(true)
     try {
+      // MODO DEMO: Usar datos de ejemplo
+      if (isDemoMode && demoData) {
+        setQuotations(demoData.quotations || [])
+        setCompanySettings(demoData.business || null)
+        setIsLoading(false)
+        return
+      }
+
       const [quotationsResult, settingsResult] = await Promise.all([
         getQuotations(user.uid),
         getCompanySettings(user.uid),
@@ -121,6 +133,20 @@ export default function Quotations() {
 
     setIsDeleting(true)
     try {
+      // MODO DEMO: Simular eliminación sin guardar en Firebase
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Eliminando cotización simulada...')
+        await new Promise(resolve => setTimeout(resolve, 500)) // Simular delay
+
+        // Eliminar de la lista local
+        setQuotations(prev => prev.filter(q => q.id !== deletingQuotation.id))
+
+        toast.success('Cotización eliminada exitosamente (DEMO - No se guardó)', { duration: 5000 })
+        setDeletingQuotation(null)
+        setIsDeleting(false)
+        return
+      }
+
       const result = await deleteQuotation(user.uid, deletingQuotation.id)
 
       if (result.success) {
@@ -143,6 +169,27 @@ export default function Quotations() {
 
     setIsConverting(true)
     try {
+      // MODO DEMO: Simular conversión sin guardar en Firebase
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Convirtiendo cotización a factura simulada...')
+        await new Promise(resolve => setTimeout(resolve, 1000)) // Simular delay
+
+        // Actualizar la cotización como convertida en la lista local
+        setQuotations(prev => prev.map(q =>
+          q.id === convertingQuotation.id
+            ? { ...q, status: 'converted', isConverted: true }
+            : q
+        ))
+
+        toast.success('Cotización convertida a factura exitosamente (DEMO - No se guardó)', { duration: 5000 })
+        setConvertingQuotation(null)
+        setIsConverting(false)
+
+        // Navegar a la lista de facturas en modo demo
+        navigate('/demo/facturas')
+        return
+      }
+
       // Obtener datos de la cotización para crear la factura
       const convertResult = await convertToInvoice(user.uid, convertingQuotation.id)
 
@@ -215,7 +262,7 @@ export default function Quotations() {
 Te envío nuestra cotización N° ${quotation.number}.
 
 Total: ${formatCurrency(quotation.total)}
-${quotation.expiryDate ? `Válida hasta: ${formatDate(quotation.expiryDate.toDate ? quotation.expiryDate.toDate() : new Date(quotation.expiryDate))}` : ''}
+${quotation.expiryDate ? `Válida hasta: ${formatDate(getDateFromTimestamp(quotation.expiryDate))}` : ''}
 
 ¿Tienes alguna pregunta? Estamos para ayudarte.
 
@@ -227,9 +274,18 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     window.open(url, '_blank')
 
     // Marcar como enviada
-    markQuotationAsSent(user.uid, quotation.id, 'whatsapp')
+    if (!isDemoMode) {
+      markQuotationAsSent(user.uid, quotation.id, 'whatsapp')
+      loadQuotations()
+    } else {
+      // En modo demo, actualizar estado local
+      setQuotations(prev => prev.map(q =>
+        q.id === quotation.id
+          ? { ...q, status: 'sent', isSent: true, sentAt: new Date() }
+          : q
+      ))
+    }
     toast.success('Abriendo WhatsApp...')
-    loadQuotations()
   }
 
   const handleDownloadPDF = (quotation) => {
@@ -243,9 +299,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
     try {
       generateQuotationPDF(quotation, companySettings)
-      markQuotationAsSent(user.uid, quotation.id, 'manual')
+
+      if (!isDemoMode) {
+        markQuotationAsSent(user.uid, quotation.id, 'manual')
+        loadQuotations()
+      } else {
+        // En modo demo, actualizar estado local
+        setQuotations(prev => prev.map(q =>
+          q.id === quotation.id
+            ? { ...q, status: 'sent', isSent: true, sentAt: new Date() }
+            : q
+        ))
+      }
+
       toast.success('PDF generado exitosamente')
-      loadQuotations()
     } catch (error) {
       console.error('Error al generar PDF:', error)
       toast.error('Error al generar el PDF')
@@ -290,9 +357,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       return false
     }
 
-    const expiryDate = quotation.expiryDate.toDate
-      ? quotation.expiryDate.toDate()
-      : new Date(quotation.expiryDate)
+    const expiryDate = getDateFromTimestamp(quotation.expiryDate)
     const now = new Date()
     const daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24))
 
@@ -478,7 +543,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <TableCell className="py-2.5 px-3">
                       <span className="text-sm whitespace-nowrap">
                         {quotation.createdAt
-                          ? formatDate(quotation.createdAt.toDate())
+                          ? formatDate(getDateFromTimestamp(quotation.createdAt))
                           : 'N/A'}
                       </span>
                     </TableCell>
@@ -486,11 +551,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <div className="flex items-center gap-1">
                         <span className="text-sm whitespace-nowrap">
                           {quotation.expiryDate
-                            ? formatDate(
-                                quotation.expiryDate.toDate
-                                  ? quotation.expiryDate.toDate()
-                                  : new Date(quotation.expiryDate)
-                              )
+                            ? formatDate(getDateFromTimestamp(quotation.expiryDate))
                             : 'N/A'}
                         </span>
                         {isExpiringSoon(quotation) && (
@@ -643,7 +704,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <p className="text-sm text-gray-600">Fecha</p>
                 <p className="font-semibold">
                   {viewingQuotation.createdAt
-                    ? formatDate(viewingQuotation.createdAt.toDate())
+                    ? formatDate(getDateFromTimestamp(viewingQuotation.createdAt))
                     : 'N/A'}
                 </p>
               </div>
@@ -651,11 +712,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <p className="text-sm text-gray-600">Válida Hasta</p>
                 <p className="font-semibold">
                   {viewingQuotation.expiryDate
-                    ? formatDate(
-                        viewingQuotation.expiryDate.toDate
-                          ? viewingQuotation.expiryDate.toDate()
-                          : new Date(viewingQuotation.expiryDate)
-                      )
+                    ? formatDate(getDateFromTimestamp(viewingQuotation.expiryDate))
                     : 'N/A'}
                 </p>
               </div>
