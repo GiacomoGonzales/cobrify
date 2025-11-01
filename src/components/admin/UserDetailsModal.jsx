@@ -17,15 +17,15 @@ import { PLANS } from '@/services/subscriptionService';
 export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading }) {
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('plan_3_months');
-  const [paymentAmount, setPaymentAmount] = useState(PLANS['plan_3_months'].totalPrice);
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('standard_3_months');
+  const [paymentAmount, setPaymentAmount] = useState(PLANS['standard_3_months']?.totalPrice || 0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
 
   // Actualizar precio cuando cambia el plan seleccionado
   useEffect(() => {
     if (PLANS[selectedPlanForPayment]) {
-      setPaymentAmount(PLANS[selectedPlanForPayment].totalPrice);
+      setPaymentAmount(PLANS[selectedPlanForPayment].totalPrice || 0);
     }
   }, [selectedPlanForPayment]);
 
