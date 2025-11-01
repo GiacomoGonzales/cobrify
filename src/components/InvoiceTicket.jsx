@@ -93,27 +93,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         @media print {
-          /* Configuración específica para POS-8330 80mm thermal printer */
+          /* Configuración optimizada para POS-8330 80mm thermal printer */
           @page {
-            size: 80mm 297mm;
-            margin: 0;
+            size: 80mm auto;
+            margin: 0 !important;
           }
 
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-
-          html {
-            margin: 0;
-            padding: 0;
-          }
-
-          body {
+          html, body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 80mm;
-            height: auto;
+            width: 80mm !important;
+            height: auto !important;
           }
 
           body * {
@@ -126,68 +116,129 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           }
 
           .ticket-container {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: relative !important;
+            display: block !important;
             width: 80mm !important;
             max-width: 80mm !important;
             min-width: 80mm !important;
             margin: 0 !important;
-            padding: 3mm 4mm !important;
-            font-family: 'Courier New', 'Courier', monospace;
-            font-size: 11px;
-            line-height: 1.2;
-            color: #000;
-            background: #fff;
-            page-break-after: avoid;
-            page-break-before: avoid;
+            padding: 2mm 3mm 2mm 3mm !important;
+            font-family: 'Courier New', Courier, monospace !important;
+            font-size: 10px !important;
+            line-height: 1.1 !important;
+            color: #000 !important;
+            background: transparent !important;
           }
 
-          /* Compactar secciones */
+          /* Compactar todo al máximo */
           .ticket-header {
-            margin-bottom: 8px !important;
-            padding-bottom: 8px !important;
+            margin: 0 0 5px 0 !important;
+            padding: 0 0 5px 0 !important;
+            border-bottom-width: 1px !important;
           }
 
           .ticket-section {
-            margin: 6px 0 !important;
-            padding: 4px 0 !important;
+            margin: 4px 0 !important;
+            padding: 3px 0 !important;
+            border-bottom-width: 1px !important;
             page-break-inside: avoid;
           }
 
           .totals-section {
-            margin-top: 8px !important;
-            padding-top: 8px !important;
+            margin: 5px 0 0 0 !important;
+            padding: 5px 0 0 0 !important;
+            border-top-width: 1px !important;
             page-break-inside: avoid;
           }
 
           .ticket-footer {
-            margin-top: 8px !important;
-            padding-top: 8px !important;
+            margin: 5px 0 0 0 !important;
+            padding: 5px 0 0 0 !important;
+            border-top-width: 1px !important;
             page-break-inside: avoid;
           }
 
           .item-row {
-            margin: 4px 0 !important;
-            padding: 3px 0 !important;
+            margin: 3px 0 !important;
+            padding: 2px 0 !important;
+            border-bottom-width: 1px !important;
           }
 
           .qr-container {
-            margin: 6px auto !important;
+            margin: 4px auto !important;
+            padding: 0 !important;
           }
 
-          /* Reducir espacios en elementos específicos */
+          .qr-code {
+            width: 60px !important;
+            height: 60px !important;
+          }
+
           .company-logo {
-            max-height: 50px !important;
-            margin-bottom: 3px !important;
+            max-height: 40px !important;
+            max-width: 150px !important;
+            margin: 0 auto 3px auto !important;
           }
 
-          .info-row {
+          .company-name,
+          .company-name-no-logo {
+            font-size: 12px !important;
             margin: 2px 0 !important;
           }
 
+          .company-info {
+            font-size: 9px !important;
+            margin: 1px 0 !important;
+          }
+
+          .document-type {
+            font-size: 11px !important;
+            margin: 4px 0 2px 0 !important;
+          }
+
+          .document-number {
+            font-size: 10px !important;
+            margin: 2px 0 !important;
+          }
+
+          .info-row {
+            margin: 1px 0 !important;
+            font-size: 9px !important;
+          }
+
           .total-row {
-            margin: 3px 0 !important;
+            margin: 2px 0 !important;
+            font-size: 10px !important;
+          }
+
+          .total-row.final {
+            font-size: 11px !important;
+            margin: 3px 0 0 0 !important;
+            padding: 3px 0 0 0 !important;
+          }
+
+          .item-desc {
+            font-size: 10px !important;
+            margin: 0 0 2px 0 !important;
+          }
+
+          .item-details {
+            font-size: 8px !important;
+          }
+
+          .section-title {
+            font-size: 9px !important;
+            margin: 0 0 3px 0 !important;
+          }
+
+          .footer-text {
+            font-size: 8px !important;
+            margin: 2px 0 !important;
+          }
+
+          .representation-text {
+            font-size: 7px !important;
+            margin: 4px 0 !important;
           }
         }
 
@@ -548,7 +599,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             <div className="qr-container">
               <QRCodeSVG
                 value={generateQRData()}
-                size={80}
+                size={60}
                 level="M"
                 className="qr-code"
                 includeMargin={true}
