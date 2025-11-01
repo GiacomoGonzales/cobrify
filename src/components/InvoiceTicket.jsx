@@ -136,8 +136,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .company-logo {
-          width: 120px;
-          height: 120px;
+          max-width: 200px;
+          max-height: 80px;
+          width: auto;
+          height: auto;
           object-fit: contain;
           margin: 0 auto 5px auto;
           display: block;
