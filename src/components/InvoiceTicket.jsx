@@ -91,39 +91,37 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
       {/* Estilos de impresión */}
       <style>{`
         @media print {
+          body * {
+            visibility: hidden;
+          }
+          .ticket-container,
+          .ticket-container * {
+            visibility: visible;
+          }
+          .ticket-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80mm;
+            padding: 5mm;
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+          }
           @page {
             size: 80mm auto;
             margin: 0;
-          }
-
-          body {
-            margin: 0;
-            padding: 0;
-          }
-
-          .ticket-container {
-            width: 80mm;
-            padding: 5mm;
-            margin: 0;
-            font-size: 11px;
-            line-height: 1.4;
-            color: black;
           }
         }
 
         .ticket-container {
           max-width: 80mm;
-          width: 80mm;
           margin: 0 auto;
           padding: 10px;
-          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-          font-size: 11px;
-          line-height: 1.5;
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          line-height: 1.4;
           background: white;
-          color: #1a1a1a;
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-          box-sizing: border-box;
+          color: black;
         }
 
         .ticket-header {
@@ -134,50 +132,34 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .company-logo {
-          max-width: 200px;
-          max-height: 80px;
-          width: auto;
-          height: auto;
+          width: 60px;
+          height: 60px;
           object-fit: contain;
-          margin: 0 auto 5px auto;
+          margin: 0 auto 8px auto;
           display: block;
         }
 
         .company-name {
-          font-size: 15px;
-          font-weight: 700;
-          margin-bottom: 4px;
-          letter-spacing: 0.3px;
-          color: #000;
-        }
-
-        .company-name-no-logo {
-          font-size: 15px;
-          font-weight: 700;
-          margin-bottom: 4px;
-          letter-spacing: 0.3px;
+          font-size: 14px;
+          font-weight: bold;
+          margin-bottom: 3px;
         }
 
         .company-info {
           font-size: 10px;
           margin: 2px 0;
-          font-weight: 400;
-          color: #333;
         }
 
         .document-type {
-          font-size: 14px;
-          font-weight: 700;
+          font-size: 13px;
+          font-weight: bold;
           margin: 10px 0 5px 0;
-          letter-spacing: 0.5px;
-          color: #000;
         }
 
         .document-number {
-          font-size: 13px;
-          font-weight: 600;
+          font-size: 12px;
+          font-weight: bold;
           margin-bottom: 5px;
-          letter-spacing: 0.3px;
         }
 
         .ticket-section {
@@ -191,11 +173,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .section-title {
-          font-weight: 600;
+          font-weight: bold;
           font-size: 11px;
           margin-bottom: 5px;
-          letter-spacing: 0.3px;
-          color: #000;
         }
 
         .info-row {
@@ -206,8 +186,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .info-label {
-          font-weight: 600;
-          color: #000;
+          font-weight: bold;
         }
 
         .items-table {
@@ -220,26 +199,24 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           border-bottom: 1px solid #000;
           padding-bottom: 5px;
           margin-bottom: 5px;
-          font-weight: 600;
+          font-weight: bold;
         }
 
         .item-row {
           margin: 8px 0;
           padding: 5px 0;
-          border-bottom: 1px dotted #ddd;
+          border-bottom: 1px dotted #ccc;
         }
 
         .item-desc {
-          font-weight: 600;
+          font-weight: bold;
           margin-bottom: 3px;
-          color: #000;
         }
 
         .item-details {
           display: flex;
           justify-content: space-between;
           font-size: 9px;
-          color: #555;
         }
 
         .totals-section {
@@ -253,16 +230,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           justify-content: space-between;
           margin: 5px 0;
           font-size: 11px;
-          font-weight: 500;
         }
 
         .total-row.final {
-          font-size: 14px;
-          font-weight: 700;
+          font-size: 13px;
+          font-weight: bold;
           margin-top: 8px;
           padding-top: 8px;
-          border-top: 2px solid #000;
-          color: #000;
+          border-top: 1px solid #000;
         }
 
         .ticket-footer {
@@ -275,15 +250,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
         .footer-text {
           margin: 3px 0;
-          font-weight: 400;
-          color: #555;
         }
 
         .representation-text {
           font-size: 8px;
           margin-top: 10px;
-          font-weight: 600;
-          letter-spacing: 0.3px;
+          font-weight: bold;
         }
 
         .qr-container {
@@ -305,18 +277,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         {companySettings?.logoUrl && (
           <img
             src={companySettings.logoUrl}
-            alt="Logo Empresa"
+            alt="Logo"
             className="company-logo"
             onError={(e) => { e.target.style.display = 'none' }}
           />
         )}
 
-        {/* Nombre de la empresa (siempre se muestra) */}
-        <div className="company-name">{companySettings?.businessName || companySettings?.razonSocial || ''}</div>
-        {companySettings?.nombreComercial && companySettings?.nombreComercial !== companySettings?.businessName && (
+        <div className="company-name">{companySettings?.razonSocial || 'MI EMPRESA'}</div>
+        {companySettings?.nombreComercial && (
           <div className="company-info">{companySettings.nombreComercial}</div>
         )}
-
         <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
         <div className="company-info">{companySettings?.direccion || 'Dirección no configurada'}</div>
         {companySettings?.telefono && (
@@ -468,7 +438,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             <div className="qr-container">
               <QRCodeSVG
                 value={generateQRData()}
-                size={60}
+                size={80}
                 level="M"
                 className="qr-code"
                 includeMargin={true}
