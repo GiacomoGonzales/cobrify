@@ -90,155 +90,24 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
     <div ref={ref} className="ticket-container">
       {/* Estilos de impresión */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
         @media print {
-          /* Configuración optimizada para POS-8330 80mm thermal printer */
           @page {
             size: 80mm auto;
-            margin: 0 !important;
+            margin: 0;
           }
 
-          html, body {
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 80mm !important;
-            height: auto !important;
-          }
-
-          body * {
-            visibility: hidden;
-          }
-
-          .ticket-container,
-          .ticket-container * {
-            visibility: visible;
+          body {
+            margin: 0;
+            padding: 0;
           }
 
           .ticket-container {
-            position: relative !important;
-            display: block !important;
-            width: 80mm !important;
-            max-width: 80mm !important;
-            min-width: 80mm !important;
-            margin: 0 !important;
-            padding: 2mm 3mm 2mm 3mm !important;
-            font-family: 'Courier New', Courier, monospace !important;
-            font-size: 10px !important;
-            line-height: 1.1 !important;
-            color: #000 !important;
-            background: transparent !important;
-          }
-
-          /* Compactar todo al máximo */
-          .ticket-header {
-            margin: 0 0 5px 0 !important;
-            padding: 0 0 5px 0 !important;
-            border-bottom-width: 1px !important;
-          }
-
-          .ticket-section {
-            margin: 4px 0 !important;
-            padding: 3px 0 !important;
-            border-bottom-width: 1px !important;
-            page-break-inside: avoid;
-          }
-
-          .totals-section {
-            margin: 5px 0 0 0 !important;
-            padding: 5px 0 0 0 !important;
-            border-top-width: 1px !important;
-            page-break-inside: avoid;
-          }
-
-          .ticket-footer {
-            margin: 5px 0 0 0 !important;
-            padding: 5px 0 0 0 !important;
-            border-top-width: 1px !important;
-            page-break-inside: avoid;
-          }
-
-          .item-row {
-            margin: 3px 0 !important;
-            padding: 2px 0 !important;
-            border-bottom-width: 1px !important;
-          }
-
-          .qr-container {
-            margin: 4px auto !important;
-            padding: 0 !important;
-          }
-
-          .qr-code {
-            width: 60px !important;
-            height: 60px !important;
-          }
-
-          .company-logo {
-            max-height: 40px !important;
-            max-width: 150px !important;
-            margin: 0 auto 3px auto !important;
-          }
-
-          .company-name,
-          .company-name-no-logo {
-            font-size: 12px !important;
-            margin: 2px 0 !important;
-          }
-
-          .company-info {
-            font-size: 9px !important;
-            margin: 1px 0 !important;
-          }
-
-          .document-type {
-            font-size: 11px !important;
-            margin: 4px 0 2px 0 !important;
-          }
-
-          .document-number {
-            font-size: 10px !important;
-            margin: 2px 0 !important;
-          }
-
-          .info-row {
-            margin: 1px 0 !important;
-            font-size: 9px !important;
-          }
-
-          .total-row {
-            margin: 2px 0 !important;
-            font-size: 10px !important;
-          }
-
-          .total-row.final {
-            font-size: 11px !important;
-            margin: 3px 0 0 0 !important;
-            padding: 3px 0 0 0 !important;
-          }
-
-          .item-desc {
-            font-size: 10px !important;
-            margin: 0 0 2px 0 !important;
-          }
-
-          .item-details {
-            font-size: 8px !important;
-          }
-
-          .section-title {
-            font-size: 9px !important;
-            margin: 0 0 3px 0 !important;
-          }
-
-          .footer-text {
-            font-size: 8px !important;
-            margin: 2px 0 !important;
-          }
-
-          .representation-text {
-            font-size: 7px !important;
-            margin: 4px 0 !important;
+            width: 80mm;
+            padding: 5mm;
+            margin: 0;
+            font-size: 11px;
+            line-height: 1.4;
+            color: black;
           }
         }
 
