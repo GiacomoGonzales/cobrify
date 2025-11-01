@@ -149,6 +149,26 @@ export default function CashRegister() {
     }
 
     try {
+      // MODO DEMO: Simular apertura sin guardar en Firebase
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Abriendo caja simulada...')
+        await new Promise(resolve => setTimeout(resolve, 500)) // Simular delay
+
+        const demoSession = {
+          id: `demo-session-${Date.now()}`,
+          openingAmount: parseFloat(openingAmount),
+          openedAt: new Date(),
+          openedBy: user.displayName,
+          status: 'open'
+        }
+
+        setCurrentSession(demoSession)
+        toast.success('Caja abierta correctamente (DEMO - No se guardó)', { duration: 5000 })
+        setShowOpenModal(false)
+        setOpeningAmount('')
+        return
+      }
+
       const result = await openCashRegister(user.uid, parseFloat(openingAmount))
       if (result.success) {
         toast.success('Caja abierta correctamente')
@@ -170,6 +190,21 @@ export default function CashRegister() {
     const transfer = parseFloat(closingCounts.transfer) || 0
 
     try {
+      // MODO DEMO: Simular cierre sin guardar en Firebase
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Cerrando caja simulada...')
+        await new Promise(resolve => setTimeout(resolve, 500)) // Simular delay
+
+        toast.success('Caja cerrada correctamente (DEMO - No se guardó)', { duration: 5000 })
+        setShowCloseModal(false)
+        setClosingCounts({ cash: '', card: '', transfer: '' })
+
+        // Actualizar el estado local
+        setCurrentSession(null)
+        setMovements([])
+        return
+      }
+
       const result = await closeCashRegister(user.uid, currentSession.id, {
         cash,
         card,
@@ -280,6 +315,34 @@ export default function CashRegister() {
     }
 
     try {
+      // MODO DEMO: Simular movimiento sin guardar en Firebase
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Agregando movimiento simulado...')
+        await new Promise(resolve => setTimeout(resolve, 500)) // Simular delay
+
+        const newMovement = {
+          id: `demo-movement-${Date.now()}`,
+          type: movementData.type,
+          amount: parseFloat(movementData.amount),
+          description: movementData.description,
+          category: movementData.category,
+          createdAt: new Date(),
+        }
+
+        // Agregar el movimiento a la lista local
+        setMovements(prev => [...prev, newMovement])
+
+        toast.success('Movimiento registrado correctamente (DEMO - No se guardó)', { duration: 5000 })
+        setShowMovementModal(false)
+        setMovementData({
+          type: 'income',
+          amount: '',
+          description: '',
+          category: '',
+        })
+        return
+      }
+
       const result = await addCashMovement(user.uid, currentSession.id, {
         type: movementData.type,
         amount: parseFloat(movementData.amount),
