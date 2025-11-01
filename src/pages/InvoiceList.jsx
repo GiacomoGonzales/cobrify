@@ -121,97 +121,139 @@ export default function InvoiceList() {
       size: 80mm auto;
       margin: 0;
     }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
     body {
       margin: 0;
-      padding: 3mm 4mm;
-      font-family: Arial, 'Liberation Sans', sans-serif;
-      font-size: 11pt;
-      font-weight: 600;
+      padding: 4mm 5mm;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
       width: 80mm;
-      color: #000;
-      line-height: 1.4;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
+      color: #000 !important;
+      line-height: 1.5;
+      background: white;
     }
     .company-name {
       text-align: center;
-      font-size: 13pt;
+      font-size: 16pt;
       font-weight: 900;
-      margin-bottom: 2mm;
-      letter-spacing: 0.3px;
+      margin-bottom: 3mm;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #000 !important;
     }
     .company-info {
       text-align: center;
-      font-size: 10pt;
-      font-weight: 600;
-      margin: 1mm 0;
+      font-size: 11pt;
+      font-weight: 700;
+      margin: 1.5mm 0;
+      color: #000 !important;
     }
     .doc-type {
       text-align: center;
-      font-size: 12pt;
+      font-size: 14pt;
       font-weight: 900;
-      margin: 3mm 0 2mm 0;
-      letter-spacing: 0.5px;
+      margin: 4mm 0 3mm 0;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      background: #000;
+      color: #fff !important;
+      padding: 2mm 0;
     }
     .doc-number {
       text-align: center;
-      font-size: 13pt;
+      font-size: 16pt;
       font-weight: 900;
-      margin-bottom: 2mm;
-      letter-spacing: 0.5px;
+      margin: 3mm 0;
+      letter-spacing: 1px;
+      color: #000 !important;
     }
-    .line {
+    .separator {
+      border-bottom: 3px double #000;
+      margin: 3mm 0;
+    }
+    .line-thick {
       border-bottom: 2px solid #000;
       margin: 3mm 0;
     }
     .line-dashed {
-      border-bottom: 1px dashed #000;
+      border-bottom: 2px dashed #000;
       margin: 2mm 0;
     }
-    .row {
+    .info-row {
       display: flex;
       justify-content: space-between;
-      margin: 2mm 0;
-      font-size: 10pt;
-      font-weight: 600;
-    }
-    .row-label {
+      margin: 2.5mm 0;
+      font-size: 12pt;
       font-weight: 700;
+      color: #000 !important;
+    }
+    .info-label {
+      font-weight: 900;
+    }
+    .section-title {
+      font-size: 11pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin: 3mm 0 2mm 0;
+      letter-spacing: 0.5px;
+      color: #000 !important;
     }
     .item-name {
-      font-size: 11pt;
-      font-weight: 700;
-      margin: 2mm 0 1mm 0;
+      font-size: 13pt;
+      font-weight: 800;
+      margin: 3mm 0 1mm 0;
+      color: #000 !important;
+      line-height: 1.3;
     }
     .item-detail {
       display: flex;
       justify-content: space-between;
-      font-size: 10pt;
-      font-weight: 600;
-      margin-bottom: 2mm;
+      font-size: 12pt;
+      font-weight: 700;
+      margin-bottom: 3mm;
+      color: #000 !important;
     }
-    .total-section {
-      margin-top: 3mm;
+    .totals-section {
+      margin-top: 4mm;
+      background: #f8f8f8;
+      padding: 3mm;
+      border: 2px solid #000;
     }
     .total-row {
       display: flex;
       justify-content: space-between;
       margin: 2mm 0;
-      font-size: 11pt;
-      font-weight: 700;
+      font-size: 13pt;
+      font-weight: 800;
+      color: #000 !important;
     }
     .grand-total {
-      font-size: 13pt;
+      font-size: 18pt;
       font-weight: 900;
-      margin-top: 2mm;
-      padding-top: 2mm;
-      border-top: 2px solid #000;
+      margin-top: 3mm;
+      padding-top: 3mm;
+      border-top: 3px double #000;
+      background: #000;
+      color: #fff !important;
+      padding: 2mm;
+      text-align: center;
+    }
+    .grand-total-amount {
+      display: block;
+      font-size: 22pt;
+      margin-top: 1mm;
+      letter-spacing: 1px;
     }
     .footer {
       text-align: center;
-      font-size: 10pt;
-      font-weight: 700;
-      margin-top: 4mm;
+      font-size: 13pt;
+      font-weight: 800;
+      margin-top: 5mm;
+      padding-top: 3mm;
+      border-top: 2px solid #000;
+      color: #000 !important;
     }
   </style>
 </head>
@@ -221,19 +263,21 @@ export default function InvoiceList() {
   ${settings.direccion ? `<div class="company-info">${settings.direccion}</div>` : ''}
   ${settings.telefono ? `<div class="company-info">Tel: ${settings.telefono}</div>` : ''}
 
-  <div class="line"></div>
+  <div class="separator"></div>
 
   <div class="doc-type">${docType}</div>
   <div class="doc-number">${invoice.series}-${invoice.number}</div>
 
-  <div class="line"></div>
+  <div class="separator"></div>
 
-  <div class="row"><span class="row-label">Fecha:</span><span>${formatDate(invoice.createdAt)}</span></div>
-  <div class="row"><span class="row-label">Hora:</span><span>${formatTime(invoice.createdAt)}</span></div>
-  ${invoice.customerName ? `<div class="row"><span class="row-label">Cliente:</span><span>${invoice.customerName}</span></div>` : ''}
-  ${invoice.customerDocumentNumber ? `<div class="row"><span class="row-label">Doc:</span><span>${invoice.customerDocumentNumber}</span></div>` : ''}
+  <div class="info-row"><span class="info-label">FECHA:</span><span>${formatDate(invoice.createdAt)}</span></div>
+  <div class="info-row"><span class="info-label">HORA:</span><span>${formatTime(invoice.createdAt)}</span></div>
+  ${invoice.customerName ? `<div class="info-row"><span class="info-label">CLIENTE:</span><span>${invoice.customerName}</span></div>` : ''}
+  ${invoice.customerDocumentNumber ? `<div class="info-row"><span class="info-label">DOC:</span><span>${invoice.customerDocumentNumber}</span></div>` : ''}
 
-  <div class="line"></div>
+  <div class="line-thick"></div>
+
+  <div class="section-title">Detalle</div>
 
   ${invoice.items.map(item => `
     <div class="item-name">${item.description}</div>
@@ -245,22 +289,21 @@ export default function InvoiceList() {
 
   <div class="line-dashed"></div>
 
-  <div class="total-section">
+  <div class="totals-section">
     <div class="total-row">
-      <span>SUBTOTAL:</span>
+      <span>Subtotal:</span>
       <span>${formatCurrency(invoice.subtotal)}</span>
     </div>
     <div class="total-row">
       <span>IGV (18%):</span>
       <span>${formatCurrency(invoice.tax)}</span>
     </div>
-    <div class="total-row grand-total">
-      <span>TOTAL:</span>
-      <span>${formatCurrency(invoice.total)}</span>
-    </div>
   </div>
 
-  <div class="line"></div>
+  <div class="grand-total">
+    <div>TOTAL A PAGAR</div>
+    <div class="grand-total-amount">${formatCurrency(invoice.total)}</div>
+  </div>
 
   <div class="footer">¡Gracias por su compra!</div>
 </body>
