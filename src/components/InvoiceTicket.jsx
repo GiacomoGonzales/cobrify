@@ -93,44 +93,65 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         @media print {
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+
+          html, body {
+            width: 80mm;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            overflow: visible;
+          }
+
           body * {
             visibility: hidden;
           }
+
           .ticket-container,
           .ticket-container * {
             visibility: visible;
           }
+
           .ticket-container {
-            position: absolute;
+            position: relative;
             left: 0;
             top: 0;
-            width: 80mm;
-            padding: 5mm;
+            width: 80mm !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 5mm !important;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-            font-size: 10pt;
-          }
-          @page {
-            size: 80mm auto;
-            margin: 0mm;
-          }
-
-          html, body {
-            height: auto;
-            overflow: visible;
+            font-size: 9pt;
+            line-height: 1.3;
+            background: transparent;
+            page-break-after: auto;
           }
 
-          /* Evitar saltos de página innecesarios en elementos */
+          /* Evitar saltos de página innecesarios */
           .ticket-header,
+          .ticket-section,
           .ticket-items table,
-          .ticket-totals,
+          .totals-section,
           .ticket-footer {
             page-break-inside: avoid;
           }
 
-          /* Limitar la altura del contenedor para evitar exceso de papel */
-          .ticket-container {
-            max-height: none;
-            min-height: auto;
+          /* Eliminar márgenes adicionales */
+          .ticket-header,
+          .ticket-section,
+          .totals-section,
+          .ticket-footer {
+            margin-top: 0 !important;
+            margin-bottom: 8px !important;
           }
         }
 
@@ -147,15 +168,6 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
           box-sizing: border-box;
-        }
-
-        @media print {
-          .ticket-container {
-            width: 80mm;
-            max-width: 80mm;
-            padding: 5mm;
-            margin: 0;
-          }
         }
 
         .ticket-header {
