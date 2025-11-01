@@ -111,12 +111,32 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           }
           @page {
             size: 80mm auto;
-            margin: 0;
+            margin: 0mm;
+          }
+
+          html, body {
+            height: auto;
+            overflow: visible;
+          }
+
+          /* Evitar saltos de página innecesarios en elementos */
+          .ticket-header,
+          .ticket-items table,
+          .ticket-totals,
+          .ticket-footer {
+            page-break-inside: avoid;
+          }
+
+          /* Limitar la altura del contenedor para evitar exceso de papel */
+          .ticket-container {
+            max-height: none;
+            min-height: auto;
           }
         }
 
         .ticket-container {
           max-width: 80mm;
+          width: 80mm;
           margin: 0 auto;
           padding: 10px;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
@@ -126,6 +146,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           color: #1a1a1a;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
+          box-sizing: border-box;
+        }
+
+        @media print {
+          .ticket-container {
+            width: 80mm;
+            max-width: 80mm;
+            padding: 5mm;
+            margin: 0;
+          }
         }
 
         .ticket-header {
