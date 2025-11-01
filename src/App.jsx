@@ -25,6 +25,7 @@ import GetMyUID from './pages/GetMyUID'
 import Quotations from './pages/Quotations'
 import CreateQuotation from './pages/CreateQuotation'
 import Demo from './pages/Demo'
+import DemoLayout from './layouts/DemoLayout'
 
 function App() {
   return (
@@ -40,8 +41,26 @@ function App() {
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
 
-            {/* Ruta de demo (sin autenticación) */}
+            {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}
             <Route path="/demo" element={<Demo />} />
+            <Route path="/demo" element={<DemoLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="pos" element={<POS />} />
+              <Route path="facturas" element={<InvoiceList />} />
+              <Route path="nota-credito" element={<CreateCreditNote />} />
+              <Route path="nota-debito" element={<CreateDebitNote />} />
+              <Route path="cotizaciones" element={<Quotations />} />
+              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="productos" element={<Products />} />
+              <Route path="inventario" element={<Inventory />} />
+              <Route path="proveedores" element={<Suppliers />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
+              <Route path="configuracion" element={<Settings />} />
+            </Route>
 
             {/* Ruta de cuenta suspendida (sin layout) */}
             <Route path="/account-suspended" element={<AccountSuspended />} />

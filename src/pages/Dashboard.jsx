@@ -20,10 +20,18 @@ import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 
-export default function Dashboard({ isDemoMode = false }) {
+export default function Dashboard() {
   const authContext = useAuth()
-  const demoContext = isDemoMode ? useDemo() : null
 
+  // Intentar obtener contexto de demo (si existe)
+  let demoContext = null
+  try {
+    demoContext = useDemo()
+  } catch {
+    // No estamos en modo demo
+  }
+
+  const isDemoMode = !!demoContext
   const user = isDemoMode ? demoContext?.demoData?.user : authContext?.user
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])

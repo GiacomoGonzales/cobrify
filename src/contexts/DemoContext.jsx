@@ -277,8 +277,7 @@ export const DemoProvider = ({ children }) => {
 
 export const useDemo = () => {
   const context = useContext(DemoContext)
-  if (!context) {
-    throw new Error('useDemo must be used within a DemoProvider')
-  }
+  // No lanzar error si no está en un provider, simplemente retornar null
+  // Esto permite usar el hook condicionalmente
   return context
 }
