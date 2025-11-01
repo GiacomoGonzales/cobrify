@@ -71,7 +71,85 @@ export default function InvoiceList() {
 
   // Función para imprimir ticket
   const handlePrintTicket = () => {
-    window.print()
+    if (!viewingInvoice || !companySettings) return
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('Por favor permite las ventanas emergentes')
+      return
+    }
+
+    // Generar HTML del ticket manualmente
+    const ticketHTML = generateTicketHTML(viewingInvoice, companySettings)
+
+    printWindow.document.write(ticketHTML)
+    printWindow.document.close()
+
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print()
+        printWindow.close()
+      }, 500)
+    }
+  }
+
+  // Generar HTML del ticket
+  const generateTicketHTML = (invoice, settings) => {
+    const formatCurrency = (value) => `S/ ${Number(value).toFixed(2)}`
+    const formatDate = (timestamp) => {
+      if (!timestamp) return new Date().toLocaleDateString('es-PE')
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+      return date.toLocaleDateString('es-PE')
+    }
+    const formatTime = (timestamp) => {
+      if (!timestamp) return new Date().toLocaleTimeString('es-PE')
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+      return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+    }
+
+    const docType = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' :
+                    invoice.documentType === 'boleta' ? 'BOLETA DE VENTA ELECTRÓNICA' : 'NOTA DE VENTA'
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${invoice.number}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    body { margin: 0; padding: 5mm; font-family: 'Courier New', monospace; font-size: 10pt; width: 80mm; }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    .line { border-bottom: 1px dashed #000; margin: 5mm 0; }
+    .row { display: flex; justify-content: space-between; margin: 2mm 0; }
+  </style>
+</head>
+<body>
+  <div class="center bold">${settings.razonSocial || 'MI EMPRESA'}</div>
+  <div class="center">RUC: ${settings.ruc || '00000000000'}</div>
+  <div class="center">${settings.direccion || ''}</div>
+  <div class="line"></div>
+  <div class="center bold">${docType}</div>
+  <div class="center bold">${invoice.series}-${invoice.number}</div>
+  <div class="line"></div>
+  <div class="row"><span>Fecha:</span><span>${formatDate(invoice.createdAt)}</span></div>
+  <div class="row"><span>Hora:</span><span>${formatTime(invoice.createdAt)}</span></div>
+  ${invoice.customerName ? `<div class="row"><span>Cliente:</span><span>${invoice.customerName}</span></div>` : ''}
+  ${invoice.customerDocumentNumber ? `<div class="row"><span>Doc:</span><span>${invoice.customerDocumentNumber}</span></div>` : ''}
+  <div class="line"></div>
+  ${invoice.items.map(item => `
+    <div class="bold">${item.description}</div>
+    <div class="row"><span>${item.quantity} x ${formatCurrency(item.price)}</span><span>${formatCurrency(item.quantity * item.price)}</span></div>
+  `).join('')}
+  <div class="line"></div>
+  <div class="row"><span>SUBTOTAL:</span><span>${formatCurrency(invoice.subtotal)}</span></div>
+  <div class="row"><span>IGV (18%):</span><span>${formatCurrency(invoice.tax)}</span></div>
+  <div class="row bold"><span>TOTAL:</span><span>${formatCurrency(invoice.total)}</span></div>
+  <div class="line"></div>
+  <div class="center">¡Gracias por su compra!</div>
+</body>
+</html>`
   }
 
   useEffect(() => {
