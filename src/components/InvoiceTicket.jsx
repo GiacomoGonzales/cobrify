@@ -315,14 +315,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           />
         )}
 
-        <div className="company-name">{companySettings?.razonSocial || 'MI EMPRESA'}</div>
-        {companySettings?.nombreComercial && (
-          <div className="company-info">{companySettings.nombreComercial}</div>
+        <div className="company-name">{companySettings?.businessName || 'MI EMPRESA'}</div>
+        {companySettings?.name && (
+          <div className="company-info">{companySettings.name}</div>
         )}
         <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
-        <div className="company-info">{companySettings?.direccion || 'Dirección no configurada'}</div>
-        {companySettings?.telefono && (
-          <div className="company-info">Tel: {companySettings.telefono}</div>
+        <div className="company-info">{companySettings?.address || 'Dirección no configurada'}</div>
+        {companySettings?.phone && (
+          <div className="company-info">Tel: {companySettings.phone}</div>
         )}
         {companySettings?.email && (
           <div className="company-info">Email: {companySettings.email}</div>
@@ -492,9 +492,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           ¡Gracias por su preferencia!
         </div>
 
-        {companySettings?.sitioWeb && (
+        {companySettings?.website && (
           <div className="footer-text">
-            {companySettings.sitioWeb}
+            {companySettings.website}
           </div>
         )}
       </div>
