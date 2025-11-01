@@ -10,8 +10,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import { useDemo } from '@/contexts/DemoContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -21,18 +20,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 
 export default function Dashboard() {
-  const authContext = useAuth()
-
-  // Intentar obtener contexto de demo (si existe)
-  let demoContext = null
-  try {
-    demoContext = useDemo()
-  } catch {
-    // No estamos en modo demo
-  }
-
-  const isDemoMode = !!demoContext
-  const user = isDemoMode ? demoContext?.demoData?.user : authContext?.user
+  const { user, isDemoMode, demoData } = useAppContext()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -43,11 +31,11 @@ export default function Dashboard() {
   }, [user, isDemoMode])
 
   const loadDashboardData = async () => {
-    if (isDemoMode && demoContext?.demoData) {
+    if (isDemoMode && demoData) {
       // Load demo data
-      setInvoices(demoContext.demoData.invoices || [])
-      setCustomers(demoContext.demoData.customers || [])
-      setProducts(demoContext.demoData.products || [])
+      setInvoices(demoData.invoices || [])
+      setCustomers(demoData.customers || [])
+      setProducts(demoData.products || [])
       setIsLoading(false)
       return
     }

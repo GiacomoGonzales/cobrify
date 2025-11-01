@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Search, User, LogOut, Menu, FileText, Users, Package, X } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useStore } from '@/stores/useStore'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -10,7 +10,7 @@ import NotificationPanel from './NotificationPanel'
 import Button from './ui/Button'
 
 export default function Navbar() {
-  const { user, logout, subscription } = useAuth()
+  const { user, logout, subscription, isDemoMode, demoData } = useAppContext()
   const { toggleMobileMenu } = useStore()
   const navigate = useNavigate()
 
@@ -28,6 +28,12 @@ export default function Navbar() {
 
   // Cargar notificaciones no leídas
   useEffect(() => {
+    // En modo demo, no cargar notificaciones
+    if (isDemoMode) {
+      setUnreadCount(0);
+      return;
+    }
+
     const loadUnreadCount = async () => {
       if (!user?.uid) return;
 
@@ -49,7 +55,7 @@ export default function Navbar() {
     // Actualizar cada 5 minutos
     const interval = setInterval(loadUnreadCount, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [user?.uid, subscription]);
+  }, [user?.uid, subscription, isDemoMode]);
 
   // Click outside to close
   useEffect(() => {
@@ -86,26 +92,39 @@ export default function Navbar() {
 
     setIsSearching(true)
     try {
-      const [invoicesResult, customersResult, productsResult] = await Promise.all([
-        getInvoices(user.uid),
-        getCustomers(user.uid),
-        getProducts(user.uid),
-      ])
+      let invoicesData, customersData, productsData
+
+      if (isDemoMode && demoData) {
+        // Usar datos de demo
+        invoicesData = demoData.invoices || []
+        customersData = demoData.customers || []
+        productsData = demoData.products || []
+      } else {
+        // Cargar datos reales
+        const [invoicesResult, customersResult, productsResult] = await Promise.all([
+          getInvoices(user.uid),
+          getCustomers(user.uid),
+          getProducts(user.uid),
+        ])
+        invoicesData = invoicesResult.data || []
+        customersData = customersResult.data || []
+        productsData = productsResult.data || []
+      }
 
       const lowerTerm = term.toLowerCase()
 
       // Filter invoices
-      const filteredInvoices = (invoicesResult.data || [])
+      const filteredInvoices = invoicesData
         .filter(inv =>
           inv.number?.toLowerCase().includes(lowerTerm) ||
-          inv.customerName?.toLowerCase().includes(lowerTerm) ||
-          inv.customerDocumentNumber?.includes(lowerTerm) ||
+          inv.customer?.name?.toLowerCase().includes(lowerTerm) ||
+          inv.customer?.documentNumber?.includes(lowerTerm) ||
           inv.total?.toString().includes(lowerTerm)
         )
         .slice(0, 5)
 
       // Filter customers
-      const filteredCustomers = (customersResult.data || [])
+      const filteredCustomers = customersData
         .filter(customer =>
           customer.name?.toLowerCase().includes(lowerTerm) ||
           customer.documentNumber?.includes(lowerTerm) ||
@@ -115,7 +134,7 @@ export default function Navbar() {
         .slice(0, 5)
 
       // Filter products
-      const filteredProducts = (productsResult.data || [])
+      const filteredProducts = productsData
         .filter(product =>
           product.name?.toLowerCase().includes(lowerTerm) ||
           product.code?.toLowerCase().includes(lowerTerm)

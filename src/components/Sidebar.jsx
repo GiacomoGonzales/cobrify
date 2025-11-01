@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   FileText,
@@ -16,11 +16,20 @@ import {
   FileCheck,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 
 export default function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin } = useAuth()
+  const { isAdmin, isDemoMode } = useAppContext()
+  const location = useLocation()
+
+  // Si estamos en modo demo, añadir prefijo /demo a las rutas
+  const getPath = (path) => {
+    if (isDemoMode) {
+      return `/demo${path}`
+    }
+    return path
+  }
 
   const menuItems = [
     {
@@ -138,7 +147,7 @@ export default function Sidebar() {
         {menuItems.map(item => (
           <NavLink
             key={item.path}
-            to={item.path}
+            to={getPath(item.path)}
             onClick={() => setMobileMenuOpen(false)}
             className={({ isActive }) =>
               `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
@@ -170,7 +179,7 @@ export default function Sidebar() {
             return (
               <NavLink
                 key={item.path}
-                to={item.path}
+                to={getPath(item.path)}
                 onClick={() => setMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
