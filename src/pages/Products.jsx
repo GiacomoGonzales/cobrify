@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -22,6 +22,7 @@ import {
   saveProductCategories,
 } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
+import ImportProductsModal from '@/components/ImportProductsModal'
 
 // Unidades de medida
 const UNITS = [
@@ -111,6 +112,9 @@ export default function Products() {
   const [parentCategoryId, setParentCategoryId] = useState(null)
   const [editingCategory, setEditingCategory] = useState(null)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
+
+  // Import modal state
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
   const {
     register,
@@ -340,6 +344,47 @@ export default function Products() {
     } catch (error) {
       console.error('Error al exportar productos:', error);
       toast.error('Error al generar el archivo Excel');
+    }
+  }
+
+  const handleImportProducts = async (productsToImport) => {
+    if (!user?.uid) return { success: 0, errors: ['Usuario no autenticado'] }
+
+    const errors = []
+    let successCount = 0
+
+    try {
+      for (let i = 0; i < productsToImport.length; i++) {
+        const product = productsToImport[i]
+
+        try {
+          const result = await createProduct(user.uid, product)
+
+          if (result.success) {
+            successCount++
+          } else {
+            errors.push(`Producto "${product.name}": ${result.error}`)
+          }
+        } catch (error) {
+          errors.push(`Producto "${product.name}": ${error.message}`)
+        }
+      }
+
+      // Recargar productos después de la importación
+      await loadProducts()
+
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) importado(s) exitosamente`)
+      }
+
+      if (errors.length > 0) {
+        toast.error(`${errors.length} producto(s) no pudieron ser importados`)
+      }
+
+      return { success: successCount, errors }
+    } catch (error) {
+      console.error('Error en importación:', error)
+      return { success: successCount, errors: [...errors, 'Error general en la importación'] }
     }
   }
 
@@ -595,6 +640,14 @@ export default function Products() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setIsImportModalOpen(true)}
+            className="w-full sm:w-auto"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar Excel
+          </Button>
           <Button
             variant="outline"
             onClick={handleExportToExcel}
@@ -1473,6 +1526,13 @@ export default function Products() {
           </div>
         </div>
       </Modal>
+
+      {/* Import Products Modal */}
+      <ImportProductsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleImportProducts}
+      />
     </div>
   )
 }
