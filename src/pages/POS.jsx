@@ -492,6 +492,88 @@ export default function POS() {
     setIsProcessing(true)
 
     try {
+      // MODO DEMO: Simular venta sin guardar en Firebase
+      if (isDemoMode) {
+        // Simular un delay para hacer más realista
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        // Preparar items de la factura
+        const items = cart.map(item => ({
+          productId: item.id,
+          code: item.code || item.id,
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          subtotal: item.price * item.quantity,
+        }))
+
+        // Crear datos simulados de factura
+        const demoNumber = documentType === 'factura' ? 'F001-00000099' :
+                          documentType === 'boleta' ? 'B001-00000099' : 'NV01-00000099'
+
+        const invoiceData = {
+          number: demoNumber,
+          series: documentType === 'factura' ? 'F001' : documentType === 'boleta' ? 'B001' : 'NV01',
+          correlativeNumber: 99,
+          documentType: documentType,
+          customer: customerData.documentNumber
+            ? {
+                documentType: customerData.documentType,
+                documentNumber: customerData.documentNumber,
+                name: documentType === 'factura'
+                  ? (customerData.businessName || customerData.name)
+                  : (customerData.name || 'Cliente'),
+                businessName: customerData.businessName || '',
+                email: customerData.email || '',
+                phone: customerData.phone || '',
+                address: customerData.address || '',
+              }
+            : {
+                documentType: ID_TYPES.DNI,
+                documentNumber: '00000000',
+                name: 'Cliente General',
+                businessName: '',
+                email: '',
+                phone: '',
+                address: '',
+              },
+          items: items,
+          subtotal: amounts.subtotal,
+          igv: amounts.igv,
+          total: amounts.total,
+          payments: allPayments,
+          paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
+          status: 'paid',
+          notes: '',
+          sunatStatus: 'not_applicable',
+          sunatResponse: null,
+          sunatSentAt: null,
+          createdAt: new Date(),
+        }
+
+        setLastInvoiceNumber(demoNumber)
+        setLastInvoiceData(invoiceData)
+
+        const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
+        toast.success(`${documentName} ${demoNumber} generada exitosamente (DEMO - No se guardó)`, 5000)
+
+        // Limpiar el carrito y resetear el estado
+        setCart([])
+        setCustomerData({
+          documentType: ID_TYPES.DNI,
+          documentNumber: '',
+          name: '',
+          businessName: '',
+          email: '',
+          phone: '',
+          address: '',
+        })
+        setPayments([{ id: Date.now(), method: '', amount: '' }])
+        setSelectedCustomerId('')
+
+        setIsProcessing(false)
+        return
+      }
       // 1. Obtener siguiente número de documento
       const numberResult = await getNextDocumentNumber(user.uid, documentType)
       if (!numberResult.success) {
