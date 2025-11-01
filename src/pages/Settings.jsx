@@ -68,6 +68,28 @@ export default function Settings() {
     if (!user?.uid) return
 
     setIsLoading(true)
+
+    // MODO DEMO: No cargar datos de Firebase
+    if (isDemoMode) {
+      // Establecer datos por defecto para demo
+      reset({
+        ruc: '20123456789',
+        businessName: 'EMPRESA DEMO SAC',
+        tradeName: 'Demo Store',
+        phone: '01-2345678',
+        email: 'demo@empresa.com',
+        website: 'www.empresademo.com',
+        address: 'Av. Demo 123',
+        urbanization: '',
+        district: 'Miraflores',
+        province: 'Lima',
+        department: 'Lima',
+        ubigeo: '150101',
+      })
+      setIsLoading(false)
+      return
+    }
+
     try {
       // Cargar suscripción del usuario
       const subResult = await getSubscription(user.uid)
