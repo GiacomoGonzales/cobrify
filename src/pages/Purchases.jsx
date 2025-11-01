@@ -12,7 +12,7 @@ import {
   DollarSign,
   Calendar,
 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -23,7 +23,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getPurchases, deletePurchase } from '@/services/firestoreService'
 
 export default function Purchases() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [purchases, setPurchases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -41,6 +41,13 @@ export default function Purchases() {
 
     setIsLoading(true)
     try {
+      // MODO DEMO: Usar datos de ejemplo
+      if (isDemoMode && demoData) {
+        setPurchases(demoData.purchases || [])
+        setIsLoading(false)
+        return
+      }
+
       const result = await getPurchases(user.uid)
       if (result.success) {
         setPurchases(result.data || [])
@@ -56,6 +63,13 @@ export default function Purchases() {
 
   const handleDelete = async () => {
     if (!deletingPurchase || !user?.uid) return
+
+    // MODO DEMO: No permitir eliminaciones
+    if (isDemoMode) {
+      toast.error('No se pueden eliminar compras en modo demo')
+      setDeletingPurchase(null)
+      return
+    }
 
     setIsDeleting(true)
     try {

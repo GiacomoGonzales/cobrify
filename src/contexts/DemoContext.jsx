@@ -406,6 +406,112 @@ const generateDemoData = () => {
         address: 'Av. Canadá 123, La Victoria',
       },
     ],
+    purchases: [
+      {
+        id: '1',
+        invoiceNumber: 'F001-00125',
+        supplier: {
+          id: '1',
+          documentType: '6',
+          documentNumber: '20123456789',
+          businessName: 'DISTRIBUIDORA TECH SAC',
+        },
+        items: [
+          {
+            productId: '1',
+            productName: 'Laptop HP 15"',
+            quantity: 10,
+            unitPrice: 2000.00,
+          },
+          {
+            productId: '2',
+            productName: 'Mouse Inalámbrico',
+            quantity: 50,
+            unitPrice: 30.00,
+          },
+        ],
+        subtotal: 21500.00,
+        igv: 3870.00,
+        total: 25370.00,
+        notes: 'Primera compra del mes',
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 5),
+      },
+      {
+        id: '2',
+        invoiceNumber: 'F001-00234',
+        supplier: {
+          id: '2',
+          documentType: '6',
+          documentNumber: '20987654321',
+          businessName: 'IMPORTACIONES GLOBAL SRL',
+        },
+        items: [
+          {
+            productId: '4',
+            productName: 'Monitor 24"',
+            quantity: 20,
+            unitPrice: 550.00,
+          },
+        ],
+        subtotal: 11000.00,
+        igv: 1980.00,
+        total: 12980.00,
+        notes: 'Compra de monitores para stock',
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 12),
+      },
+      {
+        id: '3',
+        invoiceNumber: 'F002-00089',
+        supplier: {
+          id: '3',
+          documentType: '6',
+          documentNumber: '20456789123',
+          businessName: 'ELECTRÓNICA PERUANA SAC',
+        },
+        items: [
+          {
+            productId: '3',
+            productName: 'Teclado Mecánico',
+            quantity: 30,
+            unitPrice: 150.00,
+          },
+          {
+            productId: '2',
+            productName: 'Mouse Inalámbrico',
+            quantity: 30,
+            unitPrice: 30.00,
+          },
+        ],
+        subtotal: 5400.00,
+        igv: 972.00,
+        total: 6372.00,
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 18),
+      },
+      // Compra del mes pasado
+      {
+        id: '4',
+        invoiceNumber: 'F001-00098',
+        supplier: {
+          id: '1',
+          documentType: '6',
+          documentNumber: '20123456789',
+          businessName: 'DISTRIBUIDORA TECH SAC',
+        },
+        items: [
+          {
+            productId: '1',
+            productName: 'Laptop HP 15"',
+            quantity: 5,
+            unitPrice: 2000.00,
+          },
+        ],
+        subtotal: 10000.00,
+        igv: 1800.00,
+        total: 11800.00,
+        notes: 'Reposición de stock',
+        createdAt: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 20),
+      },
+    ],
     subscription: {
       status: 'active',
       plan: 'unlimited_12_months',
