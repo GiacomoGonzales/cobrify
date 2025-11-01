@@ -42,6 +42,12 @@ export default function InvoiceList() {
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
+
+  // Helper para manejar fechas (Firestore Timestamp o Date)
+  const getInvoiceDate = (invoice) => {
+    if (!invoice?.createdAt) return null
+    return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
+  }
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -474,8 +480,8 @@ export default function InvoiceList() {
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <span className="text-sm whitespace-nowrap">
-                        {invoice.createdAt
-                          ? formatDate(invoice.createdAt.toDate())
+                        {getInvoiceDate(invoice)
+                          ? formatDate(getInvoiceDate(invoice))
                           : 'N/A'}
                       </span>
                     </TableCell>
@@ -632,8 +638,8 @@ export default function InvoiceList() {
               <div>
                 <p className="text-sm text-gray-600">Fecha</p>
                 <p className="font-semibold">
-                  {viewingInvoice.createdAt
-                    ? formatDate(viewingInvoice.createdAt.toDate())
+                  {getInvoiceDate(viewingInvoice)
+                    ? formatDate(getInvoiceDate(viewingInvoice))
                     : 'N/A'}
                 </p>
               </div>
