@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   Folder,
   Tag,
+  Share2,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -675,6 +676,45 @@ export default function POS() {
 
   const handlePrintTicket = () => {
     window.print()
+  }
+
+  const handleSendWhatsApp = () => {
+    if (!lastInvoiceData) return
+
+    // Verificar si hay teléfono del cliente
+    const phone = lastInvoiceData.customer?.phone || customerData.phone
+
+    if (!phone) {
+      toast.error('El cliente no tiene un número de teléfono registrado')
+      return
+    }
+
+    // Limpiar el número de teléfono (solo dígitos)
+    const cleanPhone = phone.replace(/\D/g, '')
+
+    // Crear mensaje
+    const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                       lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+
+    const customerName = lastInvoiceData.customer?.name || 'Cliente'
+    const total = formatCurrency(lastInvoiceData.total)
+
+    const message = `Hola ${customerName},
+
+Gracias por tu compra. Aquí está el detalle de tu ${docTypeName}:
+
+${docTypeName}: ${lastInvoiceData.number}
+Total: ${total}
+
+${companySettings?.businessName || 'Tu Empresa'}
+${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
+${companySettings?.website ? companySettings.website : ''}`
+
+    // Abrir WhatsApp Web
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+    window.open(url, '_blank')
+
+    toast.success('Abriendo WhatsApp...')
   }
 
   const getStockBadge = product => {
@@ -1503,6 +1543,15 @@ export default function POS() {
                       Descargar PDF
                     </Button>
                   </div>
+                  <Button
+                    onClick={handleSendWhatsApp}
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                  >
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Enviar por WhatsApp
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

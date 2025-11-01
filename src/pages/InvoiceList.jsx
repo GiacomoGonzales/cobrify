@@ -21,6 +21,7 @@ import {
   FilePlus,
   MoreVertical,
   FileSpreadsheet,
+  Share2,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -73,6 +74,45 @@ export default function InvoiceList() {
   const handlePrintTicket = () => {
     if (!viewingInvoice || !companySettings) return
     window.print()
+  }
+
+  const handleSendWhatsApp = (invoice) => {
+    if (!invoice) return
+
+    // Verificar si hay teléfono del cliente
+    const phone = invoice.customer?.phone
+
+    if (!phone) {
+      toast.error('El cliente no tiene un número de teléfono registrado')
+      return
+    }
+
+    // Limpiar el número de teléfono (solo dígitos)
+    const cleanPhone = phone.replace(/\D/g, '')
+
+    // Crear mensaje
+    const docTypeName = invoice.documentType === 'factura' ? 'Factura' :
+                       invoice.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+
+    const customerName = invoice.customer?.name || 'Cliente'
+    const total = `S/ ${Number(invoice.total).toFixed(2)}`
+
+    const message = `Hola ${customerName},
+
+Gracias por tu compra. Aquí está el detalle de tu ${docTypeName}:
+
+${docTypeName}: ${invoice.number}
+Total: ${total}
+
+${companySettings?.businessName || 'Tu Empresa'}
+${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
+${companySettings?.website ? companySettings.website : ''}`
+
+    // Abrir WhatsApp Web
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+    window.open(url, '_blank')
+
+    toast.success('Abriendo WhatsApp...')
   }
 
   useEffect(() => {
@@ -755,6 +795,13 @@ export default function InvoiceList() {
               </Button>
               <Button
                 variant="outline"
+                onClick={() => handleSendWhatsApp(viewingInvoice)}
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                WhatsApp
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => {
                   // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
@@ -766,7 +813,7 @@ export default function InvoiceList() {
                 }}
               >
                 <Printer className="w-4 h-4 mr-2" />
-                Imprimir Ticket
+                Imprimir
               </Button>
               <Button
                 onClick={() => {
@@ -786,7 +833,7 @@ export default function InvoiceList() {
                 }}
               >
                 <Download className="w-4 h-4 mr-2" />
-                Descargar PDF
+                PDF
               </Button>
             </div>
           </div>
