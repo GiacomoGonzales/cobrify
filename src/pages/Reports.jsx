@@ -14,7 +14,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
@@ -48,7 +48,7 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export default function Reports() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -65,6 +65,15 @@ export default function Reports() {
 
     setIsLoading(true)
     try {
+      // MODO DEMO: Usar datos de ejemplo
+      if (isDemoMode && demoData) {
+        setInvoices(demoData.invoices || [])
+        setCustomers(demoData.customers || [])
+        setProducts(demoData.products || [])
+        setIsLoading(false)
+        return
+      }
+
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
         getInvoices(user.uid),
         getCustomersWithStats(user.uid),
