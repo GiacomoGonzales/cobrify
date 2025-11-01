@@ -207,16 +207,20 @@ export default function Reports() {
 
     filteredInvoices.forEach(invoice => {
       invoice.items?.forEach(item => {
-        const key = item.name
+        // Soportar tanto 'name' como 'description' y tanto 'unitPrice' como 'price'
+        const itemName = item.name || item.description
+        const itemPrice = item.unitPrice || item.price || 0
+        const key = itemName
+
         if (!productSales[key]) {
           productSales[key] = {
-            name: item.name,
+            name: itemName,
             quantity: 0,
             revenue: 0,
           }
         }
         productSales[key].quantity += item.quantity || 0
-        const itemRevenue = item.subtotal || ((item.quantity || 0) * (item.unitPrice || 0))
+        const itemRevenue = item.subtotal || ((item.quantity || 0) * itemPrice)
         productSales[key].revenue += itemRevenue
       })
     })
@@ -311,8 +315,8 @@ export default function Reports() {
   // Datos para gráfico de productos top 5
   const top5ProductsData = useMemo(() => {
     return topProducts.slice(0, 5).map((product, index) => ({
-      name: product.name.length > 15 ? product.name.substring(0, 15) + '...' : product.name,
-      fullName: product.name,
+      name: product.name && product.name.length > 15 ? product.name.substring(0, 15) + '...' : (product.name || 'Producto'),
+      fullName: product.name || 'Producto',
       ventas: product.revenue,
       cantidad: product.quantity,
       color: COLORS[index % COLORS.length]
