@@ -71,41 +71,7 @@ export default function InvoiceList() {
 
   // Función para imprimir ticket
   const handlePrintTicket = () => {
-    if (!ticketRef.current) return
-
-    // Crear una ventana nueva
-    const printWindow = window.open('', '_blank', 'width=300,height=600')
-
-    if (!printWindow) {
-      toast.error('Por favor permite las ventanas emergentes para imprimir')
-      return
-    }
-
-    // Escribir el contenido del ticket en la ventana nueva
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${viewingInvoice?.number || 'Ticket'}</title>
-        </head>
-        <body>
-          ${ticketRef.current.outerHTML}
-        </body>
-      </html>
-    `)
-
-    printWindow.document.close()
-
-    // Esperar a que cargue y luego imprimir
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.focus()
-        printWindow.print()
-        printWindow.close()
-        toast.success('Ticket enviado a la impresora')
-      }, 250)
-    }
+    window.print()
   }
 
   useEffect(() => {

@@ -96,19 +96,25 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             margin: 0;
           }
 
-          body {
-            margin: 0;
-            padding: 0;
+          body * {
+            visibility: hidden;
+          }
+
+          .ticket-container,
+          .ticket-container * {
+            visibility: visible;
           }
 
           .ticket-container {
+            position: absolute;
+            left: 0;
+            top: 0;
             width: 80mm;
             max-height: 200mm;
             margin: 0;
             padding: 3mm;
             font-family: 'Courier New', monospace;
             font-size: 10pt;
-            overflow: hidden;
           }
         }
 
