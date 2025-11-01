@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -177,10 +177,10 @@ export default function Settings() {
 
       // Actualizar Firestore
       const businessRef = doc(db, 'businesses', user.uid)
-      await updateDoc(businessRef, {
+      await setDoc(businessRef, {
         logoUrl: null,
         updatedAt: serverTimestamp(),
-      })
+      }, { merge: true })
 
       setLogoUrl('')
       setLogoFile(null)
@@ -215,10 +215,10 @@ export default function Settings() {
         }
       }
 
-      // Actualizar datos de la empresa usando userId como businessId
+      // Crear o actualizar datos de la empresa usando userId como businessId
       const businessRef = doc(db, 'businesses', user.uid)
 
-      await updateDoc(businessRef, {
+      await setDoc(businessRef, {
         ruc: data.ruc,
         businessName: data.businessName,
         name: data.tradeName || data.businessName,
@@ -233,7 +233,7 @@ export default function Settings() {
         ubigeo: data.ubigeo,
         logoUrl: uploadedLogoUrl || null,
         updatedAt: serverTimestamp(),
-      })
+      }, { merge: true })
 
       setLogoFile(null) // Limpiar archivo temporal
       toast.success('Configuración guardada exitosamente')
@@ -251,13 +251,13 @@ export default function Settings() {
     setIsSaving(true)
 
     try {
-      // Actualizar series usando userId como businessId
+      // Crear o actualizar series usando userId como businessId
       const businessRef = doc(db, 'businesses', user.uid)
 
-      await updateDoc(businessRef, {
+      await setDoc(businessRef, {
         series: series,
         updatedAt: serverTimestamp(),
-      })
+      }, { merge: true })
 
       toast.success('Series actualizadas exitosamente')
       setEditingSeries(false)
@@ -360,10 +360,10 @@ export default function Settings() {
       }
 
       // Guardar configuración en Firestore
-      await updateDoc(businessRef, {
+      await setDoc(businessRef, {
         sunat: sunatData,
         updatedAt: serverTimestamp(),
-      })
+      }, { merge: true })
 
       toast.success('Configuración SUNAT guardada exitosamente')
       setEditingSunat(false)
