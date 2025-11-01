@@ -132,14 +132,20 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .company-logo {
-          width: 60px;
-          height: 60px;
+          width: 80px;
+          height: 80px;
           object-fit: contain;
-          margin: 0 auto 8px auto;
+          margin: 0 auto 10px auto;
           display: block;
         }
 
         .company-name {
+          font-size: 14px;
+          font-weight: bold;
+          margin-bottom: 3px;
+        }
+
+        .company-name-no-logo {
           font-size: 14px;
           font-weight: bold;
           margin-bottom: 3px;
@@ -277,16 +283,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         {companySettings?.logoUrl && (
           <img
             src={companySettings.logoUrl}
-            alt="Logo"
+            alt="Logo Empresa"
             className="company-logo"
             onError={(e) => { e.target.style.display = 'none' }}
           />
         )}
 
-        <div className="company-name">{companySettings?.razonSocial || 'MI EMPRESA'}</div>
-        {companySettings?.nombreComercial && (
+        {/* Nombre de la empresa (siempre se muestra) */}
+        <div className="company-name">{companySettings?.businessName || companySettings?.razonSocial || ''}</div>
+        {companySettings?.nombreComercial && companySettings?.nombreComercial !== companySettings?.businessName && (
           <div className="company-info">{companySettings.nombreComercial}</div>
         )}
+
         <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
         <div className="company-info">{companySettings?.direccion || 'Dirección no configurada'}</div>
         {companySettings?.telefono && (
