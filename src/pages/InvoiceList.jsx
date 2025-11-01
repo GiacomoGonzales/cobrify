@@ -88,23 +88,9 @@ export default function InvoiceList() {
         <head>
           <meta charset="UTF-8">
           <title>${viewingInvoice?.number || 'Ticket'}</title>
-          <style>
-            @page {
-              size: 80mm auto;
-              margin: 0;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              width: 80mm;
-            }
-            * {
-              box-sizing: border-box;
-            }
-          </style>
         </head>
         <body>
-          ${ticketRef.current.innerHTML}
+          ${ticketRef.current.outerHTML}
         </body>
       </html>
     `)
