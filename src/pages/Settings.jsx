@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info } from 'lucide-react'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
@@ -15,7 +15,7 @@ import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
 
 export default function Settings() {
-  const { user } = useAuth()
+  const { user, isDemoMode } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -194,6 +194,12 @@ export default function Settings() {
   const onSubmit = async data => {
     if (!user?.uid) return
 
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -247,6 +253,12 @@ export default function Settings() {
 
   const handleSaveSeries = async () => {
     if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
 
     setIsSaving(true)
 
@@ -317,6 +329,12 @@ export default function Settings() {
 
   const handleSaveSunat = async () => {
     if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
 
     setIsSaving(true)
 
@@ -412,6 +430,30 @@ export default function Settings() {
           Configura la información de tu empresa
         </p>
       </div>
+
+      {/* Demo Mode Alert */}
+      {isDemoMode && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <Info className="h-5 w-5 text-blue-400" />
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">Modo Demo</h3>
+              <div className="mt-2 text-sm text-blue-700">
+                <p>
+                  Estás explorando Cobrify en modo demostración. Para configurar la información de tu empresa
+                  y personalizar tus comprobantes, necesitas{' '}
+                  <a href="/register" className="font-semibold underline hover:text-blue-900">
+                    crear una cuenta
+                  </a>
+                  {' '}y elegir un plan de suscripción.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
