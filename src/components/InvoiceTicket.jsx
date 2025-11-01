@@ -92,7 +92,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
       <style>{`
         @media print {
           @page {
-            size: 80mm auto;
+            size: 80mm 200mm;
             margin: 0;
           }
 
@@ -103,10 +103,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
           .ticket-container {
             width: 80mm;
+            max-height: 200mm;
             margin: 0;
             padding: 3mm;
             font-family: 'Courier New', monospace;
             font-size: 10pt;
+            overflow: hidden;
           }
         }
 
