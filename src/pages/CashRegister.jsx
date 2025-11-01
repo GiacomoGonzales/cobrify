@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -20,7 +20,7 @@ import {
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
 export default function CashRegister() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -55,6 +55,52 @@ export default function CashRegister() {
   const loadData = async () => {
     setIsLoading(true)
     try {
+      if (isDemoMode && demoData) {
+        // Simular sesión de caja abierta con datos demo
+        const demoSession = {
+          id: 'demo-session-1',
+          openingAmount: 500,
+          openedAt: new Date(new Date().setHours(8, 0, 0, 0)),
+          openedBy: demoData.user.displayName,
+          status: 'open'
+        }
+        setCurrentSession(demoSession)
+
+        // Movimientos demo
+        const demoMovements = [
+          {
+            id: '1',
+            type: 'income',
+            amount: 50,
+            description: 'Venta de productos',
+            category: 'Ventas',
+            createdAt: new Date(new Date().setHours(10, 30, 0, 0))
+          },
+          {
+            id: '2',
+            type: 'expense',
+            amount: 20,
+            description: 'Compra de suministros',
+            category: 'Suministros',
+            createdAt: new Date(new Date().setHours(12, 15, 0, 0))
+          }
+        ]
+        setMovements(demoMovements)
+
+        // Filtrar facturas del día de hoy
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const todayInvoicesList = (demoData.invoices || []).filter(invoice => {
+          const invoiceDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt)
+          invoiceDate.setHours(0, 0, 0, 0)
+          return invoiceDate.getTime() === today.getTime()
+        })
+        setTodayInvoices(todayInvoicesList)
+
+        setIsLoading(false)
+        return
+      }
+
       // Obtener sesión actual
       const sessionResult = await getCashRegisterSession(user.uid)
       if (sessionResult.success && sessionResult.data) {
