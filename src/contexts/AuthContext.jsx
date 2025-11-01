@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin } from '@/services/adminService'
-import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
+import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 
 const AuthContext = createContext(null)
 
@@ -56,7 +56,25 @@ export const AuthProvider = ({ children }) => {
               getSubscription(firebaseUser.uid),
               new Promise((_, reject) => setTimeout(() => reject(new Error('Subscription timeout')), 5000))
             ])
-            const userSubscription = await subscriptionPromise
+            let userSubscription = await subscriptionPromise
+
+            // Si no tiene suscripción, crear una de prueba automáticamente
+            if (!userSubscription && !adminStatus) {
+              console.log('📝 Usuario sin suscripción, creando trial automático')
+              try {
+                await createSubscription(
+                  firebaseUser.uid,
+                  firebaseUser.email,
+                  firebaseUser.displayName || 'Mi Negocio',
+                  'trial'
+                )
+                // Obtener la suscripción recién creada
+                userSubscription = await getSubscription(firebaseUser.uid)
+              } catch (createError) {
+                console.error('Error al crear suscripción de prueba:', createError)
+              }
+            }
+
             setSubscription(userSubscription)
 
             // Verificar acceso activo (admin siempre tiene acceso)
