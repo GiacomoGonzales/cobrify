@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus,
@@ -11,6 +11,7 @@ import {
   Loader2,
   FileText,
   AlertTriangle,
+  Printer,
   Send,
   CheckCircle,
   Clock,
@@ -35,6 +36,8 @@ import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvo
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
+import InvoiceTicket from '@/components/InvoiceTicket'
+import { useReactToPrint } from 'react-to-print'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData } = useAppContext()
@@ -42,6 +45,7 @@ export default function InvoiceList() {
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
+  const ticketRef = useRef()
 
   // Helper para manejar fechas (Firestore Timestamp o Date)
   const getInvoiceDate = (invoice) => {
@@ -64,6 +68,15 @@ export default function InvoiceList() {
     type: 'all',
     startDate: '',
     endDate: '',
+  })
+
+  // Función para imprimir ticket
+  const handlePrintTicket = useReactToPrint({
+    content: () => ticketRef.current,
+    documentTitle: viewingInvoice?.number || 'Ticket',
+    onAfterPrint: () => {
+      toast.success('Ticket enviado a la impresora')
+    },
   })
 
   useEffect(() => {
@@ -746,30 +759,18 @@ export default function InvoiceList() {
               </Button>
               <Button
                 variant="outline"
-                onClick={async () => {
+                onClick={() => {
                   // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
                     toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
                     return
                   }
 
-                  try {
-                    const result = await prepareInvoiceXML(viewingInvoice, companySettings)
-
-                    if (result.success) {
-                      await downloadCompressedXML(result.xml, result.fileName)
-                      toast.success('XML SUNAT descargado exitosamente')
-                    } else {
-                      throw new Error(result.error)
-                    }
-                  } catch (error) {
-                    console.error('Error al generar XML:', error)
-                    toast.error('Error al generar el XML: ' + error.message)
-                  }
+                  handlePrintTicket()
                 }}
               >
-                <FileText className="w-4 h-4 mr-2" />
-                XML SUNAT
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir Ticket
               </Button>
               <Button
                 onClick={() => {
@@ -902,6 +903,13 @@ export default function InvoiceList() {
           </div>
         </div>
       </Modal>
+
+      {/* Hidden Ticket Component for Printing */}
+      <div style={{ display: 'none' }}>
+        {viewingInvoice && (
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} />
+        )}
+      </div>
     </div>
   )
 }
