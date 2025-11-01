@@ -11,7 +11,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -24,7 +24,7 @@ import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
 
 export default function Inventory() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [productCategories, setProductCategories] = useState([])
@@ -43,6 +43,13 @@ export default function Inventory() {
 
     setIsLoading(true)
     try {
+      // MODO DEMO: Usar datos de ejemplo
+      if (isDemoMode && demoData) {
+        setProducts(demoData.products || [])
+        setIsLoading(false)
+        return
+      }
+
       const result = await getProducts(user.uid)
       if (result.success) {
         setProducts(result.data || [])
@@ -58,6 +65,12 @@ export default function Inventory() {
     if (!user?.uid) return
 
     try {
+      // MODO DEMO: Usar categorías de ejemplo
+      if (isDemoMode && demoData) {
+        setProductCategories(['Electrónica', 'Servicios'])
+        return
+      }
+
       const result = await getProductCategories(user.uid)
       if (result.success) {
         setProductCategories(result.data || [])
