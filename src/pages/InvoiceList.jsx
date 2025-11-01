@@ -117,37 +117,152 @@ export default function InvoiceList() {
   <meta charset="UTF-8">
   <title>${invoice.number}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; }
-    body { margin: 0; padding: 5mm; font-family: 'Courier New', monospace; font-size: 10pt; width: 80mm; }
-    .center { text-align: center; }
-    .bold { font-weight: bold; }
-    .line { border-bottom: 1px dashed #000; margin: 5mm 0; }
-    .row { display: flex; justify-content: space-between; margin: 2mm 0; }
+    @page {
+      size: 80mm auto;
+      margin: 0;
+    }
+    body {
+      margin: 0;
+      padding: 3mm 4mm;
+      font-family: Arial, 'Liberation Sans', sans-serif;
+      font-size: 11pt;
+      font-weight: 600;
+      width: 80mm;
+      color: #000;
+      line-height: 1.4;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .company-name {
+      text-align: center;
+      font-size: 13pt;
+      font-weight: 900;
+      margin-bottom: 2mm;
+      letter-spacing: 0.3px;
+    }
+    .company-info {
+      text-align: center;
+      font-size: 10pt;
+      font-weight: 600;
+      margin: 1mm 0;
+    }
+    .doc-type {
+      text-align: center;
+      font-size: 12pt;
+      font-weight: 900;
+      margin: 3mm 0 2mm 0;
+      letter-spacing: 0.5px;
+    }
+    .doc-number {
+      text-align: center;
+      font-size: 13pt;
+      font-weight: 900;
+      margin-bottom: 2mm;
+      letter-spacing: 0.5px;
+    }
+    .line {
+      border-bottom: 2px solid #000;
+      margin: 3mm 0;
+    }
+    .line-dashed {
+      border-bottom: 1px dashed #000;
+      margin: 2mm 0;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin: 2mm 0;
+      font-size: 10pt;
+      font-weight: 600;
+    }
+    .row-label {
+      font-weight: 700;
+    }
+    .item-name {
+      font-size: 11pt;
+      font-weight: 700;
+      margin: 2mm 0 1mm 0;
+    }
+    .item-detail {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10pt;
+      font-weight: 600;
+      margin-bottom: 2mm;
+    }
+    .total-section {
+      margin-top: 3mm;
+    }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 2mm 0;
+      font-size: 11pt;
+      font-weight: 700;
+    }
+    .grand-total {
+      font-size: 13pt;
+      font-weight: 900;
+      margin-top: 2mm;
+      padding-top: 2mm;
+      border-top: 2px solid #000;
+    }
+    .footer {
+      text-align: center;
+      font-size: 10pt;
+      font-weight: 700;
+      margin-top: 4mm;
+    }
   </style>
 </head>
 <body>
-  <div class="center bold">${settings.razonSocial || 'MI EMPRESA'}</div>
-  <div class="center">RUC: ${settings.ruc || '00000000000'}</div>
-  <div class="center">${settings.direccion || ''}</div>
+  <div class="company-name">${settings.razonSocial || 'MI EMPRESA'}</div>
+  <div class="company-info">RUC: ${settings.ruc || '00000000000'}</div>
+  ${settings.direccion ? `<div class="company-info">${settings.direccion}</div>` : ''}
+  ${settings.telefono ? `<div class="company-info">Tel: ${settings.telefono}</div>` : ''}
+
   <div class="line"></div>
-  <div class="center bold">${docType}</div>
-  <div class="center bold">${invoice.series}-${invoice.number}</div>
+
+  <div class="doc-type">${docType}</div>
+  <div class="doc-number">${invoice.series}-${invoice.number}</div>
+
   <div class="line"></div>
-  <div class="row"><span>Fecha:</span><span>${formatDate(invoice.createdAt)}</span></div>
-  <div class="row"><span>Hora:</span><span>${formatTime(invoice.createdAt)}</span></div>
-  ${invoice.customerName ? `<div class="row"><span>Cliente:</span><span>${invoice.customerName}</span></div>` : ''}
-  ${invoice.customerDocumentNumber ? `<div class="row"><span>Doc:</span><span>${invoice.customerDocumentNumber}</span></div>` : ''}
+
+  <div class="row"><span class="row-label">Fecha:</span><span>${formatDate(invoice.createdAt)}</span></div>
+  <div class="row"><span class="row-label">Hora:</span><span>${formatTime(invoice.createdAt)}</span></div>
+  ${invoice.customerName ? `<div class="row"><span class="row-label">Cliente:</span><span>${invoice.customerName}</span></div>` : ''}
+  ${invoice.customerDocumentNumber ? `<div class="row"><span class="row-label">Doc:</span><span>${invoice.customerDocumentNumber}</span></div>` : ''}
+
   <div class="line"></div>
+
   ${invoice.items.map(item => `
-    <div class="bold">${item.description}</div>
-    <div class="row"><span>${item.quantity} x ${formatCurrency(item.price)}</span><span>${formatCurrency(item.quantity * item.price)}</span></div>
+    <div class="item-name">${item.description}</div>
+    <div class="item-detail">
+      <span>${item.quantity} x ${formatCurrency(item.price)}</span>
+      <span>${formatCurrency(item.quantity * item.price)}</span>
+    </div>
   `).join('')}
+
+  <div class="line-dashed"></div>
+
+  <div class="total-section">
+    <div class="total-row">
+      <span>SUBTOTAL:</span>
+      <span>${formatCurrency(invoice.subtotal)}</span>
+    </div>
+    <div class="total-row">
+      <span>IGV (18%):</span>
+      <span>${formatCurrency(invoice.tax)}</span>
+    </div>
+    <div class="total-row grand-total">
+      <span>TOTAL:</span>
+      <span>${formatCurrency(invoice.total)}</span>
+    </div>
+  </div>
+
   <div class="line"></div>
-  <div class="row"><span>SUBTOTAL:</span><span>${formatCurrency(invoice.subtotal)}</span></div>
-  <div class="row"><span>IGV (18%):</span><span>${formatCurrency(invoice.tax)}</span></div>
-  <div class="row bold"><span>TOTAL:</span><span>${formatCurrency(invoice.total)}</span></div>
-  <div class="line"></div>
-  <div class="center">¡Gracias por su compra!</div>
+
+  <div class="footer">¡Gracias por su compra!</div>
 </body>
 </html>`
   }
