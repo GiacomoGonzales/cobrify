@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle } from 'lucide-react'
 import { z } from 'zod'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -32,7 +32,7 @@ const supplierSchema = z.object({
 })
 
 export default function Suppliers() {
-  const { user } = useAuth()
+  const { user, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [suppliers, setSuppliers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -69,6 +69,13 @@ export default function Suppliers() {
 
     setIsLoading(true)
     try {
+      // MODO DEMO: Usar datos de ejemplo
+      if (isDemoMode && demoData) {
+        setSuppliers(demoData.suppliers || [])
+        setIsLoading(false)
+        return
+      }
+
       const result = await getSuppliers(user.uid)
       if (result.success) {
         setSuppliers(result.data || [])
@@ -119,6 +126,12 @@ export default function Suppliers() {
   const onSubmit = async data => {
     if (!user?.uid) return
 
+    // MODO DEMO: No permitir modificaciones
+    if (isDemoMode) {
+      toast.error('No se pueden crear o editar proveedores en modo demo')
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -151,6 +164,13 @@ export default function Suppliers() {
 
   const handleDelete = async () => {
     if (!deletingSupplier || !user?.uid) return
+
+    // MODO DEMO: No permitir eliminaciones
+    if (isDemoMode) {
+      toast.error('No se pueden eliminar proveedores en modo demo')
+      setDeletingSupplier(null)
+      return
+    }
 
     setIsSaving(true)
     try {
