@@ -21,6 +21,7 @@ import CashRegister from './pages/CashRegister'
 import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
 import UserManagement from './pages/admin/UserManagement'
+import Users from './pages/Users'
 import GetMyUID from './pages/GetMyUID'
 import Quotations from './pages/Quotations'
 import CreateQuotation from './pages/CreateQuotation'
@@ -87,6 +88,7 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="configuracion" element={<Settings />} />
+              <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />
               <Route path="business/new" element={<BusinessCreate />} />
 

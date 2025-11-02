@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
+import { getUserData } from '@/services/userManagementService'
 
 const AuthContext = createContext(null)
 
@@ -13,6 +14,8 @@ export const AuthProvider = ({ children }) => {
   const [isAdmin, setIsAdmin] = useState(false)
   const [subscription, setSubscription] = useState(null)
   const [hasAccess, setHasAccess] = useState(false)
+  const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
+  const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -49,6 +52,34 @@ export const AuthProvider = ({ children }) => {
             adminStatus = false
           }
           setIsAdmin(adminStatus)
+
+          // Cargar permisos del usuario (si no es admin)
+          if (!adminStatus) {
+            try {
+              const userDataResult = await getUserData(firebaseUser.uid)
+              if (userDataResult.success && userDataResult.data) {
+                const userData = userDataResult.data
+                setUserPermissions(userData)
+                setAllowedPages(userData.allowedPages || [])
+
+                // Si el usuario no está activo, cerrar sesión
+                if (!userData.isActive) {
+                  console.warn('Usuario inactivo, cerrando sesión')
+                  await logoutService()
+                  return
+                }
+              } else {
+                // Usuario no tiene datos en Firestore, permitir acceso total temporalmente
+                setAllowedPages([])
+              }
+            } catch (error) {
+              console.error('Error al cargar permisos:', error)
+              setAllowedPages([])
+            }
+          } else {
+            // Admin tiene acceso total
+            setAllowedPages([])
+          }
 
           // Obtener suscripción con timeout
           try {
@@ -93,6 +124,8 @@ export const AuthProvider = ({ children }) => {
           setIsAdmin(false)
           setSubscription(null)
           setHasAccess(false)
+          setUserPermissions(null)
+          setAllowedPages([])
         }
       } catch (error) {
         console.error('Error en AuthContext:', error)
@@ -133,6 +166,8 @@ export const AuthProvider = ({ children }) => {
       setIsAdmin(false)
       setSubscription(null)
       setHasAccess(false)
+      setUserPermissions(null)
+      setAllowedPages([])
       navigate('/login')
     } catch (error) {
       console.error('Error al cerrar sesión:', error)
@@ -153,6 +188,21 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  // Función helper para verificar si el usuario tiene acceso a una página
+  const hasPageAccess = (pageId) => {
+    // Admin siempre tiene acceso
+    if (isAdmin) return true
+
+    // Si no hay permisos cargados, denegar acceso (mientras carga)
+    if (userPermissions === null) return false
+
+    // Si allowedPages está vacío y no es admin, permitir acceso (usuario sin restricciones)
+    if (allowedPages.length === 0 && !userPermissions) return true
+
+    // Verificar si la página está en la lista de permitidas
+    return allowedPages.includes(pageId)
+  }
+
   const value = {
     user,
     isAuthenticated,
@@ -160,6 +210,9 @@ export const AuthProvider = ({ children }) => {
     isAdmin,
     subscription,
     hasAccess,
+    userPermissions,
+    allowedPages,
+    hasPageAccess,
     login,
     logout,
     refreshSubscription,

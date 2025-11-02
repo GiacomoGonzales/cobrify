@@ -14,13 +14,14 @@ import {
   CreditCard,
   Shield,
   FileCheck,
+  UserCog,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 
 export default function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin, isDemoMode } = useAppContext()
+  const { isAdmin, isDemoMode, hasPageAccess } = useAppContext()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo a las rutas
@@ -36,62 +37,74 @@ export default function Sidebar() {
       path: '/dashboard',
       icon: LayoutDashboard,
       label: 'Dashboard',
+      pageId: 'dashboard',
     },
     {
       path: '/pos',
       icon: ShoppingCart,
       label: 'Punto de Venta',
       badge: 'POS',
+      pageId: 'pos',
     },
     {
       path: '/caja',
       icon: Wallet,
       label: 'Control de Caja',
+      pageId: 'cash-register',
     },
     {
       path: '/facturas',
       icon: FileText,
       label: 'Facturas',
+      pageId: 'invoices',
     },
     {
       path: '/cotizaciones',
       icon: FileCheck,
       label: 'Cotizaciones',
+      pageId: 'invoices', // Mismo permiso que facturas
     },
     {
       path: '/clientes',
       icon: Users,
       label: 'Clientes',
+      pageId: 'customers',
     },
     {
       path: '/productos',
       icon: Package,
       label: 'Productos',
+      pageId: 'products',
     },
     {
       path: '/inventario',
       icon: Warehouse,
       label: 'Inventario',
+      pageId: 'products', // Mismo permiso que productos
     },
     {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
+      pageId: 'purchases', // Relacionado con compras
     },
     {
       path: '/compras',
       icon: ShoppingBag,
       label: 'Compras',
+      pageId: 'purchases',
     },
     {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',
+      pageId: 'reports',
     },
     {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
+      pageId: 'settings',
     },
   ]
 
@@ -102,14 +115,45 @@ export default function Sidebar() {
       icon: CreditCard,
       label: 'Mi Suscripción',
       adminOnly: false,
+      pageId: null, // Todos tienen acceso
     },
     {
-      path: '/admin/users',
-      icon: Shield,
+      path: '/usuarios',
+      icon: UserCog,
       label: 'Gestión de Usuarios',
       adminOnly: true,
+      pageId: 'users',
     },
   ]
+
+  // Filtrar items del menú según permisos
+  const filteredMenuItems = menuItems.filter((item) => {
+    // Si estamos en modo demo, mostrar todo
+    if (isDemoMode) return true
+
+    // Si es admin, mostrar todo
+    if (isAdmin) return true
+
+    // Si no tiene pageId, permitir acceso (sin restricción)
+    if (!item.pageId) return true
+
+    // Verificar si tiene permiso para esta página
+    return hasPageAccess && hasPageAccess(item.pageId)
+  })
+
+  const filteredAdditionalItems = additionalItems.filter((item) => {
+    // Si es solo para admin y el usuario no es admin, no mostrar
+    if (item.adminOnly && !isAdmin) return false
+
+    // Si estamos en modo demo, mostrar todo
+    if (isDemoMode) return true
+
+    // Si no tiene pageId, permitir acceso
+    if (!item.pageId) return true
+
+    // Verificar si tiene permiso
+    return hasPageAccess && hasPageAccess(item.pageId)
+  })
 
   return (
     <>
@@ -144,7 +188,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-4rem)]">
-        {menuItems.map(item => (
+        {filteredMenuItems.map(item => (
           <NavLink
             key={item.path}
             to={getPath(item.path)}
@@ -172,10 +216,7 @@ export default function Sidebar() {
 
         {/* Separador */}
         <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
-          {additionalItems.map(item => {
-            // Si es solo para admin y el usuario no es admin, no mostrar
-            if (item.adminOnly && !isAdmin) return null
-
+          {filteredAdditionalItems.map(item => {
             return (
               <NavLink
                 key={item.path}
