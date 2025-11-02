@@ -99,6 +99,19 @@ export const productSchema = z.object({
         .pipe(z.number().positive('El precio debe ser mayor a 0'))
     )
     .optional(), // Optional when hasVariants is true
+  cost: z
+    .number()
+    .nonnegative('El costo no puede ser negativo')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return 0
+          const num = parseFloat(val)
+          return isNaN(num) ? 0 : num
+        })
+    )
+    .optional(),
   unit: z.string().default('UNIDAD'),
   category: z.string().optional(),
   stock: z

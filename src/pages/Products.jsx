@@ -832,6 +832,7 @@ export default function Products() {
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden lg:table-cell">Descripción</TableHead>
                   <TableHead>Precio</TableHead>
+                  <TableHead className="hidden xl:table-cell">Utilidad</TableHead>
                   <TableHead className="hidden md:table-cell">Categoría</TableHead>
                   <TableHead>Stock</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -864,6 +865,20 @@ export default function Products() {
                           <span className="font-semibold">{formatCurrency(product.price)}</span>
                           <p className="text-xs text-gray-500">{product.unit}</p>
                         </>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden xl:table-cell">
+                      {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
+                        <>
+                          <span className="font-semibold text-green-600">
+                            {formatCurrency(product.price - product.cost)}
+                          </span>
+                          <p className="text-xs text-gray-500">
+                            {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(1)}%` : '0%'}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -963,9 +978,18 @@ export default function Products() {
             {...register('name')}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              label="Precio"
+              label="Costo"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              error={errors.cost?.message}
+              {...register('cost')}
+            />
+
+            <Input
+              label="Precio de Venta"
               type="number"
               step="0.01"
               required
