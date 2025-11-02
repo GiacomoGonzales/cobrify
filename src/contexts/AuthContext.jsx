@@ -272,15 +272,16 @@ export const AuthProvider = ({ children }) => {
   }
 
   // Función helper para obtener el Business ID (owner del negocio)
-  // Si es sub-usuario, retorna el ownerId; si es business owner, retorna su propio uid
+  // Si es sub-usuario, retorna el ownerId; si es business owner o admin, retorna su propio uid
   const getBusinessId = () => {
     if (!user) return null
 
-    // Si es super admin, no tiene businessId
-    if (isAdmin) return null
-
-    // Si es business owner, su businessId es su propio uid
-    if (isBusinessOwner) return user.uid
+    // Si es business owner o super admin, su businessId es su propio uid
+    // Esto permite que los super admins también tengan sus propios datos
+    if (isBusinessOwner || isAdmin) {
+      console.log('🔍 getBusinessId - Business owner or admin, using user.uid:', user.uid)
+      return user.uid
+    }
 
     // Si es sub-usuario, usar el ownerId de userPermissions
     if (userPermissions && userPermissions.ownerId) {
