@@ -271,6 +271,28 @@ export const AuthProvider = ({ children }) => {
     return hasAccess
   }
 
+  // Función helper para obtener el Business ID (owner del negocio)
+  // Si es sub-usuario, retorna el ownerId; si es business owner, retorna su propio uid
+  const getBusinessId = () => {
+    if (!user) return null
+
+    // Si es super admin, no tiene businessId
+    if (isAdmin) return null
+
+    // Si es business owner, su businessId es su propio uid
+    if (isBusinessOwner) return user.uid
+
+    // Si es sub-usuario, usar el ownerId de userPermissions
+    if (userPermissions && userPermissions.ownerId) {
+      console.log('🔍 getBusinessId - Sub-user detected, using ownerId:', userPermissions.ownerId)
+      return userPermissions.ownerId
+    }
+
+    // Fallback: usar el uid del usuario
+    console.log('⚠️ getBusinessId - No ownerId found, using user.uid as fallback')
+    return user.uid
+  }
+
   const value = {
     user,
     isAuthenticated,
@@ -282,6 +304,7 @@ export const AuthProvider = ({ children }) => {
     userPermissions,
     allowedPages,
     hasPageAccess,
+    getBusinessId, // Función para obtener el ID del negocio (owner)
     login,
     logout,
     refreshSubscription,

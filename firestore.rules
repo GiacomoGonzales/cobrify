@@ -90,59 +90,72 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
+    // Helper function to check if user is sub-user of business owner
+    function isSubUserOf(ownerId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.ownerId == ownerId && userDoc.data.isActive == true;
+    }
+
+    // Helper function to check if user can access business data
+    // Returns true if: user is owner OR user is active sub-user of owner
+    function canAccessBusiness(userId) {
+      return isOwner(userId) || isSubUserOf(userId);
+    }
+
     // Businesses (Negocios)
     // Cada usuario tiene un solo negocio con su userId como ID
     // IMPORTANTE: Los administradores tienen acceso sin importar su suscripción
+    // Sub-usuarios (employees) pueden acceder a los datos del Business Owner
     match /businesses/{userId} {
-      allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-      allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+      allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
 
       // Subcollection: Invoices (Facturas/Boletas)
       match /invoices/{invoiceId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Customers (Clientes)
       match /customers/{customerId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Products (Productos)
       match /products/{productId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Cash Register Sessions (Sesiones de Caja)
       match /cashSessions/{sessionId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Cash Movements (Movimientos de Caja)
       match /cashMovements/{movementId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Suppliers (Proveedores)
       match /suppliers/{supplierId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Purchases (Compras)
       match /purchases/{purchaseId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Quotations (Cotizaciones)
       match /quotations/{quotationId} {
-        allow read: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
-        allow write: if isAuthenticated() && isOwner(userId) && hasAccess(userId);
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
     }
   }

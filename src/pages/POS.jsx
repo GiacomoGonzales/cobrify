@@ -84,7 +84,7 @@ const getAllSubcategoryIds = (categories, parentId) => {
 }
 
 export default function POS() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const ticketRef = useRef(null)
   const [products, setProducts] = useState([])
@@ -144,27 +144,31 @@ export default function POS() {
         return
       }
 
+      const businessId = getBusinessId()
+      console.log('🔍 POS - Using businessId:', businessId, 'for user:', user.email)
+
       // Cargar productos
-      const productsResult = await getProducts(user.uid)
+      const productsResult = await getProducts(businessId)
       if (productsResult.success) {
         // Mostrar todos los productos (los sin stock se mostrarán deshabilitados)
         setProducts(productsResult.data || [])
+        console.log('✅ POS - Loaded', productsResult.data?.length || 0, 'products')
       }
 
       // Cargar clientes
-      const customersResult = await getCustomers(user.uid)
+      const customersResult = await getCustomers(businessId)
       if (customersResult.success) {
         setCustomers(customersResult.data || [])
       }
 
       // Cargar configuración de empresa
-      const settingsResult = await getCompanySettings(user.uid)
+      const settingsResult = await getCompanySettings(businessId)
       if (settingsResult.success && settingsResult.data) {
         setCompanySettings(settingsResult.data)
       }
 
       // Cargar categorías
-      const categoriesResult = await getProductCategories(user.uid)
+      const categoriesResult = await getProductCategories(businessId)
       if (categoriesResult.success) {
         const migratedCategories = migrateLegacyCategories(categoriesResult.data || [])
         setCategories(migratedCategories)
@@ -579,8 +583,10 @@ export default function POS() {
         return
       }
 
+      const businessId = getBusinessId()
+
       // 1. Obtener siguiente número de documento
-      const numberResult = await getNextDocumentNumber(user.uid, documentType)
+      const numberResult = await getNextDocumentNumber(businessId, documentType)
       if (!numberResult.success) {
         throw new Error('Error al generar número de comprobante')
       }
@@ -638,7 +644,7 @@ export default function POS() {
         sunatSentAt: null,
       }
 
-      const result = await createInvoice(user.uid, invoiceData)
+      const result = await createInvoice(businessId, invoiceData)
       if (!result.success) {
         throw new Error(result.error || 'Error al crear la factura')
       }
@@ -648,7 +654,7 @@ export default function POS() {
         .filter(item => item.stock !== null) // Solo productos con control de stock
         .map(item => {
           const newStock = item.stock - item.quantity
-          return updateProduct(user.uid, item.id, { stock: newStock })
+          return updateProduct(businessId, item.id, { stock: newStock })
         })
 
       await Promise.all(stockUpdates)
@@ -662,7 +668,7 @@ export default function POS() {
       toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
 
       // 6. Recargar productos para actualizar stock
-      const productsResult = await getProducts(user.uid)
+      const productsResult = await getProducts(businessId)
       if (productsResult.success) {
         setProducts(productsResult.data || [])
       }
