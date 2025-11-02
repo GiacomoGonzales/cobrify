@@ -124,6 +124,13 @@ export default function Sidebar() {
       businessOwnerOnly: true, // Solo para business owners, NO para super admins
       pageId: 'users',
     },
+    {
+      path: '/admin/users',
+      icon: Shield,
+      label: 'Admin - Negocios',
+      adminOnly: true, // Solo para super admins
+      pageId: null,
+    },
   ]
 
   // Filtrar items del menú según permisos
