@@ -323,8 +323,9 @@ export default function CreatePurchase() {
           const createdProduct = { id: result.id, ...productData }
           selectProduct(currentItemIndex, createdProduct)
 
-          // Auto-llenar costo y precio de venta en el formulario de compra
+          // Auto-llenar cantidad, costo y precio de venta en el formulario de compra
           const newItems = [...purchaseItems]
+          newItems[currentItemIndex].quantity = data.stock ? parseFloat(data.stock) : 1
           newItems[currentItemIndex].cost = productData.cost || 0
           newItems[currentItemIndex].unitPrice = productData.price || 0
           setPurchaseItems(newItems)
@@ -982,11 +983,14 @@ export default function CreatePurchase() {
               </div>
 
               {!noStock && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-800">
-                    <strong>📦 Stock:</strong> Se iniciará en 0 y se actualizará automáticamente al guardar la compra.
-                  </p>
-                </div>
+                <Input
+                  label="Cantidad de Compra"
+                  type="number"
+                  placeholder="Ej: 40"
+                  error={errorsProduct.stock?.message}
+                  {...registerProduct('stock')}
+                  helperText="Cantidad que estás comprando ahora"
+                />
               )}
             </div>
           </div>
