@@ -138,6 +138,15 @@ export default function Sidebar() {
 
   // Filtrar items del menú según permisos
   const filteredMenuItems = menuItems.filter((item) => {
+    console.log('🔍 Sidebar - Checking item:', item.label, {
+      pageId: item.pageId,
+      isDemoMode,
+      isAdmin,
+      isBusinessOwner,
+      hasPageAccessFn: !!hasPageAccess,
+      hasAccess: hasPageAccess ? hasPageAccess(item.pageId) : 'N/A'
+    })
+
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true
 
