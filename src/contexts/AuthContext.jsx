@@ -59,11 +59,13 @@ export const AuthProvider = ({ children }) => {
           if (!superAdminStatus) {
             try {
               businessOwnerStatus = await isBusinessAdmin(firebaseUser.uid)
+              console.log('🔍 DEBUG - isBusinessAdmin result:', businessOwnerStatus, 'for user:', firebaseUser.email)
             } catch (error) {
               console.error('Error al verificar business owner:', error)
               businessOwnerStatus = false
             }
           }
+          console.log('🔍 DEBUG - Setting isBusinessOwner to:', businessOwnerStatus)
           setIsBusinessOwner(businessOwnerStatus)
 
           // Cargar permisos del usuario (si no es super admin ni business owner)

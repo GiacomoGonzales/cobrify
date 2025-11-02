@@ -24,6 +24,9 @@ export default function Sidebar() {
   const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess } = useAppContext()
   const location = useLocation()
 
+  // Debug logs
+  console.log('🔍 Sidebar - isAdmin:', isAdmin, 'isBusinessOwner:', isBusinessOwner, 'isDemoMode:', isDemoMode)
+
   // Si estamos en modo demo, añadir prefijo /demo a las rutas
   const getPath = (path) => {
     if (isDemoMode) {
@@ -147,6 +150,8 @@ export default function Sidebar() {
     // Verificar si tiene permiso para esta página
     return hasPageAccess && hasPageAccess(item.pageId)
   })
+
+  console.log('🔍 Sidebar - Filtered menu items:', filteredMenuItems.length, 'out of', menuItems.length)
 
   const filteredAdditionalItems = additionalItems.filter((item) => {
     // Si es solo para admin y el usuario no es admin, no mostrar

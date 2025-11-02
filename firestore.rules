@@ -47,6 +47,33 @@ service cloud.firestore {
       allow write: if false; // Solo se gestiona manualmente desde consola Firebase
     }
 
+    // Users collection (para gestión de usuarios y permisos)
+    match /users/{userId} {
+      // Cualquier usuario autenticado puede leer su propio documento
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Business Owners pueden leer usuarios que ellos crearon (sub-usuarios)
+      allow read: if isAuthenticated() &&
+                     exists(/databases/$(database)/documents/users/$(userId)) &&
+                     get(/databases/$(database)/documents/users/$(userId)).data.ownerId == request.auth.uid;
+
+      // Admins pueden leer cualquier usuario
+      allow read: if isAdmin();
+
+      // Business Owners pueden crear sub-usuarios
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+
+      // Los usuarios pueden actualizar su propio documento
+      allow update: if isAuthenticated() && isOwner(userId);
+
+      // Business Owners pueden actualizar usuarios que crearon
+      allow update: if isAuthenticated() &&
+                       resource.data.ownerId == request.auth.uid;
+
+      // Admins pueden hacer cualquier cosa
+      allow write: if isAdmin();
+    }
+
     // Notifications collection
     match /notifications/{notificationId} {
       // Users can only read/write their own notifications
