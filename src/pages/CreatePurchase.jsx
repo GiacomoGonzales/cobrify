@@ -69,7 +69,7 @@ export default function CreatePurchase() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0 },
+    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0 },
   ])
 
   // Estados para el autocompletado de proveedor
@@ -148,7 +148,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: 1, unitPrice: 0 },
+      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0 },
     ])
   }
 
@@ -435,20 +435,27 @@ export default function CreatePurchase() {
         throw new Error(result.error || 'Error al crear la compra')
       }
 
-      // 3. Actualizar stock de productos
-      const stockUpdates = purchaseItems.map(async item => {
+      // 3. Actualizar stock y costo de productos
+      const productUpdates = purchaseItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (product) {
           const currentStock = product.stock !== null ? product.stock : 0
           const newStock = currentStock + parseFloat(item.quantity)
-          return updateProduct(user.uid, item.productId, { stock: newStock })
+
+          // Actualizar stock y costo (si se proporcionó un costo)
+          const updates = { stock: newStock }
+          if (item.cost && parseFloat(item.cost) > 0) {
+            updates.cost = parseFloat(item.cost)
+          }
+
+          return updateProduct(user.uid, item.productId, updates)
         }
       })
 
-      await Promise.all(stockUpdates)
+      await Promise.all(productUpdates)
 
       // 4. Mostrar éxito y redirigir
-      toast.success('Compra registrada exitosamente y stock actualizado')
+      toast.success('Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
         navigate('/compras')
       }, 1500)
@@ -723,10 +730,26 @@ export default function CreatePurchase() {
                   />
                 </div>
 
+                {/* Costo Unitario */}
+                <div>
+                  <Input
+                    label="Costo Unitario"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ej: 80.00"
+                    value={item.cost}
+                    onChange={e => updateItem(index, 'cost', e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Costo de compra del producto
+                  </p>
+                </div>
+
                 {/* Precio Unitario */}
                 <div>
                   <Input
-                    label="Precio Unitario (Inc. IGV)"
+                    label="Precio de Venta (Inc. IGV)"
                     type="number"
                     required
                     min="0.01"
@@ -735,6 +758,17 @@ export default function CreatePurchase() {
                     value={item.unitPrice}
                     onChange={e => updateItem(index, 'unitPrice', e.target.value)}
                   />
+                  {item.cost > 0 && item.unitPrice > 0 && (
+                    <p className="text-xs font-semibold text-green-600 mt-1">
+                      Utilidad: {formatCurrency(item.unitPrice - item.cost)} (
+                      {(((item.unitPrice - item.cost) / item.unitPrice) * 100).toFixed(1)}%)
+                    </p>
+                  )}
+                  {!item.cost && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Precio al que vendes el producto
+                    </p>
+                  )}
                 </div>
 
                 {/* Subtotal de la línea */}
