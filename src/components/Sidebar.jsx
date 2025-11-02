@@ -138,8 +138,8 @@ export default function Sidebar() {
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true
 
-    // Si es admin, mostrar todo
-    if (isAdmin) return true
+    // Si es admin o business owner, mostrar todo
+    if (isAdmin || isBusinessOwner) return true
 
     // Si no tiene pageId, permitir acceso (sin restricción)
     if (!item.pageId) return true
