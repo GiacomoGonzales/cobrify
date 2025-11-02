@@ -24,7 +24,7 @@ import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [productCategories, setProductCategories] = useState([])
@@ -50,7 +50,7 @@ export default function Inventory() {
         return
       }
 
-      const result = await getProducts(user.uid)
+      const result = await getProducts(getBusinessId())
       if (result.success) {
         setProducts(result.data || [])
       }
@@ -71,7 +71,7 @@ export default function Inventory() {
         return
       }
 
-      const result = await getProductCategories(user.uid)
+      const result = await getProductCategories(getBusinessId())
       if (result.success) {
         setProductCategories(result.data || [])
       }
@@ -89,7 +89,7 @@ export default function Inventory() {
 
       // Obtener datos del negocio
       const { getCompanySettings } = await import('@/services/firestoreService');
-      const settingsResult = await getCompanySettings(user.uid);
+      const settingsResult = await getCompanySettings(getBusinessId());
       const businessData = settingsResult.success ? settingsResult.data : null;
 
       // Generar Excel

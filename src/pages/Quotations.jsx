@@ -40,7 +40,7 @@ import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/serv
 import { generateQuotationPDF } from '@/utils/quotationPdfGenerator'
 
 export default function Quotations() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [quotations, setQuotations] = useState([])
@@ -82,7 +82,7 @@ export default function Quotations() {
           const expiryDate = getDateFromTimestamp(quotation.expiryDate)
 
           if (expiryDate < now) {
-            updateQuotationStatus(user.uid, quotation.id, 'expired')
+            updateQuotationStatus(getBusinessId(), quotation.id, 'expired')
           }
         }
       })
@@ -108,8 +108,8 @@ export default function Quotations() {
       }
 
       const [quotationsResult, settingsResult] = await Promise.all([
-        getQuotations(user.uid),
-        getCompanySettings(user.uid),
+        getQuotations(getBusinessId()),
+        getCompanySettings(getBusinessId()),
       ])
 
       if (quotationsResult.success) {
@@ -147,7 +147,7 @@ export default function Quotations() {
         return
       }
 
-      const result = await deleteQuotation(user.uid, deletingQuotation.id)
+      const result = await deleteQuotation(getBusinessId(), deletingQuotation.id)
 
       if (result.success) {
         toast.success('Cotización eliminada exitosamente')
@@ -191,7 +191,7 @@ export default function Quotations() {
       }
 
       // Obtener datos de la cotización para crear la factura
-      const convertResult = await convertToInvoice(user.uid, convertingQuotation.id)
+      const convertResult = await convertToInvoice(getBusinessId(), convertingQuotation.id)
 
       if (!convertResult.success) {
         throw new Error(convertResult.error)
@@ -203,7 +203,7 @@ export default function Quotations() {
       const documentType = quotationData.customer.documentType === 'RUC' ? 'factura' : 'boleta'
 
       // Obtener el siguiente número de documento
-      const numberResult = await getNextDocumentNumber(user.uid, documentType)
+      const numberResult = await getNextDocumentNumber(getBusinessId(), documentType)
 
       if (!numberResult.success) {
         throw new Error(numberResult.error)
@@ -224,14 +224,14 @@ export default function Quotations() {
         sunatStatus: 'pending',
       }
 
-      const createResult = await createInvoice(user.uid, invoiceData)
+      const createResult = await createInvoice(getBusinessId(), invoiceData)
 
       if (!createResult.success) {
         throw new Error(createResult.error)
       }
 
       // Marcar cotización como convertida
-      await markQuotationAsConverted(user.uid, convertingQuotation.id, createResult.id)
+      await markQuotationAsConverted(getBusinessId(), convertingQuotation.id, createResult.id)
 
       toast.success('Cotización convertida a factura exitosamente')
       setConvertingQuotation(null)
@@ -275,7 +275,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
     // Marcar como enviada
     if (!isDemoMode) {
-      markQuotationAsSent(user.uid, quotation.id, 'whatsapp')
+      markQuotationAsSent(getBusinessId(), quotation.id, 'whatsapp')
       loadQuotations()
     } else {
       // En modo demo, actualizar estado local
@@ -301,7 +301,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       generateQuotationPDF(quotation, companySettings)
 
       if (!isDemoMode) {
-        markQuotationAsSent(user.uid, quotation.id, 'manual')
+        markQuotationAsSent(getBusinessId(), quotation.id, 'manual')
         loadQuotations()
       } else {
         // En modo demo, actualizar estado local

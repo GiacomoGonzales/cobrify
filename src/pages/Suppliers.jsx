@@ -32,7 +32,7 @@ const supplierSchema = z.object({
 })
 
 export default function Suppliers() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [suppliers, setSuppliers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -76,7 +76,7 @@ export default function Suppliers() {
         return
       }
 
-      const result = await getSuppliers(user.uid)
+      const result = await getSuppliers(getBusinessId())
       if (result.success) {
         setSuppliers(result.data || [])
       } else {
@@ -138,9 +138,9 @@ export default function Suppliers() {
       let result
 
       if (editingSupplier) {
-        result = await updateSupplier(user.uid, editingSupplier.id, data)
+        result = await updateSupplier(getBusinessId(), editingSupplier.id, data)
       } else {
-        result = await createSupplier(user.uid, data)
+        result = await createSupplier(getBusinessId(), data)
       }
 
       if (result.success) {
@@ -174,7 +174,7 @@ export default function Suppliers() {
 
     setIsSaving(true)
     try {
-      const result = await deleteSupplier(user.uid, deletingSupplier.id)
+      const result = await deleteSupplier(getBusinessId(), deletingSupplier.id)
 
       if (result.success) {
         toast.success('Proveedor eliminado exitosamente')

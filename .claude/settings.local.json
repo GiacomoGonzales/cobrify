@@ -12,7 +12,10 @@
       "Bash(gcloud functions add-invoker-policy-binding:*)",
       "Bash(npm run dev:*)",
       "Bash(node setup-admin-simple.js:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(for file in Inventory CashRegister Quotations Suppliers Purchases Reports Settings)",
+      "Bash(do echo \"=== $file.jsx ===\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

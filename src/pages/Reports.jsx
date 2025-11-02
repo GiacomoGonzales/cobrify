@@ -48,7 +48,7 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export default function Reports() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -75,9 +75,9 @@ export default function Reports() {
       }
 
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
-        getInvoices(user.uid),
-        getCustomersWithStats(user.uid),
-        getProducts(user.uid),
+        getInvoices(getBusinessId()),
+        getCustomersWithStats(getBusinessId()),
+        getProducts(getBusinessId()),
       ])
 
       if (invoicesResult.success) {

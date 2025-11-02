@@ -15,7 +15,7 @@ import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
 
 export default function Settings() {
-  const { user, isDemoMode } = useAppContext()
+  const { user, isDemoMode, getBusinessId } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -92,13 +92,13 @@ export default function Settings() {
 
     try {
       // Cargar suscripción del usuario
-      const subResult = await getSubscription(user.uid)
+      const subResult = await getSubscription(getBusinessId())
       if (subResult) {
         setSubscription(subResult)
       }
 
       // Cargar datos de la empresa usando userId como businessId
-      const businessRef = doc(db, 'businesses', user.uid)
+      const businessRef = doc(db, 'businesses', getBusinessId())
       const businessDoc = await getDoc(businessRef)
 
       if (businessDoc.exists()) {
@@ -190,7 +190,7 @@ export default function Settings() {
       // Si hay un logo en storage, eliminarlo
       if (logoUrl && logoUrl.includes('firebase')) {
         try {
-          const logoRef = ref(storage, `businesses/${user.uid}/logo`)
+          const logoRef = ref(storage, `businesses/${getBusinessId()}/logo`)
           await deleteObject(logoRef)
         } catch (error) {
           console.log('No se pudo eliminar el logo anterior:', error)
@@ -198,7 +198,7 @@ export default function Settings() {
       }
 
       // Actualizar Firestore
-      const businessRef = doc(db, 'businesses', user.uid)
+      const businessRef = doc(db, 'businesses', getBusinessId())
       await setDoc(businessRef, {
         logoUrl: null,
         updatedAt: serverTimestamp(),
@@ -231,7 +231,7 @@ export default function Settings() {
       if (logoFile) {
         setUploadingLogo(true)
         try {
-          const logoRef = ref(storage, `businesses/${user.uid}/logo`)
+          const logoRef = ref(storage, `businesses/${getBusinessId()}/logo`)
           await uploadBytes(logoRef, logoFile)
           uploadedLogoUrl = await getDownloadURL(logoRef)
           console.log('✅ Logo subido exitosamente')
@@ -244,7 +244,7 @@ export default function Settings() {
       }
 
       // Crear o actualizar datos de la empresa usando userId como businessId
-      const businessRef = doc(db, 'businesses', user.uid)
+      const businessRef = doc(db, 'businesses', getBusinessId())
 
       await setDoc(businessRef, {
         ruc: data.ruc,
@@ -286,7 +286,7 @@ export default function Settings() {
 
     try {
       // Crear o actualizar series usando userId como businessId
-      const businessRef = doc(db, 'businesses', user.uid)
+      const businessRef = doc(db, 'businesses', getBusinessId())
 
       await setDoc(businessRef, {
         series: series,
@@ -361,7 +361,7 @@ export default function Settings() {
     setIsSaving(true)
 
     try {
-      const businessRef = doc(db, 'businesses', user.uid)
+      const businessRef = doc(db, 'businesses', getBusinessId())
 
       // Preparar datos de SUNAT
       const sunatData = {

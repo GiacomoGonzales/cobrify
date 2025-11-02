@@ -20,7 +20,7 @@ import {
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -108,12 +108,12 @@ export default function CashRegister() {
       }
 
       // Obtener sesión actual
-      const sessionResult = await getCashRegisterSession(user.uid)
+      const sessionResult = await getCashRegisterSession(getBusinessId())
       if (sessionResult.success && sessionResult.data) {
         setCurrentSession(sessionResult.data)
 
         // Obtener movimientos de la sesión
-        const movementsResult = await getCashMovements(user.uid, sessionResult.data.id)
+        const movementsResult = await getCashMovements(getBusinessId(), sessionResult.data.id)
         if (movementsResult.success) {
           setMovements(movementsResult.data || [])
         }
@@ -123,7 +123,7 @@ export default function CashRegister() {
       }
 
       // Obtener facturas del día
-      const invoicesResult = await getInvoices(user.uid)
+      const invoicesResult = await getInvoices(getBusinessId())
       if (invoicesResult.success) {
         const today = new Date()
         today.setHours(0, 0, 0, 0)
@@ -169,7 +169,7 @@ export default function CashRegister() {
         return
       }
 
-      const result = await openCashRegister(user.uid, parseFloat(openingAmount))
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount))
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
@@ -205,7 +205,7 @@ export default function CashRegister() {
         return
       }
 
-      const result = await closeCashRegister(user.uid, currentSession.id, {
+      const result = await closeCashRegister(getBusinessId(), currentSession.id, {
         cash,
         card,
         transfer,
@@ -235,7 +235,7 @@ export default function CashRegister() {
   const handleDownloadExcel = async () => {
     try {
       // Obtener datos del negocio
-      const businessResult = await getCompanySettings(user.uid)
+      const businessResult = await getCompanySettings(getBusinessId())
       const businessData = businessResult.success ? businessResult.data : null
 
       // Calcular los valores de cierre si están disponibles en closingCounts
@@ -268,7 +268,7 @@ export default function CashRegister() {
   const handleDownloadPDF = async () => {
     try {
       // Obtener datos del negocio
-      const businessResult = await getCompanySettings(user.uid)
+      const businessResult = await getCompanySettings(getBusinessId())
       const businessData = businessResult.success ? businessResult.data : null
 
       // Calcular los valores de cierre si están disponibles en closingCounts
@@ -343,7 +343,7 @@ export default function CashRegister() {
         return
       }
 
-      const result = await addCashMovement(user.uid, currentSession.id, {
+      const result = await addCashMovement(getBusinessId(), currentSession.id, {
         type: movementData.type,
         amount: parseFloat(movementData.amount),
         description: movementData.description,

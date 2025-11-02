@@ -23,7 +23,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getPurchases, deletePurchase } from '@/services/firestoreService'
 
 export default function Purchases() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [purchases, setPurchases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -48,7 +48,7 @@ export default function Purchases() {
         return
       }
 
-      const result = await getPurchases(user.uid)
+      const result = await getPurchases(getBusinessId())
       if (result.success) {
         setPurchases(result.data || [])
       } else {
@@ -73,7 +73,7 @@ export default function Purchases() {
 
     setIsDeleting(true)
     try {
-      const result = await deletePurchase(user.uid, deletingPurchase.id)
+      const result = await deletePurchase(getBusinessId(), deletingPurchase.id)
 
       if (result.success) {
         toast.success('Compra eliminada exitosamente')
