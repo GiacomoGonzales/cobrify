@@ -145,14 +145,12 @@ export default function POS() {
       }
 
       const businessId = getBusinessId()
-      console.log('🔍 POS - Using businessId:', businessId, 'for user:', user.email)
 
       // Cargar productos
       const productsResult = await getProducts(businessId)
       if (productsResult.success) {
         // Mostrar todos los productos (los sin stock se mostrarán deshabilitados)
         setProducts(productsResult.data || [])
-        console.log('✅ POS - Loaded', productsResult.data?.length || 0, 'products')
       }
 
       // Cargar clientes

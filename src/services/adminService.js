@@ -29,46 +29,30 @@ export const isUserAdmin = async (userId) => {
  */
 export const isBusinessAdmin = async (userId) => {
   try {
-    if (!userId) {
-      console.log('🔍 isBusinessAdmin - No userId provided');
-      return false;
-    }
+    if (!userId) return false;
 
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
 
-    console.log('🔍 isBusinessAdmin - Document exists:', userSnap.exists(), 'for userId:', userId);
-
     if (userSnap.exists()) {
       const userData = userSnap.data();
-      console.log('🔍 isBusinessAdmin - User data:', {
-        isBusinessOwner: userData.isBusinessOwner,
-        ownerId: userData.ownerId,
-        hasEither: !!(userData.isBusinessOwner || userData.ownerId)
-      });
 
       // Si tiene el documento y es business owner
-      if (userData.isBusinessOwner === true) {
-        console.log('✅ isBusinessAdmin - User IS business owner (explicit)');
-        return true;
-      }
+      if (userData.isBusinessOwner === true) return true;
+
       // Si tiene el documento pero NO es business owner (es un sub-usuario)
-      if (userData.ownerId) {
-        console.log('❌ isBusinessAdmin - User is sub-user (has ownerId)');
-        return false;
-      }
+      if (userData.ownerId) return false;
+
       // Si tiene documento pero no tiene ni isBusinessOwner ni ownerId
       // Es un usuario viejo, tratarlo como business owner
-      console.log('✅ isBusinessAdmin - User is old user (no flags) - treating as business owner');
       return true;
     }
 
     // Si NO existe en la colección users, es un usuario registrado directamente
     // antes de la implementación del sistema. Tratarlo como business owner.
-    console.log('✅ isBusinessAdmin - No document found - treating as business owner (legacy user)');
     return true;
   } catch (error) {
-    console.error('❌ Error al verificar business admin:', error);
+    console.error('Error al verificar business admin:', error);
     return false;
   }
 };

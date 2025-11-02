@@ -59,18 +59,15 @@ export const AuthProvider = ({ children }) => {
           if (!superAdminStatus) {
             try {
               businessOwnerStatus = await isBusinessAdmin(firebaseUser.uid)
-              console.log('🔍 DEBUG - isBusinessAdmin result:', businessOwnerStatus, 'for user:', firebaseUser.email)
 
               // Si es un usuario legacy sin documento, crear su documento de Business Owner
               if (businessOwnerStatus) {
                 const userDataCheck = await getUserData(firebaseUser.uid)
                 if (!userDataCheck.success || !userDataCheck.data) {
-                  console.log('📝 Usuario legacy detectado, creando documento de Business Owner...')
                   try {
                     await setAsBusinessOwner(firebaseUser.uid, firebaseUser.email)
-                    console.log('✅ Documento de Business Owner creado para usuario legacy')
                   } catch (error) {
-                    console.error('❌ Error al crear documento de Business Owner:', error)
+                    console.error('Error al crear documento de Business Owner:', error)
                   }
                 }
               }
@@ -79,25 +76,14 @@ export const AuthProvider = ({ children }) => {
               businessOwnerStatus = false
             }
           }
-          console.log('🔍 DEBUG - Setting isBusinessOwner to:', businessOwnerStatus)
           setIsBusinessOwner(businessOwnerStatus)
 
           // Cargar permisos del usuario (si no es super admin ni business owner)
-          console.log('🔍 AuthContext - superAdminStatus:', superAdminStatus, 'businessOwnerStatus:', businessOwnerStatus)
           if (!superAdminStatus && !businessOwnerStatus) {
-            console.log('🔍 AuthContext - Loading user permissions for sub-user')
             try {
               const userDataResult = await getUserData(firebaseUser.uid)
-              console.log('🔍 AuthContext - getUserData result:', userDataResult)
               if (userDataResult.success && userDataResult.data) {
                 const userData = userDataResult.data
-                console.log('🔍 AuthContext - User data loaded:', {
-                  uid: userData.uid,
-                  email: userData.email,
-                  allowedPages: userData.allowedPages,
-                  isActive: userData.isActive,
-                  ownerId: userData.ownerId
-                })
                 setUserPermissions(userData)
                 setAllowedPages(userData.allowedPages || [])
 
@@ -109,7 +95,6 @@ export const AuthProvider = ({ children }) => {
                 }
               } else {
                 // Usuario no tiene datos en Firestore, permitir acceso total temporalmente
-                console.log('⚠️ AuthContext - No user data found, allowing full access')
                 setAllowedPages([])
               }
             } catch (error) {
@@ -118,7 +103,6 @@ export const AuthProvider = ({ children }) => {
             }
           } else {
             // Super Admin o Business Owner tienen acceso total
-            console.log('✅ AuthContext - User is admin or business owner, full access granted')
             setAllowedPages([])
           }
 
@@ -132,7 +116,6 @@ export const AuthProvider = ({ children }) => {
 
             // Si no tiene suscripción, crear una de prueba automáticamente
             if (!userSubscription && !superAdminStatus) {
-              console.log('📝 Usuario sin suscripción, creando trial automático')
               try {
                 await createSubscription(
                   firebaseUser.uid,
@@ -233,42 +216,20 @@ export const AuthProvider = ({ children }) => {
 
   // Función helper para verificar si el usuario tiene acceso a una página
   const hasPageAccess = (pageId) => {
-    console.log('🔍 hasPageAccess - Checking pageId:', pageId, {
-      isAdmin,
-      isBusinessOwner,
-      userPermissions: !!userPermissions,
-      allowedPages,
-      allowedPagesLength: allowedPages.length
-    })
-
     // Super Admin siempre tiene acceso
-    if (isAdmin) {
-      console.log('✅ hasPageAccess - Admin access granted')
-      return true
-    }
+    if (isAdmin) return true
 
     // Business Owner siempre tiene acceso
-    if (isBusinessOwner) {
-      console.log('✅ hasPageAccess - Business owner access granted')
-      return true
-    }
+    if (isBusinessOwner) return true
 
     // Si no hay permisos cargados, denegar acceso (mientras carga)
-    if (userPermissions === null) {
-      console.log('⏳ hasPageAccess - Permissions not loaded yet, denying access')
-      return false
-    }
+    if (userPermissions === null) return false
 
     // Si allowedPages está vacío y no es admin, permitir acceso (usuario sin restricciones)
-    if (allowedPages.length === 0 && !userPermissions) {
-      console.log('✅ hasPageAccess - No restrictions (legacy user), granting access')
-      return true
-    }
+    if (allowedPages.length === 0 && !userPermissions) return true
 
     // Verificar si la página está en la lista de permitidas
-    const hasAccess = allowedPages.includes(pageId)
-    console.log(hasAccess ? '✅' : '❌', 'hasPageAccess - Page', pageId, hasAccess ? 'allowed' : 'denied')
-    return hasAccess
+    return allowedPages.includes(pageId)
   }
 
   // Función helper para obtener el Business ID (owner del negocio)
@@ -278,19 +239,12 @@ export const AuthProvider = ({ children }) => {
 
     // Si es business owner o super admin, su businessId es su propio uid
     // Esto permite que los super admins también tengan sus propios datos
-    if (isBusinessOwner || isAdmin) {
-      console.log('🔍 getBusinessId - Business owner or admin, using user.uid:', user.uid)
-      return user.uid
-    }
+    if (isBusinessOwner || isAdmin) return user.uid
 
     // Si es sub-usuario, usar el ownerId de userPermissions
-    if (userPermissions && userPermissions.ownerId) {
-      console.log('🔍 getBusinessId - Sub-user detected, using ownerId:', userPermissions.ownerId)
-      return userPermissions.ownerId
-    }
+    if (userPermissions && userPermissions.ownerId) return userPermissions.ownerId
 
     // Fallback: usar el uid del usuario
-    console.log('⚠️ getBusinessId - No ownerId found, using user.uid as fallback')
     return user.uid
   }
 
