@@ -27,3 +27,14 @@ dist-ssr
 .env
 .env.local
 .env.production
+
+# Setup and admin scripts with credentials
+setup-admin*.js
+setup-admin*.cjs
+create-business-owner*.js
+create-business-owner*.cjs
+check-user.js
+fix-admin*.js
+fix-admin*.cjs
+setup-business-owner.js
+test-sunat.js
