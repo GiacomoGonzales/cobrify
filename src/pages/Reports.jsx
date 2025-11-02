@@ -183,6 +183,21 @@ export default function Reports() {
 
     const avgTicket = totalInvoices > 0 ? totalRevenue / totalInvoices : 0
 
+    // Calcular utilidad total
+    let totalCost = 0
+    filteredInvoices.forEach(invoice => {
+      invoice.items?.forEach(item => {
+        // Buscar el producto para obtener su costo
+        const productId = item.productId || item.id
+        const product = products.find(p => p.id === productId)
+        const cost = product?.cost || 0
+        const quantity = item.quantity || 0
+        totalCost += cost * quantity
+      })
+    })
+    const totalProfit = totalRevenue - totalCost
+    const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+
     // Comparar con período anterior
     const previousPeriodRevenue = getPreviousPeriodRevenue()
     const revenueGrowth = previousPeriodRevenue > 0
@@ -198,8 +213,11 @@ export default function Reports() {
       boletas,
       avgTicket,
       revenueGrowth,
+      totalCost,
+      totalProfit,
+      profitMargin,
     }
-  }, [filteredInvoices, getPreviousPeriodRevenue])
+  }, [filteredInvoices, getPreviousPeriodRevenue, products])
 
   // Top productos vendidos
   const topProducts = useMemo(() => {
@@ -512,11 +530,16 @@ export default function Reports() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Clientes Activos</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-2">{customers.length}</p>
+                    <p className="text-sm font-medium text-gray-600">Utilidad Total</p>
+                    <p className="text-2xl font-bold text-green-600 mt-2">
+                      {formatCurrency(stats.totalProfit)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Margen: {stats.profitMargin.toFixed(1)}%
+                    </p>
                   </div>
-                  <div className="p-3 bg-orange-100 rounded-lg">
-                    <Users className="w-6 h-6 text-orange-600" />
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
