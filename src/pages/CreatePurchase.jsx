@@ -101,6 +101,7 @@ export default function CreatePurchase() {
       code: '',
       name: '',
       price: '',
+      cost: '',
       unit: 'UNIDAD',
       category: '',
       stock: '',
@@ -284,6 +285,7 @@ export default function CreatePurchase() {
       code: '',
       name: searchTerm,
       price: '',
+      cost: '',
       unit: 'UNIDAD',
       category: '',
       stock: '',
@@ -299,10 +301,11 @@ export default function CreatePurchase() {
         code: data.code,
         name: data.name,
         price: parseFloat(data.price),
+        cost: data.cost ? parseFloat(data.cost) : 0,
         unit: data.unit,
         category: data.category || '',
         description: data.description || '',
-        stock: noStock ? null : parseFloat(data.stock || 0),
+        stock: noStock ? null : 0, // Stock inicial siempre en 0, se actualizará al guardar la compra
       }
 
       const result = await createProduct(user.uid, productData)
@@ -319,6 +322,12 @@ export default function CreatePurchase() {
         if (currentItemIndex !== null) {
           const createdProduct = { id: result.id, ...productData }
           selectProduct(currentItemIndex, createdProduct)
+
+          // Auto-llenar costo y precio de venta en el formulario de compra
+          const newItems = [...purchaseItems]
+          newItems[currentItemIndex].cost = productData.cost || 0
+          newItems[currentItemIndex].unitPrice = productData.price || 0
+          setPurchaseItems(newItems)
         }
 
         // Cerrar modal y resetear
@@ -894,9 +903,18 @@ export default function CreatePurchase() {
             {...registerProduct('name')}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              label="Precio"
+              label="Costo"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              error={errorsProduct.cost?.message}
+              {...registerProduct('cost')}
+            />
+
+            <Input
+              label="Precio de Venta"
               type="number"
               step="0.01"
               required
@@ -964,14 +982,11 @@ export default function CreatePurchase() {
               </div>
 
               {!noStock && (
-                <Input
-                  label="Stock Inicial"
-                  type="number"
-                  placeholder="Ingresa la cantidad inicial"
-                  error={errorsProduct.stock?.message}
-                  {...registerProduct('stock')}
-                  helperText="Ingresa la cantidad de unidades disponibles"
-                />
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>📦 Stock:</strong> Se iniciará en 0 y se actualizará automáticamente al guardar la compra.
+                  </p>
+                </div>
               )}
             </div>
           </div>
