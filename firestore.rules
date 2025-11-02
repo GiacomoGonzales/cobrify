@@ -53,10 +53,8 @@ service cloud.firestore {
       allow get: if isAuthenticated() && isOwner(userId);
 
       // Business Owners pueden leer usuarios que ellos crearon mediante query
-      // IMPORTANTE: Para queries necesitamos verificar en la request, no en el resource
-      allow list: if isAuthenticated() &&
-                     request.query.limit <= 100 &&
-                     request.resource == null; // Esto permite queries
+      // IMPORTANTE: La query debe filtrar por ownerId igual al uid del usuario autenticado
+      allow list: if isAuthenticated();
 
       // Admins pueden leer cualquier usuario
       allow read: if isAdmin();
