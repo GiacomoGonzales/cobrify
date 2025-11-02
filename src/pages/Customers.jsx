@@ -24,7 +24,7 @@ import { formatCurrency } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 
 export default function Customers() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -78,7 +78,8 @@ export default function Customers() {
         return
       }
 
-      const result = await getCustomersWithStats(user.uid)
+      const businessId = getBusinessId()
+      const result = await getCustomersWithStats(businessId)
       if (result.success) {
         setCustomers(result.data || [])
       } else {
@@ -128,6 +129,7 @@ export default function Customers() {
   const onSubmit = async data => {
     if (!user?.uid) return
 
+    const businessId = getBusinessId()
     setIsSaving(true)
 
     try {
@@ -135,10 +137,10 @@ export default function Customers() {
 
       if (editingCustomer) {
         // Actualizar
-        result = await updateCustomer(user.uid, editingCustomer.id, data)
+        result = await updateCustomer(businessId, editingCustomer.id, data)
       } else {
         // Crear
-        result = await createCustomer(user.uid, data)
+        result = await createCustomer(businessId, data)
       }
 
       if (result.success) {
@@ -163,9 +165,10 @@ export default function Customers() {
   const handleDelete = async () => {
     if (!deletingCustomer || !user?.uid) return
 
+    const businessId = getBusinessId()
     setIsSaving(true)
     try {
-      const result = await deleteCustomer(user.uid, deletingCustomer.id)
+      const result = await deleteCustomer(businessId, deletingCustomer.id)
 
       if (result.success) {
         toast.success('Cliente eliminado exitosamente')

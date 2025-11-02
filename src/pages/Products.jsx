@@ -87,7 +87,7 @@ const getAllDescendantCategoryIds = (categories, parentId) => {
 }
 
 export default function Products() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -156,9 +156,10 @@ export default function Products() {
         return
       }
 
+      const businessId = getBusinessId()
       const [productsResult, categoriesResult] = await Promise.all([
-        getProducts(user.uid),
-        getProductCategories(user.uid)
+        getProducts(businessId),
+        getProductCategories(businessId)
       ])
 
       if (productsResult.success) {
@@ -290,10 +291,10 @@ export default function Products() {
 
       if (editingProduct) {
         // Update
-        result = await updateProduct(user.uid, editingProduct.id, productData)
+        result = await updateProduct(getBusinessId(), editingProduct.id, productData)
       } else {
         // Create
-        result = await createProduct(user.uid, productData)
+        result = await createProduct(getBusinessId(), productData)
       }
 
       if (result.success) {
@@ -320,7 +321,7 @@ export default function Products() {
 
     setIsSaving(true)
     try {
-      const result = await deleteProduct(user.uid, deletingProduct.id)
+      const result = await deleteProduct(getBusinessId(), deletingProduct.id)
 
       if (result.success) {
         toast.success('Producto eliminado exitosamente')
@@ -346,7 +347,7 @@ export default function Products() {
 
       // Obtener datos del negocio
       const { getCompanySettings } = await import('@/services/firestoreService');
-      const settingsResult = await getCompanySettings(user.uid);
+      const settingsResult = await getCompanySettings(getBusinessId());
       const businessData = settingsResult.success ? settingsResult.data : null;
 
       // Generar Excel
@@ -369,7 +370,7 @@ export default function Products() {
         const product = productsToImport[i]
 
         try {
-          const result = await createProduct(user.uid, product)
+          const result = await createProduct(getBusinessId(), product)
 
           if (result.success) {
             successCount++
@@ -420,7 +421,7 @@ export default function Products() {
       const updatedCategories = [...categories, newCategory]
       setCategories(updatedCategories)
 
-      const result = await saveProductCategories(user.uid, updatedCategories)
+      const result = await saveProductCategories(getBusinessId(), updatedCategories)
       if (result.success) {
         toast.success(parentCategoryId ? 'Subcategoría creada exitosamente' : 'Categoría creada exitosamente')
         setNewCategoryName('')
@@ -451,7 +452,7 @@ export default function Products() {
       )
       setCategories(updatedCategories)
 
-      const result = await saveProductCategories(user.uid, updatedCategories)
+      const result = await saveProductCategories(getBusinessId(), updatedCategories)
       if (result.success) {
         toast.success('Categoría actualizada exitosamente')
         setEditingCategory(null)
@@ -492,7 +493,7 @@ export default function Products() {
       const updatedCategories = categories.filter(cat => cat.id !== categoryId)
       setCategories(updatedCategories)
 
-      const result = await saveProductCategories(user.uid, updatedCategories)
+      const result = await saveProductCategories(getBusinessId(), updatedCategories)
       if (result.success) {
         toast.success('Categoría eliminada exitosamente')
       } else {

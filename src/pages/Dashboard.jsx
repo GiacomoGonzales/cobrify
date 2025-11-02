@@ -20,7 +20,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -42,12 +42,13 @@ export default function Dashboard() {
 
     if (!user?.uid) return
 
+    const businessId = getBusinessId()
     setIsLoading(true)
     try {
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
-        getInvoices(user.uid),
-        getCustomers(user.uid),
-        getProducts(user.uid),
+        getInvoices(businessId),
+        getCustomers(businessId),
+        getProducts(businessId),
       ])
 
       if (invoicesResult.success) {
