@@ -119,6 +119,9 @@ const generateDemoData = () => {
           documentType: '6',
           documentNumber: '20456789012',
           name: 'TECNOLOGÍA DEL PERÚ SAC',
+          phone: '987654321',
+          email: 'ventas@tecnologia.com',
+          address: 'Av. Arequipa 2580, Lima',
         },
         items: [
           {
@@ -150,6 +153,9 @@ const generateDemoData = () => {
           documentType: '1',
           documentNumber: '45678901',
           name: 'Juan Pérez García',
+          phone: '987654322',
+          email: 'juan.perez@email.com',
+          address: 'Jr. Cusco 456, San Isidro',
         },
         items: [
           {
@@ -181,6 +187,9 @@ const generateDemoData = () => {
           documentType: '6',
           documentNumber: '20567890123',
           name: 'COMERCIAL LIMA SRL',
+          phone: '987654323',
+          email: 'compras@comerciallima.com',
+          address: 'Av. Venezuela 1234, Lima',
         },
         items: [
           {
