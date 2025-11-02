@@ -36,12 +36,22 @@ export const isBusinessAdmin = async (userId) => {
 
     if (userSnap.exists()) {
       const userData = userSnap.data();
-      return userData.isBusinessOwner === true;
+      // Si tiene el documento y es business owner
+      if (userData.isBusinessOwner === true) {
+        return true;
+      }
+      // Si tiene el documento pero NO es business owner (es un sub-usuario)
+      if (userData.ownerId) {
+        return false;
+      }
+      // Si tiene documento pero no tiene ni isBusinessOwner ni ownerId
+      // Es un usuario viejo, tratarlo como business owner
+      return true;
     }
 
-    // Si no existe en la colección users, es un usuario registrado directamente
-    // Los usuarios que se registran normalmente son business admins por defecto
-    return false;
+    // Si NO existe en la colección users, es un usuario registrado directamente
+    // antes de la implementación del sistema. Tratarlo como business owner.
+    return true;
   } catch (error) {
     console.error('Error al verificar business admin:', error);
     return false;
