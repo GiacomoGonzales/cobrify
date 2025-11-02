@@ -105,7 +105,7 @@ export const AuthProvider = ({ children }) => {
             let userSubscription = await subscriptionPromise
 
             // Si no tiene suscripción, crear una de prueba automáticamente
-            if (!userSubscription && !adminStatus) {
+            if (!userSubscription && !superAdminStatus) {
               console.log('📝 Usuario sin suscripción, creando trial automático')
               try {
                 await createSubscription(
