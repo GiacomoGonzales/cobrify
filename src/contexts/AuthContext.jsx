@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
-import { isUserAdmin, isBusinessAdmin } from '@/services/adminService'
+import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
 
