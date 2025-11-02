@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { createSubscription } from './subscriptionService'
+import { setAsBusinessOwner } from './adminService'
 
 /**
  * Servicio de autenticación con Firebase
@@ -36,6 +37,15 @@ export const registerUser = async (email, password, displayName) => {
     // Actualizar perfil con nombre
     if (displayName) {
       await updateProfile(userCredential.user, { displayName })
+    }
+
+    // Marcar como Business Owner (dueño del negocio) automáticamente
+    try {
+      await setAsBusinessOwner(userCredential.user.uid, email)
+      console.log('✅ Usuario marcado como Business Owner automáticamente')
+    } catch (ownerError) {
+      console.error('Error al marcar como business owner:', ownerError)
+      // Continuar aunque falle
     }
 
     // Crear suscripción de prueba de 1 día automáticamente

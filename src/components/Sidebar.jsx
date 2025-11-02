@@ -21,7 +21,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 
 export default function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin, isDemoMode, hasPageAccess } = useAppContext()
+  const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess } = useAppContext()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo a las rutas
@@ -121,7 +121,7 @@ export default function Sidebar() {
       path: '/usuarios',
       icon: UserCog,
       label: 'Gestión de Usuarios',
-      adminOnly: true,
+      businessOwnerOnly: true, // Solo para business owners, NO para super admins
       pageId: 'users',
     },
   ]
@@ -144,6 +144,9 @@ export default function Sidebar() {
   const filteredAdditionalItems = additionalItems.filter((item) => {
     // Si es solo para admin y el usuario no es admin, no mostrar
     if (item.adminOnly && !isAdmin) return false
+
+    // Si es solo para business owner y el usuario no lo es (o es super admin), no mostrar
+    if (item.businessOwnerOnly && (!isBusinessOwner || isAdmin)) return false
 
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true

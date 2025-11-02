@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
-import { isUserAdmin } from '@/services/adminService'
+import { isUserAdmin, isBusinessAdmin } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
 
@@ -11,7 +11,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false) // Super admin (giiacomo@gmail.com)
+  const [isBusinessOwner, setIsBusinessOwner] = useState(false) // Admin del negocio
   const [subscription, setSubscription] = useState(null)
   const [hasAccess, setHasAccess] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
@@ -39,22 +40,34 @@ export const AuthProvider = ({ children }) => {
           setUser(userData)
           setIsAuthenticated(true)
 
-          // Verificar si es administrador con timeout
-          let adminStatus = false
+          // Verificar si es SUPER ADMIN (giiacomo@gmail.com)
+          let superAdminStatus = false
           try {
             const adminPromise = Promise.race([
               isUserAdmin(firebaseUser.uid),
               new Promise((_, reject) => setTimeout(() => reject(new Error('Admin check timeout')), 5000))
             ])
-            adminStatus = await adminPromise
+            superAdminStatus = await adminPromise
           } catch (error) {
-            console.error('Error al verificar admin:', error)
-            adminStatus = false
+            console.error('Error al verificar super admin:', error)
+            superAdminStatus = false
           }
-          setIsAdmin(adminStatus)
+          setIsAdmin(superAdminStatus)
 
-          // Cargar permisos del usuario (si no es admin)
-          if (!adminStatus) {
+          // Verificar si es BUSINESS OWNER (dueño del negocio)
+          let businessOwnerStatus = false
+          if (!superAdminStatus) {
+            try {
+              businessOwnerStatus = await isBusinessAdmin(firebaseUser.uid)
+            } catch (error) {
+              console.error('Error al verificar business owner:', error)
+              businessOwnerStatus = false
+            }
+          }
+          setIsBusinessOwner(businessOwnerStatus)
+
+          // Cargar permisos del usuario (si no es super admin ni business owner)
+          if (!superAdminStatus && !businessOwnerStatus) {
             try {
               const userDataResult = await getUserData(firebaseUser.uid)
               if (userDataResult.success && userDataResult.data) {
@@ -77,7 +90,7 @@ export const AuthProvider = ({ children }) => {
               setAllowedPages([])
             }
           } else {
-            // Admin tiene acceso total
+            // Super Admin o Business Owner tienen acceso total
             setAllowedPages([])
           }
 
@@ -108,13 +121,13 @@ export const AuthProvider = ({ children }) => {
 
             setSubscription(userSubscription)
 
-            // Verificar acceso activo (admin siempre tiene acceso)
-            const accessStatus = adminStatus ? true : hasActiveAccess(userSubscription)
+            // Verificar acceso activo (super admin y business owner siempre tienen acceso)
+            const accessStatus = superAdminStatus || businessOwnerStatus ? true : hasActiveAccess(userSubscription)
             setHasAccess(accessStatus)
           } catch (error) {
             console.error('Error al obtener suscripción:', error)
-            // Si es admin, darle acceso aunque falle la suscripción
-            setHasAccess(adminStatus)
+            // Si es admin o business owner, darle acceso aunque falle la suscripción
+            setHasAccess(superAdminStatus || businessOwnerStatus)
             setSubscription(null)
           }
         } else {
@@ -122,6 +135,7 @@ export const AuthProvider = ({ children }) => {
           setUser(null)
           setIsAuthenticated(false)
           setIsAdmin(false)
+          setIsBusinessOwner(false)
           setSubscription(null)
           setHasAccess(false)
           setUserPermissions(null)
@@ -164,6 +178,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null)
       setIsAuthenticated(false)
       setIsAdmin(false)
+      setIsBusinessOwner(false)
       setSubscription(null)
       setHasAccess(false)
       setUserPermissions(null)
@@ -190,8 +205,11 @@ export const AuthProvider = ({ children }) => {
 
   // Función helper para verificar si el usuario tiene acceso a una página
   const hasPageAccess = (pageId) => {
-    // Admin siempre tiene acceso
+    // Super Admin siempre tiene acceso
     if (isAdmin) return true
+
+    // Business Owner siempre tiene acceso
+    if (isBusinessOwner) return true
 
     // Si no hay permisos cargados, denegar acceso (mientras carga)
     if (userPermissions === null) return false
@@ -207,7 +225,8 @@ export const AuthProvider = ({ children }) => {
     user,
     isAuthenticated,
     isLoading,
-    isAdmin,
+    isAdmin, // Super Admin (giiacomo@gmail.com)
+    isBusinessOwner, // Admin del negocio (usuarios registrados)
     subscription,
     hasAccess,
     userPermissions,

@@ -21,7 +21,7 @@ import {
 import { formatDate } from '@/lib/utils'
 
 export default function Users() {
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isBusinessOwner } = useAuth()
   const toast = useToast()
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -181,14 +181,19 @@ export default function Users() {
     }
   }
 
-  // Si no es admin, no mostrar esta página
-  if (!isAdmin) {
+  // Solo Business Owners pueden ver esta página
+  // Super Admins NO deben verla (ellos gestionan negocios, no usuarios de negocio)
+  if (!isBusinessOwner || isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Acceso Denegado</h2>
-          <p className="text-gray-600">No tienes permisos para acceder a esta página</p>
+          <p className="text-gray-600">
+            {isAdmin
+              ? 'Esta página es para administradores de negocio. Como Super Admin, gestiona negocios desde el panel de administración.'
+              : 'No tienes permisos para acceder a esta página. Solo los administradores del negocio pueden gestionar usuarios.'}
+          </p>
         </div>
       </div>
     )
