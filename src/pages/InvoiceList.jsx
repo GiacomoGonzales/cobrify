@@ -40,7 +40,7 @@ import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
@@ -132,9 +132,12 @@ ${companySettings?.website ? companySettings.website : ''}`
         return
       }
 
+      const businessId = getBusinessId()
+      console.log('🔍 InvoiceList - Using businessId:', businessId, 'for user:', user.email)
+
       const [invoicesResult, settingsResult] = await Promise.all([
-        getInvoices(user.uid),
-        getCompanySettings(user.uid)
+        getInvoices(businessId),
+        getCompanySettings(businessId)
       ])
 
       if (invoicesResult.success) {
@@ -156,9 +159,10 @@ ${companySettings?.website ? companySettings.website : ''}`
   const handleDelete = async () => {
     if (!deletingInvoice || !user?.uid) return
 
+    const businessId = getBusinessId()
     setIsDeleting(true)
     try {
-      const result = await deleteInvoice(user.uid, deletingInvoice.id)
+      const result = await deleteInvoice(businessId, deletingInvoice.id)
 
       if (result.success) {
         toast.success('Factura eliminada exitosamente')
@@ -222,8 +226,9 @@ ${companySettings?.website ? companySettings.website : ''}`
   const handleUpdateStatus = async (invoiceId, newStatus) => {
     if (!user?.uid) return
 
+    const businessId = getBusinessId()
     try {
-      const result = await updateInvoice(user.uid, invoiceId, { status: newStatus })
+      const result = await updateInvoice(businessId, invoiceId, { status: newStatus })
 
       if (result.success) {
         toast.success('Estado actualizado exitosamente')
@@ -240,11 +245,12 @@ ${companySettings?.website ? companySettings.website : ''}`
   const handleSendToSunat = async (invoiceId) => {
     if (!user?.uid) return
 
+    const businessId = getBusinessId()
     setSendingToSunat(invoiceId)
     try {
       console.log('📤 Enviando factura a SUNAT...', invoiceId)
 
-      const result = await sendInvoiceToSunat(user.uid, invoiceId)
+      const result = await sendInvoiceToSunat(businessId, invoiceId)
 
       if (result.success) {
         toast.success(result.message, 5000)
