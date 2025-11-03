@@ -325,6 +325,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           white-space: nowrap;
         }
 
+        .item-code {
+          font-size: 8.5pt;
+          color: #000;
+          font-weight: 500;
+          margin-top: 2px;
+        }
+
         .totals-section {
           margin-top: 8px;
           padding: 8px 6px;
@@ -503,7 +510,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
                 <span>{formatCurrency(item.quantity * item.price)}</span>
               </div>
               {item.code && (
-                <div style={{ fontSize: '8px', color: '#666' }}>Código: {item.code}</div>
+                <div className="item-code">Código: {item.code}</div>
               )}
             </div>
           ))}
