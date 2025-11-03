@@ -93,7 +93,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         @media print {
           @page {
             size: 80mm 297mm;
-            margin: 0;
+            margin: 2mm;
           }
 
           body * {
@@ -109,9 +109,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             position: absolute;
             left: 0;
             top: 0;
-            width: 80mm;
+            width: 72mm;
             margin: 0;
-            padding: 3mm;
+            padding: 4mm;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
             font-size: 9pt;
             font-weight: 500;
