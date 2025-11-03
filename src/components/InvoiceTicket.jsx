@@ -92,8 +92,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
       <style>{`
         @media print {
           @page {
-            size: 80mm 297mm;
-            margin: 2mm;
+            size: 80mm auto;
+            margin: 0;
+          }
+
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            padding: 0;
+            width: 80mm;
           }
 
           body * {
@@ -109,15 +119,59 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             position: absolute;
             left: 0;
             top: 0;
-            width: 72mm;
-            margin: 0;
-            padding: 4mm;
+            width: 72mm !important;
+            max-width: 72mm !important;
+            margin: 0 4mm !important;
+            padding: 3mm 2mm !important;
+            box-sizing: border-box;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-            font-size: 9pt;
+            font-size: 8.5pt;
             font-weight: 500;
+            line-height: 1.3;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            overflow: hidden;
           }
+
+          .info-row {
+            gap: 4px;
+            overflow: hidden;
+          }
+
+          .info-row span:last-child {
+            text-align: right;
+            flex-shrink: 0;
+            max-width: 50%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .item-details {
+            gap: 4px;
+            overflow: hidden;
+          }
+
+          .item-details span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .total-row {
+            gap: 4px;
+            overflow: hidden;
+          }
+
+          .total-row span:last-child {
+            text-align: right;
+            flex-shrink: 0;
+            white-space: nowrap;
+          }
+        }
+
+        * {
+          box-sizing: border-box;
         }
 
         .ticket-container {
@@ -130,6 +184,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           line-height: 1.4;
           background: white;
           color: #000;
+          box-sizing: border-box;
         }
 
         .ticket-header {
@@ -201,13 +256,25 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         .info-row {
           display: flex;
           justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
           margin: 3px 0;
           font-size: 9pt;
           font-weight: 500;
+          overflow: hidden;
         }
 
         .info-label {
           font-weight: 700;
+          flex-shrink: 0;
+          white-space: nowrap;
+        }
+
+        .info-row span:last-child {
+          text-align: right;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+          hyphens: auto;
         }
 
         .items-table {
@@ -239,8 +306,23 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         .item-details {
           display: flex;
           justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
           font-size: 9pt;
           font-weight: 500;
+          overflow: hidden;
+        }
+
+        .item-details span:first-child {
+          flex: 1;
+          min-width: 0;
+          overflow-wrap: break-word;
+        }
+
+        .item-details span:last-child {
+          flex-shrink: 0;
+          text-align: right;
+          white-space: nowrap;
         }
 
         .totals-section {
@@ -254,13 +336,27 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         .total-row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
+          gap: 8px;
           margin: 4px 0;
           font-size: 10pt;
           font-weight: 600;
+          overflow: hidden;
+        }
+
+        .total-row span:first-child {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .total-row span:last-child {
+          flex-shrink: 0;
+          text-align: right;
+          white-space: nowrap;
         }
 
         .total-row.final {
-          font-size: 13pt;
+          font-size: 12pt;
           font-weight: 700;
           margin-top: 6px;
           padding: 8px 6px;
@@ -296,10 +392,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
+          max-width: 100%;
         }
 
         .qr-code {
           margin: 5px 0;
+          max-width: 70px;
+          height: auto;
         }
       `}</style>
 
@@ -470,7 +570,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             <div className="qr-container">
               <QRCodeSVG
                 value={generateQRData()}
-                size={80}
+                size={70}
                 level="M"
                 className="qr-code"
                 includeMargin={true}
