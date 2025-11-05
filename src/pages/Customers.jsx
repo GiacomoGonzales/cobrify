@@ -279,8 +279,8 @@ export default function Customers() {
       {/* Search & Sort */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -290,15 +290,17 @@ export default function Customers() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
-            <Select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              className="w-full sm:w-48"
-            >
-              <option value="name">Ordenar por Nombre</option>
-              <option value="orders">Ordenar por Pedidos</option>
-              <option value="spent">Ordenar por Total Gastado</option>
-            </Select>
+            <div className="flex-shrink-0 w-full sm:w-auto sm:min-w-[220px]">
+              <Select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="w-full"
+              >
+                <option value="name">Ordenar por Nombre</option>
+                <option value="orders">Ordenar por Pedidos</option>
+                <option value="spent">Ordenar por Total Gastado</option>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>

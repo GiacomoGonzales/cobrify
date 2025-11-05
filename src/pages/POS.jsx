@@ -122,6 +122,14 @@ export default function POS() {
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
   const [showVariantModal, setShowVariantModal] = useState(false)
 
+  // Custom product modal
+  const [showCustomProductModal, setShowCustomProductModal] = useState(false)
+  const [customProduct, setCustomProduct] = useState({
+    name: '',
+    price: '',
+    quantity: 1
+  })
+
   // Datos del cliente para captura inline
   const [customerData, setCustomerData] = useState({
     documentType: ID_TYPES.DNI,
@@ -325,6 +333,44 @@ export default function POS() {
     // Close modal
     setShowVariantModal(false)
     setSelectedProductForVariant(null)
+  }
+
+  const addCustomProductToCart = () => {
+    // Validar campos
+    if (!customProduct.name || !customProduct.name.trim()) {
+      toast.error('El nombre del producto es requerido')
+      return
+    }
+
+    const price = parseFloat(customProduct.price)
+    if (!price || price <= 0) {
+      toast.error('El precio debe ser mayor a 0')
+      return
+    }
+
+    const quantity = parseInt(customProduct.quantity) || 1
+    if (quantity <= 0) {
+      toast.error('La cantidad debe ser mayor a 0')
+      return
+    }
+
+    // Crear producto personalizado con ID único
+    const customProductItem = {
+      id: `custom-${Date.now()}`,
+      code: 'CUSTOM',
+      name: customProduct.name.trim(),
+      price: price,
+      quantity: quantity,
+      stock: null, // Productos personalizados no tienen control de stock
+      isCustom: true,
+    }
+
+    setCart([...cart, customProductItem])
+    toast.success('Producto personalizado agregado al carrito')
+
+    // Resetear y cerrar modal
+    setCustomProduct({ name: '', price: '', quantity: 1 })
+    setShowCustomProductModal(false)
   }
 
   const updateQuantity = (itemId, change) => {
@@ -694,7 +740,7 @@ export default function POS() {
 
       // 4. Actualizar stock de productos por almacén
       const stockUpdates = cart
-        .filter(item => item.stock !== null) // Solo productos con control de stock
+        .filter(item => !item.isCustom && item.stock !== null) // Excluir productos personalizados y productos sin control de stock
         .map(async item => {
           const productData = products.find(p => p.id === item.id)
           if (!productData) return
@@ -817,10 +863,18 @@ ${companySettings?.website ? companySettings.website : ''}`
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Punto de Venta</h1>
               <p className="text-sm text-gray-600 mt-1">Selecciona productos para la venta</p>
             </div>
-            <Button variant="outline" onClick={clearCart} disabled={cart.length === 0}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Limpiar
-            </Button>
+            <div className="flex gap-2">
+              {companySettings?.allowCustomProducts && (
+                <Button onClick={() => setShowCustomProductModal(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Producto Personalizado
+                </Button>
+              )}
+              <Button variant="outline" onClick={clearCart} disabled={cart.length === 0}>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Limpiar
+              </Button>
+            </div>
           </div>
 
           {/* Customer and Document Type Selection */}
@@ -1364,13 +1418,19 @@ ${companySettings?.website ? companySettings.website : ''}`
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-                {displayedProducts.map(product => (
+                {displayedProducts.map(product => {
+                  // Determinar si el producto debe estar deshabilitado
+                  // Si allowNegativeStock es true, nunca deshabilitar por stock
+                  // Si allowNegativeStock es false, deshabilitar si stock === 0
+                  const isOutOfStock = !product.hasVariants && product.stock === 0 && !companySettings?.allowNegativeStock
+
+                  return (
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
-                  disabled={!product.hasVariants && product.stock === 0}
+                  disabled={isOutOfStock}
                   className={`p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left ${
-                    !product.hasVariants && product.stock === 0
+                    isOutOfStock
                       ? 'border-gray-200 opacity-50 cursor-not-allowed'
                       : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
@@ -1405,7 +1465,8 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </div>
                   </div>
                 </button>
-              ))}
+                  )
+                })}
               </div>
 
               {/* Load More Button */}
@@ -1530,6 +1591,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                         value={payment.method}
                         onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
                         className="flex-1 text-sm"
+                        disabled={lastInvoiceData !== null}
                       >
                         <option value="">Seleccionar</option>
                         <option value="CASH">Efectivo</option>
@@ -1547,7 +1609,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                         value={payment.amount}
                         onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
                         placeholder="0.00"
-                        disabled={!payment.method}
+                        disabled={!payment.method || lastInvoiceData !== null}
                         className="w-24 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
                       />
 
@@ -1556,7 +1618,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                         <button
                           onClick={() => handleRemovePaymentMethod(index)}
                           className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                          disabled={isProcessing}
+                          disabled={isProcessing || lastInvoiceData !== null}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1567,7 +1629,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                   {/* Botón agregar método */}
                   <button
                     onClick={handleAddPaymentMethod}
-                    disabled={isProcessing}
+                    disabled={isProcessing || lastInvoiceData !== null}
                     className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-primary-500 hover:text-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <Plus className="w-4 h-4" />
@@ -1597,13 +1659,18 @@ ${companySettings?.website ? companySettings.website : ''}`
               {/* Checkout Button */}
               <Button
                 onClick={handleCheckout}
-                disabled={cart.length === 0 || isProcessing}
+                disabled={cart.length === 0 || isProcessing || lastInvoiceData !== null}
                 className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg"
               >
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     Procesando...
+                  </>
+                ) : lastInvoiceData !== null ? (
+                  <>
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Venta Completada
                   </>
                 ) : (
                   <>
@@ -1612,6 +1679,23 @@ ${companySettings?.website ? companySettings.website : ''}`
                   </>
                 )}
               </Button>
+
+              {/* Mensaje de venta completada */}
+              {lastInvoiceData && (
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-900">
+                        ¡Venta procesada exitosamente!
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        Para realizar una nueva venta, presiona el botón "Nueva Venta" a continuación.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Print/PDF Buttons - Show after successful sale */}
               {lastInvoiceData && (
@@ -1654,11 +1738,10 @@ ${companySettings?.website ? companySettings.website : ''}`
                     Enviar por WhatsApp
                   </Button>
                   <Button
-                    variant="outline"
-                    size="sm"
                     onClick={clearCart}
-                    className="w-full mt-2"
+                    className="w-full mt-3 bg-primary-600 hover:bg-primary-700 text-white h-12"
                   >
+                    <Plus className="w-5 h-5 mr-2" />
                     Nueva Venta
                   </Button>
                 </div>
@@ -1667,6 +1750,119 @@ ${companySettings?.website ? companySettings.website : ''}`
           </Card>
         </div>
       </div>
+
+      {/* Custom Product Modal */}
+      <Modal
+        isOpen={showCustomProductModal}
+        onClose={() => {
+          setShowCustomProductModal(false)
+          setCustomProduct({ name: '', price: '', quantity: 1 })
+        }}
+        title="Agregar Producto Personalizado"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Ingresa los datos del producto o servicio que deseas agregar al carrito:
+          </p>
+
+          {/* Product Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre del Producto/Servicio <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={customProduct.name}
+              onChange={(e) => setCustomProduct({ ...customProduct, name: e.target.value })}
+              placeholder="Ej: Servicio de instalación, Reparación, etc."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              autoFocus
+            />
+          </div>
+
+          {/* Price and Quantity */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Precio Unitario <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+                  S/
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={customProduct.price}
+                  onChange={(e) => setCustomProduct({ ...customProduct, price: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Cantidad
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={customProduct.quantity}
+                onChange={(e) => setCustomProduct({ ...customProduct, quantity: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+
+          {/* Preview */}
+          {customProduct.name && customProduct.price > 0 && (
+            <div className="mt-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+              <p className="text-xs font-medium text-primary-900 mb-2">Vista Previa:</p>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-semibold text-gray-900">{customProduct.name}</p>
+                  <p className="text-sm text-gray-600">
+                    Cantidad: {customProduct.quantity || 1}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-primary-600">
+                    {formatCurrency(parseFloat(customProduct.price) * (parseInt(customProduct.quantity) || 1))}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {formatCurrency(customProduct.price)} × {customProduct.quantity || 1}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCustomProductModal(false)
+                setCustomProduct({ name: '', price: '', quantity: 1 })
+              }}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={addCustomProductToCart}
+              className="flex-1"
+              disabled={!customProduct.name || !customProduct.price || parseFloat(customProduct.price) <= 0}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar al Carrito
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Variant Selection Modal */}
       <Modal

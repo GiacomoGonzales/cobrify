@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -61,6 +61,10 @@ export default function Settings() {
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  // Estados para configuración de inventario
+  const [allowNegativeStock, setAllowNegativeStock] = useState(false)
+  const [allowCustomProducts, setAllowCustomProducts] = useState(false)
 
   const {
     register,
@@ -172,6 +176,10 @@ export default function Settings() {
         if (businessData.logoUrl) {
           setLogoUrl(businessData.logoUrl)
         }
+
+        // Cargar configuración de inventario
+        setAllowNegativeStock(businessData.allowNegativeStock || false)
+        setAllowCustomProducts(businessData.allowCustomProducts || false)
       }
     } catch (error) {
       console.error('Error al cargar configuración:', error)
@@ -515,6 +523,7 @@ export default function Settings() {
   // Tabs configuration
   const tabs = [
     { id: 'informacion', label: 'Información', icon: Building2 },
+    { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'series', label: 'Series', icon: FileText },
   ]
 
@@ -783,6 +792,128 @@ export default function Settings() {
           </Button>
         </div>
         </form>
+      )}
+
+      {/* Tab Content - Preferencias */}
+      {activeTab === 'preferencias' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <SettingsIcon className="w-5 h-5 text-primary-600" />
+              <CardTitle>Preferencias del Sistema</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Inventory Settings Section */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Inventario y Ventas</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el comportamiento del punto de venta y control de inventario
+                </p>
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowNegativeStock}
+                      onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir vender productos sin stock
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowNegativeStock
+                          ? '✓ Habilitado: Los productos se pueden vender incluso si el stock está en 0 o negativo. El stock puede quedar en números negativos. Útil para negocios bajo pedido o dropshipping.'
+                          : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowCustomProducts}
+                      onChange={(e) => setAllowCustomProducts(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir agregar productos personalizados en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowCustomProducts
+                          ? '✓ Habilitado: Aparecerá un botón "Producto Personalizado" en el punto de venta que permite agregar productos con nombre y precio personalizado sin necesidad de crearlos previamente. Ideal para servicios variables, trabajos por encargo o productos únicos.'
+                          : '✗ Deshabilitado: Solo se pueden vender productos previamente creados en el catálogo. Recomendado para negocios con inventario fijo y control estricto de productos.'}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Placeholder for future settings */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Otras Configuraciones</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Más opciones estarán disponibles próximamente
+                </p>
+                <div className="p-8 text-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <SettingsIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">
+                    Nuevas preferencias de configuración se agregarán aquí
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+
+          {/* Save Button for Preferences */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      allowNegativeStock: allowNegativeStock,
+                      allowCustomProducts: allowCustomProducts,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    toast.success('Preferencias guardadas exitosamente')
+                  } catch (error) {
+                    console.error('Error al guardar preferencias:', error)
+                    toast.error('Error al guardar las preferencias')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Preferencias
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Tab Content - Series */}

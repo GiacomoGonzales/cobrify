@@ -22,7 +22,9 @@
       "Bash(git rm:*)",
       "WebFetch(domain:docs.qpse.pe)",
       "WebFetch(domain:qpse.pe)",
-      "Bash(node configure-series-admin.cjs:*)"
+      "Bash(node configure-series-admin.cjs:*)",
+      "Bash(firebase functions:log:*)",
+      "Bash(Select-String -Pattern \"QPse|qpse|Error al enviar\" -Context 5)"
     ],
     "deny": [],
     "ask": []
