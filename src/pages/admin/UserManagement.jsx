@@ -24,7 +24,8 @@ import {
   Unlock,
   Edit,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -377,6 +378,18 @@ export default function UserManagement() {
                             title="Editar"
                           >
                             <Edit className="w-5 h-5" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedUser(sub);
+                              setModalType('config');
+                              setShowModal(true);
+                            }}
+                            className="text-purple-600 hover:text-purple-900"
+                            title="Configurar Emisión"
+                          >
+                            <Settings className="w-5 h-5" />
                           </button>
                         </div>
                       </td>

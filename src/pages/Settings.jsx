@@ -45,6 +45,18 @@ export default function Settings() {
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [certificateFile, setCertificateFile] = useState(null)
 
+  // Estados para QPse
+  const [qpseConfig, setQpseConfig] = useState({
+    enabled: false,
+    environment: 'demo',
+    usuario: '',
+    password: '',
+    firmasDisponibles: 0,
+    firmasUsadas: 0,
+  })
+  const [editingQpse, setEditingQpse] = useState(false)
+  const [showQpsePassword, setShowQpsePassword] = useState(false)
+
   // Estados para logo
   const [logoUrl, setLogoUrl] = useState('')
   const [logoFile, setLogoFile] = useState(null)
@@ -140,6 +152,19 @@ export default function Settings() {
             certificateName: businessData.sunat.certificateName || '',
             certificatePassword: businessData.sunat.certificatePassword || '',
             homologated: businessData.sunat.homologated || false,
+          })
+        }
+
+        // Cargar configuración QPse (global para todos los negocios)
+        // TODO: Mover a colección settings/qpse en producción
+        if (businessData.qpse) {
+          setQpseConfig({
+            enabled: businessData.qpse.enabled || false,
+            environment: businessData.qpse.environment || 'demo',
+            usuario: businessData.qpse.usuario || '',
+            password: businessData.qpse.password || '',
+            firmasDisponibles: businessData.qpse.firmasDisponibles || 0,
+            firmasUsadas: businessData.qpse.firmasUsadas || 0,
           })
         }
 
@@ -416,6 +441,63 @@ export default function Settings() {
     }
   }
 
+  // Funciones para QPse
+  const handleQpseConfigChange = (field, value) => {
+    setQpseConfig(prev => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  const handleSaveQpse = async () => {
+    if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
+
+    // Validar campos requeridos si está habilitado
+    if (qpseConfig.enabled) {
+      if (!qpseConfig.usuario || !qpseConfig.password) {
+        toast.error('Debes completar el Usuario y Password de QPse')
+        return
+      }
+    }
+
+    setIsSaving(true)
+
+    try {
+      const businessRef = doc(db, 'businesses', getBusinessId())
+
+      // Preparar datos de QPse (credenciales globales)
+      const qpseData = {
+        enabled: qpseConfig.enabled,
+        environment: qpseConfig.environment,
+        usuario: qpseConfig.usuario,
+        password: qpseConfig.password, // TODO: Encriptar en producción
+        firmasDisponibles: qpseConfig.firmasDisponibles || 0,
+        firmasUsadas: qpseConfig.firmasUsadas || 0,
+        updatedAt: new Date().toISOString(),
+      }
+
+      // Guardar configuración en Firestore
+      await setDoc(businessRef, {
+        qpse: qpseData,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      toast.success('Configuración de QPse guardada exitosamente')
+      setEditingQpse(false)
+    } catch (error) {
+      console.error('Error al guardar configuración QPse:', error)
+      toast.error(error.message || 'Error al guardar la configuración de QPse. Inténtalo nuevamente.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -434,13 +516,6 @@ export default function Settings() {
   const tabs = [
     { id: 'informacion', label: 'Información', icon: Building2 },
     { id: 'series', label: 'Series', icon: FileText },
-    {
-      id: 'sunat',
-      label: 'SUNAT',
-      icon: Shield,
-      disabled: isTrialUser,
-      tooltip: isTrialUser ? 'Disponible al actualizar tu plan' : null
-    },
   ]
 
   return (
@@ -988,292 +1063,6 @@ export default function Settings() {
                 Para aumentar el valor de facturas/boletas aceptadas por SUNAT (intereses, penalidades, etc.)
               </p>
             </div>
-          </div>
-        </CardContent>
-        </Card>
-      )}
-
-      {/* Tab Content - SUNAT */}
-      {activeTab === 'sunat' && (
-        <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Shield className="w-5 h-5 text-primary-600" />
-              <CardTitle>Integración con SUNAT</CardTitle>
-            </div>
-            {!editingSunat ? (
-              <Button variant="outline" size="sm" onClick={() => setEditingSunat(true)}>
-                {sunatConfig.enabled ? 'Editar Configuración' : 'Configurar SUNAT'}
-              </Button>
-            ) : (
-              <div className="flex space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setEditingSunat(false)
-                    loadSettings() // Recargar datos originales
-                  }}
-                  disabled={isSaving}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveSunat}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-1" />
-                      Guardar
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {/* Info Banner */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>Nota:</strong> La integración con SUNAT te permite emitir facturas y
-                boletas electrónicas válidas. Necesitas tener un certificado digital y credenciales
-                SOL activas.
-              </p>
-            </div>
-
-            {/* Enable/Disable Switch */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Habilitar SUNAT</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Activa la facturación electrónica con SUNAT
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={sunatConfig.enabled}
-                  onChange={(e) => handleSunatConfigChange('enabled', e.target.checked)}
-                  disabled={!editingSunat}
-                  className="sr-only peer"
-                />
-                <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 ${!editingSunat ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
-              </label>
-            </div>
-
-            {/* SUNAT Configuration Fields */}
-            {sunatConfig.enabled && (
-              <>
-                {/* Environment Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ambiente <span className="text-red-500">*</span>
-                  </label>
-                  <Select
-                    value={sunatConfig.environment}
-                    onChange={(e) => handleSunatConfigChange('environment', e.target.value)}
-                    disabled={!editingSunat}
-                    className={!editingSunat ? 'bg-gray-100' : ''}
-                  >
-                    <option value="beta">Beta / Homologación (Pruebas)</option>
-                    <option value="production">Producción</option>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Usa "Beta" para pruebas y "Producción" para facturas reales
-                  </p>
-                </div>
-
-                {/* Homologation Status */}
-                {sunatConfig.environment === 'beta' && (
-                  <div className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900">Estado de Homologación</h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {sunatConfig.homologated
-                          ? '✓ Homologado - Listo para producción'
-                          : 'Pendiente de homologación'}
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={sunatConfig.homologated}
-                        onChange={(e) => handleSunatConfigChange('homologated', e.target.checked)}
-                        disabled={!editingSunat}
-                        className="sr-only peer"
-                      />
-                      <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600 ${!editingSunat ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
-                    </label>
-                  </div>
-                )}
-
-                {/* SOL Credentials */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Usuario SOL <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      value={sunatConfig.solUser}
-                      onChange={(e) => handleSunatConfigChange('solUser', e.target.value)}
-                      disabled={!editingSunat}
-                      className={!editingSunat ? 'bg-gray-100' : ''}
-                      placeholder="MODDATOS"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Usuario SOL de SUNAT
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Clave SOL <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Input
-                        type={showSolPassword ? 'text' : 'password'}
-                        value={sunatConfig.solPassword}
-                        onChange={(e) => handleSunatConfigChange('solPassword', e.target.value)}
-                        disabled={!editingSunat}
-                        className={!editingSunat ? 'bg-gray-100' : ''}
-                        placeholder="••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowSolPassword(!showSolPassword)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        disabled={!editingSunat}
-                      >
-                        {showSolPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Contraseña SOL de SUNAT
-                    </p>
-                  </div>
-                </div>
-
-                {/* Certificate Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Certificado Digital (.pfx) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="space-y-2">
-                    {sunatConfig.certificateName ? (
-                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center space-x-2">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                          <span className="text-sm text-green-800">{sunatConfig.certificateName}</span>
-                        </div>
-                        {editingSunat && (
-                          <div className="flex space-x-3">
-                            <label className="cursor-pointer">
-                              <span className="text-sm text-primary-600 hover:text-primary-700">
-                                Cambiar
-                              </span>
-                              <input
-                                type="file"
-                                accept=".pfx,.p12"
-                                onChange={handleCertificateUpload}
-                                className="hidden"
-                              />
-                            </label>
-                            <button
-                              type="button"
-                              onClick={handleRemoveCertificate}
-                              className="text-sm text-red-600 hover:text-red-700"
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <label className={`flex items-center justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg ${editingSunat ? 'cursor-pointer hover:border-primary-500' : 'cursor-not-allowed opacity-50'}`}>
-                        <div className="text-center">
-                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <span className="text-sm text-gray-600">
-                            Haz clic para subir tu certificado
-                          </span>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Archivos .pfx o .p12
-                          </p>
-                        </div>
-                        <input
-                          type="file"
-                          accept=".pfx,.p12"
-                          onChange={handleCertificateUpload}
-                          disabled={!editingSunat}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-                </div>
-
-                {/* Certificate Password */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Contraseña del Certificado <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Input
-                      type={showCertPassword ? 'text' : 'password'}
-                      value={sunatConfig.certificatePassword}
-                      onChange={(e) => handleSunatConfigChange('certificatePassword', e.target.value)}
-                      disabled={!editingSunat}
-                      className={!editingSunat ? 'bg-gray-100' : ''}
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCertPassword(!showCertPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      disabled={!editingSunat}
-                    >
-                      {showCertPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Contraseña para desencriptar el certificado digital
-                  </p>
-                </div>
-
-                {/* Warning for Production */}
-                {sunatConfig.environment === 'production' && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex">
-                      <AlertCircle className="w-5 h-5 text-red-600 mr-2 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h3 className="text-sm font-semibold text-red-900">Ambiente de Producción</h3>
-                        <p className="text-sm text-red-800 mt-1">
-                          Estás en modo producción. Los comprobantes emitidos tendrán validez legal
-                          y serán reportados a SUNAT. Asegúrate de haber completado la homologación.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
           </div>
         </CardContent>
         </Card>

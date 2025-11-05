@@ -107,6 +107,9 @@ service cloud.firestore {
     // IMPORTANTE: Los administradores tienen acceso sin importar su suscripción
     // Sub-usuarios (employees) pueden acceder a los datos del Business Owner
     match /businesses/{userId} {
+      // Admins pueden leer/escribir cualquier negocio
+      allow read, write: if isAdmin();
+      // Owners y sub-usuarios pueden acceder a su propio negocio si tienen acceso activo
       allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
 

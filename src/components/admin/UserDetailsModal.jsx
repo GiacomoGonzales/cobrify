@@ -9,10 +9,17 @@ import {
   Calendar,
   TrendingUp,
   Activity,
-  BarChart3
+  BarChart3,
+  Settings,
+  Eye,
+  EyeOff,
+  Save,
+  CheckCircle
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
 import { PLANS } from '@/services/subscriptionService';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading }) {
   const [stats, setStats] = useState(null);
@@ -21,6 +28,29 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [paymentAmount, setPaymentAmount] = useState(PLANS['standard_3_months']?.totalPrice || 0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [emissionConfig, setEmissionConfig] = useState({
+    method: 'qpse',
+    qpse: {
+      enabled: true,
+      usuario: '',
+      password: '',
+      environment: 'demo',
+      firmasDisponibles: 0,
+      firmasUsadas: 0
+    },
+    sunat: {
+      enabled: false,
+      environment: 'beta',
+      solUser: '',
+      solPassword: '',
+      certificateName: '',
+      certificatePassword: '',
+      certificateData: '',
+      homologated: false
+    }
+  });
 
   // Actualizar precio cuando cambia el plan seleccionado
   useEffect(() => {
@@ -46,6 +76,13 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
     }
   }, [type, user.userId]);
 
+  // Cargar configuración de emisión cuando se abre el modal en modo config
+  useEffect(() => {
+    if (type === 'config' && user.userId) {
+      loadEmissionConfig();
+    }
+  }, [type, user.userId]);
+
   const loadUserStats = async () => {
     try {
       setLoadingStats(true);
@@ -55,6 +92,80 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
       console.error('Error al cargar estadísticas:', error);
     } finally {
       setLoadingStats(false);
+    }
+  };
+
+  const loadEmissionConfig = async () => {
+    try {
+      const businessDoc = await getDoc(doc(db, 'businesses', user.userId));
+      const data = businessDoc.data();
+
+      console.log('📋 Cargando configuración para:', user.email);
+      console.log('📋 Datos de Firestore:', data);
+
+      if (data?.emissionConfig) {
+        // Si ya existe emissionConfig del admin, usarlo
+        console.log('✅ Cargando desde emissionConfig');
+        setEmissionConfig(data.emissionConfig);
+      } else {
+        // Si no existe, cargar desde la configuración antigua (Settings)
+        console.log('✅ Cargando desde configuración antigua (qpse/sunat)');
+
+        const qpseEnabled = data?.qpse?.enabled || false;
+        const sunatEnabled = data?.sunat?.enabled || false;
+
+        // Determinar el método activo
+        let method = 'qpse';
+        if (qpseEnabled) method = 'qpse';
+        else if (sunatEnabled) method = 'sunat_direct';
+
+        console.log('📋 Método detectado:', method);
+        console.log('📋 QPse data:', data?.qpse);
+        console.log('📋 SUNAT data:', data?.sunat);
+
+        setEmissionConfig({
+          method: method,
+          qpse: {
+            enabled: data?.qpse?.enabled || false,
+            usuario: data?.qpse?.usuario || '',
+            password: data?.qpse?.password || '',
+            environment: data?.qpse?.environment || 'demo',
+            firmasDisponibles: data?.qpse?.firmasDisponibles || 0,
+            firmasUsadas: data?.qpse?.firmasUsadas || 0
+          },
+          sunat: {
+            enabled: data?.sunat?.enabled || false,
+            environment: data?.sunat?.environment || 'beta',
+            solUser: data?.sunat?.solUser || '',
+            solPassword: data?.sunat?.solPassword || '',
+            certificateName: data?.sunat?.certificateName || '',
+            certificatePassword: data?.sunat?.certificatePassword || '',
+            certificateData: data?.sunat?.certificateData || '',
+            homologated: data?.sunat?.homologated || false
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error al cargar configuración:', error);
+    }
+  };
+
+  const handleSaveEmissionConfig = async () => {
+    setIsSavingConfig(true);
+    try {
+      const businessRef = doc(db, 'businesses', user.userId);
+      await updateDoc(businessRef, {
+        emissionConfig: emissionConfig,
+        updatedAt: new Date()
+      });
+
+      alert('Configuración guardada exitosamente');
+      onClose();
+    } catch (error) {
+      console.error('Error al guardar configuración:', error);
+      alert('Error al guardar configuración');
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -69,6 +180,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 {type === 'view' && 'Detalles del Usuario'}
                 {type === 'payment' && 'Registrar Pago'}
                 {type === 'edit' && 'Editar Suscripción'}
+                {type === 'config' && 'Configuración de Emisión'}
               </h2>
               <p className="text-gray-600">{user.businessName || user.email}</p>
             </div>
@@ -523,6 +635,415 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 </button>
               </div>
             </form>
+          )}
+
+          {/* Vista de Configuración de Emisión */}
+          {type === 'config' && (
+            <div className="space-y-6">
+              {/* Selección de método */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Método de Emisión
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEmissionConfig({ ...emissionConfig, method: 'qpse' })}
+                    className={`p-4 border-2 rounded-lg transition-all ${
+                      emissionConfig.method === 'qpse'
+                        ? 'border-primary-600 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-semibold">QPse</p>
+                    <p className="text-xs text-gray-600">Firma tercerizada (sin certificado)</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmissionConfig({ ...emissionConfig, method: 'sunat_direct' })}
+                    className={`p-4 border-2 rounded-lg transition-all ${
+                      emissionConfig.method === 'sunat_direct'
+                        ? 'border-primary-600 bg-primary-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-semibold">SUNAT Directo</p>
+                    <p className="text-xs text-gray-600">CDT propio del negocio</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Configuración QPse */}
+              {emissionConfig.method === 'qpse' && (
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Settings className="w-5 h-5" />
+                    Credenciales QPse
+                  </h3>
+
+                  {/* Info Box */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                    <strong>QPse</strong> es un PSE que firma y envía a SUNAT sin necesidad de certificado digital.
+                  </div>
+
+                  {/* Ambiente */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ambiente <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEmissionConfig({
+                          ...emissionConfig,
+                          qpse: { ...emissionConfig.qpse, environment: 'demo' }
+                        })}
+                        className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
+                          emissionConfig.qpse.environment === 'demo'
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        Demo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEmissionConfig({
+                          ...emissionConfig,
+                          qpse: { ...emissionConfig.qpse, environment: 'production' }
+                        })}
+                        className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
+                          emissionConfig.qpse.environment === 'production'
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        Producción
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Usuario QPse */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Usuario QPse <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="usuario@ejemplo.com"
+                      value={emissionConfig.qpse.usuario}
+                      onChange={(e) => setEmissionConfig({
+                        ...emissionConfig,
+                        qpse: { ...emissionConfig.qpse, usuario: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Usuario que obtuviste al contratar QPse</p>
+                  </div>
+
+                  {/* Password QPse */}
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña QPse <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type={showPasswords ? 'text' : 'password'}
+                      placeholder="••••••••••••••••"
+                      value={emissionConfig.qpse.password}
+                      onChange={(e) => setEmissionConfig({
+                        ...emissionConfig,
+                        qpse: { ...emissionConfig.qpse, password: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords(!showPasswords)}
+                      className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPasswords ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">Password de tu cuenta QPse</p>
+                  </div>
+
+                  {/* Firmas Disponibles/Usadas */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Firmas Disponibles
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={emissionConfig.qpse.firmasDisponibles}
+                        onChange={(e) => setEmissionConfig({
+                          ...emissionConfig,
+                          qpse: { ...emissionConfig.qpse, firmasDisponibles: parseInt(e.target.value) || 0 }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Firmas Usadas
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={emissionConfig.qpse.firmasUsadas}
+                        onChange={(e) => setEmissionConfig({
+                          ...emissionConfig,
+                          qpse: { ...emissionConfig.qpse, firmasUsadas: parseInt(e.target.value) || 0 }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Warning para producción */}
+                  {emissionConfig.qpse.environment === 'production' && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                      <strong>⚠️ Producción:</strong> Los comprobantes serán enviados a SUNAT de forma real.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Configuración SUNAT Directo */}
+              {emissionConfig.method === 'sunat_direct' && (
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Settings className="w-5 h-5" />
+                    Credenciales SUNAT
+                  </h3>
+
+                  {/* Info Box */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                    <strong>SUNAT Directo:</strong> Requiere certificado digital (CDT) del negocio.
+                  </div>
+
+                  {/* Ambiente */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ambiente <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEmissionConfig({
+                          ...emissionConfig,
+                          sunat: { ...emissionConfig.sunat, environment: 'beta' }
+                        })}
+                        className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
+                          emissionConfig.sunat.environment === 'beta'
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        Beta (Pruebas)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEmissionConfig({
+                          ...emissionConfig,
+                          sunat: { ...emissionConfig.sunat, environment: 'production' }
+                        })}
+                        className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
+                          emissionConfig.sunat.environment === 'production'
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        Producción
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Usuario SOL */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Usuario SOL <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="MODDATOS"
+                      value={emissionConfig.sunat.solUser}
+                      onChange={(e) => setEmissionConfig({
+                        ...emissionConfig,
+                        sunat: { ...emissionConfig.sunat, solUser: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Usuario SOL de SUNAT</p>
+                  </div>
+
+                  {/* Contraseña SOL */}
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña SOL <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type={showPasswords ? 'text' : 'password'}
+                      placeholder="••••••••••••••••"
+                      value={emissionConfig.sunat.solPassword}
+                      onChange={(e) => setEmissionConfig({
+                        ...emissionConfig,
+                        sunat: { ...emissionConfig.sunat, solPassword: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords(!showPasswords)}
+                      className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPasswords ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">Contraseña SOL de SUNAT</p>
+                  </div>
+
+                  {/* Certificado Digital */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Certificado Digital (PFX/P12) <span className="text-red-500">*</span>
+                    </label>
+                    {emissionConfig.sunat.certificateName ? (
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                          <span className="text-sm text-green-800">{emissionConfig.sunat.certificateName}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEmissionConfig({
+                            ...emissionConfig,
+                            sunat: { ...emissionConfig.sunat, certificateName: '', certificatePassword: '', certificateData: '' }
+                          })}
+                          className="text-sm text-red-600 hover:text-red-700"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Clic para subir</span> certificado</p>
+                            <p className="text-xs text-gray-500">PFX o P12</p>
+                          </div>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pfx,.p12"
+                            onChange={async (e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  setEmissionConfig({
+                                    ...emissionConfig,
+                                    sunat: {
+                                      ...emissionConfig.sunat,
+                                      certificateName: file.name,
+                                      certificateData: event.target.result
+                                    }
+                                  });
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">Certificado digital (.pfx o .p12) del negocio</p>
+                  </div>
+
+                  {/* Contraseña del Certificado */}
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña del Certificado <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type={showPasswords ? 'text' : 'password'}
+                      placeholder="••••••••••••••••"
+                      value={emissionConfig.sunat.certificatePassword}
+                      onChange={(e) => setEmissionConfig({
+                        ...emissionConfig,
+                        sunat: { ...emissionConfig.sunat, certificatePassword: e.target.value }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords(!showPasswords)}
+                      className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPasswords ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">Password para desencriptar el certificado</p>
+                  </div>
+
+                  {/* Homologado */}
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="homologated"
+                      checked={emissionConfig.sunat.homologated}
+                      onChange={(e) => setEmissionConfig({
+                        ...emissionConfig,
+                        sunat: { ...emissionConfig.sunat, homologated: e.target.checked }
+                      })}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <label htmlFor="homologated" className="text-sm text-gray-700 cursor-pointer">
+                      <strong>Certificado Homologado por SUNAT</strong>
+                      <p className="text-xs text-gray-500">Marca si tu certificado ya fue homologado en SUNAT</p>
+                    </label>
+                  </div>
+
+                  {/* Warning para producción */}
+                  {emissionConfig.sunat.environment === 'production' && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                      <strong>⚠️ Producción:</strong> Los comprobantes serán enviados a SUNAT de forma real.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botones */}
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  disabled={isSavingConfig}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEmissionConfig}
+                  className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
+                  disabled={isSavingConfig}
+                >
+                  {isSavingConfig ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Guardar Configuración
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

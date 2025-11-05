@@ -2,9 +2,7 @@ import { onRequest } from 'firebase-functions/v2/https'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { generateInvoiceXML } from './src/utils/xmlGenerator.js'
-import { signXML } from './src/utils/xmlSigner.js'
-import { sendToSunat } from './src/utils/sunatClient.js'
+import { emitirComprobante } from './src/services/emissionRouter.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -128,128 +126,133 @@ export const sendInvoiceToSunat = onRequest(
       }
 
       const businessData = businessDoc.data()
-      const sunatConfig = businessData.sunat
 
-      if (!sunatConfig || !sunatConfig.enabled) {
-        res.status(400).json({
-          error: 'Integración SUNAT no está habilitada. Ve a Configuración > SUNAT para habilitarla.'
-        })
-        return
+      // Mapear emissionConfig (configurado por super admin) al formato esperado
+      if (businessData.emissionConfig) {
+        console.log('📋 Usando configuración de emisión del admin')
+        const config = businessData.emissionConfig
+
+        if (config.method === 'qpse') {
+          businessData.qpse = {
+            enabled: config.qpse.enabled !== false,
+            usuario: config.qpse.usuario,
+            password: config.qpse.password,
+            environment: config.qpse.environment || 'demo',
+            firmasDisponibles: config.qpse.firmasDisponibles || 0,
+            firmasUsadas: config.qpse.firmasUsadas || 0
+          }
+          businessData.sunat = { enabled: false }
+          businessData.nubefact = { enabled: false }
+        } else if (config.method === 'sunat_direct') {
+          businessData.sunat = {
+            enabled: config.sunat.enabled !== false,
+            environment: config.sunat.environment || 'beta',
+            solUser: config.sunat.solUser,
+            solPassword: config.sunat.solPassword,
+            certificateName: config.sunat.certificateName,
+            certificatePassword: config.sunat.certificatePassword,
+            certificateData: config.sunat.certificateData,
+            homologated: config.sunat.homologated || false
+          }
+          businessData.qpse = { enabled: false }
+          businessData.nubefact = { enabled: false }
+        }
       }
 
-      // Validar configuración SUNAT completa
-      if (!sunatConfig.solUser || !sunatConfig.solPassword) {
-        res.status(400).json({
-          error: 'Configuración SUNAT incompleta. Verifica credenciales SOL en Configuración.'
-        })
-        return
-      }
+      // Validar que al menos un método esté habilitado (SUNAT directo, QPse o NubeFact)
+      const sunatEnabled = businessData.sunat?.enabled === true
+      const qpseEnabled = businessData.qpse?.enabled === true
+      const nubefactEnabled = businessData.nubefact?.enabled === true
 
-      // Validar que exista certificado (si está habilitado)
-      if (!sunatConfig.certificateData && sunatConfig.environment === 'production') {
+      if (!sunatEnabled && !qpseEnabled && !nubefactEnabled) {
         res.status(400).json({
-          error: 'Certificado digital no encontrado. Sube tu certificado .pfx/.p12 en Configuración SUNAT.'
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo, QPse o NubeFact en Configuración.'
         })
         return
       }
 
       console.log(`🏢 Empresa: ${businessData.businessName} - RUC: ${businessData.ruc}`)
-      console.log(`⚙️ Ambiente SUNAT: ${sunatConfig.environment}`)
 
-      // Debug del certificado
-      const hasCert = !!sunatConfig.certificateData
-      const hasPass = !!sunatConfig.certificatePassword
-      const certLength = sunatConfig.certificateData ? sunatConfig.certificateData.length : 0
-      const passLength = sunatConfig.certificatePassword ? sunatConfig.certificatePassword.length : 0
+      // 3. Emitir comprobante usando el router (decide automáticamente SUNAT, QPse o NubeFact)
+      console.log('📨 Emitiendo comprobante electrónico...')
 
-      console.log(`🔍 Certificado: ${hasCert}, Longitud: ${certLength}`)
-      console.log(`🔍 Password: ${hasPass}, Longitud: ${passLength}`)
-      console.log(`🔍 Nombre: ${sunatConfig.certificateName || 'N/A'}`)
-      console.log(`🔍 Keys en sunatConfig: ${Object.keys(sunatConfig).join(', ')}`)
+      const emissionResult = await emitirComprobante(invoiceData, businessData)
 
-      // 3. Generar XML UBL 2.1
-      console.log('📝 Generando XML UBL 2.1...')
-      const xmlData = generateInvoiceXML(invoiceData, businessData)
-      console.log(`✅ XML generado (${xmlData.length} caracteres)`)
+      console.log(`✅ Resultado: ${emissionResult.success ? 'ÉXITO' : 'FALLO'}`)
+      console.log(`📡 Método usado: ${emissionResult.method}`)
 
-      let signedXML = xmlData
-
-      // 4. Firmar XML con certificado digital (solo si hay certificado)
-      if (sunatConfig.certificateData && sunatConfig.certificatePassword) {
-        console.log('🔐 Firmando XML con certificado digital...')
-        try {
-          signedXML = await signXML(xmlData, {
-            certificateName: sunatConfig.certificateName,
-            certificatePassword: sunatConfig.certificatePassword,
-            certificate: sunatConfig.certificateData,
-          })
-          console.log('✅ XML firmado exitosamente')
-        } catch (signError) {
-          console.error('❌ Error al firmar XML:', signError)
-          res.status(500).json({ error: `Error al firmar XML: ${signError.message}` })
-          return
-        }
-      } else {
-        console.log('⚠️ Modo sin firma digital (solo para testing en ambiente beta)')
-      }
-
-      // 5. Enviar a SUNAT
-      console.log('📨 Enviando documento a SUNAT...')
-      try {
-        const sunatResponse = await sendToSunat(signedXML, {
-          ruc: businessData.ruc,
-          solUser: sunatConfig.solUser,
-          solPassword: sunatConfig.solPassword,
-          environment: sunatConfig.environment || 'beta',
-          documentType: invoiceData.documentType,
-          series: invoiceData.series,
-          number: invoiceData.correlativeNumber,
-        })
-
-        console.log(`✅ Respuesta SUNAT: ${sunatResponse.accepted ? 'ACEPTADO' : 'RECHAZADO'}`)
-        console.log(`Código: ${sunatResponse.code} - ${sunatResponse.description}`)
-
-        // 6. Actualizar estado en Firestore
-        const updateData = {
-          sunatStatus: sunatResponse.accepted ? 'accepted' : 'rejected',
-          sunatResponse: {
-            code: sunatResponse.code,
-            description: sunatResponse.description,
-            observations: sunatResponse.observations || [],
-            cdrData: sunatResponse.cdrData || null,
-          },
-          sunatSentAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        }
-
-        await invoiceRef.update(updateData)
-        console.log(`💾 Estado actualizado en Firestore`)
-
-        res.status(200).json({
-          success: true,
-          status: sunatResponse.accepted ? 'accepted' : 'rejected',
-          message: sunatResponse.description,
-          observations: sunatResponse.observations || [],
-        })
-
-      } catch (sunatError) {
-        console.error('❌ Error al enviar a SUNAT:', sunatError)
-
+      if (!emissionResult.success) {
         // Actualizar factura con error
         await invoiceRef.update({
           sunatStatus: 'rejected',
           sunatResponse: {
             code: 'ERROR',
-            description: sunatError.message || 'Error al comunicarse con SUNAT',
+            description: emissionResult.error || 'Error al emitir comprobante',
             observations: [],
             error: true,
+            method: emissionResult.method
           },
           sunatSentAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         })
 
-        res.status(500).json({ error: `Error al enviar a SUNAT: ${sunatError.message}` })
+        res.status(500).json({
+          error: emissionResult.error || 'Error al emitir comprobante',
+          method: emissionResult.method
+        })
+        return
       }
+
+      // 4. Actualizar estado en Firestore
+      const updateData = {
+        sunatStatus: emissionResult.accepted ? 'accepted' : 'rejected',
+        sunatResponse: {
+          code: emissionResult.responseCode || '',
+          description: emissionResult.description || '',
+          observations: emissionResult.notes ? [emissionResult.notes] : [],
+          method: emissionResult.method,
+          // Datos específicos según el método
+          ...(emissionResult.method === 'nubefact' && {
+            pdfUrl: emissionResult.pdfUrl,
+            xmlUrl: emissionResult.xmlUrl,
+            cdrUrl: emissionResult.cdrUrl,
+            qrCode: emissionResult.qrCode,
+            hash: emissionResult.hash,
+            enlace: emissionResult.enlace
+          }),
+          ...(emissionResult.method === 'qpse' && {
+            pdfUrl: emissionResult.pdfUrl,
+            xmlUrl: emissionResult.xmlUrl,
+            cdrUrl: emissionResult.cdrUrl,
+            ticket: emissionResult.ticket
+          }),
+          ...(emissionResult.method === 'sunat_direct' && {
+            cdrData: emissionResult.cdrData
+          })
+        },
+        sunatSentAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      await invoiceRef.update(updateData)
+      console.log(`💾 Estado actualizado en Firestore`)
+
+      res.status(200).json({
+        success: true,
+        status: emissionResult.accepted ? 'accepted' : 'rejected',
+        message: emissionResult.description,
+        method: emissionResult.method,
+        ...(emissionResult.method === 'nubefact' && {
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          enlace: emissionResult.enlace
+        }),
+        ...(emissionResult.method === 'qpse' && {
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl
+        })
+      })
 
     } catch (error) {
       console.error('❌ Error general:', error)
