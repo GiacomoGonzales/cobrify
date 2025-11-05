@@ -371,10 +371,42 @@ export default function CashRegister() {
 
   // Cálculos
   const calculateTotals = () => {
-    if (!currentSession) return { sales: 0, income: 0, expense: 0, expected: 0, difference: 0 }
+    if (!currentSession) return {
+      sales: 0,
+      salesCash: 0,
+      salesCard: 0,
+      salesTransfer: 0,
+      salesYape: 0,
+      salesPlin: 0,
+      income: 0,
+      expense: 0,
+      expected: 0,
+      difference: 0
+    }
 
-    // Total de ventas (facturas del día)
-    const sales = todayInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+    // Total de ventas por método de pago
+    const salesCash = todayInvoices
+      .filter(inv => inv.paymentMethod === 'Efectivo')
+      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+
+    const salesCard = todayInvoices
+      .filter(inv => inv.paymentMethod === 'Tarjeta')
+      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+
+    const salesTransfer = todayInvoices
+      .filter(inv => inv.paymentMethod === 'Transferencia')
+      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+
+    const salesYape = todayInvoices
+      .filter(inv => inv.paymentMethod === 'Yape')
+      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+
+    const salesPlin = todayInvoices
+      .filter(inv => inv.paymentMethod === 'Plin')
+      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+
+    // Total de ventas (todos los métodos)
+    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin
 
     // Ingresos adicionales (movimientos tipo income)
     const income = movements
@@ -386,8 +418,8 @@ export default function CashRegister() {
       .filter(m => m.type === 'expense')
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
-    // Dinero esperado en caja
-    const expected = currentSession.openingAmount + sales + income - expense
+    // Dinero esperado en caja (SOLO efectivo + ingresos - egresos)
+    const expected = currentSession.openingAmount + salesCash + income - expense
 
     // Diferencia (si hay cierre)
     let difference = 0
@@ -395,7 +427,18 @@ export default function CashRegister() {
       difference = currentSession.closingAmount - expected
     }
 
-    return { sales, income, expense, expected, difference }
+    return {
+      sales,
+      salesCash,
+      salesCard,
+      salesTransfer,
+      salesYape,
+      salesPlin,
+      income,
+      expense,
+      expected,
+      difference
+    }
   }
 
   const totals = calculateTotals()
@@ -520,10 +563,47 @@ export default function CashRegister() {
                     <span className="text-xs sm:text-sm text-gray-600">Monto Inicial:</span>
                     <span className="text-sm sm:text-base font-semibold">{formatCurrency(currentSession.openingAmount)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="text-xs sm:text-sm text-green-600">+ Ventas:</span>
-                    <span className="text-sm sm:text-base font-semibold text-green-600">{formatCurrency(totals.sales)}</span>
+
+                  {/* Desglose de ventas por método */}
+                  <div className="py-2 border-b">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs sm:text-sm font-medium text-gray-700">Ventas del Día:</span>
+                      <span className="text-sm sm:text-base font-bold text-green-600">{formatCurrency(totals.sales)}</span>
+                    </div>
+                    <div className="pl-3 space-y-1 text-xs">
+                      {totals.salesCash > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• Efectivo:</span>
+                          <span className="font-medium text-green-600">{formatCurrency(totals.salesCash)}</span>
+                        </div>
+                      )}
+                      {totals.salesCard > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• Tarjeta:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesCard)}</span>
+                        </div>
+                      )}
+                      {totals.salesTransfer > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• Transferencia:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesTransfer)}</span>
+                        </div>
+                      )}
+                      {totals.salesYape > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• Yape:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesYape)}</span>
+                        </div>
+                      )}
+                      {totals.salesPlin > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• Plin:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesPlin)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-xs sm:text-sm text-blue-600">+ Otros Ingresos:</span>
                     <span className="text-sm sm:text-base font-semibold text-blue-600">{formatCurrency(totals.income)}</span>
@@ -537,6 +617,9 @@ export default function CashRegister() {
                     <span className="text-lg sm:text-xl font-bold text-primary-600">
                       {formatCurrency(totals.expected)}
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    <span className="font-medium">Fórmula:</span> Inicial ({formatCurrency(currentSession.openingAmount)}) + Ventas Efectivo ({formatCurrency(totals.salesCash)}) + Ingresos ({formatCurrency(totals.income)}) - Egresos ({formatCurrency(totals.expense)})
                   </div>
                   <div className="text-xs text-gray-500 mt-2">
                     <Calendar className="w-3 h-3 inline mr-1" />
@@ -687,9 +770,54 @@ export default function CashRegister() {
             </p>
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm font-medium text-gray-700 mb-2">Efectivo Esperado:</p>
-            <p className="text-2xl font-bold text-primary-600">{formatCurrency(totals.expected)}</p>
+          {/* Desglose de ventas esperadas */}
+          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+            <p className="text-sm font-medium text-gray-700 mb-3">Resumen de Ventas del Día:</p>
+
+            {totals.salesCash > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en Efectivo:</span>
+                <span className="font-semibold text-green-600">{formatCurrency(totals.salesCash)}</span>
+              </div>
+            )}
+
+            {totals.salesCard > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en Tarjeta:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesCard)}</span>
+              </div>
+            )}
+
+            {totals.salesTransfer > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en Transferencia:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesTransfer)}</span>
+              </div>
+            )}
+
+            {totals.salesYape > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en Yape:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesYape)}</span>
+              </div>
+            )}
+
+            {totals.salesPlin > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en Plin:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesPlin)}</span>
+              </div>
+            )}
+
+            <div className="border-t border-gray-300 pt-2 mt-3">
+              <div className="flex justify-between">
+                <span className="text-sm font-semibold text-gray-700">Efectivo Esperado:</span>
+                <span className="text-xl font-bold text-primary-600">{formatCurrency(totals.expected)}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Inicial ({formatCurrency(currentSession?.openingAmount || 0)}) + Ventas Efectivo + Ingresos - Egresos
+              </p>
+            </div>
           </div>
 
           <Input
