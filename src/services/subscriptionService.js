@@ -14,7 +14,7 @@ import {
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
 
-// Planes disponibles - Pago por adelantado
+// Planes disponibles - Nuevos precios 2025
 export const PLANS = {
   trial: {
     name: "Prueba Gratuita",
@@ -23,103 +23,116 @@ export const PLANS = {
     totalPrice: 0,
     duration: 1, // días
     limits: {
-      maxInvoicesPerMonth: -1, // ilimitado
+      maxInvoicesPerMonth: -1, // ilimitado durante prueba
       maxCustomers: -1, // ilimitado
       maxProducts: -1, // ilimitado
       sunatIntegration: false, // Bloqueado en prueba
       multiUser: false
     }
   },
-  // PLAN ESTÁNDAR (100 comprobantes/mes)
-  standard_3_months: {
-    name: "Plan Estándar - 3 Meses",
-    category: "standard",
-    months: 3,
-    pricePerMonth: 39.90,
-    totalPrice: 119.70,
+
+  // ============================================
+  // PLANES CON QPSE (500 comprobantes/mes)
+  // ============================================
+  qpse_1_month: {
+    name: "Plan QPse - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 19.90,
+    totalPrice: 19.90,
+    emissionMethod: "qpse", // Identifica que usa QPse
     limits: {
-      maxInvoicesPerMonth: 100,
+      maxInvoicesPerMonth: 500, // Límite por QPse
       maxCustomers: -1, // ilimitado
       maxProducts: -1, // ilimitado
       sunatIntegration: true,
       multiUser: false
     }
   },
-  standard_6_months: {
-    name: "Plan Estándar - 6 Meses",
-    category: "standard",
+  qpse_6_months: {
+    name: "Plan QPse - 6 Meses",
+    category: "qpse",
     months: 6,
-    pricePerMonth: 29.90,
-    totalPrice: 179.40,
+    pricePerMonth: 16.65, // 99.90 / 6
+    totalPrice: 99.90,
+    emissionMethod: "qpse",
     limits: {
-      maxInvoicesPerMonth: 100,
+      maxInvoicesPerMonth: 500, // 500 comprobantes/mes renovables
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
       multiUser: false
     },
-    badge: "Ahorro 25%"
+    badge: "Ahorra S/20"
   },
-  standard_12_months: {
-    name: "Plan Estándar - 12 Meses",
-    category: "standard",
+  qpse_12_months: {
+    name: "Plan QPse - 12 Meses",
+    category: "qpse",
     months: 12,
-    pricePerMonth: 19.90,
-    totalPrice: 238.80,
+    pricePerMonth: 12.49, // 149.90 / 12
+    totalPrice: 149.90,
+    emissionMethod: "qpse",
     limits: {
-      maxInvoicesPerMonth: 100,
+      maxInvoicesPerMonth: 500, // 500 comprobantes/mes renovables
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
       multiUser: false
     },
-    badge: "Ahorro 50%"
+    badge: "Ahorra S/89"
   },
-  // PLAN ILIMITADO (Comprobantes sin límite)
-  unlimited_3_months: {
-    name: "Plan Ilimitado - 3 Meses",
-    category: "unlimited",
-    months: 3,
-    pricePerMonth: 49.90,
-    totalPrice: 149.70,
+
+  // ============================================
+  // PLANES CON CDT PROPIO (ILIMITADOS)
+  // ============================================
+  sunat_direct_1_month: {
+    name: "Plan SUNAT Directo - 1 Mes",
+    category: "sunat_direct",
+    months: 1,
+    pricePerMonth: 19.90,
+    totalPrice: 19.90,
+    emissionMethod: "sunat_direct", // Identifica que usa CDT propio
     limits: {
-      maxInvoicesPerMonth: -1, // ilimitado
+      maxInvoicesPerMonth: -1, // ILIMITADO con CDT propio
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
       multiUser: false
     }
   },
-  unlimited_6_months: {
-    name: "Plan Ilimitado - 6 Meses",
-    category: "unlimited",
+  sunat_direct_6_months: {
+    name: "Plan SUNAT Directo - 6 Meses",
+    category: "sunat_direct",
     months: 6,
-    pricePerMonth: 39.90,
-    totalPrice: 239.40,
+    pricePerMonth: 16.65, // 99.90 / 6
+    totalPrice: 99.90,
+    emissionMethod: "sunat_direct",
     limits: {
-      maxInvoicesPerMonth: -1, // ilimitado
+      maxInvoicesPerMonth: -1, // ILIMITADO con CDT propio
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
       multiUser: false
     },
-    badge: "Ahorro 20%"
+    badge: "Ahorra S/20"
   },
-  unlimited_12_months: {
-    name: "Plan Ilimitado - 12 Meses",
-    category: "unlimited",
+  sunat_direct_12_months: {
+    name: "Plan SUNAT Directo - 12 Meses",
+    category: "sunat_direct",
     months: 12,
-    pricePerMonth: 29.90,
-    totalPrice: 358.80,
+    pricePerMonth: 12.49, // 149.90 / 12
+    totalPrice: 149.90,
+    emissionMethod: "sunat_direct",
     limits: {
-      maxInvoicesPerMonth: -1, // ilimitado
+      maxInvoicesPerMonth: -1, // ILIMITADO con CDT propio
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: true
+      multiUser: false
     },
-    badge: "Ahorro 40%"
+    badge: "Ahorra S/89"
   },
+
   // Plan Enterprise (para casos especiales/admin)
   enterprise: {
     name: "Plan Enterprise",
@@ -127,6 +140,7 @@ export const PLANS = {
     months: 12,
     pricePerMonth: 0,
     totalPrice: 0,
+    emissionMethod: "any", // Puede usar cualquier método
     limits: {
       maxInvoicesPerMonth: -1,
       maxCustomers: -1,
@@ -414,7 +428,10 @@ export const updateNotes = async (userId, notes) => {
 };
 
 // Verificar límites de uso
-export const checkUsageLimits = (subscription, type) => {
+// IMPORTANTE: Para facturas, el límite depende del método de emisión configurado:
+// - QPse: 500 comprobantes/mes (limitado por el plan)
+// - SUNAT Directo: Ilimitado (sin importar el plan, porque usan su CDT)
+export const checkUsageLimits = (subscription, type, emissionMethod = null) => {
   if (!subscription || !subscription.limits) return true;
 
   const limits = subscription.limits;
@@ -422,6 +439,11 @@ export const checkUsageLimits = (subscription, type) => {
 
   switch (type) {
     case 'invoice':
+      // Si usa SUNAT Directo (CDT propio), siempre es ilimitado
+      if (emissionMethod === 'sunat_direct') {
+        return true;
+      }
+      // Si usa QPse, aplicar el límite del plan
       return limits.maxInvoicesPerMonth === -1 ||
              (usage.invoicesThisMonth || 0) < limits.maxInvoicesPerMonth;
     case 'customer':

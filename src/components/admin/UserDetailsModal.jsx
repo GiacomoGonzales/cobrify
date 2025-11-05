@@ -24,8 +24,8 @@ import { db } from '@/lib/firebase';
 export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading }) {
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('standard_3_months');
-  const [paymentAmount, setPaymentAmount] = useState(PLANS['standard_3_months']?.totalPrice || 0);
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('qpse_1_month');
+  const [paymentAmount, setPaymentAmount] = useState(PLANS['qpse_1_month']?.totalPrice || 0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
   const [showPasswords, setShowPasswords] = useState(false);
@@ -469,34 +469,85 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Seleccionar Plan
                 </label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {Object.entries(PLANS).filter(([key]) => key !== 'trial' && key !== 'custom').map(([key, plan]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setSelectedPlanForPayment(key)}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        selectedPlanForPayment === key
-                          ? 'border-primary-600 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-center">
-                        {plan.badge && (
-                          <span className="inline-block px-2 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full mb-2">
-                            {plan.badge}
-                          </span>
-                        )}
-                        <p className="font-bold text-gray-900">{plan.name}</p>
-                        <p className="text-2xl font-bold text-primary-600 my-2">
-                          S/ {plan.totalPrice}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          S/ {plan.pricePerMonth}/mes × {plan.months} {plan.months === 1 ? 'mes' : 'meses'}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+
+                {/* Planes QPse */}
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-blue-600" />
+                    Planes con QPse (500 comprobantes/mes)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'qpse').map(([key, plan]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedPlanForPayment(key)}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          selectedPlanForPayment === key
+                            ? 'border-blue-600 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          {plan.badge && (
+                            <span className="inline-block px-2 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full mb-2">
+                              {plan.badge}
+                            </span>
+                          )}
+                          <p className="font-bold text-gray-900">{plan.months} {plan.months === 1 ? 'Mes' : 'Meses'}</p>
+                          <p className="text-2xl font-bold text-blue-600 my-2">
+                            S/ {plan.totalPrice}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            S/ {plan.pricePerMonth.toFixed(2)}/mes
+                          </p>
+                          <p className="text-xs text-blue-600 font-medium mt-1">
+                            500 compr./mes
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Planes SUNAT Directo */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Planes SUNAT Directo (Comprobantes ILIMITADOS)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'sunat_direct').map(([key, plan]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedPlanForPayment(key)}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          selectedPlanForPayment === key
+                            ? 'border-green-600 bg-green-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          {plan.badge && (
+                            <span className="inline-block px-2 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full mb-2">
+                              {plan.badge}
+                            </span>
+                          )}
+                          <p className="font-bold text-gray-900">{plan.months} {plan.months === 1 ? 'Mes' : 'Meses'}</p>
+                          <p className="text-2xl font-bold text-green-600 my-2">
+                            S/ {plan.totalPrice}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            S/ {plan.pricePerMonth.toFixed(2)}/mes
+                          </p>
+                          <p className="text-xs text-green-600 font-medium mt-1">
+                            ∞ Ilimitados
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -606,15 +657,40 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
 
               {/* Mostrar características del plan seleccionado */}
               {PLANS[selectedPlan] && (
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className={`p-4 border-2 rounded-lg ${
+                  PLANS[selectedPlan].category === 'qpse' ? 'bg-blue-50 border-blue-200' :
+                  PLANS[selectedPlan].category === 'sunat_direct' ? 'bg-green-50 border-green-200' :
+                  'bg-gray-50 border-gray-200'
+                }`}>
                   <h4 className="font-semibold text-gray-900 mb-2">Características del plan:</h4>
                   <ul className="space-y-1 text-sm text-gray-700">
-                    <li>• Facturas/mes: {PLANS[selectedPlan].limits.maxInvoicesPerMonth === -1 ? 'Ilimitado' : PLANS[selectedPlan].limits.maxInvoicesPerMonth}</li>
+                    <li className="font-semibold">
+                      • Comprobantes/mes: {
+                        PLANS[selectedPlan].limits.maxInvoicesPerMonth === -1
+                          ? '∞ ILIMITADO'
+                          : `${PLANS[selectedPlan].limits.maxInvoicesPerMonth} comprobantes`
+                      }
+                    </li>
+                    <li>• Método de emisión: {
+                      PLANS[selectedPlan].category === 'qpse' ? 'QPse (Factuya firma)' :
+                      PLANS[selectedPlan].category === 'sunat_direct' ? 'SUNAT Directo (CDT propio)' :
+                      'Flexible'
+                    }</li>
                     <li>• Clientes: {PLANS[selectedPlan].limits.maxCustomers === -1 ? 'Ilimitado' : PLANS[selectedPlan].limits.maxCustomers}</li>
                     <li>• Productos: {PLANS[selectedPlan].limits.maxProducts === -1 ? 'Ilimitado' : PLANS[selectedPlan].limits.maxProducts}</li>
                     <li>• Integración SUNAT: {PLANS[selectedPlan].limits.sunatIntegration ? 'Sí' : 'No'}</li>
                     <li>• Multi-usuario: {PLANS[selectedPlan].limits.multiUser ? 'Sí' : 'No'}</li>
                   </ul>
+                  {PLANS[selectedPlan].category === 'qpse' && (
+                    <div className="mt-3 p-2 bg-blue-100 border border-blue-300 rounded text-xs text-blue-800">
+                      ℹ️ Con QPse no necesitas certificado digital. Factuya firma por ti.
+                    </div>
+                  )}
+                  {PLANS[selectedPlan].category === 'sunat_direct' && (
+                    <div className="mt-3 p-2 bg-green-100 border border-green-300 rounded text-xs text-green-800">
+                      ✓ Con SUNAT Directo usas tu certificado y tienes comprobantes ilimitados.
+                    </div>
+                  )}
                 </div>
               )}
 
