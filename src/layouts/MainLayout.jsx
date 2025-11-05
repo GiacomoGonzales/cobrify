@@ -92,7 +92,7 @@ export default function MainLayout() {
       isMounted = false
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [user?.uid, isAuthenticated, location.pathname])
+  }, [user?.uid, isAuthenticated])
 
   // Esperar a que la suscripción se cargue antes de verificar acceso
   useEffect(() => {
