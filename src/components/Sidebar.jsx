@@ -83,6 +83,12 @@ export default function Sidebar() {
       pageId: 'products', // Mismo permiso que productos
     },
     {
+      path: '/almacenes',
+      icon: Warehouse,
+      label: 'Almacenes',
+      pageId: 'products', // Mismo permiso que productos
+    },
+    {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',

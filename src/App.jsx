@@ -10,6 +10,7 @@ import Products from './pages/Products'
 import Settings from './pages/Settings'
 import POS from './pages/POS'
 import Inventory from './pages/Inventory'
+import Warehouses from './pages/Warehouses'
 import BusinessCreate from './pages/BusinessCreate'
 import CreateCreditNote from './pages/CreateCreditNote'
 import CreateDebitNote from './pages/CreateDebitNote'
@@ -22,6 +23,7 @@ import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
 import UserManagement from './pages/admin/UserManagement'
 import Users from './pages/Users'
+import BusinessManagement from './pages/BusinessManagement'
 import GetMyUID from './pages/GetMyUID'
 import Quotations from './pages/Quotations'
 import CreateQuotation from './pages/CreateQuotation'
@@ -55,6 +57,7 @@ function App() {
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
@@ -82,6 +85,7 @@ function App() {
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
@@ -94,6 +98,7 @@ function App() {
 
               {/* Rutas de administración */}
               <Route path="admin/users" element={<UserManagement />} />
+              <Route path="admin/businesses" element={<BusinessManagement />} />
             </Route>
 
             {/* Ruta 404 */}
