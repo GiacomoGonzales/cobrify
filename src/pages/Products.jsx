@@ -976,19 +976,18 @@ export default function Products() {
 
       {/* Bulk Actions Bar */}
       {selectedProducts.size > 0 && (
-        <Card className="border-primary-500 shadow-lg">
-          <CardContent className="p-4">
+        <Card>
+          <CardContent className="p-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <CheckCheck className="w-5 h-5 text-primary-600" />
-                <span className="font-medium text-gray-900">
-                  {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}
+                <span className="text-sm text-gray-700">
+                  {selectedProducts.size} seleccionado{selectedProducts.size !== 1 ? 's' : ''}
                 </span>
                 <button
                   onClick={() => setSelectedProducts(new Set())}
-                  className="text-sm text-gray-600 hover:text-gray-900 underline"
+                  className="text-sm text-gray-500 hover:text-gray-700"
                 >
-                  Deseleccionar todo
+                  Limpiar
                 </button>
               </div>
               <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -1098,7 +1097,7 @@ export default function Products() {
                   <TableHead className="w-12">
                     <button
                       onClick={toggleSelectAll}
-                      className="flex items-center justify-center w-6 h-6 rounded border-2 border-gray-300 hover:border-primary-500 transition-colors"
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
                       title={selectedProducts.size === filteredProducts.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
                     >
                       {selectedProducts.size === filteredProducts.length && filteredProducts.length > 0 ? (
@@ -1129,7 +1128,7 @@ export default function Products() {
                         <TableCell>
                           <button
                             onClick={() => toggleProductSelection(product.id)}
-                            className="flex items-center justify-center w-6 h-6 rounded border-2 border-gray-300 hover:border-primary-500 transition-colors"
+                            className="p-1 hover:bg-gray-100 rounded transition-colors"
                           >
                             {selectedProducts.has(product.id) ? (
                               <CheckSquare className="w-5 h-5 text-primary-600" />
