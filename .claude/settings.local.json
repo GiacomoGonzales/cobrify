@@ -15,7 +15,14 @@
       "Bash(npm run build:*)",
       "Bash(for file in Inventory CashRegister Quotations Suppliers Purchases Reports Settings)",
       "Bash(do echo \"=== $file.jsx ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(node create-business-owner.js:*)",
+      "Bash(node create-business-owner.cjs:*)",
+      "Bash(node create-business-owner-simple.cjs:*)",
+      "Bash(git rm:*)",
+      "WebFetch(domain:docs.qpse.pe)",
+      "WebFetch(domain:qpse.pe)",
+      "Bash(node configure-series-admin.cjs:*)"
     ],
     "deny": [],
     "ask": []

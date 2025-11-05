@@ -15,6 +15,8 @@ import {
   Shield,
   FileCheck,
   UserCog,
+  ClipboardList,
+  History,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -78,7 +80,7 @@ export default function Sidebar() {
     },
     {
       path: '/inventario',
-      icon: Warehouse,
+      icon: ClipboardList,
       label: 'Inventario',
       pageId: 'products', // Mismo permiso que productos
     },
@@ -87,6 +89,12 @@ export default function Sidebar() {
       icon: Warehouse,
       label: 'Almacenes',
       pageId: 'products', // Mismo permiso que productos
+    },
+    {
+      path: '/movimientos',
+      icon: History,
+      label: 'Movimientos',
+      pageId: 'products', // Mismo permiso que productos/inventario
     },
     {
       path: '/proveedores',

@@ -9,6 +9,7 @@ import {
   Loader2,
   Plus,
   FileSpreadsheet,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -18,10 +19,40 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Alert from '@/components/ui/Alert'
 import Select from '@/components/ui/Select'
+import Modal from '@/components/ui/Modal'
+import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
-import { getProducts, getProductCategories } from '@/services/firestoreService'
+import { getProducts, getProductCategories, updateProduct } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
+import { getWarehouses, createStockMovement, updateWarehouseStock } from '@/services/warehouseService'
+
+// Helper functions for category hierarchy
+const migrateLegacyCategories = (cats) => {
+  if (!cats || cats.length === 0) return []
+  // Si ya son objetos con id, devolverlos tal cual
+  if (typeof cats[0] === 'object' && cats[0].id) return cats
+  // Migrar strings antiguos a nuevo formato
+  return cats.map((name) => ({
+    id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    name: name,
+    parentId: null,
+  }))
+}
+
+const getCategoryPath = (categories, categoryId) => {
+  if (!categoryId || !categories || categories.length === 0) return null
+
+  const category = categories.find(cat => cat.id === categoryId)
+  if (!category) return categoryId // Si no se encuentra, devolver el ID
+
+  if (category.parentId === null) {
+    return category.name
+  }
+
+  const parent = getCategoryPath(categories, category.parentId)
+  return parent ? `${parent} > ${category.name}` : category.name
+}
 
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -33,9 +64,22 @@ export default function Inventory() {
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
 
+  // Warehouses y transferencias
+  const [warehouses, setWarehouses] = useState([])
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferProduct, setTransferProduct] = useState(null)
+  const [transferData, setTransferData] = useState({
+    fromWarehouse: '',
+    toWarehouse: '',
+    quantity: '',
+    notes: ''
+  })
+  const [isTransferring, setIsTransferring] = useState(false)
+
   useEffect(() => {
     loadProducts()
     loadCategories()
+    loadWarehouses()
   }, [user])
 
   const loadProducts = async () => {
@@ -67,16 +111,41 @@ export default function Inventory() {
     try {
       // MODO DEMO: Usar categorías de ejemplo
       if (isDemoMode && demoData) {
-        setProductCategories(['Electrónica', 'Servicios'])
+        setProductCategories([
+          { id: 'cat-1', name: 'Electrónica', parentId: null },
+          { id: 'cat-2', name: 'Servicios', parentId: null }
+        ])
         return
       }
 
       const result = await getProductCategories(getBusinessId())
       if (result.success) {
-        setProductCategories(result.data || [])
+        const migratedCategories = migrateLegacyCategories(result.data || [])
+        setProductCategories(migratedCategories)
       }
     } catch (error) {
       console.error('Error al cargar categorías:', error)
+    }
+  }
+
+  const loadWarehouses = async () => {
+    if (!user?.uid) return
+
+    try {
+      if (isDemoMode) {
+        setWarehouses([
+          { id: 'demo-1', name: 'Almacén Principal', isDefault: true, isActive: true },
+          { id: 'demo-2', name: 'Mostrador', isDefault: false, isActive: true },
+        ])
+        return
+      }
+
+      const result = await getWarehouses(getBusinessId())
+      if (result.success) {
+        setWarehouses(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar almacenes:', error)
     }
   }
 
@@ -98,6 +167,125 @@ export default function Inventory() {
     } catch (error) {
       console.error('Error al exportar inventario:', error);
       toast.error('Error al generar el archivo Excel');
+    }
+  }
+
+  const openTransferModal = (product) => {
+    setTransferProduct(product)
+    setTransferData({
+      fromWarehouse: '',
+      toWarehouse: '',
+      quantity: '',
+      notes: ''
+    })
+    setShowTransferModal(true)
+  }
+
+  const closeTransferModal = () => {
+    setShowTransferModal(false)
+    setTransferProduct(null)
+    setTransferData({
+      fromWarehouse: '',
+      toWarehouse: '',
+      quantity: '',
+      notes: ''
+    })
+  }
+
+  const handleTransfer = async () => {
+    if (!user?.uid || !transferProduct) return
+
+    // Validaciones
+    if (!transferData.fromWarehouse || !transferData.toWarehouse) {
+      toast.error('Debes seleccionar ambos almacenes')
+      return
+    }
+
+    if (transferData.fromWarehouse === transferData.toWarehouse) {
+      toast.error('Los almacenes de origen y destino deben ser diferentes')
+      return
+    }
+
+    const quantity = parseFloat(transferData.quantity)
+    if (!quantity || quantity <= 0) {
+      toast.error('La cantidad debe ser mayor a 0')
+      return
+    }
+
+    // Verificar stock disponible en almacén origen
+    const warehouseStock = transferProduct.warehouseStocks?.find(
+      ws => ws.warehouseId === transferData.fromWarehouse
+    )
+    const availableStock = warehouseStock?.stock || 0
+
+    if (quantity > availableStock) {
+      toast.error(`Stock insuficiente en almacén origen. Disponible: ${availableStock}`)
+      return
+    }
+
+    setIsTransferring(true)
+
+    try {
+      const businessId = getBusinessId()
+
+      // 1. Actualizar stock - Salida del almacén origen
+      let updatedProduct = updateWarehouseStock(
+        transferProduct,
+        transferData.fromWarehouse,
+        -quantity
+      )
+
+      // 2. Actualizar stock - Entrada al almacén destino
+      updatedProduct = updateWarehouseStock(
+        updatedProduct,
+        transferData.toWarehouse,
+        quantity
+      )
+
+      // 3. Guardar en Firestore
+      const updateResult = await updateProduct(businessId, transferProduct.id, {
+        stock: updatedProduct.stock,
+        warehouseStocks: updatedProduct.warehouseStocks
+      })
+
+      if (!updateResult.success) {
+        throw new Error('Error al actualizar el stock')
+      }
+
+      // 4. Registrar movimiento de salida
+      await createStockMovement(businessId, {
+        productId: transferProduct.id,
+        warehouseId: transferData.fromWarehouse,
+        type: 'transfer_out',
+        quantity: -quantity,
+        reason: 'Transferencia',
+        referenceType: 'transfer',
+        toWarehouse: transferData.toWarehouse,
+        userId: user.uid,
+        notes: transferData.notes || `Transferencia a ${warehouses.find(w => w.id === transferData.toWarehouse)?.name}`
+      })
+
+      // 5. Registrar movimiento de entrada
+      await createStockMovement(businessId, {
+        productId: transferProduct.id,
+        warehouseId: transferData.toWarehouse,
+        type: 'transfer_in',
+        quantity: quantity,
+        reason: 'Transferencia',
+        referenceType: 'transfer',
+        fromWarehouse: transferData.fromWarehouse,
+        userId: user.uid,
+        notes: transferData.notes || `Transferencia desde ${warehouses.find(w => w.id === transferData.fromWarehouse)?.name}`
+      })
+
+      toast.success('Transferencia realizada exitosamente')
+      closeTransferModal()
+      loadProducts() // Recargar productos
+    } catch (error) {
+      console.error('Error al realizar transferencia:', error)
+      toast.error('Error al realizar la transferencia')
+    } finally {
+      setIsTransferring(false)
     }
   }
 
@@ -123,8 +311,12 @@ export default function Inventory() {
     return matchesSearch && matchesCategory && matchesStatus
   })
 
-  // Obtener categorías únicas
-  const categories = [...new Set(products.map(p => p.category).filter(Boolean))]
+  // Obtener categorías únicas con sus IDs
+  const uniqueCategoryIds = [...new Set(products.map(p => p.category).filter(Boolean))]
+  const categories = uniqueCategoryIds.map(catId => {
+    const category = productCategories.find(c => c.id === catId)
+    return category ? { id: catId, name: category.name } : { id: catId, name: catId }
+  })
 
   // Productos con stock controlado
   const productsWithStock = products.filter(p => p.stock !== null)
@@ -272,9 +464,9 @@ export default function Inventory() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
             {/* Search */}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -282,36 +474,43 @@ export default function Inventory() {
                   placeholder="Buscar por código, nombre o categoría..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
             </div>
 
-            {/* Category Filter */}
-            <Select
-              value={filterCategory}
-              onChange={e => setFilterCategory(e.target.value)}
-              className="sm:w-48"
-            >
-              <option value="all">Todas las categorías</option>
-              {categories.map(category => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </Select>
+            {/* Filters Group */}
+            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
+              {/* Category Filter */}
+              <div className="w-full sm:w-auto">
+                <Select
+                  value={filterCategory}
+                  onChange={e => setFilterCategory(e.target.value)}
+                  className="w-full lg:w-56"
+                >
+                  <option value="all">Todas las categorías</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
 
-            {/* Status Filter */}
-            <Select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              className="sm:w-48"
-            >
-              <option value="all">Todos los estados</option>
-              <option value="normal">Stock Normal</option>
-              <option value="low">Stock Bajo</option>
-              <option value="out">Agotados</option>
-            </Select>
+              {/* Status Filter */}
+              <div className="w-full sm:w-auto">
+                <Select
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className="w-full lg:w-56"
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="normal">Stock Normal</option>
+                  <option value="low">Stock Bajo</option>
+                  <option value="out">Agotados</option>
+                </Select>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -356,6 +555,7 @@ export default function Inventory() {
                     <TableHead className="hidden lg:table-cell">Precio Unit.</TableHead>
                     <TableHead className="hidden lg:table-cell">Valor Stock</TableHead>
                     <TableHead>Estado</TableHead>
+                    {warehouses.length > 1 && <TableHead className="text-right">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -373,13 +573,15 @@ export default function Inventory() {
                             <span className="font-medium text-sm">{product.name}</span>
                             {product.category && (
                               <p className="text-xs text-gray-500 md:hidden">
-                                {product.category}
+                                {getCategoryPath(productCategories, product.category) || product.category}
                               </p>
                             )}
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <Badge variant="default">{product.category || 'Sin categoría'}</Badge>
+                          <Badge variant="default">
+                            {getCategoryPath(productCategories, product.category) || 'Sin categoría'}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {product.stock === null ? (
@@ -413,6 +615,20 @@ export default function Inventory() {
                         <TableCell>
                           <Badge variant={stockStatus.variant}>{stockStatus.status}</Badge>
                         </TableCell>
+                        {warehouses.length > 1 && (
+                          <TableCell>
+                            <div className="flex items-center justify-end">
+                              <button
+                                onClick={() => openTransferModal(product)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Transferir entre almacenes"
+                                disabled={product.stock === null || product.stock === 0}
+                              >
+                                <ArrowRightLeft className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     )
                   })}
@@ -451,6 +667,120 @@ export default function Inventory() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal de Transferencia */}
+      <Modal
+        isOpen={showTransferModal}
+        onClose={closeTransferModal}
+        title="Transferir Stock entre Almacenes"
+        size="md"
+      >
+        <div className="space-y-4">
+          {transferProduct && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-gray-600">Producto</p>
+              <p className="font-semibold text-gray-900">{transferProduct.name}</p>
+              <p className="text-sm text-gray-500">Código: {transferProduct.code}</p>
+            </div>
+          )}
+
+          <Select
+            label="Almacén de Origen"
+            required
+            value={transferData.fromWarehouse}
+            onChange={(e) => setTransferData({ ...transferData, fromWarehouse: e.target.value })}
+          >
+            <option value="">Selecciona almacén origen</option>
+            {warehouses.filter(w => w.isActive).map(warehouse => {
+              const warehouseStock = transferProduct?.warehouseStocks?.find(
+                ws => ws.warehouseId === warehouse.id
+              )
+              const stock = warehouseStock?.stock || 0
+              return (
+                <option key={warehouse.id} value={warehouse.id} disabled={stock === 0}>
+                  {warehouse.name} - Stock: {stock}
+                </option>
+              )
+            })}
+          </Select>
+
+          <Select
+            label="Almacén de Destino"
+            required
+            value={transferData.toWarehouse}
+            onChange={(e) => setTransferData({ ...transferData, toWarehouse: e.target.value })}
+          >
+            <option value="">Selecciona almacén destino</option>
+            {warehouses
+              .filter(w => w.isActive && w.id !== transferData.fromWarehouse)
+              .map(warehouse => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+          </Select>
+
+          <Input
+            label="Cantidad a Transferir"
+            type="number"
+            required
+            min="1"
+            value={transferData.quantity}
+            onChange={(e) => setTransferData({ ...transferData, quantity: e.target.value })}
+            placeholder="Cantidad"
+          />
+
+          {transferData.fromWarehouse && (
+            <div className="text-sm text-gray-600">
+              Stock disponible: {' '}
+              <span className="font-semibold">
+                {transferProduct?.warehouseStocks?.find(
+                  ws => ws.warehouseId === transferData.fromWarehouse
+                )?.stock || 0}
+              </span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Notas (Opcional)
+            </label>
+            <textarea
+              value={transferData.notes}
+              onChange={(e) => setTransferData({ ...transferData, notes: e.target.value })}
+              placeholder="Motivo de la transferencia..."
+              rows={3}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <div className="flex gap-3 justify-end pt-4">
+            <Button
+              variant="outline"
+              onClick={closeTransferModal}
+              disabled={isTransferring}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleTransfer}
+              disabled={isTransferring}
+            >
+              {isTransferring ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Transfiriendo...
+                </>
+              ) : (
+                <>
+                  <ArrowRightLeft className="w-4 h-4 mr-2" />
+                  Transferir
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

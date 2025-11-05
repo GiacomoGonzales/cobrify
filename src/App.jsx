@@ -27,6 +27,7 @@ import BusinessManagement from './pages/BusinessManagement'
 import GetMyUID from './pages/GetMyUID'
 import Quotations from './pages/Quotations'
 import CreateQuotation from './pages/CreateQuotation'
+import StockMovements from './pages/StockMovements'
 import Demo from './pages/Demo'
 import DemoLayout from './layouts/DemoLayout'
 
@@ -58,6 +59,7 @@ function App() {
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
+              <Route path="movimientos" element={<StockMovements />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
@@ -86,6 +88,7 @@ function App() {
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
+              <Route path="movimientos" element={<StockMovements />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
