@@ -5,10 +5,31 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 /**
+ * Helper para convertir fechas (Firestore Timestamp o Date)
+ */
+const getDateFromTimestamp = (timestamp) => {
+  if (!timestamp) return null;
+  // Si tiene método toDate(), es un Firestore Timestamp
+  if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+  // Si ya es un Date, devolverlo directamente
+  if (timestamp instanceof Date) {
+    return timestamp;
+  }
+  // Intentar crear un Date desde el valor
+  return new Date(timestamp);
+};
+
+/**
  * Generar reporte de cierre de caja en Excel
  */
 export const generateCashReportExcel = (sessionData, movements, invoices, businessData) => {
   const workbook = XLSX.utils.book_new();
+
+  // Convertir fechas
+  const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
+  const closedAtDate = getDateFromTimestamp(sessionData.closedAt);
 
   // Hoja 1: Resumen General
   const summaryData = [
@@ -16,8 +37,8 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
     [''],
     ['Negocio:', businessData?.name || 'N/A'],
     ['RUC:', businessData?.ruc || 'N/A'],
-    ['Fecha de Apertura:', sessionData.openedAt ? format(sessionData.openedAt.toDate(), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'],
-    ['Fecha de Cierre:', sessionData.closedAt ? format(sessionData.closedAt.toDate(), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'],
+    ['Fecha de Apertura:', openedAtDate ? format(openedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'],
+    ['Fecha de Cierre:', closedAtDate ? format(closedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'],
     [''],
     ['RESUMEN FINANCIERO'],
     ['Monto Inicial:', sessionData.openingAmount || 0],
@@ -54,13 +75,14 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
     ];
 
     invoices.forEach(invoice => {
+      const invoiceDate = getDateFromTimestamp(invoice.createdAt);
       invoicesData.push([
         invoice.number || 'N/A',
         invoice.type || 'N/A',
         invoice.customerName || 'Cliente General',
         invoice.paymentMethod || 'Efectivo',
         invoice.total || 0,
-        invoice.createdAt ? format(invoice.createdAt.toDate(), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
+        invoiceDate ? format(invoiceDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
       ]);
     });
 
@@ -85,12 +107,13 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
     ];
 
     movements.forEach(movement => {
+      const movementDate = getDateFromTimestamp(movement.createdAt);
       movementsData.push([
         movement.type === 'income' ? 'Ingreso' : 'Egreso',
         movement.category || 'N/A',
         movement.description || 'N/A',
         movement.amount || 0,
-        movement.createdAt ? format(movement.createdAt.toDate(), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
+        movementDate ? format(movementDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
       ]);
     });
 
@@ -106,7 +129,7 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
   }
 
   // Generar archivo
-  const fileName = `Cierre_Caja_${format(sessionData.closedAt?.toDate() || new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
+  const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 };
 
@@ -116,6 +139,10 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
 export const generateCashReportPDF = (sessionData, movements, invoices, businessData) => {
   const doc = new jsPDF();
   let yPosition = 20;
+
+  // Convertir fechas
+  const openedAtDate = getDateFromTimestamp(sessionData.openedAt);
+  const closedAtDate = getDateFromTimestamp(sessionData.closedAt);
 
   // Título
   doc.setFontSize(18);
@@ -130,9 +157,9 @@ export const generateCashReportPDF = (sessionData, movements, invoices, business
   yPosition += 6;
   doc.text(`RUC: ${businessData?.ruc || 'N/A'}`, 20, yPosition);
   yPosition += 6;
-  doc.text(`Apertura: ${sessionData.openedAt ? format(sessionData.openedAt.toDate(), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}`, 20, yPosition);
+  doc.text(`Apertura: ${openedAtDate ? format(openedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}`, 20, yPosition);
   yPosition += 6;
-  doc.text(`Cierre: ${sessionData.closedAt ? format(sessionData.closedAt.toDate(), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}`, 20, yPosition);
+  doc.text(`Cierre: ${closedAtDate ? format(closedAtDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'}`, 20, yPosition);
   yPosition += 12;
 
   // Resumen Financiero
@@ -266,6 +293,6 @@ export const generateCashReportPDF = (sessionData, movements, invoices, business
   }
 
   // Guardar PDF
-  const fileName = `Cierre_Caja_${format(sessionData.closedAt?.toDate() || new Date(), 'yyyy-MM-dd_HHmm')}.pdf`;
+  const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.pdf`;
   doc.save(fileName);
 };
