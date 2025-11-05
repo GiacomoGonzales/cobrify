@@ -276,8 +276,12 @@ async function emitViaQPse(invoiceData, businessData) {
     // Si el código es PENDING_MANUAL, el documento está firmado pero necesita envío manual
     const isPendingManual = qpseResponse.responseCode === 'PENDING_MANUAL'
 
+    // success = true si el documento fue procesado exitosamente (independientemente de si SUNAT lo aceptó o rechazó)
+    // success = false solo si hubo un error técnico que impidió procesar el documento
+    const success = true // QPse siempre devuelve una respuesta, incluso si SUNAT rechaza
+
     return {
-      success: qpseResponse.accepted || isPendingManual, // Consideramos éxito si está firmado
+      success: success,
       method: 'qpse',
       accepted: qpseResponse.accepted,
       responseCode: qpseResponse.responseCode,

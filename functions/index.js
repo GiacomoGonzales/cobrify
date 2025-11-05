@@ -20,6 +20,19 @@ function setCorsHeaders(res) {
 }
 
 /**
+ * Filtra valores undefined de un objeto (Firestore no acepta undefined)
+ */
+function removeUndefined(obj) {
+  const cleaned = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = value
+    }
+  }
+  return cleaned
+}
+
+/**
  * Cloud Function: Enviar factura/boleta a SUNAT
  *
  * Esta función:
@@ -208,34 +221,49 @@ export const sendInvoiceToSunat = onRequest(
       const isPendingManual = emissionResult.pendingManual === true
       const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
 
+      // Construir sunatResponse sin valores undefined (Firestore no los acepta)
+      const sunatResponseBase = {
+        code: emissionResult.responseCode || '',
+        description: emissionResult.description || '',
+        // notes puede venir como array o string, normalizarlo a array
+        observations: Array.isArray(emissionResult.notes)
+          ? emissionResult.notes
+          : (emissionResult.notes ? [emissionResult.notes] : []),
+        method: emissionResult.method,
+        pendingManual: isPendingManual
+      }
+
+      // Agregar datos específicos según el método, filtrando undefined
+      let methodSpecificData = {}
+      if (emissionResult.method === 'nubefact') {
+        methodSpecificData = removeUndefined({
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl,
+          qrCode: emissionResult.qrCode,
+          hash: emissionResult.hash,
+          enlace: emissionResult.enlace
+        })
+      } else if (emissionResult.method === 'qpse') {
+        methodSpecificData = removeUndefined({
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl,
+          ticket: emissionResult.ticket,
+          hash: emissionResult.hash,
+          nombreArchivo: emissionResult.nombreArchivo
+        })
+      } else if (emissionResult.method === 'sunat_direct') {
+        methodSpecificData = removeUndefined({
+          cdrData: emissionResult.cdrData
+        })
+      }
+
       const updateData = {
         sunatStatus: finalStatus,
         sunatResponse: {
-          code: emissionResult.responseCode || '',
-          description: emissionResult.description || '',
-          observations: emissionResult.notes ? [emissionResult.notes] : [],
-          method: emissionResult.method,
-          pendingManual: isPendingManual,
-          // Datos específicos según el método
-          ...(emissionResult.method === 'nubefact' && {
-            pdfUrl: emissionResult.pdfUrl,
-            xmlUrl: emissionResult.xmlUrl,
-            cdrUrl: emissionResult.cdrUrl,
-            qrCode: emissionResult.qrCode,
-            hash: emissionResult.hash,
-            enlace: emissionResult.enlace
-          }),
-          ...(emissionResult.method === 'qpse' && {
-            pdfUrl: emissionResult.pdfUrl,
-            xmlUrl: emissionResult.xmlUrl,
-            cdrUrl: emissionResult.cdrUrl,
-            ticket: emissionResult.ticket,
-            hash: emissionResult.hash,
-            nombreArchivo: emissionResult.nombreArchivo
-          }),
-          ...(emissionResult.method === 'sunat_direct' && {
-            cdrData: emissionResult.cdrData
-          })
+          ...sunatResponseBase,
+          ...methodSpecificData
         },
         sunatSentAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),

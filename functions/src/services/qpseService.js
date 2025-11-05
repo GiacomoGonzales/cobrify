@@ -370,15 +370,26 @@ function parseQPseResponse(qpseResponse) {
   }
 
   // Estructura esperada de respuesta de QPse (ajustar según documentación real)
-  const responseCode = qpseResponse.codigo || qpseResponse.code || qpseResponse.responseCode || qpseResponse.codigo_sunat || ''
-  const description = qpseResponse.descripcion || qpseResponse.description || qpseResponse.mensaje || qpseResponse.mensaje_sunat || ''
-  const accepted = qpseResponse.aceptado || qpseResponse.accepted || qpseResponse.success || responseCode === '0' || responseCode === '0000'
+  const responseCode = qpseResponse.codigo || qpseResponse.code || qpseResponse.responseCode || qpseResponse.codigo_sunat || qpseResponse.estado || ''
+  const description = qpseResponse.descripcion || qpseResponse.description || qpseResponse.mensaje || qpseResponse.message || qpseResponse.mensaje_sunat || ''
+
+  // IMPORTANTE: QPse devuelve:
+  // - success: true/false = si la petición HTTP fue exitosa
+  // - sunat_success: true/false = si SUNAT aceptó el comprobante
+  // Debemos verificar sunat_success, NO success
+  const accepted = qpseResponse.sunat_success === true || responseCode === '0' || responseCode === '0000'
+
+  // Extraer notas/observaciones de los errores de SUNAT
+  let notes = qpseResponse.observaciones || qpseResponse.notes || qpseResponse.nota || ''
+  if (!notes && qpseResponse.errores && Array.isArray(qpseResponse.errores)) {
+    notes = qpseResponse.errores.join(' | ')
+  }
 
   return {
     accepted: accepted,
     responseCode: responseCode,
     description: description,
-    notes: qpseResponse.observaciones || qpseResponse.notes || qpseResponse.nota || '',
+    notes: notes,
 
     // Datos adicionales de QPse
     ticket: qpseResponse.ticket || '',
