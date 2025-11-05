@@ -269,7 +269,8 @@ async function emitViaQPse(invoiceData, businessData) {
       tipoDocumento,
       invoiceData.series,
       invoiceData.correlativeNumber,
-      businessData.qpse
+      businessData.qpse,
+      businessData
     )
 
     return {

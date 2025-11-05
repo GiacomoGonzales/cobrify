@@ -155,7 +155,25 @@ async function enviarASunat(nombreArchivo, xmlFirmadoBase64, token, environment 
     console.error('Status:', error.response?.status)
     console.error('Data:', JSON.stringify(error.response?.data, null, 2))
     console.error('Message:', error.message)
-    throw new Error(`Error al enviar a SUNAT: ${error.response?.data?.message || error.message}`)
+
+    // Analizar el error y dar un mensaje más específico
+    const errorData = error.response?.data
+    let errorMessage = error.message
+
+    if (errorData) {
+      if (errorData.errors && Array.isArray(errorData.errors)) {
+        errorMessage = errorData.errors.join(', ')
+      } else if (errorData.message) {
+        errorMessage = errorData.message
+      }
+
+      // Si es un error de conexión con SUNAT, agregar contexto
+      if (errorData.connection === false || errorData.errors?.includes('No se recibió respuesta SOAP')) {
+        errorMessage = `${errorMessage}. Verifica que la empresa esté registrada en QPse y que las credenciales SOL de SUNAT sean correctas.`
+      }
+    }
+
+    throw new Error(`Error al enviar a SUNAT: ${errorMessage}`)
   }
 }
 
@@ -202,7 +220,7 @@ async function consultarEstado(nombreArchivo, token, environment = 'demo') {
  * @param {Object} config - Configuración de QPse
  * @returns {Promise<Object>} Resultado del envío
  */
-export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, config) {
+export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, config, businessData) {
   try {
     console.log('🚀 Iniciando emisión vía QPse...')
     console.log(`RUC: ${ruc}`)
@@ -210,6 +228,15 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
 
     // 1. Obtener token
     const token = await obtenerToken(config)
+
+    // 2. Intentar registrar la empresa (si no está registrada, la registra automáticamente)
+    try {
+      console.log('📝 Verificando registro de empresa en QPse...')
+      await registrarEmpresa(ruc, businessData?.businessName || businessData?.name || 'Empresa', token, config.environment || 'demo')
+    } catch (registroError) {
+      // Si falla el registro pero no es porque ya existe, loguearlo pero continuar
+      console.warn('⚠️ No se pudo verificar/registrar empresa:', registroError.message)
+    }
 
     // 2. Construir nombre de archivo
     // Formato: RUC-TipoDoc-Serie-Correlativo (con 8 dígitos)
