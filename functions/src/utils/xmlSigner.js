@@ -24,8 +24,19 @@ export async function signXML(xmlContent, certificateConfig) {
 
     console.log('🔐 Decodificando certificado PFX...')
 
+    // Limpiar prefijo Data URL si existe (compatibilidad con certificados antiguos)
+    let cleanCertificate = certificate
+    if (certificate.includes(',')) {
+      // Si contiene coma, probablemente tiene prefijo Data URL
+      const parts = certificate.split(',')
+      if (parts[0].startsWith('data:')) {
+        console.log('🧹 Removiendo prefijo Data URL del certificado...')
+        cleanCertificate = parts[1]
+      }
+    }
+
     // Decodificar certificado PFX desde base64
-    const pfxData = forge.util.decode64(certificate)
+    const pfxData = forge.util.decode64(cleanCertificate)
 
     // Parsear PFX
     const p12Asn1 = forge.asn1.fromDer(pfxData)
@@ -116,7 +127,16 @@ export async function signXML(xmlContent, certificateConfig) {
  */
 export function validateCertificate(certificateData, password) {
   try {
-    const pfxData = forge.util.decode64(certificateData)
+    // Limpiar prefijo Data URL si existe
+    let cleanCertificate = certificateData
+    if (certificateData.includes(',')) {
+      const parts = certificateData.split(',')
+      if (parts[0].startsWith('data:')) {
+        cleanCertificate = parts[1]
+      }
+    }
+
+    const pfxData = forge.util.decode64(cleanCertificate)
     const p12Asn1 = forge.asn1.fromDer(pfxData)
     const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password)
 
