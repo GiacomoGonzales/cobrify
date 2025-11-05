@@ -125,11 +125,10 @@ async function emitViaSunatDirect(invoiceData, businessData) {
 
     // 2. Firmar XML
     console.log('🔏 Firmando XML con certificado digital...')
-    const signedXML = await signXML(
-      xml,
-      businessData.sunat.certificateData,
-      businessData.sunat.certificatePassword
-    )
+    const signedXML = await signXML(xml, {
+      certificate: businessData.sunat.certificateData,
+      certificatePassword: businessData.sunat.certificatePassword
+    })
 
     // 3. Enviar a SUNAT
     console.log('📡 Enviando a SUNAT...')
