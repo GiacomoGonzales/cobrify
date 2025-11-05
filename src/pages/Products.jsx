@@ -1107,14 +1107,14 @@ export default function Products() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead className="hidden lg:table-cell">Descripción</TableHead>
-                  <TableHead>Precio</TableHead>
-                  <TableHead className="hidden xl:table-cell">Utilidad</TableHead>
-                  <TableHead className="hidden md:table-cell">Categoría</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead className="w-24">Código</TableHead>
+                  <TableHead className="min-w-[180px]">Nombre</TableHead>
+                  <TableHead className="hidden lg:table-cell w-48">Descripción</TableHead>
+                  <TableHead className="w-28">Precio</TableHead>
+                  <TableHead className="hidden xl:table-cell w-24">Utilidad</TableHead>
+                  <TableHead className="hidden md:table-cell w-32">Categoría</TableHead>
+                  <TableHead className="w-20">Stock</TableHead>
+                  <TableHead className="text-right w-32">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1138,52 +1138,52 @@ export default function Products() {
                           </button>
                         </TableCell>
                         <TableCell>
-                          <span className="font-mono text-sm font-medium text-primary-600">
+                          <span className="font-mono text-xs text-primary-600">
                             {product.code}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <p className="font-medium">{product.name}</p>
+                          <p className="text-sm font-medium truncate">{product.name}</p>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
-                          <p className="text-sm text-gray-600 max-w-xs truncate">
+                          <p className="text-xs text-gray-600 truncate">
                             {product.description || '-'}
                           </p>
                         </TableCell>
                         <TableCell>
                           {product.hasVariants ? (
-                            <>
-                              <span className="font-semibold">{formatCurrency(product.basePrice)}</span>
-                              <p className="text-xs text-gray-500">{product.variants?.length || 0} variantes</p>
-                            </>
+                            <div>
+                              <span className="text-sm font-semibold">{formatCurrency(product.basePrice)}</span>
+                              <p className="text-xs text-gray-500">{product.variants?.length || 0} var.</p>
+                            </div>
                           ) : (
-                            <>
-                              <span className="font-semibold">{formatCurrency(product.price)}</span>
+                            <div>
+                              <span className="text-sm font-semibold">{formatCurrency(product.price)}</span>
                               <p className="text-xs text-gray-500">{product.unit}</p>
-                            </>
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">
                           {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
-                            <>
-                              <span className="font-semibold text-green-600">
+                            <div>
+                              <span className="text-sm font-semibold text-green-600">
                                 {formatCurrency(product.price - product.cost)}
                               </span>
                               <p className="text-xs text-gray-500">
-                                {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(1)}%` : '0%'}
+                                {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'}
                               </p>
-                            </>
+                            </div>
                           ) : (
                             <span className="text-xs text-gray-400">-</span>
                           )}
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           {product.category ? (
-                            <Badge variant="default">
+                            <span className="text-xs text-gray-700 truncate block">
                               {getCategoryPath(categories, product.category) || product.category}
-                            </Badge>
+                            </span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-xs text-gray-400">-</span>
                           )}
                         </TableCell>
                         <TableCell>
