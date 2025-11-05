@@ -56,6 +56,8 @@ export default function InvoiceList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  const [filterStartDate, setFilterStartDate] = useState('')
+  const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingInvoice, setViewingInvoice] = useState(null)
   const [deletingInvoice, setDeletingInvoice] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -289,7 +291,29 @@ ${companySettings?.website ? companySettings.website : ''}`
     const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
     const matchesType = filterType === 'all' || invoice.documentType === filterType
 
-    return matchesSearch && matchesStatus && matchesType
+    // Filtrar por rango de fechas
+    let matchesDateRange = true
+    if (filterStartDate || filterEndDate) {
+      const invoiceDate = getInvoiceDate(invoice)
+
+      if (filterStartDate) {
+        const startDate = new Date(filterStartDate)
+        startDate.setHours(0, 0, 0, 0)
+        if (invoiceDate && invoiceDate < startDate) {
+          matchesDateRange = false
+        }
+      }
+
+      if (filterEndDate) {
+        const endDate = new Date(filterEndDate)
+        endDate.setHours(23, 59, 59, 999)
+        if (invoiceDate && invoiceDate > endDate) {
+          matchesDateRange = false
+        }
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesType && matchesDateRange
   })
 
   // Apply pagination
@@ -303,7 +327,7 @@ ${companySettings?.website ? companySettings.website : ''}`
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleInvoicesCount(20)
-  }, [searchTerm, filterStatus, filterType])
+  }, [searchTerm, filterStatus, filterType, filterStartDate, filterEndDate])
 
   const getStatusBadge = status => {
     switch (status) {
@@ -465,12 +489,11 @@ ${companySettings?.website ? companySettings.website : ''}`
               />
             </div>
 
-            {/* Filtros alineados a la derecha */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+            {/* Filtros */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <Select
                 value={filterType}
                 onChange={e => setFilterType(e.target.value)}
-                className="w-full sm:w-56"
               >
                 <option value="all">Todos los tipos</option>
                 <option value="factura">Facturas</option>
@@ -482,7 +505,6 @@ ${companySettings?.website ? companySettings.website : ''}`
               <Select
                 value={filterStatus}
                 onChange={e => setFilterStatus(e.target.value)}
-                className="w-full sm:w-56"
               >
                 <option value="all">Todos los estados</option>
                 <option value="paid">Pagadas</option>
@@ -490,7 +512,34 @@ ${companySettings?.website ? companySettings.website : ''}`
                 <option value="overdue">Vencidas</option>
                 <option value="cancelled">Anuladas</option>
               </Select>
+              <Input
+                type="date"
+                value={filterStartDate}
+                onChange={e => setFilterStartDate(e.target.value)}
+                placeholder="Fecha desde"
+              />
+              <Input
+                type="date"
+                value={filterEndDate}
+                onChange={e => setFilterEndDate(e.target.value)}
+                placeholder="Fecha hasta"
+              />
             </div>
+
+            {/* Clear filters button */}
+            {(filterStartDate || filterEndDate) && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setFilterStartDate('')
+                    setFilterEndDate('')
+                  }}
+                  className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+                >
+                  Limpiar fechas
+                </button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
