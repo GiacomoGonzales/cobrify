@@ -63,6 +63,10 @@ export default function InvoiceList() {
   const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true }) // Posición del menú
 
+  // Pagination for invoices
+  const [visibleInvoicesCount, setVisibleInvoicesCount] = useState(20)
+  const INVOICES_PER_PAGE = 20
+
   // Estados para exportación
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportFilters, setExportFilters] = useState({
@@ -287,6 +291,19 @@ ${companySettings?.website ? companySettings.website : ''}`
 
     return matchesSearch && matchesStatus && matchesType
   })
+
+  // Apply pagination
+  const displayedInvoices = filteredInvoices.slice(0, visibleInvoicesCount)
+  const hasMoreInvoices = filteredInvoices.length > visibleInvoicesCount
+
+  const loadMoreInvoices = () => {
+    setVisibleInvoicesCount(prev => prev + INVOICES_PER_PAGE)
+  }
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleInvoicesCount(20)
+  }, [searchTerm, filterStatus, filterType])
 
   const getStatusBadge = status => {
     switch (status) {
@@ -517,7 +534,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredInvoices.map(invoice => (
+                {displayedInvoices.map(invoice => (
                   <TableRow key={invoice.id}>
                     <TableCell className="py-2.5 px-3">
                       <span className="font-medium text-primary-600 text-sm whitespace-nowrap">
@@ -581,6 +598,18 @@ ${companySettings?.website ? companySettings.website : ''}`
             </Table>
         )}
       </Card>
+
+      {/* Load More Button */}
+      {filteredInvoices.length > 0 && hasMoreInvoices && (
+        <div className="flex justify-center">
+          <button
+            onClick={loadMoreInvoices}
+            className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
+          >
+            Ver más comprobantes ({filteredInvoices.length - visibleInvoicesCount} restantes)
+          </button>
+        </div>
+      )}
 
       {/* Dropdown Menu (fuera de la tabla, con position fixed) */}
       {openMenuId && (
