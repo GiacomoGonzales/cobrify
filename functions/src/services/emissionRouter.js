@@ -132,18 +132,15 @@ async function emitViaSunatDirect(invoiceData, businessData) {
 
     // 3. Enviar a SUNAT
     console.log('📡 Enviando a SUNAT...')
-    const sunatResponse = await sendToSunat(
-      signedXML,
-      businessData.ruc,
-      invoiceData.documentType,
-      invoiceData.series,
-      invoiceData.correlativeNumber,
-      {
-        solUser: businessData.sunat.solUser,
-        solPassword: businessData.sunat.solPassword,
-        environment: businessData.sunat.environment || 'production'
-      }
-    )
+    const sunatResponse = await sendToSunat(signedXML, {
+      ruc: businessData.ruc,
+      documentType: invoiceData.documentType,
+      series: invoiceData.series,
+      number: invoiceData.correlativeNumber,
+      solUser: businessData.sunat.solUser,
+      solPassword: businessData.sunat.solPassword,
+      environment: businessData.sunat.environment || 'production'
+    })
 
     return {
       success: sunatResponse.accepted,
