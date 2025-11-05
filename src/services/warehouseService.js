@@ -273,6 +273,91 @@ export const createTransfer = async (businessId, transferData) => {
   }
 }
 
+// =====================================================
+// STOCK HELPERS (Funciones auxiliares para stock)
+// =====================================================
+
+/**
+ * Calcular stock total desde warehouseStocks
+ */
+export const calculateTotalStock = (warehouseStocks) => {
+  if (!warehouseStocks || warehouseStocks.length === 0) return 0
+  return warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+}
+
+/**
+ * Actualizar stock de un producto en un almacén específico
+ * @param {Object} product - Producto actual
+ * @param {string} warehouseId - ID del almacén
+ * @param {number} quantity - Cantidad a sumar/restar (positivo=entrada, negativo=salida)
+ * @returns {Object} - Producto actualizado con nuevo warehouseStocks
+ */
+export const updateWarehouseStock = (product, warehouseId, quantity) => {
+  const warehouseStocks = product.warehouseStocks || []
+
+  // Buscar si ya existe entrada para este almacén
+  const existingIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+  if (existingIndex >= 0) {
+    // Actualizar stock existente
+    const newStock = (warehouseStocks[existingIndex].stock || 0) + quantity
+    warehouseStocks[existingIndex] = {
+      ...warehouseStocks[existingIndex],
+      stock: Math.max(0, newStock) // No permitir negativos
+    }
+  } else if (quantity > 0) {
+    // Crear nueva entrada (solo si es positivo)
+    warehouseStocks.push({
+      warehouseId,
+      stock: quantity,
+      minStock: 0
+    })
+  }
+
+  return {
+    ...product,
+    warehouseStocks,
+    stock: calculateTotalStock(warehouseStocks)
+  }
+}
+
+/**
+ * Obtener stock de un producto en un almacén específico
+ */
+export const getStockInWarehouse = (product, warehouseId) => {
+  if (!product.warehouseStocks) return product.stock || 0
+
+  const warehouseStock = product.warehouseStocks.find(ws => ws.warehouseId === warehouseId)
+  return warehouseStock?.stock || 0
+}
+
+/**
+ * Inicializar warehouseStocks para productos existentes que solo tienen stock general
+ * @param {Object} product - Producto actual
+ * @param {string} defaultWarehouseId - ID del almacén por defecto
+ * @returns {Object} - Producto con warehouseStocks inicializado
+ */
+export const initializeWarehouseStocks = (product, defaultWarehouseId) => {
+  // Si ya tiene warehouseStocks, no hacer nada
+  if (product.warehouseStocks && product.warehouseStocks.length > 0) {
+    return product
+  }
+
+  // Si tiene stock general, moverlo al almacén por defecto
+  if (product.stock && product.stock > 0 && defaultWarehouseId) {
+    return {
+      ...product,
+      warehouseStocks: [{
+        warehouseId: defaultWarehouseId,
+        stock: product.stock,
+        minStock: 0
+      }]
+    }
+  }
+
+  return product
+}
+
 export default {
   // Warehouses
   getWarehouses,
@@ -285,4 +370,9 @@ export default {
   createStockMovement,
   getStockMovements,
   createTransfer,
+  // Stock Helpers
+  calculateTotalStock,
+  updateWarehouseStock,
+  getStockInWarehouse,
+  initializeWarehouseStocks,
 }

@@ -53,6 +53,13 @@ export const customerSchema = z.object({
   }
 })
 
+// Schema para stock por almacén
+export const warehouseStockSchema = z.object({
+  warehouseId: z.string().min(1, 'ID de almacén es requerido'),
+  stock: z.number().int().nonnegative('El stock no puede ser negativo'),
+  minStock: z.number().int().nonnegative('El stock mínimo no puede ser negativo').optional(),
+})
+
 // Schema para variante de producto
 export const productVariantSchema = z.object({
   sku: z.string().min(1, 'SKU es requerido'),
@@ -81,6 +88,8 @@ export const productVariantSchema = z.object({
     ])
     .nullable()
     .optional(),
+  // NUEVO: Stock por almacén para variantes
+  warehouseStocks: z.array(warehouseStockSchema).optional(),
 })
 
 // Schema para Producto/Servicio
@@ -129,6 +138,8 @@ export const productSchema = z.object({
     .nullable()
     .optional(),
   noStock: z.boolean().optional(),
+  // NUEVO: Stock por almacén para productos simples
+  warehouseStocks: z.array(warehouseStockSchema).optional(),
   // Campos para sistema de variantes
   hasVariants: z.boolean().optional(),
   basePrice: z.number().positive().optional(), // Precio de referencia cuando hasVariants es true
