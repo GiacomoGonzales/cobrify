@@ -161,15 +161,31 @@ async function enviarASunat(nombreArchivo, xmlFirmadoBase64, token, environment 
     let errorMessage = error.message
 
     if (errorData) {
+      // Intentar obtener el mensaje más específico
       if (errorData.errors && Array.isArray(errorData.errors)) {
         errorMessage = errorData.errors.join(', ')
+      } else if (errorData.mensaje) {
+        errorMessage = errorData.mensaje
       } else if (errorData.message) {
         errorMessage = errorData.message
       }
 
-      // Si es un error de conexión con SUNAT, agregar contexto
+      // Si es un error de conexión con SUNAT, agregar contexto más detallado
       if (errorData.connection === false || errorData.errors?.includes('No se recibió respuesta SOAP')) {
-        errorMessage = `${errorMessage}. Verifica que la empresa esté registrada en QPse y que las credenciales SOL de SUNAT sean correctas.`
+        const sunatErrors = []
+
+        // Agregar información específica del error
+        if (errorData.errores && Array.isArray(errorData.errores)) {
+          sunatErrors.push(...errorData.errores)
+        }
+
+        sunatErrors.push('Posibles causas:')
+        sunatErrors.push('1. Credenciales SOL incorrectas en QPse')
+        sunatErrors.push('2. RUC no dado de alta en SUNAT (espera 24-48 horas)')
+        sunatErrors.push('3. Necesitas homologar en ambiente BETA antes de producción')
+        sunatErrors.push('4. SUNAT puede estar en mantenimiento')
+
+        errorMessage = sunatErrors.join(' | ')
       }
     }
 
