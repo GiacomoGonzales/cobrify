@@ -147,10 +147,14 @@ async function enviarASunat(nombreArchivo, xmlFirmadoBase64, token, environment 
     }
 
     console.log('✅ Enviado a SUNAT exitosamente')
+    console.log('🔍 Respuesta de enviar a SUNAT:', JSON.stringify(response.data, null, 2))
     return response.data
 
   } catch (error) {
-    console.error('❌ Error al enviar a SUNAT vía QPse:', error.response?.data || error.message)
+    console.error('❌ Error al enviar a SUNAT vía QPse:')
+    console.error('Status:', error.response?.status)
+    console.error('Data:', JSON.stringify(error.response?.data, null, 2))
+    console.error('Message:', error.message)
     throw new Error(`Error al enviar a SUNAT: ${error.response?.data?.message || error.message}`)
   }
 }
@@ -267,16 +271,34 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
  * @returns {Object} Respuesta parseada
  */
 function parseQPseResponse(qpseResponse) {
+  console.log('🔍 Parseando respuesta de QPse:', JSON.stringify(qpseResponse, null, 2))
+
+  // Verificar si la respuesta está vacía o es inválida
+  if (!qpseResponse || Object.keys(qpseResponse).length === 0) {
+    console.error('❌ Respuesta de QPse está vacía o inválida')
+    return {
+      accepted: false,
+      responseCode: 'ERROR',
+      description: 'No se recibió respuesta válida de SUNAT',
+      notes: '',
+      ticket: '',
+      cdrUrl: '',
+      xmlUrl: '',
+      pdfUrl: '',
+      rawResponse: qpseResponse
+    }
+  }
+
   // Estructura esperada de respuesta de QPse (ajustar según documentación real)
-  const responseCode = qpseResponse.codigo || qpseResponse.code || qpseResponse.responseCode || ''
-  const description = qpseResponse.descripcion || qpseResponse.description || qpseResponse.mensaje || ''
-  const accepted = qpseResponse.aceptado || qpseResponse.accepted || responseCode === '0' || responseCode === '0000'
+  const responseCode = qpseResponse.codigo || qpseResponse.code || qpseResponse.responseCode || qpseResponse.codigo_sunat || ''
+  const description = qpseResponse.descripcion || qpseResponse.description || qpseResponse.mensaje || qpseResponse.mensaje_sunat || ''
+  const accepted = qpseResponse.aceptado || qpseResponse.accepted || qpseResponse.success || responseCode === '0' || responseCode === '0000'
 
   return {
     accepted: accepted,
     responseCode: responseCode,
     description: description,
-    notes: qpseResponse.observaciones || qpseResponse.notes || '',
+    notes: qpseResponse.observaciones || qpseResponse.notes || qpseResponse.nota || '',
 
     // Datos adicionales de QPse
     ticket: qpseResponse.ticket || '',
