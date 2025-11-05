@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -23,6 +23,7 @@ import {
 } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
+import { getWarehouses } from '@/services/warehouseService'
 
 // Unidades de medida
 const UNITS = [
@@ -90,6 +91,7 @@ export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
+  const [warehouses, setWarehouses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -97,6 +99,7 @@ export default function Products() {
   const [deletingProduct, setDeletingProduct] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [noStock, setNoStock] = useState(false)
+  const [expandedProduct, setExpandedProduct] = useState(null)
 
   // Variant management state
   const [hasVariants, setHasVariants] = useState(false)
@@ -138,9 +141,10 @@ export default function Products() {
     },
   })
 
-  // Cargar productos
+  // Cargar productos y almacenes
   useEffect(() => {
     loadProducts()
+    loadWarehouses()
   }, [user])
 
   const loadProducts = async () => {
@@ -178,6 +182,32 @@ export default function Products() {
       console.error('Error:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadWarehouses = async () => {
+    if (!user?.uid) return
+
+    try {
+      if (isDemoMode) {
+        // En modo demo, usar almacenes de ejemplo
+        setWarehouses([
+          { id: 'demo-1', name: 'Almacén Principal', isDefault: true, isActive: true },
+          { id: 'demo-2', name: 'Almacén Secundario', isDefault: false, isActive: true },
+        ])
+        return
+      }
+
+      const businessId = getBusinessId()
+      const result = await getWarehouses(businessId)
+
+      if (result.success) {
+        setWarehouses(result.data || [])
+      } else {
+        console.error('Error al cargar almacenes:', result.error)
+      }
+    } catch (error) {
+      console.error('Error:', error)
     }
   }
 
@@ -843,100 +873,179 @@ export default function Products() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.map(product => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <span className="font-mono text-sm font-medium text-primary-600">
-                        {product.code}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium">{product.name}</p>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <p className="text-sm text-gray-600 max-w-xs truncate">
-                        {product.description || '-'}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      {product.hasVariants ? (
-                        <>
-                          <span className="font-semibold">{formatCurrency(product.basePrice)}</span>
-                          <p className="text-xs text-gray-500">{product.variants?.length || 0} variantes</p>
-                        </>
-                      ) : (
-                        <>
-                          <span className="font-semibold">{formatCurrency(product.price)}</span>
-                          <p className="text-xs text-gray-500">{product.unit}</p>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
-                        <>
-                          <span className="font-semibold text-green-600">
-                            {formatCurrency(product.price - product.cost)}
+                {filteredProducts.map(product => {
+                  const isExpanded = expandedProduct === product.id
+                  const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
+
+                  return (
+                    <React.Fragment key={product.id}>
+                      <TableRow>
+                        <TableCell>
+                          <span className="font-mono text-sm font-medium text-primary-600">
+                            {product.code}
                           </span>
-                          <p className="text-xs text-gray-500">
-                            {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(1)}%` : '0%'}
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium">{product.name}</p>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <p className="text-sm text-gray-600 max-w-xs truncate">
+                            {product.description || '-'}
                           </p>
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
+                        </TableCell>
+                        <TableCell>
+                          {product.hasVariants ? (
+                            <>
+                              <span className="font-semibold">{formatCurrency(product.basePrice)}</span>
+                              <p className="text-xs text-gray-500">{product.variants?.length || 0} variantes</p>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-semibold">{formatCurrency(product.price)}</span>
+                              <p className="text-xs text-gray-500">{product.unit}</p>
+                            </>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
+                            <>
+                              <span className="font-semibold text-green-600">
+                                {formatCurrency(product.price - product.cost)}
+                              </span>
+                              <p className="text-xs text-gray-500">
+                                {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(1)}%` : '0%'}
+                              </p>
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {product.category ? (
+                            <Badge variant="default">
+                              {getCategoryPath(categories, product.category) || product.category}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            {/* Botón de expandir/contraer solo si hay almacenes */}
+                            {warehouses.length > 0 && !product.hasVariants && (
+                              <button
+                                onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
+                                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                title={isExpanded ? "Ocultar detalle" : "Ver por almacén"}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                                )}
+                              </button>
+                            )}
+
+                            {/* Stock total */}
+                            <div>
+                              {product.hasVariants ? (
+                                <span className="text-xs text-gray-500">
+                                  {product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0} total
+                                </span>
+                              ) : product.stock !== null && product.stock !== undefined ? (
+                                <span
+                                  className={`font-medium ${
+                                    product.stock > 10
+                                      ? 'text-green-600'
+                                      : product.stock > 0
+                                      ? 'text-yellow-600'
+                                      : 'text-red-600'
+                                  }`}
+                                >
+                                  {product.stock}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">N/A</span>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => openEditModal(product)}
+                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingProduct(product)}
+                              className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Fila expandible con detalle por almacén */}
+                      {isExpanded && warehouses.length > 0 && !product.hasVariants && (
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={8} className="py-3">
+                            <div className="pl-8 space-y-2">
+                              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                                <Warehouse className="w-4 h-4" />
+                                <span className="font-medium">Stock por Almacén:</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {warehouses.map(warehouse => {
+                                  const warehouseStock = hasWarehouseStocks
+                                    ? product.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                    : null
+                                  const stock = warehouseStock?.stock || 0
+
+                                  return (
+                                    <div
+                                      key={warehouse.id}
+                                      className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
+                                    >
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-sm font-medium text-gray-700">
+                                          {warehouse.name}
+                                        </span>
+                                        {warehouse.isDefault && (
+                                          <Badge variant="default" className="text-xs">Principal</Badge>
+                                        )}
+                                      </div>
+                                      <span
+                                        className={`font-semibold ${
+                                          stock > 10
+                                            ? 'text-green-600'
+                                            : stock > 0
+                                            ? 'text-yellow-600'
+                                            : 'text-red-600'
+                                        }`}
+                                      >
+                                        {stock}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              {!hasWarehouseStocks && (
+                                <p className="text-xs text-gray-500 mt-2">
+                                  Este producto aún no tiene stock distribuido por almacenes.
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {product.category ? (
-                        <Badge variant="default">
-                          {getCategoryPath(categories, product.category) || product.category}
-                        </Badge>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {product.hasVariants ? (
-                        <div>
-                          <span className="text-xs text-gray-500">
-                            {product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0} total
-                          </span>
-                        </div>
-                      ) : product.stock !== null && product.stock !== undefined ? (
-                        <span
-                          className={`font-medium ${
-                            product.stock > 10
-                              ? 'text-green-600'
-                              : product.stock > 0
-                              ? 'text-yellow-600'
-                              : 'text-red-600'
-                          }`}
-                        >
-                          {product.stock}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">N/A</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Editar"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeletingProduct(product)}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                    </React.Fragment>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>

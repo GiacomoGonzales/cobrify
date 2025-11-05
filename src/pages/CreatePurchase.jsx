@@ -21,6 +21,7 @@ import {
   createProduct,
   getProductCategories,
 } from '@/services/firestoreService'
+import { getWarehouses, updateWarehouseStock } from '@/services/warehouseService'
 
 // Unidades de medida
 const UNITS = [
@@ -72,6 +73,10 @@ export default function CreatePurchase() {
     { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0 },
   ])
 
+  // Warehouses
+  const [warehouses, setWarehouses] = useState([])
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+
   // Estados para el autocompletado de proveedor
   const [supplierSearch, setSupplierSearch] = useState('')
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
@@ -118,10 +123,11 @@ export default function CreatePurchase() {
 
     setIsLoading(true)
     try {
-      const [suppliersResult, productsResult, categoriesResult] = await Promise.all([
+      const [suppliersResult, productsResult, categoriesResult, warehousesResult] = await Promise.all([
         getSuppliers(user.uid),
         getProducts(user.uid),
         getProductCategories(user.uid),
+        getWarehouses(user.uid),
       ])
 
       if (suppliersResult.success) {
@@ -134,6 +140,15 @@ export default function CreatePurchase() {
 
       if (categoriesResult.success) {
         setCategories(categoriesResult.data || [])
+      }
+
+      if (warehousesResult.success) {
+        const warehouseList = warehousesResult.data || []
+        setWarehouses(warehouseList)
+
+        // Seleccionar almacén por defecto
+        const defaultWarehouse = warehouseList.find(w => w.isDefault) || warehouseList[0] || null
+        setSelectedWarehouse(defaultWarehouse)
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -445,15 +460,22 @@ export default function CreatePurchase() {
         throw new Error(result.error || 'Error al crear la compra')
       }
 
-      // 3. Actualizar stock y costo de productos
+      // 3. Actualizar stock y costo de productos por almacén
       const productUpdates = purchaseItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (product) {
-          const currentStock = product.stock !== null ? product.stock : 0
-          const newStock = currentStock + parseFloat(item.quantity)
+          // Actualizar stock usando el helper de almacén
+          const updatedProduct = updateWarehouseStock(
+            product,
+            selectedWarehouse?.id || '',
+            parseFloat(item.quantity) // Positivo porque es una entrada
+          )
 
           // Actualizar stock y costo (si se proporcionó un costo)
-          const updates = { stock: newStock }
+          const updates = {
+            stock: updatedProduct.stock,
+            warehouseStocks: updatedProduct.warehouseStocks
+          }
           if (item.cost && parseFloat(item.cost) > 0) {
             updates.cost = parseFloat(item.cost)
           }
@@ -604,6 +626,31 @@ export default function CreatePurchase() {
               value={invoiceDate}
               onChange={e => setInvoiceDate(e.target.value)}
             />
+
+            {/* Selector de Almacén */}
+            {warehouses.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Almacén de Ingreso <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={selectedWarehouse?.id || ''}
+                  onChange={e => {
+                    const warehouse = warehouses.find(w => w.id === e.target.value)
+                    setSelectedWarehouse(warehouse)
+                  }}
+                >
+                  {warehouses.filter(w => w.isActive).map(warehouse => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  El stock ingresará a este almacén
+                </p>
+              </div>
+            )}
           </div>
 
           {suppliers.length === 0 && (

@@ -36,6 +36,7 @@ import {
   getProductCategories,
 } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { getWarehouses, getDefaultWarehouse, updateWarehouseStock } from '@/services/warehouseService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 const PAYMENT_METHODS = {
@@ -102,6 +103,10 @@ export default function POS() {
   const [customerSearchTerm, setCustomerSearchTerm] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
 
+  // Warehouses
+  const [warehouses, setWarehouses] = useState([])
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+
   // Categories
   const [categories, setCategories] = useState([])
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
@@ -140,6 +145,13 @@ export default function POS() {
         setCustomers(demoData.customers || [])
         setCompanySettings(demoData.business || null)
         setCategories([])
+        // Almacenes de demo
+        const demoWarehouses = [
+          { id: 'demo-1', name: 'Almacén Principal', isDefault: true, isActive: true },
+          { id: 'demo-2', name: 'Almacén Secundario', isDefault: false, isActive: true },
+        ]
+        setWarehouses(demoWarehouses)
+        setSelectedWarehouse(demoWarehouses[0])
         setIsLoading(false)
         return
       }
@@ -170,6 +182,17 @@ export default function POS() {
       if (categoriesResult.success) {
         const migratedCategories = migrateLegacyCategories(categoriesResult.data || [])
         setCategories(migratedCategories)
+      }
+
+      // Cargar almacenes y seleccionar el default
+      const warehousesResult = await getWarehouses(businessId)
+      if (warehousesResult.success) {
+        const warehouseList = warehousesResult.data || []
+        setWarehouses(warehouseList)
+
+        // Seleccionar almacén por defecto
+        const defaultWarehouse = warehouseList.find(w => w.isDefault) || warehouseList[0] || null
+        setSelectedWarehouse(defaultWarehouse)
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -647,12 +670,25 @@ export default function POS() {
         throw new Error(result.error || 'Error al crear la factura')
       }
 
-      // 4. Actualizar stock de productos
+      // 4. Actualizar stock de productos por almacén
       const stockUpdates = cart
         .filter(item => item.stock !== null) // Solo productos con control de stock
-        .map(item => {
-          const newStock = item.stock - item.quantity
-          return updateProduct(businessId, item.id, { stock: newStock })
+        .map(async item => {
+          const productData = products.find(p => p.id === item.id)
+          if (!productData) return
+
+          // Actualizar stock usando el helper de almacén
+          const updatedProduct = updateWarehouseStock(
+            productData,
+            selectedWarehouse?.id || '',
+            -item.quantity // Negativo porque es una salida
+          )
+
+          // Guardar en Firestore
+          return updateProduct(businessId, item.id, {
+            stock: updatedProduct.stock,
+            warehouseStocks: updatedProduct.warehouseStocks
+          })
         })
 
       await Promise.all(stockUpdates)
@@ -783,6 +819,31 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <option value="nota_venta">Nota de Venta</option>
                   </Select>
                 </div>
+
+                {/* Selector de Almacén */}
+                {warehouses.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Almacén de Venta
+                    </label>
+                    <Select
+                      value={selectedWarehouse?.id || ''}
+                      onChange={e => {
+                        const warehouse = warehouses.find(w => w.id === e.target.value)
+                        setSelectedWarehouse(warehouse)
+                      }}
+                    >
+                      {warehouses.filter(w => w.isActive).map(warehouse => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      El stock se descontará de este almacén
+                    </p>
+                  </div>
+                )}
 
                 {/* Buscador de Cliente Registrado */}
                 {customers.length > 0 && (
