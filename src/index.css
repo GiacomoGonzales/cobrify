@@ -30,6 +30,11 @@
 }
 
 @layer components {
+  /* Safe area padding for mobile devices */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   /* Prevenir overscroll en elementos específicos */
   .overscroll-none {
     overscroll-behavior: none;

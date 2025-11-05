@@ -191,7 +191,7 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64
+        className={`fixed left-0 top-0 h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
       >
@@ -211,7 +211,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-4rem)]">
+      <nav className="p-3 pb-safe space-y-1 overflow-y-auto h-[calc(100dvh-4rem)]">
         {filteredMenuItems.map(item => (
           <NavLink
             key={item.path}
