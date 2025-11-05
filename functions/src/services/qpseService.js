@@ -263,15 +263,52 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
     // El campo puede venir como xml, xml_firmado o contenido_xml_firmado
     const xmlFirmado = resultadoFirma.xml || resultadoFirma.xml_firmado || resultadoFirma.contenido_xml_firmado
 
-    // 4. Enviar a SUNAT
-    const resultadoEnvio = await enviarASunat(
-      nombreArchivo,
-      xmlFirmado,
-      token,
-      config.environment || 'demo'
-    )
+    // 4. Intentar enviar a SUNAT
+    let resultadoEnvio
+    let envioFallido = false
+    let errorEnvio = null
 
-    // 5. Parsear respuesta
+    try {
+      resultadoEnvio = await enviarASunat(
+        nombreArchivo,
+        xmlFirmado,
+        token,
+        config.environment || 'demo'
+      )
+    } catch (errorEnvioSunat) {
+      // Si falla el envío automático, guardamos el error pero continuamos
+      // para poder devolver el XML firmado
+      envioFallido = true
+      errorEnvio = errorEnvioSunat
+      console.warn('⚠️ El envío automático a SUNAT falló, pero el XML está firmado y disponible en QPse')
+      console.warn('Error:', errorEnvio.message)
+    }
+
+    // 5. Si el envío automático falló, devolver información del XML firmado
+    if (envioFallido) {
+      return {
+        accepted: false,
+        responseCode: 'PENDING_MANUAL',
+        description: 'El documento fue firmado correctamente pero el envío automático a SUNAT falló. Puedes descargarlo desde tu panel de QPse y enviarlo manualmente.',
+        notes: errorEnvio?.message || 'Error al conectar con SUNAT',
+
+        // Información del documento firmado
+        xmlFirmado: xmlFirmado,
+        nombreArchivo: nombreArchivo,
+        ticket: resultadoFirma.external_id || '',
+        hash: resultadoFirma.hash || resultadoFirma.codigo_hash || '',
+
+        // URLs de QPse (si están disponibles)
+        xmlUrl: `https://${config.environment === 'production' ? 'cpe' : 'demo-cpe'}.qpse.pe/consultar/${nombreArchivo}`,
+
+        rawResponse: {
+          firma: resultadoFirma,
+          envioError: errorEnvio?.message
+        }
+      }
+    }
+
+    // 6. Si el envío fue exitoso, parsear respuesta
     console.log('🔍 Respuesta completa de SUNAT vía QPse:', JSON.stringify(resultadoEnvio, null, 2))
 
     const resultado = parseQPseResponse(resultadoEnvio)

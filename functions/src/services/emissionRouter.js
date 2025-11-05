@@ -273,8 +273,11 @@ async function emitViaQPse(invoiceData, businessData) {
       businessData
     )
 
+    // Si el código es PENDING_MANUAL, el documento está firmado pero necesita envío manual
+    const isPendingManual = qpseResponse.responseCode === 'PENDING_MANUAL'
+
     return {
-      success: qpseResponse.accepted,
+      success: qpseResponse.accepted || isPendingManual, // Consideramos éxito si está firmado
       method: 'qpse',
       accepted: qpseResponse.accepted,
       responseCode: qpseResponse.responseCode,
@@ -284,6 +287,10 @@ async function emitViaQPse(invoiceData, businessData) {
       xmlUrl: qpseResponse.xmlUrl,
       pdfUrl: qpseResponse.pdfUrl,
       ticket: qpseResponse.ticket,
+      hash: qpseResponse.hash,
+      nombreArchivo: qpseResponse.nombreArchivo,
+      xmlFirmado: qpseResponse.xmlFirmado,
+      pendingManual: isPendingManual,
       qpseResponse: qpseResponse.rawResponse
     }
 

@@ -204,13 +204,18 @@ export const sendInvoiceToSunat = onRequest(
       }
 
       // 4. Actualizar estado en Firestore
+      // Si es PENDING_MANUAL (firmado pero no enviado), guardamos como "signed"
+      const isPendingManual = emissionResult.pendingManual === true
+      const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
+
       const updateData = {
-        sunatStatus: emissionResult.accepted ? 'accepted' : 'rejected',
+        sunatStatus: finalStatus,
         sunatResponse: {
           code: emissionResult.responseCode || '',
           description: emissionResult.description || '',
           observations: emissionResult.notes ? [emissionResult.notes] : [],
           method: emissionResult.method,
+          pendingManual: isPendingManual,
           // Datos específicos según el método
           ...(emissionResult.method === 'nubefact' && {
             pdfUrl: emissionResult.pdfUrl,
@@ -224,7 +229,9 @@ export const sendInvoiceToSunat = onRequest(
             pdfUrl: emissionResult.pdfUrl,
             xmlUrl: emissionResult.xmlUrl,
             cdrUrl: emissionResult.cdrUrl,
-            ticket: emissionResult.ticket
+            ticket: emissionResult.ticket,
+            hash: emissionResult.hash,
+            nombreArchivo: emissionResult.nombreArchivo
           }),
           ...(emissionResult.method === 'sunat_direct' && {
             cdrData: emissionResult.cdrData
