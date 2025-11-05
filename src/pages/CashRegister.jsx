@@ -37,6 +37,8 @@ export default function CashRegister() {
   const [showOpenModal, setShowOpenModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [showMovementModal, setShowMovementModal] = useState(false)
+  const [closedSuccessfully, setClosedSuccessfully] = useState(false)
+  const [closedSessionData, setClosedSessionData] = useState(null)
 
   // Form states
   const [openingAmount, setOpeningAmount] = useState('')
@@ -190,18 +192,34 @@ export default function CashRegister() {
     const transfer = parseFloat(closingCounts.transfer) || 0
 
     try {
+      // Guardar datos de la sesión cerrada con hora de cierre
+      const closedData = {
+        ...currentSession,
+        closingCash: cash,
+        closingCard: card,
+        closingTransfer: transfer,
+        closingAmount: cash + card + transfer,
+        closedAt: new Date(), // Hora de cierre
+        totalSales: totals.sales,
+        salesCash: totals.salesCash,
+        salesCard: totals.salesCard,
+        salesTransfer: totals.salesTransfer,
+        salesYape: totals.salesYape,
+        salesPlin: totals.salesPlin,
+        totalIncome: totals.income,
+        totalExpense: totals.expense,
+        expectedAmount: totals.expected,
+        difference: cash - totals.expected,
+      }
+
       // MODO DEMO: Simular cierre sin guardar en Firebase
       if (isDemoMode) {
         console.log('🎭 MODO DEMO: Cerrando caja simulada...')
         await new Promise(resolve => setTimeout(resolve, 500)) // Simular delay
 
+        setClosedSessionData(closedData)
+        setClosedSuccessfully(true)
         toast.success('Caja cerrada correctamente (DEMO - No se guardó)', { duration: 5000 })
-        setShowCloseModal(false)
-        setClosingCounts({ cash: '', card: '', transfer: '' })
-
-        // Actualizar el estado local
-        setCurrentSession(null)
-        setMovements([])
         return
       }
 
@@ -211,18 +229,10 @@ export default function CashRegister() {
         transfer,
       })
       if (result.success) {
+        // Guardar datos y mostrar pantalla de éxito
+        setClosedSessionData(closedData)
+        setClosedSuccessfully(true)
         toast.success('Caja cerrada correctamente')
-        setShowCloseModal(false)
-        setClosingCounts({ cash: '', card: '', transfer: '' })
-
-        // Actualizar el estado local inmediatamente para evitar problemas de caché
-        setCurrentSession(null)
-        setMovements([])
-
-        // Recargar datos después de un breve delay para asegurar que Firestore se actualizó
-        setTimeout(() => {
-          loadData()
-        }, 500)
       } else {
         toast.error(result.error || 'Error al cerrar la caja')
       }
@@ -238,26 +248,10 @@ export default function CashRegister() {
       const businessResult = await getCompanySettings(getBusinessId())
       const businessData = businessResult.success ? businessResult.data : null
 
-      // Calcular los valores de cierre si están disponibles en closingCounts
-      const cash = parseFloat(closingCounts.cash) || currentSession.closingCash || 0
-      const card = parseFloat(closingCounts.card) || currentSession.closingCard || 0
-      const transfer = parseFloat(closingCounts.transfer) || currentSession.closingTransfer || 0
-      const totalCounted = cash + card + transfer
+      // Usar datos de la sesión cerrada si está disponible, sino usar currentSession
+      const sessionData = closedSessionData || currentSession
 
-      // Preparar datos de la sesión con los totales
-      const sessionDataWithTotals = {
-        ...currentSession,
-        totalSales: totals.sales,
-        totalIncome: totals.income,
-        totalExpense: totals.expense,
-        expectedAmount: totals.expected,
-        closingCash: cash,
-        closingCard: card,
-        closingTransfer: transfer,
-        closingAmount: totalCounted,
-      }
-
-      generateCashReportExcel(sessionDataWithTotals, movements, todayInvoices, businessData)
+      generateCashReportExcel(sessionData, movements, todayInvoices, businessData)
       toast.success('Reporte Excel descargado correctamente')
     } catch (error) {
       console.error('Error al generar Excel:', error)
@@ -271,31 +265,32 @@ export default function CashRegister() {
       const businessResult = await getCompanySettings(getBusinessId())
       const businessData = businessResult.success ? businessResult.data : null
 
-      // Calcular los valores de cierre si están disponibles en closingCounts
-      const cash = parseFloat(closingCounts.cash) || currentSession.closingCash || 0
-      const card = parseFloat(closingCounts.card) || currentSession.closingCard || 0
-      const transfer = parseFloat(closingCounts.transfer) || currentSession.closingTransfer || 0
-      const totalCounted = cash + card + transfer
+      // Usar datos de la sesión cerrada si está disponible, sino usar currentSession
+      const sessionData = closedSessionData || currentSession
 
-      // Preparar datos de la sesión con los totales
-      const sessionDataWithTotals = {
-        ...currentSession,
-        totalSales: totals.sales,
-        totalIncome: totals.income,
-        totalExpense: totals.expense,
-        expectedAmount: totals.expected,
-        closingCash: cash,
-        closingCard: card,
-        closingTransfer: transfer,
-        closingAmount: totalCounted,
-      }
-
-      generateCashReportPDF(sessionDataWithTotals, movements, todayInvoices, businessData)
+      generateCashReportPDF(sessionData, movements, todayInvoices, businessData)
       toast.success('Reporte PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
       toast.error('Error al generar el reporte PDF')
     }
+  }
+
+  const handleFinishClosing = () => {
+    // Cerrar modal y limpiar estados
+    setShowCloseModal(false)
+    setClosedSuccessfully(false)
+    setClosedSessionData(null)
+    setClosingCounts({ cash: '', card: '', transfer: '' })
+
+    // Actualizar el estado local
+    setCurrentSession(null)
+    setMovements([])
+
+    // Recargar datos
+    setTimeout(() => {
+      loadData()
+    }, 500)
   }
 
   const handleAddMovement = async () => {
@@ -757,13 +752,17 @@ export default function CashRegister() {
       <Modal
         isOpen={showCloseModal}
         onClose={() => {
-          setShowCloseModal(false)
-          setClosingCounts({ cash: '', card: '', transfer: '' })
+          if (!closedSuccessfully) {
+            setShowCloseModal(false)
+            setClosingCounts({ cash: '', card: '', transfer: '' })
+          }
         }}
-        title="Cerrar Caja"
+        title={closedSuccessfully ? "Caja Cerrada Exitosamente" : "Cerrar Caja"}
         size="lg"
       >
-        <div className="space-y-4">
+        {!closedSuccessfully ? (
+          // Formulario de cierre
+          <div className="space-y-4">
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <p className="text-sm text-yellow-800">
               <strong>Arqueo de Caja:</strong> Cuenta el dinero físico y registra los montos por método de pago
@@ -872,26 +871,6 @@ export default function CashRegister() {
           )}
 
           <div className="flex flex-col gap-3 pt-4">
-            {/* Download Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-3 border-b border-gray-200">
-              <Button
-                variant="outline"
-                onClick={handleDownloadExcel}
-                className="w-full"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Descargar Excel
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleDownloadPDF}
-                className="w-full"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Descargar PDF
-              </Button>
-            </div>
-
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-2">
               <Button
@@ -915,6 +894,77 @@ export default function CashRegister() {
             </div>
           </div>
         </div>
+        ) : (
+          // Pantalla de éxito
+          <div className="space-y-6">
+            {/* Mensaje de éxito */}
+            <div className="text-center py-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Caja Cerrada Exitosamente</h3>
+              <p className="text-gray-600">
+                Hora de cierre: {closedSessionData?.closedAt ? formatDate(closedSessionData.closedAt) : ''}
+              </p>
+            </div>
+
+            {/* Resumen de cierre */}
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Efectivo Esperado:</span>
+                <span className="font-semibold">{formatCurrency(closedSessionData?.expectedAmount || 0)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Efectivo Contado:</span>
+                <span className="font-semibold">{formatCurrency(closedSessionData?.closingCash || 0)}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t border-gray-300 pt-2">
+                <span className="text-gray-700 font-medium">Diferencia:</span>
+                <span className={`font-bold ${
+                  (closedSessionData?.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {formatCurrency(closedSessionData?.difference || 0)}
+                  <span className="text-xs ml-1">
+                    {(closedSessionData?.difference || 0) > 0 ? '(Sobrante)' : (closedSessionData?.difference || 0) < 0 ? '(Faltante)' : ''}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* Botones de descarga */}
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 text-center">Descarga el reporte de cierre de caja:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadExcel}
+                  className="w-full"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Descargar Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadPDF}
+                  className="w-full"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Descargar PDF
+                </Button>
+              </div>
+            </div>
+
+            {/* Botón finalizar */}
+            <div className="pt-4 border-t border-gray-200">
+              <Button
+                onClick={handleFinishClosing}
+                className="w-full"
+              >
+                Finalizar
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Modal Agregar Movimiento */}
