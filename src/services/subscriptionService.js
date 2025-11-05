@@ -46,7 +46,7 @@ export const PLANS = {
       maxCustomers: -1, // ilimitado
       maxProducts: -1, // ilimitado
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true // Todos los planes son multiusuario
     }
   },
   qpse_6_months: {
@@ -61,7 +61,7 @@ export const PLANS = {
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true
     },
     badge: "Ahorra S/20"
   },
@@ -77,7 +77,7 @@ export const PLANS = {
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true
     },
     badge: "Ahorra S/89"
   },
@@ -97,7 +97,7 @@ export const PLANS = {
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true
     }
   },
   sunat_direct_6_months: {
@@ -112,7 +112,7 @@ export const PLANS = {
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true
     },
     badge: "Ahorra S/20"
   },
@@ -128,23 +128,24 @@ export const PLANS = {
       maxCustomers: -1,
       maxProducts: -1,
       sunatIntegration: true,
-      multiUser: false
+      multiUser: true
     },
     badge: "Ahorra S/89"
   },
 
-  // Plan Enterprise (para casos especiales/admin)
+  // Plan Enterprise (para casos especiales/admin - TODO ILIMITADO, SIN VENCIMIENTO)
   enterprise: {
     name: "Plan Enterprise",
     category: "enterprise",
-    months: 12,
+    months: 999, // No vence prácticamente
     pricePerMonth: 0,
     totalPrice: 0,
     emissionMethod: "any", // Puede usar cualquier método
+    neverExpires: true, // Flag especial para Enterprise
     limits: {
-      maxInvoicesPerMonth: -1,
-      maxCustomers: -1,
-      maxProducts: -1,
+      maxInvoicesPerMonth: -1, // Ilimitado
+      maxCustomers: -1, // Ilimitado
+      maxProducts: -1, // Ilimitado
       sunatIntegration: true,
       multiUser: true
     }
