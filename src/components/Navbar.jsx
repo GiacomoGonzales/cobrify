@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Search, User, LogOut, Menu, FileText, Users, Package, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -9,7 +9,7 @@ import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from 
 import NotificationPanel from './NotificationPanel'
 import Button from './ui/Button'
 
-export default function Navbar() {
+function Navbar() {
   const { user, logout, subscription, isDemoMode, demoData } = useAppContext()
   const { toggleMobileMenu } = useStore()
   const navigate = useNavigate()
@@ -382,3 +382,5 @@ export default function Navbar() {
     </header>
   )
 }
+
+export default memo(Navbar)

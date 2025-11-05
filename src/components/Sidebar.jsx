@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -21,7 +22,7 @@ import {
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 
-export default function Sidebar() {
+function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
   const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess } = useAppContext()
   const location = useLocation()
@@ -278,3 +279,5 @@ export default function Sidebar() {
     </>
   )
 }
+
+export default memo(Sidebar)
