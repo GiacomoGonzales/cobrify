@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -118,6 +118,13 @@ export default function Products() {
 
   // Import modal state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+
+  // Bulk actions state
+  const [selectedProducts, setSelectedProducts] = useState(new Set())
+  const [bulkActionModalOpen, setBulkActionModalOpen] = useState(false)
+  const [bulkAction, setBulkAction] = useState(null) // 'delete', 'changeCategory', 'toggleActive'
+  const [bulkCategoryChange, setBulkCategoryChange] = useState('')
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false)
 
   const {
     register,
@@ -535,6 +542,181 @@ export default function Products() {
     }
   }
 
+  // Bulk actions functions
+  const toggleProductSelection = (productId) => {
+    const newSelection = new Set(selectedProducts)
+    if (newSelection.has(productId)) {
+      newSelection.delete(productId)
+    } else {
+      newSelection.add(productId)
+    }
+    setSelectedProducts(newSelection)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedProducts.size === filteredProducts.length) {
+      setSelectedProducts(new Set())
+    } else {
+      setSelectedProducts(new Set(filteredProducts.map(p => p.id)))
+    }
+  }
+
+  const openBulkActionModal = (action) => {
+    if (selectedProducts.size === 0) {
+      toast.error('Debes seleccionar al menos un producto')
+      return
+    }
+    setBulkAction(action)
+    setBulkActionModalOpen(true)
+  }
+
+  const closeBulkActionModal = () => {
+    setBulkActionModalOpen(false)
+    setBulkAction(null)
+    setBulkCategoryChange('')
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const result = await deleteProduct(businessId, productId)
+          if (result.success) {
+            successCount++
+          } else {
+            errorCount++
+          }
+        } catch (error) {
+          console.error(`Error al eliminar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) eliminado(s) exitosamente`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser eliminados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en eliminación masiva:', error)
+      toast.error('Error al eliminar los productos')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
+  const handleBulkCategoryChange = async () => {
+    if (selectedProducts.size === 0 || !bulkCategoryChange) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const product = products.find(p => p.id === productId)
+          if (product) {
+            const result = await updateProduct(businessId, productId, {
+              ...product,
+              category: bulkCategoryChange
+            })
+            if (result.success) {
+              successCount++
+            } else {
+              errorCount++
+            }
+          }
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) actualizado(s) exitosamente`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser actualizados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en cambio masivo de categoría:', error)
+      toast.error('Error al cambiar la categoría')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
+  const handleBulkToggleActive = async () => {
+    if (selectedProducts.size === 0) return
+
+    setIsProcessingBulk(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const productId of selectedProducts) {
+        try {
+          const product = products.find(p => p.id === productId)
+          if (product) {
+            const result = await updateProduct(businessId, productId, {
+              ...product,
+              isActive: !(product.isActive ?? true)
+            })
+            if (result.success) {
+              successCount++
+            } else {
+              errorCount++
+            }
+          }
+        } catch (error) {
+          console.error(`Error al actualizar producto ${productId}:`, error)
+          errorCount++
+        }
+      }
+
+      await loadProducts()
+      setSelectedProducts(new Set())
+
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) actualizado(s) exitosamente`)
+      }
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser actualizados`)
+      }
+
+      closeBulkActionModal()
+    } catch (error) {
+      console.error('Error en cambio masivo de estado:', error)
+      toast.error('Error al cambiar el estado')
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }
+
   // Variant management functions
   const handleAddAttribute = () => {
     if (!newAttributeName.trim()) {
@@ -792,6 +974,57 @@ export default function Products() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Bar */}
+      {selectedProducts.size > 0 && (
+        <Card className="border-primary-500 shadow-lg">
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <CheckCheck className="w-5 h-5 text-primary-600" />
+                <span className="font-medium text-gray-900">
+                  {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}
+                </span>
+                <button
+                  onClick={() => setSelectedProducts(new Set())}
+                  className="text-sm text-gray-600 hover:text-gray-900 underline"
+                >
+                  Deseleccionar todo
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionModal('changeCategory')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <FolderEdit className="w-4 h-4 mr-2" />
+                  Cambiar Categoría
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionModal('toggleActive')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Activar/Desactivar
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => openBulkActionModal('delete')}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Eliminar
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
@@ -862,6 +1095,19 @@ export default function Products() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="flex items-center justify-center w-6 h-6 rounded border-2 border-gray-300 hover:border-primary-500 transition-colors"
+                      title={selectedProducts.size === filteredProducts.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                    >
+                      {selectedProducts.size === filteredProducts.length && filteredProducts.length > 0 ? (
+                        <CheckSquare className="w-5 h-5 text-primary-600" />
+                      ) : (
+                        <Square className="w-5 h-5 text-gray-400" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead>Código</TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead className="hidden lg:table-cell">Descripción</TableHead>
@@ -880,6 +1126,18 @@ export default function Products() {
                   return (
                     <React.Fragment key={product.id}>
                       <TableRow>
+                        <TableCell>
+                          <button
+                            onClick={() => toggleProductSelection(product.id)}
+                            className="flex items-center justify-center w-6 h-6 rounded border-2 border-gray-300 hover:border-primary-500 transition-colors"
+                          >
+                            {selectedProducts.has(product.id) ? (
+                              <CheckSquare className="w-5 h-5 text-primary-600" />
+                            ) : (
+                              <Square className="w-5 h-5 text-gray-400" />
+                            )}
+                          </button>
+                        </TableCell>
                         <TableCell>
                           <span className="font-mono text-sm font-medium text-primary-600">
                             {product.code}
@@ -1669,6 +1927,146 @@ export default function Products() {
               Cerrar
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Bulk Actions Modal */}
+      <Modal
+        isOpen={bulkActionModalOpen}
+        onClose={closeBulkActionModal}
+        title={
+          bulkAction === 'delete'
+            ? 'Eliminar productos seleccionados'
+            : bulkAction === 'changeCategory'
+            ? 'Cambiar categoría'
+            : 'Activar/Desactivar productos'
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          {bulkAction === 'delete' && (
+            <>
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-red-900">
+                      ¿Estás seguro de que deseas eliminar {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}?
+                    </p>
+                    <p className="text-sm text-red-700 mt-1">
+                      Esta acción no se puede deshacer. Los productos se eliminarán permanentemente.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button variant="danger" onClick={handleBulkDelete} disabled={isProcessingBulk}>
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'changeCategory' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  Cambiarás la categoría de {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nueva Categoría
+                </label>
+                <Select
+                  value={bulkCategoryChange}
+                  onChange={e => setBulkCategoryChange(e.target.value)}
+                  className="w-full"
+                >
+                  <option value="">Seleccionar categoría...</option>
+                  {getRootCategories(categories).map(category => {
+                    const subcategories = getSubcategories(categories, category.id)
+                    return (
+                      <React.Fragment key={category.id}>
+                        <option value={category.id}>{category.name}</option>
+                        {subcategories.map(subcat => (
+                          <option key={subcat.id} value={subcat.id}>
+                            &nbsp;&nbsp;→ {subcat.name}
+                          </option>
+                        ))}
+                      </React.Fragment>
+                    )
+                  })}
+                  <option value="">Sin categoría</option>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleBulkCategoryChange}
+                  disabled={isProcessingBulk || !bulkCategoryChange}
+                >
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <FolderEdit className="w-4 h-4 mr-2" />
+                      Cambiar Categoría
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {bulkAction === 'toggleActive' && (
+            <>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  Cambiarás el estado (activo/inactivo) de {selectedProducts.size} producto{selectedProducts.size !== 1 ? 's' : ''} seleccionado{selectedProducts.size !== 1 ? 's' : ''}.
+                </p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Los productos activos se desactivarán y viceversa.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleBulkToggleActive} disabled={isProcessingBulk}>
+                  {isProcessingBulk ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    <>
+                      <Package className="w-4 h-4 mr-2" />
+                      Cambiar Estado
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 
