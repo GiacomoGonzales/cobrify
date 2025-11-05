@@ -61,6 +61,7 @@ export default function InvoiceList() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
   const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true }) // Posición del menú
 
   // Estados para exportación
   const [showExportModal, setShowExportModal] = useState(false)
@@ -502,7 +503,6 @@ ${companySettings?.website ? companySettings.website : ''}`
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -553,113 +553,25 @@ ${companySettings?.website ? companySettings.website : ''}`
                       <div className="flex items-center justify-end">
                         <div className="relative">
                           <button
-                            onClick={() => setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)}
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              const menuHeight = 400 // Altura estimada del menú
+                              const spaceAbove = rect.top
+                              const spaceBelow = window.innerHeight - rect.bottom
+                              const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
+
+                              setMenuPosition({
+                                top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                                right: window.innerWidth - rect.right,
+                                openUpward
+                              })
+                              setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)
+                            }}
                             className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
                             title="Acciones"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
-
-                          {/* Dropdown Menu */}
-                          {openMenuId === invoice.id && (
-                            <>
-                              {/* Backdrop para cerrar al hacer clic fuera */}
-                              <div
-                                className="fixed inset-0 z-10"
-                                onClick={() => setOpenMenuId(null)}
-                              />
-
-                              {/* Menu */}
-                              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                                {/* Enviar a SUNAT */}
-                                {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                                 invoice.sunatStatus === 'pending' && (
-                                  <button
-                                    onClick={() => {
-                                      setOpenMenuId(null)
-                                      handleSendToSunat(invoice.id)
-                                    }}
-                                    disabled={sendingToSunat === invoice.id}
-                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {sendingToSunat === invoice.id ? (
-                                      <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
-                                    ) : (
-                                      <Send className="w-4 h-4 text-green-600" />
-                                    )}
-                                    <span>Enviar a SUNAT</span>
-                                  </button>
-                                )}
-
-                                {/* Crear Nota de Crédito */}
-                                {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                                 invoice.sunatStatus === 'accepted' && (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        setOpenMenuId(null)
-                                        navigate(`/nota-credito?invoiceId=${invoice.id}`)
-                                      }}
-                                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                                    >
-                                      <FileMinus className="w-4 h-4 text-orange-600" />
-                                      <span>Crear Nota de Crédito</span>
-                                    </button>
-
-                                    <button
-                                      onClick={() => {
-                                        setOpenMenuId(null)
-                                        navigate(`/nota-debito?invoiceId=${invoice.id}`)
-                                      }}
-                                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                                    >
-                                      <FilePlus className="w-4 h-4 text-blue-600" />
-                                      <span>Crear Nota de Débito</span>
-                                    </button>
-
-                                    <div className="border-t border-gray-100 my-1" />
-                                  </>
-                                )}
-
-                                {/* Ver detalles */}
-                                <button
-                                  onClick={() => {
-                                    setOpenMenuId(null)
-                                    setViewingInvoice(invoice)
-                                  }}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                                >
-                                  <Eye className="w-4 h-4 text-primary-600" />
-                                  <span>Ver detalles</span>
-                                </button>
-
-                                {/* Descargar PDF */}
-                                <button
-                                  onClick={() => {
-                                    setOpenMenuId(null)
-                                    generateInvoicePDF(invoice, companySettings)
-                                  }}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                                >
-                                  <Download className="w-4 h-4 text-green-600" />
-                                  <span>Descargar PDF</span>
-                                </button>
-
-                                {/* Eliminar */}
-                                <div className="border-t border-gray-100 my-1" />
-                                <button
-                                  onClick={() => {
-                                    setOpenMenuId(null)
-                                    setDeletingInvoice(invoice)
-                                  }}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  <span>Eliminar</span>
-                                </button>
-                              </div>
-                            </>
-                          )}
                         </div>
                       </div>
                     </TableCell>
@@ -667,9 +579,127 @@ ${companySettings?.website ? companySettings.website : ''}`
                 ))}
               </TableBody>
             </Table>
-          </div>
         )}
       </Card>
+
+      {/* Dropdown Menu (fuera de la tabla, con position fixed) */}
+      {openMenuId && (
+        <>
+          {/* Backdrop para cerrar al hacer clic fuera */}
+          <div
+            className="fixed inset-0 z-10"
+            onClick={() => setOpenMenuId(null)}
+          />
+
+          {/* Menu */}
+          <div
+            className="fixed w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+            style={{
+              top: `${menuPosition.top}px`,
+              right: `${menuPosition.right}px`,
+              transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+              maxHeight: '80vh',
+              overflowY: 'auto'
+            }}
+          >
+            {(() => {
+              const invoice = filteredInvoices.find(inv => inv.id === openMenuId)
+              if (!invoice) return null
+
+              return (
+                <>
+                  {/* Enviar a SUNAT */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.sunatStatus === 'pending' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        handleSendToSunat(invoice.id)
+                      }}
+                      disabled={sendingToSunat === invoice.id}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {sendingToSunat === invoice.id ? (
+                        <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 text-green-600" />
+                      )}
+                      <span>Enviar a SUNAT</span>
+                    </button>
+                  )}
+
+                  {/* Crear Nota de Crédito */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.sunatStatus === 'accepted' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          navigate(`/nota-credito?invoiceId=${invoice.id}`)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <FileMinus className="w-4 h-4 text-orange-600" />
+                        <span>Crear Nota de Crédito</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          navigate(`/nota-debito?invoiceId=${invoice.id}`)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <FilePlus className="w-4 h-4 text-blue-600" />
+                        <span>Crear Nota de Débito</span>
+                      </button>
+
+                      <div className="border-t border-gray-100 my-1" />
+                    </>
+                  )}
+
+                  {/* Ver detalles */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      setViewingInvoice(invoice)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <Eye className="w-4 h-4 text-primary-600" />
+                    <span>Ver detalles</span>
+                  </button>
+
+                  {/* Descargar PDF */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      generateInvoicePDF(invoice, companySettings)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <Download className="w-4 h-4 text-green-600" />
+                    <span>Descargar PDF</span>
+                  </button>
+
+                  {/* Eliminar */}
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      setDeletingInvoice(invoice)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Eliminar</span>
+                  </button>
+                </>
+              )
+            })()}
+          </div>
+        </>
+      )}
 
       {/* View Invoice Modal */}
       <Modal

@@ -54,7 +54,7 @@ export default function Quotations() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 })
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
 
   // Helper para manejar fechas de Firestore y Date objects
   const getDateFromTimestamp = (timestamp) => {
@@ -573,9 +573,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           <button
                             onClick={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect()
+                              const menuHeight = 300 // Altura estimada del menú
+                              const spaceAbove = rect.top
+                              const spaceBelow = window.innerHeight - rect.bottom
+                              const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
+
                               setMenuPosition({
-                                top: rect.top - 10,
-                                right: window.innerWidth - rect.right
+                                top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                                right: window.innerWidth - rect.right,
+                                openUpward
                               })
                               setOpenMenuId(openMenuId === quotation.id ? null : quotation.id)
                             }}
@@ -597,7 +603,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 style={{
                                   top: `${menuPosition.top}px`,
                                   right: `${menuPosition.right}px`,
-                                  transform: 'translateY(-100%)'
+                                  transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                                  maxHeight: '80vh',
+                                  overflowY: 'auto'
                                 }}
                               >
                                 {/* Ver detalles */}
