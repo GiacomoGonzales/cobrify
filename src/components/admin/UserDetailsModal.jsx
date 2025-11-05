@@ -1019,12 +1019,14 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                               if (file) {
                                 const reader = new FileReader();
                                 reader.onload = (event) => {
+                                  // Remover el prefijo "data:application/x-pkcs12;base64," del resultado
+                                  const base64 = event.target.result.split(',')[1] || event.target.result;
                                   setEmissionConfig({
                                     ...emissionConfig,
                                     sunat: {
                                       ...emissionConfig.sunat,
                                       certificateName: file.name,
-                                      certificateData: event.target.result
+                                      certificateData: base64
                                     }
                                   });
                                 };
