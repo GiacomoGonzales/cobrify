@@ -111,6 +111,10 @@ export default function POS() {
   const [categories, setCategories] = useState([])
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
 
+  // Pagination for products
+  const [visibleProductsCount, setVisibleProductsCount] = useState(6)
+  const PRODUCTS_PER_PAGE = 6
+
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: '', amount: '' }])
 
@@ -224,6 +228,24 @@ export default function POS() {
 
     return matchesSearch && matchesCategory
   })
+
+  // Apply pagination only when there's no search term
+  const displayedProducts = searchTerm || selectedCategoryFilter !== 'all'
+    ? filteredProducts
+    : filteredProducts.slice(0, visibleProductsCount)
+
+  const hasMoreProducts = filteredProducts.length > visibleProductsCount && !searchTerm && selectedCategoryFilter === 'all'
+
+  const loadMoreProducts = () => {
+    setVisibleProductsCount(prev => prev + PRODUCTS_PER_PAGE)
+  }
+
+  // Reset pagination when search or filter changes
+  useEffect(() => {
+    if (searchTerm || selectedCategoryFilter !== 'all') {
+      setVisibleProductsCount(6) // Reset to initial
+    }
+  }, [searchTerm, selectedCategoryFilter])
 
   const addToCart = product => {
     // If product has variants, show variant selection modal
@@ -1340,8 +1362,9 @@ ${companySettings?.website ? companySettings.website : ''}`
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-              {filteredProducts.map(product => (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                {displayedProducts.map(product => (
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
@@ -1383,7 +1406,20 @@ ${companySettings?.website ? companySettings.website : ''}`
                   </div>
                 </button>
               ))}
-            </div>
+              </div>
+
+              {/* Load More Button */}
+              {hasMoreProducts && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={loadMoreProducts}
+                    className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+                  >
+                    Ver más productos ({filteredProducts.length - visibleProductsCount} restantes)
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
