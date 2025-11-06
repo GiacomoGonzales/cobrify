@@ -365,7 +365,8 @@ export default function Tables() {
   }
 
   const handleReleaseTable = async (tableId) => {
-    // Abrir modal para confirmar y opcionalmente generar comprobante
+    // Cerrar modal de acciones y abrir modal de cierre con comprobante
+    setIsActionModalOpen(false)
     setIsCloseTableModalOpen(true)
   }
 

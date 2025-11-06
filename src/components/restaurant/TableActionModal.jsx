@@ -62,17 +62,10 @@ export default function TableActionModal({
     }
   }
 
-  const handleRelease = async () => {
-    if (!window.confirm('¿Cerrar la cuenta de esta mesa?')) return
-
-    setIsLoading(true)
-    try {
-      await onRelease(table.id)
-      handleClose()
-    } catch (error) {
-      console.error('Error al liberar mesa:', error)
-    } finally {
-      setIsLoading(false)
+  const handleRelease = () => {
+    // No cerrar el modal, solo llamar a onRelease que abrirá el CloseTableModal
+    if (onRelease) {
+      onRelease(table.id)
     }
   }
 
