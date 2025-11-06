@@ -33,6 +33,35 @@ function removeUndefined(obj) {
 }
 
 /**
+ * Serializa un valor para que sea compatible con Firestore
+ * Convierte objetos complejos a JSON strings
+ */
+function sanitizeForFirestore(value, maxDepth = 2, currentDepth = 0) {
+  // Si llegamos al máximo de profundidad, convertir a string
+  if (currentDepth >= maxDepth) {
+    return typeof value === 'object' ? JSON.stringify(value) : value
+  }
+
+  // Valores primitivos
+  if (value === null || value === undefined) return value
+  if (typeof value !== 'object') return value
+
+  // Arrays
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeForFirestore(item, maxDepth, currentDepth + 1))
+  }
+
+  // Objetos
+  const sanitized = {}
+  for (const [key, val] of Object.entries(value)) {
+    if (val !== undefined) {
+      sanitized[key] = sanitizeForFirestore(val, maxDepth, currentDepth + 1)
+    }
+  }
+  return sanitized
+}
+
+/**
  * Cloud Function: Enviar factura/boleta a SUNAT
  *
  * Esta función:
@@ -222,49 +251,56 @@ export const sendInvoiceToSunat = onRequest(
       const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
 
       // Construir sunatResponse sin valores undefined (Firestore no los acepta)
+      // Normalizar observations (notes) - puede venir como array, string, o array de objetos
+      let observations = []
+      if (Array.isArray(emissionResult.notes)) {
+        observations = emissionResult.notes.map(note =>
+          typeof note === 'string' ? note : JSON.stringify(note)
+        )
+      } else if (emissionResult.notes) {
+        observations = [String(emissionResult.notes)]
+      }
+
       const sunatResponseBase = {
         code: emissionResult.responseCode || '',
         description: emissionResult.description || '',
-        // notes puede venir como array o string, normalizarlo a array
-        observations: Array.isArray(emissionResult.notes)
-          ? emissionResult.notes
-          : (emissionResult.notes ? [emissionResult.notes] : []),
+        observations: observations,
         method: emissionResult.method,
         pendingManual: isPendingManual
       }
 
-      // Agregar datos específicos según el método, filtrando undefined
+      // Agregar datos específicos según el método, filtrando undefined y sanitizando
       let methodSpecificData = {}
       if (emissionResult.method === 'nubefact') {
-        methodSpecificData = removeUndefined({
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
           qrCode: emissionResult.qrCode,
           hash: emissionResult.hash,
           enlace: emissionResult.enlace
-        })
+        }))
       } else if (emissionResult.method === 'qpse') {
-        methodSpecificData = removeUndefined({
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
           ticket: emissionResult.ticket,
           hash: emissionResult.hash,
           nombreArchivo: emissionResult.nombreArchivo
-        })
+        }))
       } else if (emissionResult.method === 'sunat_direct') {
-        methodSpecificData = removeUndefined({
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
           cdrData: emissionResult.cdrData
-        })
+        }))
       }
 
       const updateData = {
         sunatStatus: finalStatus,
-        sunatResponse: {
+        sunatResponse: sanitizeForFirestore({
           ...sunatResponseBase,
           ...methodSpecificData
-        },
+        }),
         sunatSentAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }

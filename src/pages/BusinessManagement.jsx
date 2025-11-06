@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Building2, Settings as SettingsIcon, Shield, Loader2, Eye, EyeOff, Save } from 'lucide-react'
+import { Building2, Settings as SettingsIcon, Shield, Loader2, Eye, EyeOff, Save, Calendar, CreditCard, XCircle, CheckCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Badge from '@/components/ui/Badge'
+import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Modal from '@/components/ui/Modal'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { PLANS, changePlan, suspendUser, reactivateUser, registerPayment } from '@/services/subscriptionService'
 
 const SUPER_ADMIN_EMAIL = 'giiacomo@gmail.com'
 
@@ -36,6 +38,11 @@ export default function BusinessManagement() {
   const [isSaving, setIsSaving] = useState(false)
   const [showPasswords, setShowPasswords] = useState(false)
 
+  // Estados para modal de suscripción
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState('')
+  const [subscriptionAction, setSubscriptionAction] = useState('') // 'changePlan', 'suspend', 'reactivate', 'registerPayment'
+
   // Solo super admin puede acceder
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL
 
@@ -52,12 +59,28 @@ export default function BusinessManagement() {
       const snapshot = await getDocs(businessesRef)
 
       const businessList = []
-      snapshot.forEach((doc) => {
-        businessList.push({
-          id: doc.id,
-          ...doc.data()
-        })
-      })
+
+      // Cargar negocios y sus suscripciones
+      for (const docSnap of snapshot.docs) {
+        const businessData = {
+          id: docSnap.id,
+          ...docSnap.data()
+        }
+
+        // Cargar suscripción para obtener fecha de inicio
+        try {
+          const subscriptionRef = doc(db, 'subscriptions', docSnap.id)
+          const subscriptionSnap = await getDoc(subscriptionRef)
+
+          if (subscriptionSnap.exists()) {
+            businessData.subscription = subscriptionSnap.data()
+          }
+        } catch (err) {
+          console.warn('No se pudo cargar suscripción para:', docSnap.id)
+        }
+
+        businessList.push(businessData)
+      }
 
       setBusinesses(businessList)
     } catch (error) {
@@ -140,6 +163,65 @@ export default function BusinessManagement() {
     }
   }
 
+  // Funciones de gestión de suscripción
+  const openSubscriptionModal = (business, action) => {
+    setSelectedBusiness(business)
+    setSubscriptionAction(action)
+    setSelectedPlan(business.subscription?.plan || 'trial')
+    setIsSubscriptionModalOpen(true)
+  }
+
+  const handleChangePlan = async () => {
+    if (!selectedBusiness || !selectedPlan) return
+
+    setIsSaving(true)
+    try {
+      await changePlan(selectedBusiness.id, selectedPlan)
+      toast.success('Plan cambiado exitosamente')
+      setIsSubscriptionModalOpen(false)
+      loadBusinesses()
+    } catch (error) {
+      console.error('Error al cambiar plan:', error)
+      toast.error(error.message || 'Error al cambiar plan')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSuspendUser = async () => {
+    if (!selectedBusiness) return
+
+    setIsSaving(true)
+    try {
+      await suspendUser(selectedBusiness.id, 'Falta de pago')
+      toast.success('Usuario suspendido')
+      setIsSubscriptionModalOpen(false)
+      loadBusinesses()
+    } catch (error) {
+      console.error('Error al suspender:', error)
+      toast.error('Error al suspender usuario')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleReactivateUser = async () => {
+    if (!selectedBusiness) return
+
+    setIsSaving(true)
+    try {
+      await reactivateUser(selectedBusiness.id, 30)
+      toast.success('Usuario reactivado con 30 días adicionales')
+      setIsSubscriptionModalOpen(false)
+      loadBusinesses()
+    } catch (error) {
+      console.error('Error al reactivar:', error)
+      toast.error('Error al reactivar usuario')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // Control de acceso
   if (!isSuperAdmin) {
     return (
@@ -190,7 +272,9 @@ export default function BusinessManagement() {
                 <TableRow>
                   <TableHead>Negocio</TableHead>
                   <TableHead>RUC</TableHead>
-                  <TableHead>Razón Social</TableHead>
+                  <TableHead>Fecha Inicio</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Vencimiento</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Método Emisión</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -199,26 +283,87 @@ export default function BusinessManagement() {
               <TableBody>
                 {businesses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                       <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                       <p>No hay negocios registrados</p>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  businesses.map((business) => (
-                    <TableRow key={business.id}>
-                      <TableCell className="font-medium">
-                        {business.businessName || business.tradeName || 'Sin nombre'}
-                      </TableCell>
-                      <TableCell>{business.ruc || '-'}</TableCell>
-                      <TableCell className="text-sm text-gray-600">
-                        {business.legalName || '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={business.isActive !== false ? 'success' : 'default'}>
-                          {business.isActive !== false ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
+                  businesses.map((business) => {
+                    // Obtener datos de suscripción
+                    const startDate = business.subscription?.startDate?.toDate?.() ||
+                                    business.subscription?.createdAt?.toDate?.() ||
+                                    business.createdAt?.toDate?.()
+
+                    const expiryDate = business.subscription?.currentPeriodEnd?.toDate?.()
+                    const isExpired = expiryDate && expiryDate < new Date()
+                    const isBlocked = business.subscription?.accessBlocked === true
+                    const currentPlan = business.subscription?.plan || 'trial'
+                    const planInfo = PLANS[currentPlan]
+
+                    return (
+                      <TableRow key={business.id}>
+                        <TableCell className="font-medium">
+                          {business.businessName || business.tradeName || 'Sin nombre'}
+                        </TableCell>
+                        <TableCell>{business.ruc || '-'}</TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {startDate ? (
+                            <div>
+                              <div className="font-medium">
+                                {startDate.toLocaleDateString('es-PE', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {Math.floor((new Date() - startDate) / (1000 * 60 * 60 * 24))} días
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">No disponible</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {planInfo ? (
+                            <div>
+                              <div className="font-medium text-gray-900">{planInfo.name}</div>
+                              <div className="text-xs text-gray-500">
+                                S/ {planInfo.pricePerMonth}/mes
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Sin plan</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {expiryDate ? (
+                            <div>
+                              <div className={`font-medium ${isExpired ? 'text-red-600' : 'text-gray-900'}`}>
+                                {expiryDate.toLocaleDateString('es-PE', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </div>
+                              <div className={`text-xs ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
+                                {isExpired ? 'Vencido' : `${Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24))} días`}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">No disponible</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isBlocked ? (
+                            <Badge variant="danger">Suspendido</Badge>
+                          ) : isExpired ? (
+                            <Badge variant="warning">Vencido</Badge>
+                          ) : (
+                            <Badge variant="success">Activo</Badge>
+                          )}
+                        </TableCell>
                       <TableCell>
                         {business.emissionConfig?.method ? (
                           <Badge variant="primary">
@@ -231,22 +376,36 @@ export default function BusinessManagement() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Cambiar Plan */}
                           <button
-                            onClick={() => toggleBusinessStatus(business.id, business.isActive !== false)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              business.isActive !== false
-                                ? 'hover:bg-yellow-100 text-yellow-600'
-                                : 'hover:bg-green-100 text-green-600'
-                            }`}
-                            title={business.isActive !== false ? 'Desactivar' : 'Activar'}
+                            onClick={() => openSubscriptionModal(business, 'changePlan')}
+                            className="p-2 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors"
+                            title="Cambiar Plan"
                           >
-                            {business.isActive !== false ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
+                            <CreditCard className="w-4 h-4" />
                           </button>
+
+                          {/* Suspender/Reactivar */}
+                          {isBlocked ? (
+                            <button
+                              onClick={() => openSubscriptionModal(business, 'reactivate')}
+                              className="p-2 hover:bg-green-100 text-green-600 rounded-lg transition-colors"
+                              title="Reactivar"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openSubscriptionModal(business, 'suspend')}
+                              className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                              title="Suspender"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {/* Configurar Emisión */}
                           <button
                             onClick={() => openConfigModal(business)}
                             className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
@@ -257,7 +416,8 @@ export default function BusinessManagement() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
@@ -470,6 +630,140 @@ export default function BusinessManagement() {
                 <>
                   <Save className="w-4 h-4 mr-2" />
                   Guardar Configuración
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Gestión de Suscripción */}
+      <Modal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        title={
+          subscriptionAction === 'changePlan' ? 'Cambiar Plan' :
+          subscriptionAction === 'suspend' ? 'Suspender Usuario' :
+          subscriptionAction === 'reactivate' ? 'Reactivar Usuario' :
+          'Gestión de Suscripción'
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          {subscriptionAction === 'changePlan' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Negocio
+                </label>
+                <p className="text-sm text-gray-900 font-medium">
+                  {selectedBusiness?.businessName || selectedBusiness?.tradeName}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Plan Actual
+                </label>
+                <p className="text-sm text-gray-600">
+                  {PLANS[selectedBusiness?.subscription?.plan]?.name || 'Sin plan'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nuevo Plan
+                </label>
+                <Select
+                  value={selectedPlan}
+                  onChange={(e) => setSelectedPlan(e.target.value)}
+                >
+                  <option value="">Seleccionar plan...</option>
+                  <optgroup label="Planes QPse">
+                    <option value="qpse_1_month">Plan QPse - 1 Mes (S/ 19.90/mes)</option>
+                    <option value="qpse_6_months">Plan QPse - 6 Meses (S/ 16.65/mes)</option>
+                    <option value="qpse_12_months">Plan QPse - 12 Meses (S/ 12.49/mes)</option>
+                  </optgroup>
+                  <optgroup label="Planes SUNAT Directo">
+                    <option value="sunat_direct_1_month">Plan SUNAT Directo - 1 Mes (S/ 19.90/mes)</option>
+                    <option value="sunat_direct_6_months">Plan SUNAT Directo - 6 Meses (S/ 16.65/mes)</option>
+                    <option value="sunat_direct_12_months">Plan SUNAT Directo - 12 Meses (S/ 12.49/mes)</option>
+                  </optgroup>
+                  <optgroup label="Otros">
+                    <option value="enterprise">Plan Enterprise (Ilimitado)</option>
+                    <option value="trial">Plan Trial (1 día)</option>
+                  </optgroup>
+                </Select>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  Al cambiar el plan, la fecha de vencimiento se actualizará automáticamente según la duración del nuevo plan.
+                </p>
+              </div>
+            </>
+          )}
+
+          {subscriptionAction === 'suspend' && (
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                ¿Estás seguro de que deseas suspender el acceso de{' '}
+                <strong>{selectedBusiness?.businessName || selectedBusiness?.tradeName}</strong>?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm text-red-800">
+                  El usuario no podrá acceder al sistema hasta que sea reactivado. Se mostrará un modal solicitando regularización de pago.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {subscriptionAction === 'reactivate' && (
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                Reactivar el acceso de{' '}
+                <strong>{selectedBusiness?.businessName || selectedBusiness?.tradeName}</strong>
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-sm text-green-800">
+                  El usuario recuperará el acceso inmediatamente y se le extenderá 30 días adicionales.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Botones */}
+          <div className="flex gap-3 pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSubscriptionModalOpen(false)}
+              className="flex-1"
+              disabled={isSaving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={
+                subscriptionAction === 'changePlan' ? handleChangePlan :
+                subscriptionAction === 'suspend' ? handleSuspendUser :
+                subscriptionAction === 'reactivate' ? handleReactivateUser :
+                undefined
+              }
+              className="flex-1"
+              disabled={isSaving || (subscriptionAction === 'changePlan' && !selectedPlan)}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  {subscriptionAction === 'changePlan' && <><CreditCard className="w-4 h-4 mr-2" /> Cambiar Plan</>}
+                  {subscriptionAction === 'suspend' && <><XCircle className="w-4 h-4 mr-2" /> Suspender</>}
+                  {subscriptionAction === 'reactivate' && <><CheckCircle className="w-4 h-4 mr-2" /> Reactivar</>}
                 </>
               )}
             </Button>

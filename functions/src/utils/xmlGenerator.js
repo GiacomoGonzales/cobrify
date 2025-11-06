@@ -222,16 +222,25 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
 
-    // Total línea (cantidad * precio unitario)
-    const lineTotal = item.quantity * item.unitPrice
+    // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
+    // Necesitamos calcular el precio sin IGV para el XML UBL 2.1
+
+    // Precio unitario CON IGV (el que viene de la base de datos)
+    const priceWithIGV = item.unitPrice
+
+    // Precio unitario SIN IGV (valor base para SUNAT)
+    // Para items gravados, dividimos entre 1.18 para obtener el valor sin IGV
+    // Para items exonerados/inafectos, el precio ya está sin IGV
+    const priceWithoutIGV = isGravado ? priceWithIGV / 1.18 : priceWithIGV
+
+    // Total de la línea SIN IGV (base imponible)
+    const lineTotal = item.quantity * priceWithoutIGV
     invoiceLine.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
-    // Precio unitario
+    // Precio unitario (tipo 01 = precio unitario incluye IGV según catálogo 16)
     const pricingReference = invoiceLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
-    // Solo incluir IGV en el precio para items gravados
-    const priceWithIGV = isGravado ? item.unitPrice * 1.18 : item.unitPrice
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(priceWithIGV.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
@@ -299,10 +308,10 @@ export function generateInvoiceXML(invoiceData, businessData) {
     // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
-    // Precio sin IGV
+    // Precio unitario SIN IGV (valor base para SUNAT)
     const price = invoiceLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(item.unitPrice.toFixed(2))
+      .txt(priceWithoutIGV.toFixed(2))
   })
 
   return root.end({ prettyPrint: true })
@@ -502,15 +511,18 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
 
-    // Total línea
-    const lineTotal = item.quantity * item.unitPrice
+    // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
+    const priceWithIGV = item.unitPrice
+    const priceWithoutIGV = isGravado ? priceWithIGV / 1.18 : priceWithIGV
+
+    // Total línea SIN IGV (base imponible)
+    const lineTotal = item.quantity * priceWithoutIGV
     creditNoteLine.ele('cbc:LineExtensionAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
-    // Precio unitario
+    // Precio unitario CON IGV
     const pricingReference = creditNoteLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
-    const priceWithIGV = isGravado ? item.unitPrice * 1.18 : item.unitPrice
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(priceWithIGV.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
@@ -572,10 +584,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
-    // Precio sin IGV
+    // Precio unitario SIN IGV (valor base para SUNAT)
     const price = creditNoteLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(item.unitPrice.toFixed(2))
+      .txt(priceWithoutIGV.toFixed(2))
   })
 
   return root.end({ prettyPrint: true })
@@ -774,15 +786,18 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
 
-    // Total línea
-    const lineTotal = item.quantity * item.unitPrice
+    // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
+    const priceWithIGV = item.unitPrice
+    const priceWithoutIGV = isGravado ? priceWithIGV / 1.18 : priceWithIGV
+
+    // Total línea SIN IGV (base imponible)
+    const lineTotal = item.quantity * priceWithoutIGV
     debitNoteLine.ele('cbc:LineExtensionAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
-    // Precio unitario
+    // Precio unitario CON IGV
     const pricingReference = debitNoteLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
-    const priceWithIGV = isGravado ? item.unitPrice * 1.18 : item.unitPrice
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
       .txt(priceWithIGV.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
@@ -844,10 +859,10 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     // Usar código del producto, si no existe usar productId, si tampoco existe usar índice
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
-    // Precio sin IGV
+    // Precio unitario SIN IGV (valor base para SUNAT)
     const price = debitNoteLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
-      .txt(item.unitPrice.toFixed(2))
+      .txt(priceWithoutIGV.toFixed(2))
   })
 
   return root.end({ prettyPrint: true })

@@ -34,9 +34,10 @@ import {
   updateProduct,
   getNextDocumentNumber,
   getProductCategories,
+  sendInvoiceToSunat,
 } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
-import { getWarehouses, getDefaultWarehouse, updateWarehouseStock } from '@/services/warehouseService'
+import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse } from '@/services/warehouseService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 const PAYMENT_METHODS = {
@@ -263,18 +264,19 @@ export default function POS() {
       return
     }
 
-    // Verificar stock
-    if (product.stock !== null && product.stock <= 0) {
-      toast.error('Producto sin stock disponible')
+    // Verificar stock del almacén seleccionado
+    const warehouseStock = getCurrentWarehouseStock(product)
+    if (product.stock !== null && warehouseStock <= 0) {
+      toast.error(`Producto sin stock en ${selectedWarehouse?.name || 'este almacén'}`)
       return
     }
 
     const existingItem = cart.find(item => item.id === product.id)
 
     if (existingItem) {
-      // Verificar si hay suficiente stock
-      if (product.stock !== null && existingItem.quantity >= product.stock) {
-        toast.error('No hay suficiente stock disponible')
+      // Verificar si hay suficiente stock en el almacén
+      if (product.stock !== null && existingItem.quantity >= warehouseStock) {
+        toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
         return
       }
 
@@ -381,10 +383,16 @@ export default function POS() {
           if (matchId === itemId) {
             const newQuantity = item.quantity + change
 
-            // Verificar stock
-            if (item.stock !== null && newQuantity > item.stock) {
-              toast.error('No hay suficiente stock disponible')
-              return item
+            // Verificar stock del almacén seleccionado (solo para productos no personalizados)
+            if (item.stock !== null && !item.isCustom) {
+              const productData = products.find(p => p.id === item.id)
+              if (productData) {
+                const warehouseStock = getCurrentWarehouseStock(productData)
+                if (newQuantity > warehouseStock) {
+                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
+                  return item
+                }
+              }
             }
 
             return { ...item, quantity: newQuantity }
@@ -738,6 +746,27 @@ export default function POS() {
         throw new Error(result.error || 'Error al crear la factura')
       }
 
+      const invoiceId = result.id
+
+      // 3.1. Envío automático a SUNAT (si está configurado)
+      const shouldAutoSend = companySettings?.autoSendToSunat === true
+      const canSendToSunat = documentType === 'factura' || documentType === 'boleta'
+
+      if (shouldAutoSend && canSendToSunat) {
+        try {
+          console.log('🚀 Enviando automáticamente a SUNAT...')
+          toast.info('Enviando comprobante a SUNAT...', 3000)
+
+          await sendInvoiceToSunat(user.uid, invoiceId)
+
+          console.log('✅ Comprobante enviado a SUNAT exitosamente')
+          toast.success('Comprobante enviado a SUNAT exitosamente', 5000)
+        } catch (sunatError) {
+          console.error('❌ Error al enviar a SUNAT:', sunatError)
+          toast.warning('El comprobante se guardó correctamente, pero hubo un error al enviarlo a SUNAT. Puedes reenviarlo desde la lista de comprobantes.', 7000)
+        }
+      }
+
       // 4. Actualizar stock de productos por almacén
       const stockUpdates = cart
         .filter(item => !item.isCustom && item.stock !== null) // Excluir productos personalizados y productos sin control de stock
@@ -825,20 +854,29 @@ ${companySettings?.website ? companySettings.website : ''}`
     toast.success('Abriendo WhatsApp...')
   }
 
+  // Obtener stock del almacén seleccionado
+  const getCurrentWarehouseStock = (product) => {
+    if (!selectedWarehouse) return product.stock || 0
+    return getStockInWarehouse(product, selectedWarehouse.id)
+  }
+
   const getStockBadge = product => {
+    // Obtener stock del almacén seleccionado
+    const warehouseStock = getCurrentWarehouseStock(product)
+
     if (product.stock === null) {
       return <span className="text-xs text-gray-500">Sin control</span>
     }
 
-    if (product.stock === 0) {
+    if (warehouseStock === 0) {
       return <span className="text-xs text-red-600 font-semibold">Sin stock</span>
     }
 
-    if (product.stock < 10) {
-      return <span className="text-xs text-yellow-600">Stock: {product.stock}</span>
+    if (warehouseStock < 10) {
+      return <span className="text-xs text-yellow-600">Stock: {warehouseStock}</span>
     }
 
-    return <span className="text-xs text-green-600">Stock: {product.stock}</span>
+    return <span className="text-xs text-green-600">Stock: {warehouseStock}</span>
   }
 
   if (isLoading) {

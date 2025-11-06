@@ -14,14 +14,15 @@ import {
   Eye,
   EyeOff,
   Save,
-  CheckCircle
+  CheckCircle,
+  Shield
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
 import { PLANS } from '@/services/subscriptionService';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading }) {
+export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading, toast }) {
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('qpse_1_month');
@@ -159,11 +160,15 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
         updatedAt: new Date()
       });
 
-      alert('Configuración guardada exitosamente');
+      if (toast) {
+        toast.success('Configuración guardada exitosamente');
+      }
       onClose();
     } catch (error) {
       console.error('Error al guardar configuración:', error);
-      alert('Error al guardar configuración');
+      if (toast) {
+        toast.error('Error al guardar configuración');
+      }
     } finally {
       setIsSavingConfig(false);
     }

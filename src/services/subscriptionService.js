@@ -365,6 +365,8 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
 };
 
 // Cambiar plan de un usuario (Admin)
+// NOTA: Esta función solo cambia el tipo de plan y sus límites, NO modifica las fechas de suscripción.
+// Para registrar un pago y extender la suscripción, usar registerPayment()
 export const changePlan = async (userId, newPlan) => {
   try {
     if (!PLANS[newPlan]) {
@@ -382,6 +384,7 @@ export const changePlan = async (userId, newPlan) => {
     const subscription = subscriptionSnap.data();
     const oldPlan = PLANS[subscription.plan]?.name || subscription.plan;
 
+    // Solo actualizar el plan y sus límites, SIN tocar las fechas
     await updateDoc(subscriptionRef, {
       plan: newPlan,
       monthlyPrice: planConfig.pricePerMonth,

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { Navigate } from 'react-router-dom';
 import {
   getAllSubscriptions,
@@ -32,6 +33,7 @@ import { es } from 'date-fns/locale';
 
 export default function UserManagement() {
   const { isAdmin, isLoading } = useAuth();
+  const toast = useToast();
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,17 +88,17 @@ export default function UserManagement() {
 
   // Acciones
   const handleSuspend = async (userId, reason = 'Falta de pago') => {
-    if (!confirm('¿Estás seguro de suspender este usuario?')) return;
+    if (!window.confirm('¿Estás seguro de suspender este usuario?')) return;
 
     try {
       setActionLoading(true);
       await suspendUser(userId, reason);
       await loadSubscriptions();
       setShowModal(false);
-      alert('Usuario suspendido exitosamente');
+      toast.success('Usuario suspendido exitosamente');
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al suspender usuario');
+      toast.error('Error al suspender usuario');
     } finally {
       setActionLoading(false);
     }
@@ -108,25 +110,25 @@ export default function UserManagement() {
       await reactivateUser(userId, days);
       await loadSubscriptions();
       setShowModal(false);
-      alert('Usuario reactivado exitosamente');
+      toast.success('Usuario reactivado exitosamente');
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al reactivar usuario');
+      toast.error('Error al reactivar usuario');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleRegisterPayment = async (userId, amount, method, days = 30) => {
+  const handleRegisterPayment = async (userId, amount, method, planKey) => {
     try {
       setActionLoading(true);
-      await registerPayment(userId, amount, method, days);
+      await registerPayment(userId, amount, method, planKey);
       await loadSubscriptions();
       setShowModal(false);
-      alert('Pago registrado exitosamente');
+      toast.success('Pago registrado exitosamente');
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al registrar pago');
+      toast.error('Error al registrar pago');
     } finally {
       setActionLoading(false);
     }
@@ -138,10 +140,10 @@ export default function UserManagement() {
       await changePlan(userId, newPlan);
       await loadSubscriptions();
       setShowModal(false);
-      alert('Plan cambiado exitosamente');
+      toast.success('Plan cambiado exitosamente');
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al cambiar plan');
+      toast.error('Error al cambiar plan');
     } finally {
       setActionLoading(false);
     }
@@ -272,6 +274,9 @@ export default function UserManagement() {
                     Plan
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fecha Inicio
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Estado
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -284,9 +289,34 @@ export default function UserManagement() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredSubscriptions.map((sub) => {
-                  const periodEnd = sub.currentPeriodEnd?.toDate?.() || sub.currentPeriodEnd;
-                  const isExpired = periodEnd && new Date(periodEnd) < new Date();
+                  // Convertir correctamente el Timestamp de Firestore para fecha de fin
+                  let periodEnd = null;
+                  if (sub.currentPeriodEnd) {
+                    if (typeof sub.currentPeriodEnd.toDate === 'function') {
+                      periodEnd = sub.currentPeriodEnd.toDate();
+                    } else if (sub.currentPeriodEnd instanceof Date) {
+                      periodEnd = sub.currentPeriodEnd;
+                    } else if (typeof sub.currentPeriodEnd === 'object' && sub.currentPeriodEnd.seconds) {
+                      periodEnd = new Date(sub.currentPeriodEnd.seconds * 1000);
+                    }
+                  }
+
+                  // Convertir fecha de inicio
+                  let periodStart = null;
+                  if (sub.currentPeriodStart) {
+                    if (typeof sub.currentPeriodStart.toDate === 'function') {
+                      periodStart = sub.currentPeriodStart.toDate();
+                    } else if (sub.currentPeriodStart instanceof Date) {
+                      periodStart = sub.currentPeriodStart;
+                    } else if (typeof sub.currentPeriodStart === 'object' && sub.currentPeriodStart.seconds) {
+                      periodStart = new Date(sub.currentPeriodStart.seconds * 1000);
+                    }
+                  }
+
+                  const isExpired = periodEnd && periodEnd < new Date();
                   const isBlocked = sub.accessBlocked || sub.status === 'suspended';
+                  const planInfo = PLANS[sub.plan];
+                  const daysElapsed = periodStart ? Math.floor((new Date() - periodStart) / (1000 * 60 * 60 * 24)) : null;
 
                   return (
                     <tr key={sub.id} className={isBlocked ? 'bg-red-50' : ''}>
@@ -299,14 +329,39 @@ export default function UserManagement() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 capitalize">
-                          {sub.plan}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                            {planInfo?.name || sub.plan}
+                          </span>
+                          {planInfo && (
+                            <span className="text-xs text-gray-500 mt-1">
+                              S/ {planInfo.pricePerMonth}/mes
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {periodStart ? (
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {format(periodStart, 'dd/MM/yyyy', { locale: es })}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Hace {daysElapsed} días
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">No disponible</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {isBlocked ? (
                           <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
                             Suspendido
+                          </span>
+                        ) : isExpired ? (
+                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                            Vencido
                           </span>
                         ) : (
                           <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
@@ -315,11 +370,19 @@ export default function UserManagement() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {periodEnd ? format(new Date(periodEnd), 'dd/MM/yyyy', { locale: es }) : 'N/A'}
-                        </div>
-                        {isExpired && !isBlocked && (
-                          <div className="text-xs text-red-600">Vencido</div>
+                        {periodEnd ? (
+                          <div>
+                            <div className={`text-sm font-medium ${isExpired ? 'text-red-600' : 'text-gray-900'}`}>
+                              {format(periodEnd, 'dd/MM/yyyy', { locale: es })}
+                            </div>
+                            <div className={`text-xs ${isExpired ? 'text-red-500' : 'text-gray-500'}`}>
+                              {isExpired
+                                ? 'Vencido hace ' + Math.abs(Math.ceil((periodEnd - new Date()) / (1000 * 60 * 60 * 24))) + ' días'
+                                : 'Vence en ' + Math.ceil((periodEnd - new Date()) / (1000 * 60 * 60 * 24)) + ' días'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">No disponible</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -414,6 +477,7 @@ export default function UserManagement() {
           onRegisterPayment={handleRegisterPayment}
           onChangePlan={handleChangePlan}
           loading={actionLoading}
+          toast={toast}
         />
       )}
     </div>

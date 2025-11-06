@@ -24,7 +24,12 @@
       "WebFetch(domain:qpse.pe)",
       "Bash(node configure-series-admin.cjs:*)",
       "Bash(firebase functions:log:*)",
-      "Bash(Select-String -Pattern \"QPse|qpse|Error al enviar\" -Context 5)"
+      "Bash(Select-String -Pattern \"QPse|qpse|Error al enviar\" -Context 5)",
+      "Bash(npx rg:*)",
+      "Bash(Select-String -Pattern \"error|Error|ERROR|fail|Fail|FAIL|timeout\" -Context 2)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []
