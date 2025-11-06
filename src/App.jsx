@@ -30,6 +30,11 @@ import CreateQuotation from './pages/CreateQuotation'
 import StockMovements from './pages/StockMovements'
 import Demo from './pages/Demo'
 import DemoLayout from './layouts/DemoLayout'
+// Restaurant pages
+import Tables from './pages/Tables'
+import Waiters from './pages/Waiters'
+import Orders from './pages/Orders'
+import Kitchen from './pages/Kitchen'
 
 function App() {
   return (
@@ -66,6 +71,11 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="configuracion" element={<Settings />} />
+              {/* Rutas de modo restaurante en demo */}
+              <Route path="mesas" element={<Tables />} />
+              <Route path="mozos" element={<Waiters />} />
+              <Route path="ordenes" element={<Orders />} />
+              <Route path="cocina" element={<Kitchen />} />
             </Route>
 
             {/* Ruta de cuenta suspendida (sin layout) */}
@@ -98,6 +108,12 @@ function App() {
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />
               <Route path="business/new" element={<BusinessCreate />} />
+
+              {/* Rutas de modo restaurante */}
+              <Route path="mesas" element={<Tables />} />
+              <Route path="mozos" element={<Waiters />} />
+              <Route path="ordenes" element={<Orders />} />
+              <Route path="cocina" element={<Kitchen />} />
 
               {/* Rutas de administración */}
               <Route path="admin/users" element={<UserManagement />} />
