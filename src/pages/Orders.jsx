@@ -1,83 +1,104 @@
-import { useState } from 'react'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, Users, DollarSign } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, Users, DollarSign, Loader2, ChevronRight } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import Button from '@/components/ui/Button'
+import { getActiveOrders, getOrdersStats, updateOrderStatus } from '@/services/orderService'
+import { useAppContext } from '@/hooks/useAppContext'
+import { useToast } from '@/contexts/ToastContext'
 
 export default function Orders() {
-  // Estado temporal para demostración
-  const [orders] = useState([
-    {
-      id: 1,
-      orderNumber: 'ORD-001',
-      table: 2,
-      waiter: 'Juan Pérez',
-      status: 'preparing',
-      items: [
-        { name: 'Lomo Saltado', quantity: 2, price: 35.00 },
-        { name: 'Chicha Morada', quantity: 2, price: 8.00 },
-      ],
-      total: 86.00,
-      startTime: '18:30',
-      elapsed: '15 min',
-    },
-    {
-      id: 2,
-      orderNumber: 'ORD-002',
-      table: 5,
-      waiter: 'María García',
-      status: 'ready',
-      items: [
-        { name: 'Ceviche', quantity: 1, price: 42.00 },
-        { name: 'Inca Kola', quantity: 1, price: 6.00 },
-      ],
-      total: 48.00,
-      startTime: '19:15',
-      elapsed: '8 min',
-    },
-    {
-      id: 3,
-      orderNumber: 'ORD-003',
-      table: 8,
-      waiter: 'Carlos López',
-      status: 'pending',
-      items: [
-        { name: 'Parrilla Mixta', quantity: 1, price: 85.00 },
-        { name: 'Papa a la Huancaína', quantity: 2, price: 18.00 },
-        { name: 'Pisco Sour', quantity: 2, price: 25.00 },
-      ],
-      total: 146.00,
-      startTime: '20:00',
-      elapsed: '2 min',
-    },
-    {
-      id: 4,
-      orderNumber: 'ORD-004',
-      table: 3,
-      waiter: 'Juan Pérez',
-      status: 'preparing',
-      items: [
-        { name: 'Ají de Gallina', quantity: 1, price: 32.00 },
-        { name: 'Arroz con Leche', quantity: 1, price: 12.00 },
-      ],
-      total: 44.00,
-      startTime: '19:45',
-      elapsed: '20 min',
-    },
-    {
-      id: 5,
-      orderNumber: 'ORD-005',
-      table: 1,
-      waiter: 'Pedro Ramírez',
-      status: 'delivered',
-      items: [
-        { name: 'Causa Limeña', quantity: 2, price: 22.00 },
-        { name: 'Limonada', quantity: 2, price: 7.00 },
-      ],
-      total: 58.00,
-      startTime: '18:15',
-      elapsed: '45 min',
-    },
-  ])
+  const { getBusinessId } = useAppContext()
+  const toast = useToast()
+
+  const [orders, setOrders] = useState([])
+  const [stats, setStats] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [updatingOrderId, setUpdatingOrderId] = useState(null)
+
+  // Cargar órdenes
+  useEffect(() => {
+    loadOrders()
+    // Auto-refresh cada 30 segundos
+    const interval = setInterval(loadOrders, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const loadOrders = async () => {
+    try {
+      const businessId = getBusinessId()
+      const [ordersResult, statsResult] = await Promise.all([
+        getActiveOrders(businessId),
+        getOrdersStats(businessId),
+      ])
+
+      if (ordersResult.success) {
+        setOrders(ordersResult.data || [])
+      } else {
+        toast.error('Error al cargar órdenes: ' + ordersResult.error)
+      }
+
+      if (statsResult.success) {
+        setStats(statsResult.data)
+      }
+    } catch (error) {
+      console.error('Error al cargar órdenes:', error)
+      toast.error('Error al cargar órdenes')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleStatusChange = async (orderId, currentStatus) => {
+    // Definir el siguiente estado
+    const statusFlow = {
+      pending: 'preparing',
+      preparing: 'ready',
+      ready: 'delivered',
+    }
+
+    const nextStatus = statusFlow[currentStatus]
+    if (!nextStatus) return
+
+    setUpdatingOrderId(orderId)
+    try {
+      const result = await updateOrderStatus(getBusinessId(), orderId, nextStatus)
+      if (result.success) {
+        toast.success(`Orden actualizada a ${getStatusConfig(nextStatus).label}`)
+        loadOrders()
+      } else {
+        toast.error('Error al actualizar orden: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al actualizar orden:', error)
+      toast.error('Error al actualizar orden')
+    } finally {
+      setUpdatingOrderId(null)
+    }
+  }
+
+  const calculateElapsedTime = (createdAt) => {
+    if (!createdAt) return '0 min'
+
+    const orderDate = createdAt.toDate ? createdAt.toDate() : new Date(createdAt)
+    const now = new Date()
+    const diffMs = now - orderDate
+    const diffMins = Math.floor(diffMs / 60000)
+
+    if (diffMins < 60) {
+      return `${diffMins} min`
+    } else {
+      const hours = Math.floor(diffMins / 60)
+      const mins = diffMins % 60
+      return `${hours}h ${mins}min`
+    }
+  }
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '--:--'
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+  }
 
   const getStatusConfig = (status) => {
     switch (status) {
@@ -124,8 +145,16 @@ export default function Orders() {
     }
   }
 
-  const activeOrders = orders.filter(o => o.status !== 'delivered')
-  const totalAmount = activeOrders.reduce((sum, o) => sum + o.total, 0)
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-primary-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Cargando órdenes...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -147,7 +176,7 @@ export default function Orders() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Órdenes Activas</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{activeOrders.length}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-2">{orders.length}</p>
               </div>
               <ListOrdered className="w-10 h-10 text-gray-500" />
             </div>
@@ -160,7 +189,7 @@ export default function Orders() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Pendientes</p>
                 <p className="text-2xl font-bold text-yellow-600 mt-2">
-                  {orders.filter(o => o.status === 'pending').length}
+                  {stats?.pending || 0}
                 </p>
               </div>
               <Clock className="w-10 h-10 text-yellow-500" />
@@ -174,7 +203,7 @@ export default function Orders() {
               <div>
                 <p className="text-sm font-medium text-gray-600">En Preparación</p>
                 <p className="text-2xl font-bold text-blue-600 mt-2">
-                  {orders.filter(o => o.status === 'preparing').length}
+                  {stats?.preparing || 0}
                 </p>
               </div>
               <AlertCircle className="w-10 h-10 text-blue-500" />
@@ -186,8 +215,10 @@ export default function Orders() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Monto Total</p>
-                <p className="text-2xl font-bold text-green-600 mt-2">S/ {totalAmount.toFixed(2)}</p>
+                <p className="text-sm font-medium text-gray-600">Ventas Hoy</p>
+                <p className="text-2xl font-bold text-green-600 mt-2">
+                  S/ {(stats?.totalSalesToday || 0).toFixed(2)}
+                </p>
               </div>
               <DollarSign className="w-10 h-10 text-green-500" />
             </div>
@@ -197,93 +228,114 @@ export default function Orders() {
 
       {/* Lista de Órdenes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {orders.map((order) => {
-          const statusConfig = getStatusConfig(order.status)
-          const StatusIcon = statusConfig.icon
-
-          return (
-            <Card key={order.id} className={`border-2 ${statusConfig.bgColor}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-lg">{order.orderNumber}</span>
-                    <Badge variant={statusConfig.variant} className="flex items-center gap-1">
-                      <StatusIcon className="w-3 h-3" />
-                      {statusConfig.label}
-                    </Badge>
-                  </div>
-                  <span className={`text-sm font-semibold ${statusConfig.color}`}>
-                    {order.elapsed}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Info de Mesa y Mozo */}
-                <div className="flex items-center justify-between text-sm pb-3 border-b border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-700">
-                      {order.table}
-                    </div>
-                    <span className="text-gray-600">Mesa {order.table}</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-gray-600">
-                    <Users className="w-4 h-4" />
-                    <span>{order.waiter}</span>
-                  </div>
-                </div>
-
-                {/* Items */}
-                <div className="space-y-2">
-                  {order.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span className="text-gray-700">
-                        {item.quantity}x {item.name}
-                      </span>
-                      <span className="font-medium text-gray-900">
-                        S/ {(item.quantity * item.price).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Total */}
-                <div className="flex justify-between items-center pt-3 border-t border-gray-200">
-                  <span className="font-semibold text-gray-900">TOTAL</span>
-                  <span className="text-lg font-bold text-gray-900">
-                    S/ {order.total.toFixed(2)}
-                  </span>
-                </div>
-
-                {/* Hora de inicio */}
-                <div className="flex items-center gap-2 text-xs text-gray-500 pt-2">
-                  <Clock className="w-3 h-3" />
-                  <span>Iniciada a las {order.startTime}</span>
-                </div>
+        {orders.length === 0 ? (
+          <div className="col-span-full">
+            <Card>
+              <CardContent className="py-12 text-center">
+                <ListOrdered className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay órdenes activas</h3>
+                <p className="text-gray-600">
+                  Las órdenes aparecerán aquí cuando se ocupen las mesas
+                </p>
               </CardContent>
             </Card>
-          )
-        })}
-      </div>
-
-      {/* Mensaje informativo */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <div className="bg-blue-100 rounded-full p-2">
-              <ListOrdered className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-blue-900 mb-1">
-                Sistema de Órdenes en Desarrollo
-              </h3>
-              <p className="text-sm text-blue-800">
-                Esta es una vista preliminar del sistema de órdenes. Próximamente se agregarán funcionalidades como:
-                actualización en tiempo real, notificaciones, cambio de estado de órdenes, división de cuentas y más.
-              </p>
-            </div>
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          orders.map((order) => {
+            const statusConfig = getStatusConfig(order.status)
+            const StatusIcon = statusConfig.icon
+            const elapsed = calculateElapsedTime(order.createdAt)
+            const isUpdating = updatingOrderId === order.id
+
+            return (
+              <Card key={order.id} className={`border-2 ${statusConfig.bgColor}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-lg">#{order.id.slice(-6)}</span>
+                      <Badge variant={statusConfig.variant} className="flex items-center gap-1">
+                        <StatusIcon className="w-3 h-3" />
+                        {statusConfig.label}
+                      </Badge>
+                    </div>
+                    <span className={`text-sm font-semibold ${statusConfig.color}`}>
+                      {elapsed}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Info de Mesa y Mozo */}
+                  <div className="flex items-center justify-between text-sm pb-3 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-700">
+                        {order.tableNumber}
+                      </div>
+                      <span className="text-gray-600">Mesa {order.tableNumber}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Users className="w-4 h-4" />
+                      <span>{order.waiterName}</span>
+                    </div>
+                  </div>
+
+                  {/* Items */}
+                  <div className="space-y-2">
+                    {(order.items || []).map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span className="text-gray-700">
+                          {item.quantity}x {item.name}
+                        </span>
+                        <span className="font-medium text-gray-900">
+                          S/ {(item.total || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Total */}
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+                    <span className="font-semibold text-gray-900">TOTAL</span>
+                    <span className="text-lg font-bold text-gray-900">
+                      S/ {(order.total || 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Hora de inicio */}
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <Clock className="w-3 h-3" />
+                    <span>Iniciada a las {formatTime(order.createdAt)}</span>
+                  </div>
+
+                  {/* Botón de avanzar estado */}
+                  {order.status !== 'delivered' && (
+                    <Button
+                      onClick={() => handleStatusChange(order.id, order.status)}
+                      disabled={isUpdating}
+                      className="w-full mt-3"
+                      size="sm"
+                    >
+                      {isUpdating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Actualizando...
+                        </>
+                      ) : (
+                        <>
+                          Marcar como {getStatusConfig(
+                            order.status === 'pending' ? 'preparing' :
+                            order.status === 'preparing' ? 'ready' : 'delivered'
+                          ).label}
+                          <ChevronRight className="w-4 h-4 ml-1" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })
+        )}
+      </div>
     </div>
   )
 }
