@@ -22,6 +22,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
   // Cargar productos
   useEffect(() => {
     if (isOpen) {
+      console.log('Modal abierto, cargando productos...')
       loadProducts()
     }
   }, [isOpen])
@@ -45,13 +46,13 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
     try {
       const result = await getProducts(getBusinessId())
       if (result.success) {
-        // Filtrar solo productos activos con stock
-        const activeProducts = (result.data || []).filter(
-          (p) => p.isActive !== false && (p.stock === undefined || p.stock > 0)
-        )
-        setProducts(activeProducts)
-        setFilteredProducts(activeProducts)
+        console.log('Productos cargados:', result.data)
+        // Mostrar todos los productos por ahora (sin filtro restrictivo)
+        const allProducts = result.data || []
+        setProducts(allProducts)
+        setFilteredProducts(allProducts)
       } else {
+        console.error('Error al cargar productos:', result.error)
         toast.error('Error al cargar productos: ' + result.error)
       }
     } catch (error) {
