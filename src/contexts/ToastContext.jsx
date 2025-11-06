@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react'
 
 const ToastContext = createContext(null)
@@ -44,12 +44,12 @@ const toastVariants = {
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
-  const [counter, setCounter] = useState(0)
+  const counterRef = useRef(0)
 
   const addToast = useCallback((message, variant = 'info', duration = 4000) => {
     // Usar Date.now() + contador para garantizar IDs únicos
-    const id = `${Date.now()}-${counter}`
-    setCounter(prev => prev + 1)
+    const id = `${Date.now()}-${counterRef.current}`
+    counterRef.current += 1
 
     const newToast = { id, message, variant, duration }
 
@@ -61,7 +61,7 @@ export function ToastProvider({ children }) {
     }, duration)
 
     return id
-  }, [counter])
+  }, [])
 
   const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id))

@@ -193,7 +193,7 @@ function Sidebar() {
     },
   ]
 
-  // Seleccionar menú según el modo de negocio
+  // Seleccionar menú según el modo de negocio (default: retail)
   const menuItems = businessMode === 'restaurant' ? restaurantMenuItems : retailMenuItems
 
   // Agregar opciones adicionales según el rol
