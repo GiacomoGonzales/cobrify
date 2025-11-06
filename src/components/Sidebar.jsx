@@ -18,13 +18,18 @@ import {
   UserCog,
   ClipboardList,
   History,
+  // Iconos para modo restaurante
+  UtensilsCrossed,
+  Grid3x3,
+  ChefHat,
+  ListOrdered,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess } = useAppContext()
+  const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess, businessMode } = useAppContext()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo a las rutas
@@ -35,7 +40,8 @@ function Sidebar() {
     return path
   }
 
-  const menuItems = [
+  // Menú para modo RETAIL (tiendas, comercios)
+  const retailMenuItems = [
     {
       path: '/dashboard',
       icon: LayoutDashboard,
@@ -122,6 +128,73 @@ function Sidebar() {
       pageId: 'settings',
     },
   ]
+
+  // Menú para modo RESTAURANT (restaurantes, cafeterías, bares)
+  const restaurantMenuItems = [
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    {
+      path: '/mesas',
+      icon: Grid3x3,
+      label: 'Mesas',
+      pageId: 'tables',
+    },
+    {
+      path: '/mozos',
+      icon: Users,
+      label: 'Mozos',
+      pageId: 'waiters',
+    },
+    {
+      path: '/ordenes',
+      icon: ListOrdered,
+      label: 'Órdenes',
+      pageId: 'orders',
+    },
+    {
+      path: '/cocina',
+      icon: ChefHat,
+      label: 'Cocina',
+      pageId: 'kitchen',
+    },
+    {
+      path: '/productos',
+      icon: UtensilsCrossed,
+      label: 'Menú',
+      pageId: 'products',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Clientes',
+      pageId: 'customers',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Caja',
+      pageId: 'cash-register',
+    },
+    {
+      path: '/reportes',
+      icon: BarChart3,
+      label: 'Reportes',
+      pageId: 'reports',
+    },
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
+  // Seleccionar menú según el modo de negocio
+  const menuItems = businessMode === 'restaurant' ? restaurantMenuItems : retailMenuItems
 
   // Agregar opciones adicionales según el rol
   const additionalItems = [
