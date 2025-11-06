@@ -198,6 +198,118 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
 }
 
 /**
+ * Eliminar un item de una orden existente y actualizar la mesa
+ */
+export const removeOrderItem = async (businessId, orderId, itemIndex) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+
+    const orderData = orderSnap.data()
+    const currentItems = orderData.items || []
+
+    if (itemIndex < 0 || itemIndex >= currentItems.length) {
+      return { success: false, error: 'Item no encontrado' }
+    }
+
+    // Eliminar el item del array
+    const updatedItems = currentItems.filter((_, index) => index !== itemIndex)
+
+    // Recalcular totales (el precio YA incluye IGV)
+    const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
+    const subtotal = total / 1.18 // Precio sin IGV
+    const tax = total - subtotal // IGV = Total - Subtotal
+
+    // Actualizar la orden
+    await updateDoc(orderRef, {
+      items: updatedItems,
+      subtotal,
+      tax,
+      total,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Actualizar el monto en la mesa si existe tableId
+    if (orderData.tableId) {
+      const updateTableResult = await updateTableAmount(businessId, orderData.tableId, total)
+      if (!updateTableResult.success) {
+        console.warn('No se pudo actualizar el monto de la mesa:', updateTableResult.error)
+      }
+    }
+
+    return { success: true, data: { subtotal, tax, total } }
+  } catch (error) {
+    console.error('Error al eliminar item de la orden:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar cantidad de un item en una orden existente y actualizar la mesa
+ */
+export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, newQuantity) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+
+    const orderData = orderSnap.data()
+    const currentItems = orderData.items || []
+
+    if (itemIndex < 0 || itemIndex >= currentItems.length) {
+      return { success: false, error: 'Item no encontrado' }
+    }
+
+    if (newQuantity <= 0) {
+      // Si la cantidad es 0 o negativa, eliminar el item
+      return await removeOrderItem(businessId, orderId, itemIndex)
+    }
+
+    // Actualizar la cantidad y el total del item
+    const updatedItems = [...currentItems]
+    updatedItems[itemIndex] = {
+      ...updatedItems[itemIndex],
+      quantity: newQuantity,
+      total: updatedItems[itemIndex].price * newQuantity
+    }
+
+    // Recalcular totales (el precio YA incluye IGV)
+    const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
+    const subtotal = total / 1.18 // Precio sin IGV
+    const tax = total - subtotal // IGV = Total - Subtotal
+
+    // Actualizar la orden
+    await updateDoc(orderRef, {
+      items: updatedItems,
+      subtotal,
+      tax,
+      total,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Actualizar el monto en la mesa si existe tableId
+    if (orderData.tableId) {
+      const updateTableResult = await updateTableAmount(businessId, orderData.tableId, total)
+      if (!updateTableResult.success) {
+        console.warn('No se pudo actualizar el monto de la mesa:', updateTableResult.error)
+      }
+    }
+
+    return { success: true, data: { subtotal, tax, total } }
+  } catch (error) {
+    console.error('Error al actualizar cantidad de item:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Actualizar el estado de una orden
  */
 export const updateOrderStatus = async (businessId, orderId, newStatus, note = '') => {
@@ -450,6 +562,8 @@ export default {
   updateOrder,
   deleteOrder,
   addOrderItems,
+  removeOrderItem,
+  updateOrderItemQuantity,
   updateOrderStatus,
   getOrdersByStatus,
   getOrdersByTable,

@@ -10,6 +10,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
+import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import {
   getTables,
   getTablesStats,
@@ -47,6 +48,7 @@ export default function Tables() {
 
   // Order items modal
   const [isOrderItemsModalOpen, setIsOrderItemsModalOpen] = useState(false)
+  const [isEditOrderModalOpen, setIsEditOrderModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Form state
@@ -183,25 +185,28 @@ export default function Tables() {
   const handleTableClick = async (table) => {
     setSelectedTable(table)
 
-    // Si la mesa está ocupada, abrir modal de items para agregar productos
+    // Si la mesa está ocupada, cargar la orden y abrir modal de acciones
     if (table.status === 'occupied' && table.currentOrder) {
       try {
         const orderResult = await getOrder(getBusinessId(), table.currentOrder)
         if (orderResult.success) {
           setSelectedOrder(orderResult.data)
-          setIsOrderItemsModalOpen(true)
-        } else {
-          // Si no se puede cargar la orden, abrir modal de acciones
-          setIsActionModalOpen(true)
         }
       } catch (error) {
         console.error('Error al cargar orden:', error)
-        setIsActionModalOpen(true)
       }
-    } else {
-      // Para mesas disponibles o reservadas, abrir modal de acciones
-      setIsActionModalOpen(true)
     }
+
+    // Abrir modal de acciones para todas las mesas
+    setIsActionModalOpen(true)
+  }
+
+  const handleAddItems = () => {
+    setIsOrderItemsModalOpen(true)
+  }
+
+  const handleEditOrder = () => {
+    setIsEditOrderModalOpen(true)
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
@@ -620,6 +625,8 @@ export default function Tables() {
         onRelease={handleReleaseTable}
         onReserve={handleReserveTable}
         onCancelReservation={handleCancelReservation}
+        onAddItems={handleAddItems}
+        onEditOrder={handleEditOrder}
       />
 
       {/* Modal para agregar items a la orden */}
@@ -634,6 +641,29 @@ export default function Tables() {
         order={selectedOrder}
         onSuccess={() => {
           loadTables()
+        }}
+      />
+
+      {/* Modal para editar items de la orden */}
+      <EditOrderItemsModal
+        isOpen={isEditOrderModalOpen}
+        onClose={() => {
+          setIsEditOrderModalOpen(false)
+          setSelectedTable(null)
+          setSelectedOrder(null)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        onSuccess={() => {
+          loadTables()
+          // Recargar la orden actualizada
+          if (selectedTable && selectedTable.currentOrder) {
+            getOrder(getBusinessId(), selectedTable.currentOrder).then((result) => {
+              if (result.success) {
+                setSelectedOrder(result.data)
+              }
+            })
+          }
         }}
       />
     </div>

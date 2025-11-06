@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -14,6 +14,8 @@ export default function TableActionModal({
   onRelease,
   onReserve,
   onCancelReservation,
+  onAddItems,
+  onEditOrder,
   waiters = [],
 }) {
   const [isLoading, setIsLoading] = useState(false)
@@ -191,6 +193,31 @@ export default function TableActionModal({
                       S/ {(table.amount || 0).toFixed(2)}
                     </span>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => {
+                      handleClose()
+                      if (onAddItems) onAddItems()
+                    }}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart className="w-5 h-5" />
+                    Agregar Items
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      handleClose()
+                      if (onEditOrder) onEditOrder()
+                    }}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <Edit className="w-5 h-5" />
+                    Editar Orden
+                  </Button>
                 </div>
 
                 <Button
