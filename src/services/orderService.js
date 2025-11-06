@@ -70,6 +70,8 @@ export const createOrder = async (businessId, orderData) => {
   try {
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
 
+    const now = new Date()
+
     const newOrder = {
       // Información de la mesa y mozo
       tableId: orderData.tableId,
@@ -101,7 +103,7 @@ export const createOrder = async (businessId, orderData) => {
       statusHistory: [
         {
           status: 'pending',
-          timestamp: serverTimestamp(),
+          timestamp: now,
           note: 'Orden creada',
         },
       ],
