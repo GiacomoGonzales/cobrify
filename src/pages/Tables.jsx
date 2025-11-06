@@ -12,7 +12,9 @@ import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
+import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import { printPreBill } from '@/utils/printPreBill'
+import { createInvoice } from '@/services/firestoreService'
 import {
   getTables,
   getTablesStats,
@@ -55,6 +57,7 @@ export default function Tables() {
   const [isOrderItemsModalOpen, setIsOrderItemsModalOpen] = useState(false)
   const [isEditOrderModalOpen, setIsEditOrderModalOpen] = useState(false)
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false)
+  const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Form state
@@ -362,17 +365,61 @@ export default function Tables() {
   }
 
   const handleReleaseTable = async (tableId) => {
+    // Abrir modal para confirmar y opcionalmente generar comprobante
+    setIsCloseTableModalOpen(true)
+  }
+
+  const handleConfirmCloseTable = async (closeData) => {
     try {
-      const result = await releaseTable(getBusinessId(), tableId)
+      const { generateReceipt, documentType, documentNumber, customerName, paymentMethod } = closeData
+
+      // Si se debe generar comprobante
+      if (generateReceipt === 'boleta' || generateReceipt === 'factura') {
+        // Generar el comprobante usando los datos de la orden
+        const invoiceData = {
+          documentType: generateReceipt === 'boleta' ? 'boleta' : 'factura',
+          customer: {
+            documentType: documentType,
+            documentNumber: documentNumber || '',
+            name: customerName || 'Cliente',
+          },
+          items: selectedOrder.items.map(item => ({
+            productId: item.productId,
+            code: item.code || item.productId,
+            name: item.name,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+            category: item.category || 'Platos',
+          })),
+          subtotal: selectedOrder.subtotal,
+          tax: selectedOrder.tax,
+          total: selectedOrder.total,
+          paymentMethod: paymentMethod,
+          notes: `Mesa ${selectedTable.number} - Orden ${selectedOrder.orderNumber || selectedOrder.id.slice(-6)}`,
+        }
+
+        const result = await createInvoice(getBusinessId(), invoiceData)
+
+        if (!result.success) {
+          toast.error('Error al generar comprobante: ' + result.error)
+          return
+        }
+
+        toast.success(`${generateReceipt === 'boleta' ? 'Boleta' : 'Factura'} generada exitosamente`)
+      }
+
+      // Liberar la mesa
+      const result = await releaseTable(getBusinessId(), selectedTable.id)
       if (result.success) {
-        toast.success('Mesa liberada exitosamente')
-        loadTables()
+        toast.success('Mesa cerrada exitosamente')
+        setIsActionModalOpen(false)
       } else {
         toast.error(result.error || 'Error al liberar mesa')
       }
     } catch (error) {
-      console.error('Error al liberar mesa:', error)
-      toast.error('Error al liberar mesa')
+      console.error('Error al cerrar mesa:', error)
+      toast.error('Error al cerrar mesa')
     }
   }
 
@@ -806,6 +853,19 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         onConfirm={handleConfirmSplit}
+      />
+
+      {/* Modal para cerrar mesa y generar comprobante */}
+      <CloseTableModal
+        isOpen={isCloseTableModalOpen}
+        onClose={() => {
+          setIsCloseTableModalOpen(false)
+          // Reabrir el modal de acciones después de cerrar
+          setIsActionModalOpen(true)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        onConfirm={handleConfirmCloseTable}
       />
     </div>
   )
