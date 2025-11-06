@@ -666,8 +666,8 @@ export default function Tables() {
         isOpen={isOrderItemsModalOpen}
         onClose={() => {
           setIsOrderItemsModalOpen(false)
-          setSelectedTable(null)
-          setSelectedOrder(null)
+          // Reabrir el modal de acciones después de cerrar
+          setIsActionModalOpen(true)
         }}
         table={selectedTable}
         order={selectedOrder}
@@ -681,8 +681,8 @@ export default function Tables() {
         isOpen={isEditOrderModalOpen}
         onClose={() => {
           setIsEditOrderModalOpen(false)
-          setSelectedTable(null)
-          setSelectedOrder(null)
+          // Reabrir el modal de acciones después de cerrar
+          setIsActionModalOpen(true)
         }}
         table={selectedTable}
         order={selectedOrder}
@@ -704,8 +704,8 @@ export default function Tables() {
         isOpen={isSplitBillModalOpen}
         onClose={() => {
           setIsSplitBillModalOpen(false)
-          setSelectedTable(null)
-          setSelectedOrder(null)
+          // Reabrir el modal de acciones después de cerrar
+          setIsActionModalOpen(true)
         }}
         table={selectedTable}
         order={selectedOrder}

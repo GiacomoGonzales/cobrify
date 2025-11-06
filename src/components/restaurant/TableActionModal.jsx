@@ -221,7 +221,6 @@ export default function TableActionModal({
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     onClick={() => {
-                      handleClose()
                       if (onAddItems) onAddItems()
                     }}
                     variant="outline"
@@ -232,7 +231,6 @@ export default function TableActionModal({
                   </Button>
                   <Button
                     onClick={() => {
-                      handleClose()
                       if (onEditOrder) onEditOrder()
                     }}
                     variant="outline"
@@ -246,7 +244,6 @@ export default function TableActionModal({
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     onClick={() => {
-                      handleClose()
                       if (onSplitBill) onSplitBill()
                     }}
                     variant="outline"
