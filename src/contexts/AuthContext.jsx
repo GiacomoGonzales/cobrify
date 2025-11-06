@@ -1,9 +1,12 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
+import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
 
 const AuthContext = createContext(null)
 
@@ -17,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const [hasAccess, setHasAccess] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
+  const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant'
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -141,6 +145,20 @@ export const AuthProvider = ({ children }) => {
             setHasAccess(superAdminStatus || businessOwnerStatus)
             setSubscription(null)
           }
+
+          // Cargar configuración del negocio (businessMode)
+          try {
+            const businessId = businessOwnerStatus || superAdminStatus ? firebaseUser.uid : (await getUserData(firebaseUser.uid))?.ownerId || firebaseUser.uid
+            const businessRef = doc(db, 'businesses', businessId)
+            const businessDoc = await getDoc(businessRef)
+            if (businessDoc.exists()) {
+              const businessData = businessDoc.data()
+              setBusinessMode(businessData.businessMode || 'retail')
+            }
+          } catch (error) {
+            console.error('Error al cargar configuración del negocio:', error)
+            setBusinessMode('retail') // Fallback a retail
+          }
         } else {
           // Usuario no autenticado
           setUser(null)
@@ -260,12 +278,29 @@ export const AuthProvider = ({ children }) => {
     allowedPages,
     hasPageAccess,
     getBusinessId, // Función para obtener el ID del negocio (owner)
+    businessMode, // Modo de negocio: 'retail' | 'restaurant'
     login,
     logout,
     refreshSubscription,
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  // Verificar si la cuenta está bloqueada
+  const isBlocked = subscription?.accessBlocked === true && !isAdmin
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+
+      {/* Modal de cuenta suspendida - Solo para usuarios NO admin */}
+      {isBlocked && (
+        <SubscriptionBlockedModal
+          isOpen={isBlocked}
+          subscription={subscription}
+          businessName={subscription?.businessName || user?.email}
+        />
+      )}
+    </AuthContext.Provider>
+  )
 }
 
 export const useAuth = () => {

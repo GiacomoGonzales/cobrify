@@ -66,6 +66,18 @@ export default function Settings() {
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
 
+  // Estados para configuración de SUNAT
+  const [autoSendToSunat, setAutoSendToSunat] = useState(false)
+
+  // Estados para modo de negocio
+  const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
+  const [restaurantConfig, setRestaurantConfig] = useState({
+    tablesEnabled: true,
+    waitersEnabled: true,
+    kitchenEnabled: true,
+    deliveryEnabled: false,
+  })
+
   const {
     register,
     handleSubmit,
@@ -180,6 +192,15 @@ export default function Settings() {
         // Cargar configuración de inventario
         setAllowNegativeStock(businessData.allowNegativeStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
+
+        // Cargar configuración de SUNAT
+        setAutoSendToSunat(businessData.autoSendToSunat || false)
+
+        // Cargar modo de negocio
+        setBusinessMode(businessData.businessMode || 'retail')
+        if (businessData.restaurantConfig) {
+          setRestaurantConfig(businessData.restaurantConfig)
+        }
       }
     } catch (error) {
       console.error('Error al cargar configuración:', error)
@@ -293,6 +314,8 @@ export default function Settings() {
         department: data.department,
         ubigeo: data.ubigeo,
         logoUrl: uploadedLogoUrl || null,
+        businessMode: businessMode,
+        restaurantConfig: restaurantConfig,
         updatedAt: serverTimestamp(),
       }, { merge: true })
 
@@ -805,6 +828,58 @@ export default function Settings() {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+              {/* Business Mode Section */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Tipo de Negocio</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Selecciona el modo que mejor se adapte a tu negocio. Esto cambiará las opciones del menú lateral.
+                </p>
+                <div className="space-y-3">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="retail"
+                      checked={businessMode === 'retail'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold text-gray-900 group-hover:text-primary-900">
+                        🏪 Modo Retail (Tienda/Comercio)
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para tiendas, comercios, ferreterías, farmacias y negocios de venta de productos.
+                        Incluye: POS, productos, inventario, almacenes, compras, proveedores, etc.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50/30 transition-colors">
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="restaurant"
+                      checked={businessMode === 'restaurant'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold text-gray-900 group-hover:text-orange-900">
+                        🍽️ Modo Restaurante
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para restaurantes, cafeterías, bares y negocios de comida.
+                        Incluye: mesas, mozos, órdenes, cocina, menú/productos, caja, reportes, etc.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Inventory Settings Section */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Inventario y Ventas</h3>
@@ -855,17 +930,38 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
-              {/* Placeholder for future settings */}
+              {/* Configuración de Envío a SUNAT */}
               <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Otras Configuraciones</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Envío a SUNAT</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Más opciones estarán disponibles próximamente
+                  Configura el comportamiento del envío de comprobantes a SUNAT
                 </p>
-                <div className="p-8 text-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-                  <SettingsIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500">
-                    Nuevas preferencias de configuración se agregarán aquí
-                  </p>
+
+                {/* Auto Send to SUNAT */}
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoSendToSunat}
+                      onChange={e => setAutoSendToSunat(e.target.checked)}
+                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">Envío automático a SUNAT desde el POS</div>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Cuando está activado, los comprobantes se envían automáticamente a SUNAT al completar una venta en el punto de venta.
+                        Si está desactivado, deberás enviarlos manualmente desde la lista de comprobantes.
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs text-blue-700">
+                          {autoSendToSunat
+                            ? 'Los comprobantes se enviarán automáticamente'
+                            : 'Los comprobantes requerirán envío manual'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>
@@ -885,11 +981,14 @@ export default function Settings() {
                   try {
                     const businessRef = doc(db, 'businesses', getBusinessId())
                     await setDoc(businessRef, {
+                      businessMode: businessMode,
+                      restaurantConfig: restaurantConfig,
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
+                      autoSendToSunat: autoSendToSunat,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
-                    toast.success('Preferencias guardadas exitosamente')
+                    toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')
                   } catch (error) {
                     console.error('Error al guardar preferencias:', error)
                     toast.error('Error al guardar las preferencias')
