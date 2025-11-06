@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -18,6 +18,7 @@ export default function TableActionModal({
   onEditOrder,
   onSplitBill,
   onTransferTable,
+  onPrintPreBill,
   waiters = [],
 }) {
   const [isLoading, setIsLoading] = useState(false)
@@ -240,6 +241,17 @@ export default function TableActionModal({
                     Editar Orden
                   </Button>
                 </div>
+
+                <Button
+                  onClick={() => {
+                    if (onPrintPreBill) onPrintPreBill()
+                  }}
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                >
+                  <Printer className="w-5 h-5" />
+                  Imprimir Precuenta
+                </Button>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button

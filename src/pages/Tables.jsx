@@ -12,6 +12,7 @@ import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
+import { printPreBill } from '@/utils/printPreBill'
 import {
   getTables,
   getTablesStats,
@@ -236,6 +237,28 @@ export default function Tables() {
     } catch (error) {
       console.error('Error al transferir mesa:', error)
       toast.error('Error al transferir mesa')
+    }
+  }
+
+  const handlePrintPreBill = () => {
+    if (!selectedTable || !selectedOrder) {
+      toast.error('No se puede imprimir: datos incompletos')
+      return
+    }
+
+    try {
+      // TODO: Obtener información del negocio desde el contexto
+      const businessInfo = {
+        name: 'MI RESTAURANTE',
+        address: '',
+        phone: ''
+      }
+
+      printPreBill(selectedTable, selectedOrder, businessInfo)
+      toast.success('Imprimiendo precuenta...')
+    } catch (error) {
+      console.error('Error al imprimir precuenta:', error)
+      toast.error('Error al imprimir precuenta')
     }
   }
 
@@ -659,6 +682,7 @@ export default function Tables() {
         onEditOrder={handleEditOrder}
         onSplitBill={handleSplitBill}
         onTransferTable={handleTransferTable}
+        onPrintPreBill={handlePrintPreBill}
       />
 
       {/* Modal para agregar items a la orden */}
