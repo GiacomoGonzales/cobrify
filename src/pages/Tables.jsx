@@ -1,21 +1,163 @@
-import { useState } from 'react'
-import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, DollarSign } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, DollarSign, Edit, Trash2, Loader2 } from 'lucide-react'
+import { useAppContext } from '@/hooks/useAppContext'
+import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
+import Modal from '@/components/ui/Modal'
+import Input from '@/components/ui/Input'
+import Select from '@/components/ui/Select'
+import {
+  getTables,
+  getTablesStats,
+  createTable,
+  updateTable,
+  deleteTable,
+  occupyTable,
+  releaseTable,
+  reserveTable,
+  cancelReservation,
+} from '@/services/tableService'
 
 export default function Tables() {
-  // Estado temporal para demostración
-  const [tables] = useState([
-    { id: 1, number: 1, capacity: 4, status: 'available', zone: 'Salón Principal' },
-    { id: 2, number: 2, capacity: 2, status: 'occupied', zone: 'Salón Principal', waiter: 'Juan Pérez', startTime: '18:30', amount: 125.50 },
-    { id: 3, number: 3, capacity: 6, status: 'available', zone: 'Salón Principal' },
-    { id: 4, number: 4, capacity: 4, status: 'reserved', zone: 'Salón Principal', reservedFor: '19:00' },
-    { id: 5, number: 5, capacity: 2, status: 'occupied', zone: 'Terraza', waiter: 'María García', startTime: '19:15', amount: 89.00 },
-    { id: 6, number: 6, capacity: 4, status: 'available', zone: 'Terraza' },
-    { id: 7, number: 7, capacity: 8, status: 'available', zone: 'Salón VIP' },
-    { id: 8, number: 8, capacity: 4, status: 'occupied', zone: 'Salón VIP', waiter: 'Carlos López', startTime: '20:00', amount: 256.75 },
-  ])
+  const { user, getBusinessId } = useAppContext()
+  const toast = useToast()
+
+  const [tables, setTables] = useState([])
+  const [stats, setStats] = useState({
+    total: 0,
+    available: 0,
+    occupied: 0,
+    reserved: 0,
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingTable, setEditingTable] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Form state
+  const [formData, setFormData] = useState({
+    number: '',
+    capacity: '4',
+    zone: 'Salón Principal',
+  })
+
+  const zones = ['Salón Principal', 'Terraza', 'Salón VIP', 'Bar', 'Exterior']
+
+  useEffect(() => {
+    loadTables()
+  }, [user])
+
+  const loadTables = async () => {
+    if (!user?.uid) return
+
+    setIsLoading(true)
+    try {
+      const [tablesResult, statsResult] = await Promise.all([
+        getTables(getBusinessId()),
+        getTablesStats(getBusinessId()),
+      ])
+
+      if (tablesResult.success) {
+        setTables(tablesResult.data || [])
+      } else {
+        toast.error(tablesResult.error || 'Error al cargar mesas')
+      }
+
+      if (statsResult.success) {
+        setStats(statsResult.data)
+      }
+    } catch (error) {
+      console.error('Error al cargar mesas:', error)
+      toast.error('Error al cargar mesas')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const openCreateModal = () => {
+    setEditingTable(null)
+    setFormData({
+      number: '',
+      capacity: '4',
+      zone: 'Salón Principal',
+    })
+    setIsModalOpen(true)
+  }
+
+  const openEditModal = (table) => {
+    setEditingTable(table)
+    setFormData({
+      number: table.number.toString(),
+      capacity: table.capacity.toString(),
+      zone: table.zone,
+    })
+    setIsModalOpen(true)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!formData.number || formData.number < 1) {
+      toast.error('Ingresa un número de mesa válido')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const tableData = {
+        number: parseInt(formData.number),
+        capacity: parseInt(formData.capacity),
+        zone: formData.zone,
+      }
+
+      let result
+      if (editingTable) {
+        result = await updateTable(getBusinessId(), editingTable.id, tableData)
+      } else {
+        result = await createTable(getBusinessId(), tableData)
+      }
+
+      if (result.success) {
+        toast.success(
+          editingTable ? 'Mesa actualizada exitosamente' : 'Mesa creada exitosamente'
+        )
+        setIsModalOpen(false)
+        loadTables()
+      } else {
+        toast.error(result.error || 'Error al guardar mesa')
+      }
+    } catch (error) {
+      console.error('Error al guardar mesa:', error)
+      toast.error('Error al guardar mesa')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDelete = async (tableId) => {
+    if (!window.confirm('¿Estás seguro de eliminar esta mesa?')) return
+
+    try {
+      const result = await deleteTable(getBusinessId(), tableId)
+      if (result.success) {
+        toast.success('Mesa eliminada exitosamente')
+        loadTables()
+      } else {
+        toast.error(result.error || 'Error al eliminar mesa')
+      }
+    } catch (error) {
+      console.error('Error al eliminar mesa:', error)
+      toast.error('Error al eliminar mesa')
+    }
+  }
+
+  const handleTableClick = (table) => {
+    // TODO: Abrir modal con opciones según el estado
+    // Por ahora solo mostramos info
+    console.log('Table clicked:', table)
+  }
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -25,6 +167,8 @@ export default function Tables() {
         return 'bg-red-100 border-red-300 hover:border-red-400'
       case 'reserved':
         return 'bg-yellow-100 border-yellow-300 hover:border-yellow-400'
+      case 'maintenance':
+        return 'bg-gray-100 border-gray-300 hover:border-gray-400'
       default:
         return 'bg-gray-100 border-gray-300'
     }
@@ -51,16 +195,17 @@ export default function Tables() {
         return 'Ocupada'
       case 'reserved':
         return 'Reservada'
+      case 'maintenance':
+        return 'Mantenimiento'
       default:
         return status
     }
   }
 
-  const stats = {
-    total: tables.length,
-    available: tables.filter(t => t.status === 'available').length,
-    occupied: tables.filter(t => t.status === 'occupied').length,
-    reserved: tables.filter(t => t.status === 'reserved').length,
+  const formatTime = (timestamp) => {
+    if (!timestamp) return ''
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -74,7 +219,7 @@ export default function Tables() {
           </h1>
           <p className="text-gray-600 mt-1">Administra las mesas de tu restaurante</p>
         </div>
-        <Button className="flex items-center gap-2">
+        <Button onClick={openCreateModal} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Nueva Mesa
         </Button>
@@ -132,101 +277,231 @@ export default function Tables() {
       </div>
 
       {/* Vista de Mesas por Zona */}
-      <div className="space-y-6">
-        {['Salón Principal', 'Terraza', 'Salón VIP'].map(zone => {
-          const zoneTables = tables.filter(t => t.zone === zone)
-
-          return (
-            <Card key={zone}>
-              <CardHeader>
-                <CardTitle>{zone}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {zoneTables.map(table => (
-                    <div
-                      key={table.id}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${getStatusColor(table.status)}`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl font-bold text-gray-900">
-                            {table.number}
-                          </span>
-                          {getStatusIcon(table.status)}
-                        </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-600">
-                          <Users className="w-4 h-4" />
-                          <span>{table.capacity}</span>
-                        </div>
-                      </div>
-
-                      <Badge
-                        variant={
-                          table.status === 'available' ? 'success' :
-                          table.status === 'occupied' ? 'danger' : 'warning'
-                        }
-                        className="mb-2 w-full justify-center"
-                      >
-                        {getStatusText(table.status)}
-                      </Badge>
-
-                      {table.status === 'occupied' && (
-                        <div className="space-y-1 text-xs text-gray-700 mt-2 pt-2 border-t border-gray-300">
-                          <div className="flex justify-between">
-                            <span>Mozo:</span>
-                            <span className="font-medium">{table.waiter}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Inicio:</span>
-                            <span className="font-medium">{table.startTime}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span>Consumo:</span>
-                            <span className="font-bold text-gray-900 flex items-center gap-1">
-                              <DollarSign className="w-3 h-3" />
-                              {table.amount.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {table.status === 'reserved' && (
-                        <div className="text-xs text-gray-700 mt-2 pt-2 border-t border-gray-300">
-                          <div className="flex justify-between">
-                            <span>Reserva:</span>
-                            <span className="font-medium">{table.reservedFor}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Mensaje informativo */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-3">
-            <div className="bg-blue-100 rounded-full p-2">
-              <Grid3x3 className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-blue-900 mb-1">
-                Vista de Mesas en Desarrollo
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+        </div>
+      ) : tables.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-12">
+              <Grid3x3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No hay mesas registradas
               </h3>
-              <p className="text-sm text-blue-800">
-                Esta es una vista preliminar de la gestión de mesas. Próximamente se agregarán funcionalidades como:
-                asignación de mozos, apertura de comandas, gestión de reservas, división de cuentas y más.
+              <p className="text-gray-600 mb-4">
+                Crea tu primera mesa para comenzar a gestionar tu restaurante
               </p>
+              <Button onClick={openCreateModal}>
+                <Plus className="w-4 h-4 mr-2" />
+                Crear Primera Mesa
+              </Button>
             </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {zones.map((zone) => {
+            const zoneTables = tables.filter((t) => t.zone === zone)
+            if (zoneTables.length === 0) return null
+
+            return (
+              <Card key={zone}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>{zone}</CardTitle>
+                    <span className="text-sm text-gray-500">
+                      {zoneTables.length} {zoneTables.length === 1 ? 'mesa' : 'mesas'}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {zoneTables.map((table) => (
+                      <div key={table.id} className="relative group">
+                        <div
+                          onClick={() => handleTableClick(table)}
+                          className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${getStatusColor(
+                            table.status
+                          )}`}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl font-bold text-gray-900">
+                                {table.number}
+                              </span>
+                              {getStatusIcon(table.status)}
+                            </div>
+                            <div className="flex items-center gap-1 text-sm text-gray-600">
+                              <Users className="w-4 h-4" />
+                              <span>{table.capacity}</span>
+                            </div>
+                          </div>
+
+                          <Badge
+                            variant={
+                              table.status === 'available'
+                                ? 'success'
+                                : table.status === 'occupied'
+                                ? 'danger'
+                                : 'warning'
+                            }
+                            className="mb-2 w-full justify-center"
+                          >
+                            {getStatusText(table.status)}
+                          </Badge>
+
+                          {table.status === 'occupied' && (
+                            <div className="space-y-1 text-xs text-gray-700 mt-2 pt-2 border-t border-gray-300">
+                              {table.waiter && (
+                                <div className="flex justify-between">
+                                  <span>Mozo:</span>
+                                  <span className="font-medium">{table.waiter}</span>
+                                </div>
+                              )}
+                              {table.startTime && (
+                                <div className="flex justify-between">
+                                  <span>Inicio:</span>
+                                  <span className="font-medium">{formatTime(table.startTime)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between items-center">
+                                <span>Consumo:</span>
+                                <span className="font-bold text-gray-900 flex items-center gap-1">
+                                  <DollarSign className="w-3 h-3" />
+                                  {(table.amount || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {table.status === 'reserved' && table.reservedFor && (
+                            <div className="text-xs text-gray-700 mt-2 pt-2 border-t border-gray-300">
+                              <div className="flex justify-between">
+                                <span>Reserva:</span>
+                                <span className="font-medium">{table.reservedFor}</span>
+                              </div>
+                              {table.reservedBy && (
+                                <div className="flex justify-between mt-1">
+                                  <span>Cliente:</span>
+                                  <span className="font-medium">{table.reservedBy}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Botones de edición/eliminación */}
+                        {table.status === 'available' && (
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditModal(table)
+                              }}
+                              className="bg-white shadow-md"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDelete(table.id)
+                              }}
+                              className="bg-white shadow-md text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Modal Crear/Editar */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingTable ? 'Editar Mesa' : 'Nueva Mesa'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Número de Mesa *
+            </label>
+            <Input
+              type="number"
+              min="1"
+              value={formData.number}
+              onChange={(e) => setFormData({ ...formData, number: e.target.value })}
+              placeholder="Ej: 1"
+              required
+            />
           </div>
-        </CardContent>
-      </Card>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Capacidad *
+            </label>
+            <Input
+              type="number"
+              min="1"
+              value={formData.capacity}
+              onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+              placeholder="Ej: 4"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Zona *
+            </label>
+            <Select
+              value={formData.zone}
+              onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
+              required
+            >
+              {zones.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsModalOpen(false)}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSaving} className="flex-1">
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>{editingTable ? 'Actualizar' : 'Crear'} Mesa</>
+              )}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }
