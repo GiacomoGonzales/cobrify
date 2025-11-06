@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, DollarSign, Edit, Trash2, Loader2 } from 'lucide-react'
+import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -472,9 +472,8 @@ export default function Tables() {
                               )}
                               <div className="flex justify-between items-center">
                                 <span>Consumo:</span>
-                                <span className="font-bold text-gray-900 flex items-center gap-1">
-                                  <DollarSign className="w-3 h-3" />
-                                  {(table.amount || 0).toFixed(2)}
+                                <span className="font-bold text-gray-900">
+                                  S/ {(table.amount || 0).toFixed(2)}
                                 </span>
                               </div>
                             </div>
