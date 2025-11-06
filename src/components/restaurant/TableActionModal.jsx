@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -17,10 +17,11 @@ export default function TableActionModal({
   onAddItems,
   onEditOrder,
   onSplitBill,
+  onTransferTable,
   waiters = [],
 }) {
   const [isLoading, setIsLoading] = useState(false)
-  const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel'
+  const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel', 'transfer'
 
   // Form states
   const [selectedWaiter, setSelectedWaiter] = useState('')
@@ -104,6 +105,27 @@ export default function TableActionModal({
       handleClose()
     } catch (error) {
       console.error('Error al cancelar reserva:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleTransfer = async () => {
+    if (!selectedWaiter) {
+      alert('Por favor selecciona un mozo')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const waiter = waiters.find(w => w.id === selectedWaiter)
+      await onTransferTable(table.id, {
+        waiterId: waiter.id,
+        waiterName: waiter.name,
+      })
+      handleClose()
+    } catch (error) {
+      console.error('Error al transferir mesa:', error)
     } finally {
       setIsLoading(false)
     }
@@ -221,17 +243,27 @@ export default function TableActionModal({
                   </Button>
                 </div>
 
-                <Button
-                  onClick={() => {
-                    handleClose()
-                    if (onSplitBill) onSplitBill()
-                  }}
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2 border-primary-300 text-primary-700 hover:bg-primary-50"
-                >
-                  <Receipt className="w-5 h-5" />
-                  Dividir Cuenta
-                </Button>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => {
+                      handleClose()
+                      if (onSplitBill) onSplitBill()
+                    }}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2 border-primary-300 text-primary-700 hover:bg-primary-50"
+                  >
+                    <Receipt className="w-5 h-5" />
+                    Dividir Cuenta
+                  </Button>
+                  <Button
+                    onClick={() => setAction('transfer')}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <UserCheck className="w-5 h-5" />
+                    Transferir Mesa
+                  </Button>
+                </div>
 
                 <Button
                   onClick={() => setAction('release')}
@@ -336,6 +368,72 @@ export default function TableActionModal({
                 </>
               ) : (
                 'Ocupar Mesa'
+              )}
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    // Formulario para transferir mesa
+    if (action === 'transfer') {
+      return (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              Vas a transferir la <strong>Mesa {table.number}</strong> a otro mozo.
+            </p>
+            {table.waiter && (
+              <p className="text-sm text-blue-800 mt-2">
+                Mozo actual: <strong>{table.waiter}</strong>
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Seleccionar Nuevo Mozo *
+            </label>
+            <Select
+              value={selectedWaiter}
+              onChange={(e) => setSelectedWaiter(e.target.value)}
+              required
+            >
+              <option value="">-- Seleccionar mozo --</option>
+              {waiters
+                .filter((w) => w.status === 'active' && w.id !== table.waiterId)
+                .map((waiter) => (
+                  <option key={waiter.id} value={waiter.id}>
+                    {waiter.name} ({waiter.code})
+                  </option>
+                ))}
+            </Select>
+            {waiters.filter((w) => w.status === 'active' && w.id !== table.waiterId).length === 0 && (
+              <p className="text-sm text-amber-600 mt-2">
+                No hay otros mozos activos disponibles para transferir.
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => setAction(null)} className="flex-1">
+              Atrás
+            </Button>
+            <Button
+              onClick={handleTransfer}
+              disabled={isLoading || !selectedWaiter}
+              className="flex-1 bg-primary-600 hover:bg-primary-700"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Transfiriendo...
+                </>
+              ) : (
+                <>
+                  <UserCheck className="w-4 h-4 mr-2" />
+                  Transferir Mesa
+                </>
               )}
             </Button>
           </div>

@@ -22,6 +22,7 @@ import {
   releaseTable,
   reserveTable,
   cancelReservation,
+  transferTable,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder } from '@/services/orderService'
@@ -220,6 +221,22 @@ export default function Tables() {
     // En el futuro esto podría crear múltiples transacciones de pago
     toast.success(`Cuenta dividida entre ${splitData.numberOfPeople} personas`)
     console.log('Split data:', splitData)
+  }
+
+  const handleTransferTable = async (tableId, transferData) => {
+    try {
+      const result = await transferTable(getBusinessId(), tableId, transferData)
+      if (result.success) {
+        toast.success(`Mesa transferida a ${transferData.waiterName}`)
+        loadTables()
+        setIsActionModalOpen(false)
+      } else {
+        toast.error('Error al transferir mesa: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al transferir mesa:', error)
+      toast.error('Error al transferir mesa')
+    }
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
@@ -641,6 +658,7 @@ export default function Tables() {
         onAddItems={handleAddItems}
         onEditOrder={handleEditOrder}
         onSplitBill={handleSplitBill}
+        onTransferTable={handleTransferTable}
       />
 
       {/* Modal para agregar items a la orden */}

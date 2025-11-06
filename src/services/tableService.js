@@ -291,6 +291,48 @@ export const updateTableAmount = async (businessId, tableId, amount) => {
 }
 
 /**
+ * Transferir una mesa a otro mozo
+ */
+export const transferTable = async (businessId, tableId, transferData) => {
+  try {
+    const tableRef = doc(db, 'businesses', businessId, 'tables', tableId)
+    const tableSnap = await getDoc(tableRef)
+
+    if (!tableSnap.exists()) {
+      return { success: false, error: 'Mesa no encontrada' }
+    }
+
+    const tableData = tableSnap.data()
+
+    if (tableData.status !== 'occupied') {
+      return { success: false, error: 'Solo se pueden transferir mesas ocupadas' }
+    }
+
+    // Actualizar la mesa con el nuevo mozo
+    await updateDoc(tableRef, {
+      waiter: transferData.waiterName,
+      waiterId: transferData.waiterId,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Si hay una orden asociada, también actualizar el mozo en la orden
+    if (tableData.currentOrder) {
+      const orderRef = doc(db, 'businesses', businessId, 'orders', tableData.currentOrder)
+      await updateDoc(orderRef, {
+        waiterName: transferData.waiterName,
+        waiterId: transferData.waiterId,
+        updatedAt: serverTimestamp(),
+      })
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al transferir mesa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener mesas por zona
  */
 export const getTablesByZone = async (businessId, zone) => {
@@ -381,6 +423,7 @@ export default {
   reserveTable,
   cancelReservation,
   updateTableAmount,
+  transferTable,
   getTablesByZone,
   getTablesByStatus,
   getTablesStats,
