@@ -162,6 +162,19 @@ function Sidebar() {
       pageId: 'kitchen',
     },
     {
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
+    },
+    {
+      path: '/facturas',
+      icon: FileText,
+      label: 'Facturas',
+      pageId: 'invoices',
+    },
+    {
       path: '/productos',
       icon: UtensilsCrossed,
       label: 'Menú',
