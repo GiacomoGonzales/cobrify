@@ -12,6 +12,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { createOrder, completeOrder } from './orderService'
 
 /**
  * Servicio para gestión de mesas de restaurante
@@ -132,15 +133,45 @@ export const deleteTable = async (businessId, tableId) => {
 }
 
 /**
- * Ocupar una mesa (asignar mozo y abrir orden)
+ * Ocupar una mesa (asignar mozo y abrir orden automáticamente)
  */
 export const occupyTable = async (businessId, tableId, occupyData) => {
   try {
+    // Obtener datos de la mesa
     const tableRef = doc(db, 'businesses', businessId, 'tables', tableId)
+    const tableSnap = await getDoc(tableRef)
 
+    if (!tableSnap.exists()) {
+      return { success: false, error: 'Mesa no encontrada' }
+    }
+
+    const tableData = tableSnap.data()
+
+    // Crear una orden automáticamente
+    const orderResult = await createOrder(businessId, {
+      tableId: tableId,
+      tableNumber: tableData.number,
+      waiterId: occupyData.waiterId,
+      waiterName: occupyData.waiterName,
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      customerName: occupyData.customerName || null,
+      customerPhone: occupyData.customerPhone || null,
+      notes: occupyData.notes || '',
+    })
+
+    if (!orderResult.success) {
+      return { success: false, error: 'Error al crear orden: ' + orderResult.error }
+    }
+
+    const orderId = orderResult.id
+
+    // Actualizar la mesa con la información de ocupación
     await updateDoc(tableRef, {
       status: 'occupied',
-      currentOrder: occupyData.orderId || null,
+      currentOrder: orderId,
       waiter: occupyData.waiterName,
       waiterId: occupyData.waiterId,
       startTime: serverTimestamp(),
@@ -148,7 +179,7 @@ export const occupyTable = async (businessId, tableId, occupyData) => {
       updatedAt: serverTimestamp(),
     })
 
-    return { success: true }
+    return { success: true, orderId }
   } catch (error) {
     console.error('Error al ocupar mesa:', error)
     return { success: false, error: error.message }
@@ -156,12 +187,29 @@ export const occupyTable = async (businessId, tableId, occupyData) => {
 }
 
 /**
- * Liberar una mesa (cerrar orden)
+ * Liberar una mesa (cerrar orden y completarla)
  */
 export const releaseTable = async (businessId, tableId) => {
   try {
     const tableRef = doc(db, 'businesses', businessId, 'tables', tableId)
+    const tableSnap = await getDoc(tableRef)
 
+    if (!tableSnap.exists()) {
+      return { success: false, error: 'Mesa no encontrada' }
+    }
+
+    const tableData = tableSnap.data()
+
+    // Si hay una orden asociada, completarla
+    if (tableData.currentOrder) {
+      const orderResult = await completeOrder(businessId, tableData.currentOrder)
+      if (!orderResult.success) {
+        console.warn('No se pudo completar la orden:', orderResult.error)
+        // Continuar de todos modos para liberar la mesa
+      }
+    }
+
+    // Liberar la mesa
     await updateDoc(tableRef, {
       status: 'available',
       currentOrder: null,

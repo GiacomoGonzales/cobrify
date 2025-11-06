@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { updateTableAmount } from './tableService'
 
 /**
  * Servicio para gestión de órdenes de restaurante
@@ -149,7 +150,7 @@ export const deleteOrder = async (businessId, orderId) => {
 }
 
 /**
- * Agregar items a una orden existente
+ * Agregar items a una orden existente y actualizar la mesa
  */
 export const addOrderItems = async (businessId, orderId, newItems) => {
   try {
@@ -169,6 +170,7 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
     const tax = subtotal * 0.18 // IGV 18%
     const total = subtotal + tax
 
+    // Actualizar la orden
     await updateDoc(orderRef, {
       items: updatedItems,
       subtotal,
@@ -176,6 +178,15 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
       total,
       updatedAt: serverTimestamp(),
     })
+
+    // Actualizar el monto en la mesa si existe tableId
+    if (orderData.tableId) {
+      const updateTableResult = await updateTableAmount(businessId, orderData.tableId, total)
+      if (!updateTableResult.success) {
+        console.warn('No se pudo actualizar el monto de la mesa:', updateTableResult.error)
+        // Continuar de todos modos, la orden se actualizó correctamente
+      }
+    }
 
     return { success: true, data: { subtotal, tax, total } }
   } catch (error) {
