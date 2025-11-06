@@ -172,7 +172,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
       }
       size="xl"
     >
-      <div className="flex flex-col h-[600px]">
+      <div className="flex flex-col h-[600px] lg:h-[600px]">
         {/* Buscador */}
         <div className="mb-4">
           <div className="relative">
@@ -187,9 +187,9 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
           </div>
         </div>
 
-        <div className="flex-1 flex gap-4 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
           {/* Lista de productos */}
-          <div className="flex-1 overflow-y-auto border rounded-lg p-4">
+          <div className="flex-1 overflow-y-auto border rounded-lg p-4 max-h-[250px] lg:max-h-none">
             <h3 className="font-semibold text-gray-900 mb-3">Productos Disponibles</h3>
 
             {isLoading ? (
@@ -233,7 +233,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
           </div>
 
           {/* Carrito */}
-          <div className="w-80 border rounded-lg p-4 flex flex-col">
+          <div className="w-full lg:w-80 border rounded-lg p-4 flex flex-col">
             <h3 className="font-semibold text-gray-900 mb-3">
               Carrito ({cart.length} items)
             </h3>

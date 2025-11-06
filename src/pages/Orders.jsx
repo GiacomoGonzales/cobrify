@@ -10,7 +10,7 @@ import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy } fro
 import { db } from '@/lib/firebase'
 
 export default function Orders() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [orders, setOrders] = useState([])
@@ -24,6 +24,37 @@ export default function Orders() {
 
     setIsLoading(true)
 
+    // Si estamos en modo demo, usar datos de demo
+    if (isDemoMode && demoData?.orders) {
+      const ordersData = demoData.orders.filter(o =>
+        ['pending', 'preparing', 'ready', 'delivered', 'active'].includes(o.status)
+      )
+
+      // Ordenar por fecha de creación (más recientes primero)
+      ordersData.sort((a, b) => {
+        const dateA = a.createdAt || new Date(0)
+        const dateB = b.createdAt || new Date(0)
+        return dateB - dateA
+      })
+
+      setOrders(ordersData)
+
+      // Calcular estadísticas
+      const newStats = {
+        total: ordersData.length,
+        pending: ordersData.filter(o => o.status === 'pending').length,
+        preparing: ordersData.filter(o => o.status === 'preparing').length,
+        ready: ordersData.filter(o => o.status === 'ready').length,
+        delivered: ordersData.filter(o => o.status === 'delivered').length,
+        active: ordersData.filter(o => o.status === 'active').length,
+        totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
+      }
+      setStats(newStats)
+      setIsLoading(false)
+      return
+    }
+
+    // Modo normal - usar Firestore
     const businessId = getBusinessId()
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
 
@@ -74,7 +105,7 @@ export default function Orders() {
 
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => unsubscribe()
-  }, [user])
+  }, [user, isDemoMode, demoData])
 
   const loadOrders = async () => {
     // Esta función ya no es necesaria con listeners en tiempo real
@@ -82,6 +113,11 @@ export default function Orders() {
   }
 
   const handleStatusChange = async (orderId, currentStatus) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     // Definir el siguiente estado
     const statusFlow = {
       pending: 'preparing',

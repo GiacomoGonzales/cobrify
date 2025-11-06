@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext'
 import { useDemo } from '@/contexts/DemoContext'
+import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
 /**
  * Hook unificado que retorna el contexto apropiado (demo o real)
@@ -8,6 +9,26 @@ import { useDemo } from '@/contexts/DemoContext'
 export function useAppContext() {
   const authContext = useAuth()
   const demoContext = useDemo()
+  const demoRestaurantContext = useDemoRestaurant()
+
+  // Si estamos en modo demo de restaurante, usar datos de demo de restaurante
+  if (demoRestaurantContext?.isDemo) {
+    return {
+      user: demoRestaurantContext.user,
+      isAuthenticated: true, // En demo siempre "autenticado"
+      isLoading: false,
+      isAdmin: false,
+      subscription: { status: 'active', accessBlocked: false },
+      hasAccess: true,
+      isDemoMode: true,
+      demoData: demoRestaurantContext,
+      businessMode: 'restaurant', // Modo restaurante
+      getBusinessId: demoRestaurantContext.getBusinessId,
+      login: async () => ({ success: false, error: 'Demo mode' }),
+      logout: async () => {},
+      refreshSubscription: async () => {},
+    }
+  }
 
   // Si estamos en modo demo, usar datos de demo
   if (demoContext?.isDemoMode) {

@@ -10,7 +10,7 @@ import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy } fro
 import { db } from '@/lib/firebase'
 
 export default function Kitchen() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [orders, setOrders] = useState([])
@@ -23,6 +23,25 @@ export default function Kitchen() {
 
     setIsLoading(true)
 
+    // Si estamos en modo demo, usar datos de demo
+    if (isDemoMode && demoData?.orders) {
+      const ordersData = demoData.orders.filter(o =>
+        ['pending', 'preparing', 'ready', 'active'].includes(o.status)
+      )
+
+      // Ordenar por fecha de creación (más antiguas primero para cocina)
+      ordersData.sort((a, b) => {
+        const dateA = a.createdAt || new Date(0)
+        const dateB = b.createdAt || new Date(0)
+        return dateA - dateB
+      })
+
+      setOrders(ordersData)
+      setIsLoading(false)
+      return
+    }
+
+    // Modo normal - usar Firestore
     const businessId = getBusinessId()
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
 
@@ -61,7 +80,7 @@ export default function Kitchen() {
 
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => unsubscribe()
-  }, [user])
+  }, [user, isDemoMode, demoData])
 
   const loadOrders = async () => {
     // Esta función ya no es necesaria con listeners en tiempo real
@@ -69,6 +88,11 @@ export default function Kitchen() {
   }
 
   const handleStatusChange = async (orderId, newStatus) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     setUpdatingOrderId(orderId)
     try {
       const result = await updateOrderStatus(getBusinessId(), orderId, newStatus)

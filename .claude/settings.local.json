@@ -31,7 +31,10 @@
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
       "Bash(find:*)",
-      "Bash(powershell -Command \"Stop-Process -Id 28020 -Force\")"
+      "Bash(powershell -Command \"Stop-Process -Id 28020 -Force\")",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command \"Get-Process node | Stop-Process -Force\")",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

@@ -32,7 +32,7 @@ import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function Tables() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [tables, setTables] = useState([])
@@ -74,6 +74,29 @@ export default function Tables() {
 
     setIsLoading(true)
 
+    // Si estamos en modo demo, usar datos de demo
+    if (isDemoMode && demoData?.tables) {
+      const tablesData = demoData.tables
+      setTables(tablesData)
+
+      // Calcular estadísticas
+      const newStats = {
+        total: tablesData.length,
+        available: tablesData.filter(t => t.status === 'available').length,
+        occupied: tablesData.filter(t => t.status === 'occupied').length,
+        reserved: tablesData.filter(t => t.status === 'reserved').length,
+        maintenance: tablesData.filter(t => t.status === 'maintenance').length,
+        totalCapacity: tablesData.reduce((sum, t) => sum + (t.capacity || 0), 0),
+        totalAmount: tablesData
+          .filter(t => t.status === 'occupied')
+          .reduce((sum, t) => sum + (t.amount || 0), 0),
+      }
+      setStats(newStats)
+      setIsLoading(false)
+      return
+    }
+
+    // Modo normal - usar Firestore
     const businessId = getBusinessId()
     const tablesRef = collection(db, 'businesses', businessId, 'tables')
     const q = query(tablesRef, orderBy('number', 'asc'))
@@ -114,12 +137,31 @@ export default function Tables() {
 
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => unsubscribe()
-  }, [user])
+  }, [user, isDemoMode, demoData])
 
   // Cargar mozos al inicio
   useEffect(() => {
+    const loadWaiters = async () => {
+      if (!user?.uid) return
+
+      // Si estamos en modo demo, usar datos de demo
+      if (isDemoMode && demoData?.waiters) {
+        setWaiters(demoData.waiters)
+        return
+      }
+
+      try {
+        const result = await getWaiters(getBusinessId())
+        if (result.success) {
+          setWaiters(result.data || [])
+        }
+      } catch (error) {
+        console.error('Error al cargar mozos:', error)
+      }
+    }
+
     loadWaiters()
-  }, [user])
+  }, [user, isDemoMode, demoData])
 
   // Función auxiliar para recargar mesas manualmente si es necesario
   const loadTables = async () => {
@@ -128,22 +170,18 @@ export default function Tables() {
     // Los datos se actualizan automáticamente vía onSnapshot
   }
 
-  const loadWaiters = async () => {
-    if (!user?.uid) return
-
-    try {
-      const result = await getWaiters(getBusinessId())
-      if (result.success) {
-        setWaiters(result.data || [])
-      }
-    } catch (error) {
-      console.error('Error al cargar mozos:', error)
-    }
-  }
-
   // Listener en tiempo real para la orden seleccionada
   useEffect(() => {
     if (!user?.uid || !selectedTable?.currentOrder) return
+
+    // Si estamos en modo demo, buscar la orden en los datos de demo
+    if (isDemoMode && demoData?.orders) {
+      const order = demoData.orders.find(o => o.id === selectedTable.currentOrder)
+      if (order) {
+        setSelectedOrder(order)
+      }
+      return
+    }
 
     const businessId = getBusinessId()
     const orderRef = doc(db, 'businesses', businessId, 'orders', selectedTable.currentOrder)
@@ -163,11 +201,20 @@ export default function Tables() {
 
     // Cleanup: desuscribirse cuando cambie la mesa o se desmonte
     return () => unsubscribe()
-  }, [user, selectedTable?.currentOrder])
+  }, [user, selectedTable?.currentOrder, isDemoMode, demoData])
 
   // Listener en tiempo real para la mesa seleccionada
   useEffect(() => {
     if (!user?.uid || !selectedTable?.id) return
+
+    // Si estamos en modo demo, buscar la mesa en los datos de demo
+    if (isDemoMode && demoData?.tables) {
+      const table = demoData.tables.find(t => t.id === selectedTable.id)
+      if (table) {
+        setSelectedTable(table)
+      }
+      return
+    }
 
     const businessId = getBusinessId()
     const tableRef = doc(db, 'businesses', businessId, 'tables', selectedTable.id)
@@ -187,7 +234,7 @@ export default function Tables() {
 
     // Cleanup: desuscribirse cuando cambie la mesa o se desmonte
     return () => unsubscribe()
-  }, [user, selectedTable?.id])
+  }, [user, selectedTable?.id, isDemoMode, demoData])
 
   // Función para recargar la mesa y orden seleccionadas (ya no necesaria, pero mantenida para compatibilidad)
   const reloadSelectedTableAndOrder = async () => {
@@ -196,6 +243,11 @@ export default function Tables() {
   }
 
   const openCreateModal = () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     setEditingTable(null)
     setFormData({
       number: '',
@@ -206,6 +258,11 @@ export default function Tables() {
   }
 
   const openEditModal = (table) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     setEditingTable(table)
     setFormData({
       number: table.number.toString(),
@@ -256,6 +313,11 @@ export default function Tables() {
   }
 
   const handleDelete = async (tableId) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     if (!window.confirm('¿Estás seguro de eliminar esta mesa?')) return
 
     try {
@@ -349,6 +411,11 @@ export default function Tables() {
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     try {
       const result = await occupyTable(getBusinessId(), tableId, occupyData)
       if (result.success) {
@@ -370,23 +437,41 @@ export default function Tables() {
   }
 
   const handleConfirmCloseTable = async (closeData) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      setIsCloseTableModalOpen(false)
+      setIsActionModalOpen(false)
+      setSelectedTable(null)
+      setSelectedOrder(null)
+      return
+    }
+
     try {
       // Solo cierra sin comprobante (el comprobante se genera desde el POS si es necesario)
       const result = await releaseTable(getBusinessId(), selectedTable.id)
       if (result.success) {
         toast.success('Mesa cerrada exitosamente')
-        setIsActionModalOpen(false)
-        setIsCloseTableModalOpen(false)
       } else {
         toast.error(result.error || 'Error al liberar mesa')
       }
     } catch (error) {
       console.error('Error al cerrar mesa:', error)
       toast.error('Error al cerrar mesa')
+    } finally {
+      // Siempre cerrar ambos modales, independientemente del resultado
+      setIsCloseTableModalOpen(false)
+      setIsActionModalOpen(false)
+      setSelectedTable(null)
+      setSelectedOrder(null)
     }
   }
 
   const handleReserveTable = async (tableId, reservationData) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     try {
       const result = await reserveTable(getBusinessId(), tableId, reservationData)
       if (result.success) {
@@ -402,6 +487,11 @@ export default function Tables() {
   }
 
   const handleCancelReservation = async (tableId) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
     try {
       const result = await cancelReservation(getBusinessId(), tableId)
       if (result.success) {
@@ -578,7 +668,7 @@ export default function Tables() {
                       <div key={table.id} className="relative group">
                         <div
                           onClick={() => handleTableClick(table)}
-                          className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${getStatusColor(
+                          className={`p-4 border-2 rounded-lg cursor-pointer transition-all min-h-[180px] flex flex-col ${getStatusColor(
                             table.status
                           )}`}
                         >
@@ -643,6 +733,13 @@ export default function Tables() {
                                   <span className="font-medium">{table.reservedBy}</span>
                                 </div>
                               )}
+                            </div>
+                          )}
+
+                          {/* Spacer for available tables to maintain consistent height */}
+                          {table.status === 'available' && (
+                            <div className="mt-2 pt-2 border-t border-transparent">
+                              <div className="h-[60px]"></div>
                             </div>
                           )}
                         </div>

@@ -32,10 +32,12 @@ function Sidebar() {
   const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess, businessMode } = useAppContext()
   const location = useLocation()
 
-  // Si estamos en modo demo, añadir prefijo /demo a las rutas
+  // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
   const getPath = (path) => {
     if (isDemoMode) {
-      return `/demo${path}`
+      // Detectar si estamos en demo de restaurante
+      const isRestaurantDemo = location.pathname.startsWith('/demorestaurant')
+      return isRestaurantDemo ? `/demorestaurant${path}` : `/demo${path}`
     }
     return path
   }

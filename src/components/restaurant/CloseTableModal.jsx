@@ -44,11 +44,11 @@ export default function CloseTableModal({
       await onConfirm({
         generateReceipt: 'none',
       })
-      handleClose()
     } catch (error) {
       console.error('Error al cerrar mesa:', error)
     } finally {
       setIsProcessing(false)
+      handleClose()
     }
   }
 

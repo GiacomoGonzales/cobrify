@@ -219,6 +219,10 @@ export default function Products() {
   }
 
   const openCreateModal = () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
     setEditingProduct(null)
     setNoStock(false)
     setHasVariants(false)
@@ -241,6 +245,10 @@ export default function Products() {
   }
 
   const openEditModal = product => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
     setEditingProduct(product)
     const hasNoStock = product.stock === null || product.stock === undefined
     setNoStock(hasNoStock)
@@ -355,6 +363,12 @@ export default function Products() {
 
   const handleDelete = async () => {
     if (!deletingProduct || !user?.uid) return
+
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      setDeletingProduct(null)
+      return
+    }
 
     setIsSaving(true)
     try {

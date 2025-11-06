@@ -10,7 +10,7 @@ import { useToast } from '@/contexts/ToastContext'
 import WaiterFormModal from '@/components/restaurant/WaiterFormModal'
 
 export default function Waiters() {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [waiters, setWaiters] = useState([])
@@ -19,14 +19,28 @@ export default function Waiters() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingWaiter, setEditingWaiter] = useState(null)
 
-  // Cargar datos de Firestore
+  // Cargar datos de Firestore o demo
   useEffect(() => {
     loadWaiters()
-  }, [])
+  }, [isDemoMode, demoData])
 
   const loadWaiters = async () => {
     setIsLoading(true)
     try {
+      // Si estamos en modo demo, usar datos de demo
+      if (isDemoMode && demoData?.waiters) {
+        setWaiters(demoData.waiters)
+        // Calcular stats básicas de demo
+        setStats({
+          total: demoData.waiters.length,
+          active: demoData.waiters.filter(w => w.status === 'active').length,
+          inactive: demoData.waiters.filter(w => w.status === 'inactive').length,
+        })
+        setIsLoading(false)
+        return
+      }
+
+      // Modo normal - usar Firestore
       const businessId = getBusinessId()
       const [waitersResult, statsResult] = await Promise.all([
         getWaiters(businessId),
@@ -51,16 +65,28 @@ export default function Waiters() {
   }
 
   const handleCreate = () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
     setEditingWaiter(null)
     setIsFormModalOpen(true)
   }
 
   const handleEdit = (waiter) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
     setEditingWaiter(waiter)
     setIsFormModalOpen(true)
   }
 
   const handleDelete = async (waiter) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
     if (!window.confirm(`¿Eliminar al mozo ${waiter.name}?`)) return
 
     try {
@@ -78,6 +104,10 @@ export default function Waiters() {
   }
 
   const handleToggleStatus = async (waiter) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
     const newStatus = waiter.status !== 'active'
     try {
       const result = await toggleWaiterStatus(getBusinessId(), waiter.id, newStatus)

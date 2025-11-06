@@ -30,6 +30,8 @@ import CreateQuotation from './pages/CreateQuotation'
 import StockMovements from './pages/StockMovements'
 import Demo from './pages/Demo'
 import DemoLayout from './layouts/DemoLayout'
+import DemoRestaurant from './pages/DemoRestaurant'
+import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
 // Restaurant pages
 import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
@@ -76,6 +78,23 @@ function App() {
               <Route path="mozos" element={<Waiters />} />
               <Route path="ordenes" element={<Orders />} />
               <Route path="cocina" element={<Kitchen />} />
+            </Route>
+
+            {/* Rutas de demo restaurante (sin autenticación, con datos de ejemplo de restaurante) */}
+            <Route path="/demorestaurant" element={<DemoRestaurant />} />
+            <Route path="/demorestaurant" element={<DemoRestaurantLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="pos" element={<POS />} />
+              <Route path="mesas" element={<Tables />} />
+              <Route path="mozos" element={<Waiters />} />
+              <Route path="ordenes" element={<Orders />} />
+              <Route path="cocina" element={<Kitchen />} />
+              <Route path="facturas" element={<InvoiceList />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="productos" element={<Products />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
+              <Route path="configuracion" element={<Settings />} />
             </Route>
 
             {/* Ruta de cuenta suspendida (sin layout) */}

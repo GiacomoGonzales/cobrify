@@ -1,0 +1,411 @@
+import { createContext, useContext, useState } from 'react'
+
+const DemoRestaurantContext = createContext(null)
+
+// Datos de ejemplo para el demo de restaurante
+const generateRestaurantDemoData = () => {
+  const today = new Date()
+
+  return {
+    user: {
+      uid: 'demo-restaurant-user',
+      email: 'demo@restaurante.com',
+      displayName: 'Usuario Demo Restaurante',
+      photoURL: null,
+    },
+    business: {
+      businessName: 'RESTAURANTE EL SABOR SAC',
+      ruc: '20987654321',
+      address: 'Av. La Marina 2355, San Miguel',
+      phone: '01-5678901',
+      email: 'contacto@elsabor.com',
+      website: 'www.elsabor.com',
+      mode: 'restaurant',
+    },
+    products: [
+      {
+        id: '1',
+        code: 'PLT001',
+        name: 'Ceviche de Pescado',
+        description: 'Ceviche fresco del día',
+        price: 32.00,
+        cost: 15.00,
+        stock: null,
+        unit: 'PLATO',
+        category: 'Entradas',
+        hasVariants: false,
+      },
+      {
+        id: '2',
+        code: 'PLT002',
+        name: 'Lomo Saltado',
+        description: 'Lomo saltado con papas fritas y arroz',
+        price: 28.00,
+        cost: 12.00,
+        stock: null,
+        unit: 'PLATO',
+        category: 'Platos de Fondo',
+        hasVariants: false,
+      },
+      {
+        id: '3',
+        code: 'PLT003',
+        name: 'Arroz con Pollo',
+        description: 'Arroz con pollo y papa a la huancaína',
+        price: 22.00,
+        cost: 10.00,
+        stock: null,
+        unit: 'PLATO',
+        category: 'Platos de Fondo',
+        hasVariants: false,
+      },
+      {
+        id: '4',
+        code: 'PLT004',
+        name: 'Ají de Gallina',
+        description: 'Ají de gallina con arroz y papa',
+        price: 24.00,
+        cost: 11.00,
+        stock: null,
+        unit: 'PLATO',
+        category: 'Platos de Fondo',
+        hasVariants: false,
+      },
+      {
+        id: '5',
+        code: 'BEB001',
+        name: 'Chicha Morada',
+        description: 'Chicha morada natural (jarra)',
+        price: 12.00,
+        cost: 3.00,
+        stock: null,
+        unit: 'JARRA',
+        category: 'Bebidas',
+        hasVariants: false,
+      },
+      {
+        id: '6',
+        code: 'BEB002',
+        name: 'Inca Kola',
+        description: 'Inca Kola 500ml',
+        price: 5.00,
+        cost: 2.00,
+        stock: 50,
+        unit: 'UNIDAD',
+        category: 'Bebidas',
+        hasVariants: false,
+      },
+      {
+        id: '7',
+        code: 'PST001',
+        name: 'Suspiro Limeño',
+        description: 'Postre tradicional peruano',
+        price: 12.00,
+        cost: 5.00,
+        stock: null,
+        unit: 'PORCIÓN',
+        category: 'Postres',
+        hasVariants: false,
+      },
+      {
+        id: '8',
+        code: 'PLT005',
+        name: 'Causa Limeña',
+        description: 'Causa rellena de pollo',
+        price: 18.00,
+        cost: 8.00,
+        stock: null,
+        unit: 'PLATO',
+        category: 'Entradas',
+        hasVariants: false,
+      },
+    ],
+    tables: [
+      {
+        id: '1',
+        number: 1,
+        capacity: 4,
+        zone: 'Salón Principal',
+        status: 'occupied',
+        waiter: 'Carlos Rodríguez',
+        waiterId: 'w1',
+        startTime: new Date(today.setHours(today.getHours() - 1)),
+        amount: 84.00,
+        currentOrder: 'order1',
+      },
+      {
+        id: '2',
+        number: 2,
+        capacity: 2,
+        zone: 'Salón Principal',
+        status: 'available',
+      },
+      {
+        id: '3',
+        number: 3,
+        capacity: 6,
+        zone: 'Salón Principal',
+        status: 'occupied',
+        waiter: 'María López',
+        waiterId: 'w2',
+        startTime: new Date(today.setHours(today.getHours() - 2)),
+        amount: 156.00,
+        currentOrder: 'order2',
+      },
+      {
+        id: '4',
+        number: 4,
+        capacity: 4,
+        zone: 'Terraza',
+        status: 'reserved',
+        reservedFor: '19:30',
+        reservedBy: 'Juan Martínez',
+        customerPhone: '987654321',
+      },
+      {
+        id: '5',
+        number: 5,
+        capacity: 2,
+        zone: 'Terraza',
+        status: 'available',
+      },
+      {
+        id: '6',
+        number: 6,
+        capacity: 4,
+        zone: 'Terraza',
+        status: 'available',
+      },
+      {
+        id: '7',
+        number: 7,
+        capacity: 8,
+        zone: 'Salón VIP',
+        status: 'available',
+      },
+      {
+        id: '8',
+        number: 8,
+        capacity: 4,
+        zone: 'Salón Principal',
+        status: 'occupied',
+        waiter: 'Carlos Rodríguez',
+        waiterId: 'w1',
+        startTime: new Date(today.setMinutes(today.getMinutes() - 30)),
+        amount: 46.00,
+        currentOrder: 'order3',
+      },
+    ],
+    waiters: [
+      {
+        id: 'w1',
+        code: 'MOZ001',
+        name: 'Carlos Rodríguez',
+        phone: '987123456',
+        status: 'active',
+        createdAt: new Date(2024, 0, 15),
+      },
+      {
+        id: 'w2',
+        code: 'MOZ002',
+        name: 'María López',
+        phone: '987123457',
+        status: 'active',
+        createdAt: new Date(2024, 0, 20),
+      },
+      {
+        id: 'w3',
+        code: 'MOZ003',
+        name: 'Pedro García',
+        phone: '987123458',
+        status: 'active',
+        createdAt: new Date(2024, 1, 5),
+      },
+    ],
+    orders: [
+      {
+        id: 'order1',
+        orderNumber: '#001',
+        tableId: '1',
+        tableNumber: 1,
+        waiterName: 'Carlos Rodríguez',
+        waiterId: 'w1',
+        status: 'pending',
+        items: [
+          {
+            productId: '1',
+            name: 'Ceviche de Pescado',
+            code: 'PLT001',
+            price: 32.00,
+            quantity: 2,
+            total: 64.00,
+          },
+          {
+            productId: '6',
+            name: 'Inca Kola',
+            code: 'BEB002',
+            price: 5.00,
+            quantity: 4,
+            total: 20.00,
+          },
+        ],
+        subtotal: 71.19,
+        tax: 12.81,
+        total: 84.00,
+        createdAt: new Date(today.setHours(today.getHours() - 1)),
+      },
+      {
+        id: 'order2',
+        orderNumber: '#002',
+        tableId: '3',
+        tableNumber: 3,
+        waiterName: 'María López',
+        waiterId: 'w2',
+        status: 'preparing',
+        items: [
+          {
+            productId: '2',
+            name: 'Lomo Saltado',
+            code: 'PLT002',
+            price: 28.00,
+            quantity: 3,
+            total: 84.00,
+          },
+          {
+            productId: '3',
+            name: 'Arroz con Pollo',
+            code: 'PLT003',
+            price: 22.00,
+            quantity: 2,
+            total: 44.00,
+          },
+          {
+            productId: '5',
+            name: 'Chicha Morada',
+            code: 'BEB001',
+            price: 12.00,
+            quantity: 2,
+            total: 24.00,
+          },
+        ],
+        subtotal: 132.20,
+        tax: 23.80,
+        total: 156.00,
+        createdAt: new Date(today.setHours(today.getHours() - 2)),
+      },
+      {
+        id: 'order3',
+        orderNumber: '#003',
+        tableId: '8',
+        tableNumber: 8,
+        waiterName: 'Carlos Rodríguez',
+        waiterId: 'w1',
+        status: 'ready',
+        items: [
+          {
+            productId: '8',
+            name: 'Causa Limeña',
+            code: 'PLT005',
+            price: 18.00,
+            quantity: 2,
+            total: 36.00,
+          },
+          {
+            productId: '6',
+            name: 'Inca Kola',
+            code: 'BEB002',
+            price: 5.00,
+            quantity: 2,
+            total: 10.00,
+          },
+        ],
+        subtotal: 38.98,
+        tax: 7.02,
+        total: 46.00,
+        createdAt: new Date(today.setMinutes(today.getMinutes() - 30)),
+      },
+    ],
+    customers: [
+      {
+        id: '1',
+        documentType: '1',
+        documentNumber: '45678901',
+        name: 'María González',
+        email: 'maria.gonzalez@email.com',
+        phone: '987654321',
+        address: 'Av. Universitaria 1234, San Miguel',
+      },
+      {
+        id: '2',
+        documentType: '6',
+        documentNumber: '20123456789',
+        name: 'EVENTOS Y CATERING SAC',
+        email: 'eventos@catering.com',
+        phone: '987654322',
+        address: 'Jr. Comercio 567, Pueblo Libre',
+      },
+    ],
+    invoices: [
+      {
+        id: '1',
+        number: 'B001-00000001',
+        series: 'B001',
+        documentType: 'boleta',
+        customer: {
+          documentType: '1',
+          documentNumber: '45678901',
+          name: 'María González',
+          phone: '987654321',
+          email: 'maria.gonzalez@email.com',
+        },
+        items: [
+          {
+            code: 'PLT002',
+            description: 'Lomo Saltado',
+            quantity: 2,
+            price: 28.00,
+          },
+          {
+            code: 'BEB001',
+            description: 'Chicha Morada',
+            quantity: 1,
+            price: 12.00,
+          },
+        ],
+        subtotal: 68.00,
+        tax: 12.24,
+        total: 80.24,
+        status: 'paid',
+        paymentMethod: 'Efectivo',
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 10),
+      },
+    ],
+  }
+}
+
+export function DemoRestaurantProvider({ children }) {
+  const [demoData] = useState(generateRestaurantDemoData())
+  const [isDemo] = useState(true)
+
+  const value = {
+    ...demoData,
+    isDemo,
+    user: demoData.user,
+    getBusinessId: () => 'demo-restaurant-user',
+  }
+
+  return (
+    <DemoRestaurantContext.Provider value={value}>
+      {children}
+    </DemoRestaurantContext.Provider>
+  )
+}
+
+export function useDemoRestaurant() {
+  const context = useContext(DemoRestaurantContext)
+  // No lanzar error si no está en el provider, simplemente retornar null
+  // Esto permite usar el hook en cualquier lugar sin causar errores
+  return context
+}
+
+export { DemoRestaurantContext }

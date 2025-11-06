@@ -88,7 +88,7 @@ const getAllSubcategoryIds = (categories, parentId) => {
 }
 
 export default function POS() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -824,8 +824,8 @@ export default function POS() {
         try {
           const releaseResult = await releaseTable(businessId, tableData.tableId)
           if (releaseResult.success) {
-            toast.success(`Mesa ${tableData.tableNumber} liberada exitosamente`)
-            // Limpiar datos de mesa
+            // No mostrar toast aquí, solo limpiar datos de mesa
+            // El toast de éxito ya se muestra más abajo
             setTableData(null)
           } else {
             toast.warning(`Comprobante generado, pero no se pudo liberar la mesa automáticamente`)
@@ -990,7 +990,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                 </div>
 
                 {/* Selector de Almacén */}
-                {warehouses.length > 0 && (
+                {warehouses.length > 0 && businessMode !== 'restaurant' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Almacén de Venta
