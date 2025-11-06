@@ -9,6 +9,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import TableActionModal from '@/components/restaurant/TableActionModal'
+import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import {
   getTables,
   getTablesStats,
@@ -21,6 +22,7 @@ import {
   cancelReservation,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
+import { getOrder } from '@/services/orderService'
 
 export default function Tables() {
   const { user, getBusinessId } = useAppContext()
@@ -42,6 +44,10 @@ export default function Tables() {
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
   const [selectedTable, setSelectedTable] = useState(null)
   const [waiters, setWaiters] = useState([])
+
+  // Order items modal
+  const [isOrderItemsModalOpen, setIsOrderItemsModalOpen] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -174,9 +180,28 @@ export default function Tables() {
     }
   }
 
-  const handleTableClick = (table) => {
+  const handleTableClick = async (table) => {
     setSelectedTable(table)
-    setIsActionModalOpen(true)
+
+    // Si la mesa está ocupada, abrir modal de items para agregar productos
+    if (table.status === 'occupied' && table.currentOrder) {
+      try {
+        const orderResult = await getOrder(getBusinessId(), table.currentOrder)
+        if (orderResult.success) {
+          setSelectedOrder(orderResult.data)
+          setIsOrderItemsModalOpen(true)
+        } else {
+          // Si no se puede cargar la orden, abrir modal de acciones
+          setIsActionModalOpen(true)
+        }
+      } catch (error) {
+        console.error('Error al cargar orden:', error)
+        setIsActionModalOpen(true)
+      }
+    } else {
+      // Para mesas disponibles o reservadas, abrir modal de acciones
+      setIsActionModalOpen(true)
+    }
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
@@ -596,6 +621,21 @@ export default function Tables() {
         onRelease={handleReleaseTable}
         onReserve={handleReserveTable}
         onCancelReservation={handleCancelReservation}
+      />
+
+      {/* Modal para agregar items a la orden */}
+      <OrderItemsModal
+        isOpen={isOrderItemsModalOpen}
+        onClose={() => {
+          setIsOrderItemsModalOpen(false)
+          setSelectedTable(null)
+          setSelectedOrder(null)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        onSuccess={() => {
+          loadTables()
+        }}
       />
     </div>
   )
