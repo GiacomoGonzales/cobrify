@@ -6,34 +6,59 @@ import Badge from '@/components/ui/Badge'
 import { getActiveOrders, updateOrderStatus } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 export default function Kitchen() {
-  const { getBusinessId } = useAppContext()
+  const { user, getBusinessId } = useAppContext()
   const toast = useToast()
 
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
 
-  // Cargar órdenes
+  // Listener en tiempo real para órdenes activas de cocina
   useEffect(() => {
-    loadOrders()
-    // Auto-refresh cada 10 segundos para la cocina
-    const interval = setInterval(loadOrders, 10000)
-    return () => clearInterval(interval)
-  }, [])
+    if (!user?.uid) return
+
+    setIsLoading(true)
+
+    const businessId = getBusinessId()
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+
+    // Query para órdenes activas (pending, preparing, ready)
+    const q = query(
+      ordersRef,
+      where('status', 'in', ['pending', 'preparing', 'ready']),
+      firestoreOrderBy('createdAt', 'asc')
+    )
+
+    // Listener en tiempo real - se ejecuta cada vez que hay cambios en las órdenes
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const ordersData = []
+        snapshot.forEach((doc) => {
+          ordersData.push({ id: doc.id, ...doc.data() })
+        })
+
+        setOrders(ordersData)
+        setIsLoading(false)
+      },
+      (error) => {
+        console.error('Error en listener de órdenes de cocina:', error)
+        toast.error('Error al cargar órdenes en tiempo real')
+        setIsLoading(false)
+      }
+    )
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => unsubscribe()
+  }, [user])
 
   const loadOrders = async () => {
-    try {
-      const result = await getActiveOrders(getBusinessId())
-      if (result.success) {
-        setOrders(result.data || [])
-      }
-    } catch (error) {
-      console.error('Error al cargar órdenes:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    // Esta función ya no es necesaria con listeners en tiempo real
+    // Los datos se actualizan automáticamente vía onSnapshot
   }
 
   const handleStatusChange = async (orderId, newStatus) => {
@@ -42,7 +67,7 @@ export default function Kitchen() {
       const result = await updateOrderStatus(getBusinessId(), orderId, newStatus)
       if (result.success) {
         toast.success(`Orden actualizada`)
-        loadOrders()
+        // No es necesario llamar a loadOrders() - el listener actualiza automáticamente
       } else {
         toast.error('Error al actualizar orden')
       }

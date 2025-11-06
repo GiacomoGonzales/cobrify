@@ -27,6 +27,8 @@ import {
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder } from '@/services/orderService'
+import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 export default function Tables() {
   const { user, getBusinessId } = useAppContext()
@@ -64,36 +66,64 @@ export default function Tables() {
 
   const zones = ['Salón Principal', 'Terraza', 'Salón VIP', 'Bar', 'Exterior']
 
+  // Listener en tiempo real para mesas
   useEffect(() => {
-    loadTables()
-    loadWaiters()
-  }, [user])
-
-  const loadTables = async () => {
     if (!user?.uid) return
 
     setIsLoading(true)
-    try {
-      const [tablesResult, statsResult] = await Promise.all([
-        getTables(getBusinessId()),
-        getTablesStats(getBusinessId()),
-      ])
 
-      if (tablesResult.success) {
-        setTables(tablesResult.data || [])
-      } else {
-        toast.error(tablesResult.error || 'Error al cargar mesas')
-      }
+    const businessId = getBusinessId()
+    const tablesRef = collection(db, 'businesses', businessId, 'tables')
+    const q = query(tablesRef, orderBy('number', 'asc'))
 
-      if (statsResult.success) {
-        setStats(statsResult.data)
+    // Listener en tiempo real - se ejecuta cada vez que hay cambios
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const tablesData = []
+        snapshot.forEach((doc) => {
+          tablesData.push({ id: doc.id, ...doc.data() })
+        })
+
+        setTables(tablesData)
+
+        // Calcular estadísticas en tiempo real
+        const newStats = {
+          total: tablesData.length,
+          available: tablesData.filter(t => t.status === 'available').length,
+          occupied: tablesData.filter(t => t.status === 'occupied').length,
+          reserved: tablesData.filter(t => t.status === 'reserved').length,
+          maintenance: tablesData.filter(t => t.status === 'maintenance').length,
+          totalCapacity: tablesData.reduce((sum, t) => sum + (t.capacity || 0), 0),
+          totalAmount: tablesData
+            .filter(t => t.status === 'occupied')
+            .reduce((sum, t) => sum + (t.amount || 0), 0),
+        }
+        setStats(newStats)
+
+        setIsLoading(false)
+      },
+      (error) => {
+        console.error('Error en listener de mesas:', error)
+        toast.error('Error al cargar mesas en tiempo real')
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error('Error al cargar mesas:', error)
-      toast.error('Error al cargar mesas')
-    } finally {
-      setIsLoading(false)
-    }
+    )
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => unsubscribe()
+  }, [user])
+
+  // Cargar mozos al inicio
+  useEffect(() => {
+    loadWaiters()
+  }, [user])
+
+  // Función auxiliar para recargar mesas manualmente si es necesario
+  const loadTables = async () => {
+    // Esta función ya no es necesaria con listeners en tiempo real
+    // pero la mantenemos para compatibilidad con código existente
+    // Los datos se actualizan automáticamente vía onSnapshot
   }
 
   const loadWaiters = async () => {
@@ -107,6 +137,60 @@ export default function Tables() {
     } catch (error) {
       console.error('Error al cargar mozos:', error)
     }
+  }
+
+  // Listener en tiempo real para la orden seleccionada
+  useEffect(() => {
+    if (!user?.uid || !selectedTable?.currentOrder) return
+
+    const businessId = getBusinessId()
+    const orderRef = doc(db, 'businesses', businessId, 'orders', selectedTable.currentOrder)
+
+    // Listener en tiempo real para la orden - se actualiza automáticamente cuando cambia
+    const unsubscribe = onSnapshot(
+      orderRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          setSelectedOrder({ id: docSnapshot.id, ...docSnapshot.data() })
+        }
+      },
+      (error) => {
+        console.error('Error en listener de orden:', error)
+      }
+    )
+
+    // Cleanup: desuscribirse cuando cambie la mesa o se desmonte
+    return () => unsubscribe()
+  }, [user, selectedTable?.currentOrder])
+
+  // Listener en tiempo real para la mesa seleccionada
+  useEffect(() => {
+    if (!user?.uid || !selectedTable?.id) return
+
+    const businessId = getBusinessId()
+    const tableRef = doc(db, 'businesses', businessId, 'tables', selectedTable.id)
+
+    // Listener en tiempo real para la mesa - mantiene actualizado el monto y estado
+    const unsubscribe = onSnapshot(
+      tableRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          setSelectedTable({ id: docSnapshot.id, ...docSnapshot.data() })
+        }
+      },
+      (error) => {
+        console.error('Error en listener de mesa:', error)
+      }
+    )
+
+    // Cleanup: desuscribirse cuando cambie la mesa o se desmonte
+    return () => unsubscribe()
+  }, [user, selectedTable?.id])
+
+  // Función para recargar la mesa y orden seleccionadas (ya no necesaria, pero mantenida para compatibilidad)
+  const reloadSelectedTableAndOrder = async () => {
+    // Los datos se actualizan automáticamente vía listeners en tiempo real
+    // Esta función se mantiene vacía para compatibilidad con código existente
   }
 
   const openCreateModal = () => {
@@ -695,9 +779,7 @@ export default function Tables() {
         }}
         table={selectedTable}
         order={selectedOrder}
-        onSuccess={() => {
-          loadTables()
-        }}
+        onSuccess={reloadSelectedTableAndOrder}
       />
 
       {/* Modal para editar items de la orden */}
@@ -710,17 +792,7 @@ export default function Tables() {
         }}
         table={selectedTable}
         order={selectedOrder}
-        onSuccess={() => {
-          loadTables()
-          // Recargar la orden actualizada
-          if (selectedTable && selectedTable.currentOrder) {
-            getOrder(getBusinessId(), selectedTable.currentOrder).then((result) => {
-              if (result.success) {
-                setSelectedOrder(result.data)
-              }
-            })
-          }
-        }}
+        onSuccess={reloadSelectedTableAndOrder}
       />
 
       {/* Modal para dividir la cuenta */}

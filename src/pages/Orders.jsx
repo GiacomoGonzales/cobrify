@@ -6,9 +6,11 @@ import Button from '@/components/ui/Button'
 import { getActiveOrders, getOrdersStats, updateOrderStatus } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 export default function Orders() {
-  const { getBusinessId } = useAppContext()
+  const { user, getBusinessId } = useAppContext()
   const toast = useToast()
 
   const [orders, setOrders] = useState([])
@@ -16,37 +18,60 @@ export default function Orders() {
   const [isLoading, setIsLoading] = useState(true)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
 
-  // Cargar órdenes
+  // Listener en tiempo real para órdenes activas
   useEffect(() => {
-    loadOrders()
-    // Auto-refresh cada 30 segundos
-    const interval = setInterval(loadOrders, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    if (!user?.uid) return
+
+    setIsLoading(true)
+
+    const businessId = getBusinessId()
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+
+    // Query para órdenes activas (pending, preparing, ready, delivered)
+    const q = query(
+      ordersRef,
+      where('status', 'in', ['pending', 'preparing', 'ready', 'delivered']),
+      firestoreOrderBy('createdAt', 'desc')
+    )
+
+    // Listener en tiempo real - se ejecuta cada vez que hay cambios
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const ordersData = []
+        snapshot.forEach((doc) => {
+          ordersData.push({ id: doc.id, ...doc.data() })
+        })
+
+        setOrders(ordersData)
+
+        // Calcular estadísticas en tiempo real
+        const newStats = {
+          total: ordersData.length,
+          pending: ordersData.filter(o => o.status === 'pending').length,
+          preparing: ordersData.filter(o => o.status === 'preparing').length,
+          ready: ordersData.filter(o => o.status === 'ready').length,
+          delivered: ordersData.filter(o => o.status === 'delivered').length,
+          totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
+        }
+        setStats(newStats)
+
+        setIsLoading(false)
+      },
+      (error) => {
+        console.error('Error en listener de órdenes:', error)
+        toast.error('Error al cargar órdenes en tiempo real')
+        setIsLoading(false)
+      }
+    )
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => unsubscribe()
+  }, [user])
 
   const loadOrders = async () => {
-    try {
-      const businessId = getBusinessId()
-      const [ordersResult, statsResult] = await Promise.all([
-        getActiveOrders(businessId),
-        getOrdersStats(businessId),
-      ])
-
-      if (ordersResult.success) {
-        setOrders(ordersResult.data || [])
-      } else {
-        toast.error('Error al cargar órdenes: ' + ordersResult.error)
-      }
-
-      if (statsResult.success) {
-        setStats(statsResult.data)
-      }
-    } catch (error) {
-      console.error('Error al cargar órdenes:', error)
-      toast.error('Error al cargar órdenes')
-    } finally {
-      setIsLoading(false)
-    }
+    // Esta función ya no es necesaria con listeners en tiempo real
+    // Los datos se actualizan automáticamente vía onSnapshot
   }
 
   const handleStatusChange = async (orderId, currentStatus) => {
@@ -65,7 +90,7 @@ export default function Orders() {
       const result = await updateOrderStatus(getBusinessId(), orderId, nextStatus)
       if (result.success) {
         toast.success(`Orden actualizada a ${getStatusConfig(nextStatus).label}`)
-        loadOrders()
+        // No es necesario llamar a loadOrders() - el listener actualiza automáticamente
       } else {
         toast.error('Error al actualizar orden: ' + result.error)
       }

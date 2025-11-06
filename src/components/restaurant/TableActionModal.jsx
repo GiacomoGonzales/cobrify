@@ -247,7 +247,7 @@ export default function TableActionModal({
                     if (onPrintPreBill) onPrintPreBill()
                   }}
                   variant="outline"
-                  className="w-full flex items-center justify-center gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                  className="w-full flex items-center justify-center gap-2"
                 >
                   <Printer className="w-5 h-5" />
                   Imprimir Precuenta
@@ -259,7 +259,7 @@ export default function TableActionModal({
                       if (onSplitBill) onSplitBill()
                     }}
                     variant="outline"
-                    className="flex items-center justify-center gap-2 border-primary-300 text-primary-700 hover:bg-primary-50"
+                    className="flex items-center justify-center gap-2"
                   >
                     <Receipt className="w-5 h-5" />
                     Dividir Cuenta
