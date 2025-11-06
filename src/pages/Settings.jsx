@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -835,7 +835,11 @@ export default function Settings() {
                   Selecciona el modo que mejor se adapte a tu negocio. Esto cambiará las opciones del menú lateral.
                 </p>
                 <div className="space-y-3">
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'retail'
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-gray-200 hover:border-primary-300 hover:bg-primary-50/30'
+                  }`}>
                     <input
                       type="radio"
                       name="businessMode"
@@ -844,18 +848,25 @@ export default function Settings() {
                       onChange={(e) => setBusinessMode(e.target.value)}
                       className="mt-1 w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
                     />
+                    <Store className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'retail' ? 'text-primary-600' : 'text-gray-400 group-hover:text-primary-600'
+                    }`} />
                     <div className="flex-1">
-                      <span className="text-sm font-semibold text-gray-900 group-hover:text-primary-900">
-                        🏪 Modo Retail (Tienda/Comercio)
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Modo Retail (Tienda/Comercio)
                       </span>
                       <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                         Para tiendas, comercios, ferreterías, farmacias y negocios de venta de productos.
-                        Incluye: POS, productos, inventario, almacenes, compras, proveedores, etc.
+                        Incluye: POS, productos, inventario, almacenes, compras, proveedores.
                       </p>
                     </div>
                   </label>
 
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50/30 transition-colors">
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'restaurant'
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/30'
+                  }`}>
                     <input
                       type="radio"
                       name="businessMode"
@@ -864,13 +875,16 @@ export default function Settings() {
                       onChange={(e) => setBusinessMode(e.target.value)}
                       className="mt-1 w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
                     />
+                    <UtensilsCrossed className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'restaurant' ? 'text-orange-600' : 'text-gray-400 group-hover:text-orange-600'
+                    }`} />
                     <div className="flex-1">
-                      <span className="text-sm font-semibold text-gray-900 group-hover:text-orange-900">
-                        🍽️ Modo Restaurante
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900">
+                        Modo Restaurante
                       </span>
                       <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                         Para restaurantes, cafeterías, bares y negocios de comida.
-                        Incluye: mesas, mozos, órdenes, cocina, menú/productos, caja, reportes, etc.
+                        Incluye: mesas, mozos, órdenes, cocina, menú/productos, caja, reportes.
                       </p>
                     </div>
                   </label>
