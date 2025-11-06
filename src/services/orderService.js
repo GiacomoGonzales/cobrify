@@ -417,20 +417,21 @@ export const completeOrder = async (businessId, orderId) => {
 
 /**
  * Obtener órdenes activas (pending, preparing, ready)
+ * Filtrado en cliente para evitar necesidad de índice compuesto
  */
 export const getActiveOrders = async (businessId) => {
   try {
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
-    const q = query(
-      ordersRef,
-      where('status', 'in', ['pending', 'preparing', 'ready']),
-      orderBy('createdAt', 'asc')
-    )
+    const q = query(ordersRef, orderBy('createdAt', 'desc'))
     const snapshot = await getDocs(q)
 
     const orders = []
     snapshot.forEach((doc) => {
-      orders.push({ id: doc.id, ...doc.data() })
+      const data = doc.data()
+      // Filtrar solo órdenes activas
+      if (['pending', 'preparing', 'ready'].includes(data.status)) {
+        orders.push({ id: doc.id, ...data })
+      }
     })
 
     return { success: true, data: orders }
