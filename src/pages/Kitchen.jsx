@@ -26,11 +26,11 @@ export default function Kitchen() {
     const businessId = getBusinessId()
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
 
-    // Query para órdenes activas (pending, preparing, ready)
+    // Query simplificada sin orderBy para evitar índice compuesto
+    // Ordenaremos los datos en el cliente después de recibirlos
     const q = query(
       ordersRef,
-      where('status', 'in', ['pending', 'preparing', 'ready']),
-      firestoreOrderBy('createdAt', 'asc')
+      where('status', 'in', ['pending', 'preparing', 'ready'])
     )
 
     // Listener en tiempo real - se ejecuta cada vez que hay cambios en las órdenes
@@ -40,6 +40,13 @@ export default function Kitchen() {
         const ordersData = []
         snapshot.forEach((doc) => {
           ordersData.push({ id: doc.id, ...doc.data() })
+        })
+
+        // Ordenar por fecha de creación en el cliente (más antiguas primero para cocina)
+        ordersData.sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0)
+          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0)
+          return dateA - dateB // Ascendente - las más antiguas primero
         })
 
         setOrders(ordersData)
