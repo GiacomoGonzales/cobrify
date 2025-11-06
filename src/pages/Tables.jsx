@@ -11,6 +11,7 @@ import Select from '@/components/ui/Select'
 import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
+import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import {
   getTables,
   getTablesStats,
@@ -49,6 +50,7 @@ export default function Tables() {
   // Order items modal
   const [isOrderItemsModalOpen, setIsOrderItemsModalOpen] = useState(false)
   const [isEditOrderModalOpen, setIsEditOrderModalOpen] = useState(false)
+  const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Form state
@@ -207,6 +209,17 @@ export default function Tables() {
 
   const handleEditOrder = () => {
     setIsEditOrderModalOpen(true)
+  }
+
+  const handleSplitBill = () => {
+    setIsSplitBillModalOpen(true)
+  }
+
+  const handleConfirmSplit = async (splitData) => {
+    // Por ahora solo mostramos la información
+    // En el futuro esto podría crear múltiples transacciones de pago
+    toast.success(`Cuenta dividida entre ${splitData.numberOfPeople} personas`)
+    console.log('Split data:', splitData)
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
@@ -627,6 +640,7 @@ export default function Tables() {
         onCancelReservation={handleCancelReservation}
         onAddItems={handleAddItems}
         onEditOrder={handleEditOrder}
+        onSplitBill={handleSplitBill}
       />
 
       {/* Modal para agregar items a la orden */}
@@ -665,6 +679,19 @@ export default function Tables() {
             })
           }
         }}
+      />
+
+      {/* Modal para dividir la cuenta */}
+      <SplitBillModal
+        isOpen={isSplitBillModalOpen}
+        onClose={() => {
+          setIsSplitBillModalOpen(false)
+          setSelectedTable(null)
+          setSelectedOrder(null)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        onConfirm={handleConfirmSplit}
       />
     </div>
   )

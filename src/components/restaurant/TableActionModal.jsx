@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -16,6 +16,7 @@ export default function TableActionModal({
   onCancelReservation,
   onAddItems,
   onEditOrder,
+  onSplitBill,
   waiters = [],
 }) {
   const [isLoading, setIsLoading] = useState(false)
@@ -219,6 +220,18 @@ export default function TableActionModal({
                     Editar Orden
                   </Button>
                 </div>
+
+                <Button
+                  onClick={() => {
+                    handleClose()
+                    if (onSplitBill) onSplitBill()
+                  }}
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-primary-300 text-primary-700 hover:bg-primary-50"
+                >
+                  <Receipt className="w-5 h-5" />
+                  Dividir Cuenta
+                </Button>
 
                 <Button
                   onClick={() => setAction('release')}
