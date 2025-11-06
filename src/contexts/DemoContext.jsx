@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 
 const DemoContext = createContext(null)
 
@@ -532,11 +532,49 @@ const generateDemoData = () => {
       currentPeriodEnd: new Date(today.getFullYear() + 1, today.getMonth(), today.getDate()),
       accessBlocked: false,
     },
+    warehouses: [
+      {
+        id: '1',
+        name: 'Almacén Principal',
+        location: 'Av. Larco 1234, Miraflores',
+        isDefault: true,
+        isActive: true,
+        createdAt: new Date(today.getFullYear(), today.getMonth() - 2, 1),
+      },
+      {
+        id: '2',
+        name: 'Almacén Secundario',
+        location: 'Jr. Comercio 567, San Isidro',
+        isDefault: false,
+        isActive: true,
+        createdAt: new Date(today.getFullYear(), today.getMonth() - 1, 15),
+      },
+      {
+        id: '3',
+        name: 'Almacén de Productos Tecnológicos',
+        location: 'Av. Arequipa 890, Lince',
+        isDefault: false,
+        isActive: true,
+        createdAt: new Date(today.getFullYear(), today.getMonth(), 5),
+      },
+    ],
   }
 }
 
 export const DemoProvider = ({ children }) => {
   const [demoData] = useState(generateDemoData())
+
+  // Inyectar datos de demo en window para que los servicios puedan acceder
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__DEMO_DATA__ = demoData
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete window.__DEMO_DATA__
+      }
+    }
+  }, [demoData])
 
   const value = {
     isDemoMode: true,

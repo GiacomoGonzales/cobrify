@@ -44,9 +44,13 @@ const toastVariants = {
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const [counter, setCounter] = useState(0)
 
   const addToast = useCallback((message, variant = 'info', duration = 4000) => {
-    const id = Date.now()
+    // Usar Date.now() + contador para garantizar IDs únicos
+    const id = `${Date.now()}-${counter}`
+    setCounter(prev => prev + 1)
+
     const newToast = { id, message, variant, duration }
 
     setToasts(prev => [...prev, newToast])
@@ -57,7 +61,7 @@ export function ToastProvider({ children }) {
     }, duration)
 
     return id
-  }, [])
+  }, [counter])
 
   const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id))

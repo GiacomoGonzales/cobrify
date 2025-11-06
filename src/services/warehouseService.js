@@ -17,6 +17,20 @@ import { db } from '@/lib/firebase'
  * Servicio para gestión de almacenes y movimientos de stock
  */
 
+// Helper para detectar modo demo
+const isDemoMode = (businessId) => {
+  return businessId === 'demo-user'
+}
+
+// Obtener datos de demo desde window (inyectados por DemoContext)
+const getDemoData = () => {
+  // Acceder a los datos de demo desde el contexto global
+  if (typeof window !== 'undefined' && window.__DEMO_DATA__) {
+    return window.__DEMO_DATA__
+  }
+  return null
+}
+
 // =====================================================
 // WAREHOUSES (Almacenes)
 // =====================================================
@@ -25,6 +39,14 @@ import { db } from '@/lib/firebase'
  * Obtener todos los almacenes de un negocio
  */
 export const getWarehouses = async (businessId) => {
+  // Si es modo demo, retornar datos de demo
+  if (isDemoMode(businessId)) {
+    const demoData = getDemoData()
+    if (demoData?.warehouses) {
+      return { success: true, data: demoData.warehouses }
+    }
+  }
+
   try {
     const warehousesRef = collection(db, 'businesses', businessId, 'warehouses')
     const q = query(warehousesRef, orderBy('createdAt', 'asc'))

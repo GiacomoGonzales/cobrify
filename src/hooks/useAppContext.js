@@ -20,6 +20,7 @@ export function useAppContext() {
       hasAccess: true,
       isDemoMode: true,
       demoData: demoContext.demoData,
+      getBusinessId: () => demoContext.demoData.user.uid, // Retornar el ID del usuario demo
       login: async () => ({ success: false, error: 'Demo mode' }),
       logout: async () => {},
       refreshSubscription: async () => {},
