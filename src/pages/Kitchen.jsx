@@ -151,7 +151,7 @@ export default function Kitchen() {
                 <span className="font-bold text-primary-600 text-lg">{order.tableNumber}</span>
               </div>
               <div>
-                <div className="font-mono font-bold text-gray-900">#{order.id.slice(-6)}</div>
+                <div className="font-mono font-bold text-gray-900">{order.orderNumber || '#' + order.id.slice(-6)}</div>
                 <div className="text-xs text-gray-500">{order.waiterName}</div>
               </div>
             </div>

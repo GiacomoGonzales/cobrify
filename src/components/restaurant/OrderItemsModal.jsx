@@ -165,7 +165,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
           <div>
             <div className="text-lg font-bold">Agregar Items - Mesa {table.number}</div>
             <div className="text-sm font-normal text-gray-600">
-              Mozo: {table.waiter} | Orden: #{order.id.slice(-6)}
+              Mozo: {table.waiter} | Orden: {order.orderNumber || '#' + order.id.slice(-6)}
             </div>
           </div>
         </div>

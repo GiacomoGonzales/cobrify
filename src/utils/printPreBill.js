@@ -190,7 +190,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         </div>
         <div class="info-row">
           <span>Orden:</span>
-          <span>#${order.id.slice(-6)}</span>
+          <span>${order.orderNumber || '#' + order.id.slice(-6)}</span>
         </div>
       </div>
 

@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   where,
   writeBatch,
+  setDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { updateTableAmount } from './tableService'
@@ -64,6 +65,46 @@ export const getOrder = async (businessId, orderId) => {
 }
 
 /**
+ * Obtener el siguiente número de orden del día
+ */
+const getDailyOrderNumber = async (businessId) => {
+  try {
+    // Obtener la fecha de hoy en formato YYYY-MM-DD
+    const today = new Date()
+    const dateKey = today.toISOString().split('T')[0] // "2025-01-15"
+
+    // Referencia al contador diario
+    const counterRef = doc(db, 'businesses', businessId, 'counters', `orders-${dateKey}`)
+    const counterSnap = await getDoc(counterRef)
+
+    let orderNumber = 1
+
+    if (counterSnap.exists()) {
+      orderNumber = (counterSnap.data().lastNumber || 0) + 1
+    }
+
+    // Si llega a 1000, reiniciar a 1
+    if (orderNumber > 999) {
+      orderNumber = 1
+    }
+
+    // Actualizar o crear el contador usando setDoc con merge
+    await setDoc(counterRef, {
+      lastNumber: orderNumber,
+      date: dateKey,
+      updatedAt: serverTimestamp()
+    }, { merge: true })
+
+    // Formatear como #001, #002, etc.
+    return `#${String(orderNumber).padStart(3, '0')}`
+  } catch (error) {
+    console.error('Error al obtener número de orden:', error)
+    // En caso de error, generar un número aleatorio
+    return `#${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`
+  }
+}
+
+/**
  * Crear una nueva orden
  */
 export const createOrder = async (businessId, orderData) => {
@@ -72,7 +113,13 @@ export const createOrder = async (businessId, orderData) => {
 
     const now = new Date()
 
+    // Obtener el número de orden del día
+    const orderNumber = await getDailyOrderNumber(businessId)
+
     const newOrder = {
+      // Número de orden diario
+      orderNumber: orderNumber,
+
       // Información de la mesa y mozo
       tableId: orderData.tableId,
       tableNumber: orderData.tableNumber,
@@ -110,7 +157,7 @@ export const createOrder = async (businessId, orderData) => {
     }
 
     const docRef = await addDoc(ordersRef, newOrder)
-    return { success: true, id: docRef.id }
+    return { success: true, id: docRef.id, orderNumber }
   } catch (error) {
     console.error('Error al crear orden:', error)
     return { success: false, error: error.message }

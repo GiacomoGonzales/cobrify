@@ -284,7 +284,7 @@ export default function Orders() {
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-lg">#{order.id.slice(-6)}</span>
+                      <span className="font-mono font-bold text-lg">{order.orderNumber || '#' + order.id.slice(-6)}</span>
                       <Badge variant={statusConfig.variant} className="flex items-center gap-1">
                         <StatusIcon className="w-3 h-3" />
                         {statusConfig.label}

@@ -29,7 +29,8 @@
       "Bash(Select-String -Pattern \"error|Error|ERROR|fail|Fail|FAIL|timeout\" -Context 2)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

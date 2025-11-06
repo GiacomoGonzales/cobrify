@@ -81,7 +81,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
           <div>
             <div className="text-lg font-bold">Editar Orden - Mesa {table.number}</div>
             <div className="text-sm font-normal text-gray-600">
-              Mozo: {table.waiter} | Orden: #{order.id.slice(-6)}
+              Mozo: {table.waiter} | Orden: {order.orderNumber || '#' + order.id.slice(-6)}
             </div>
           </div>
         </div>
