@@ -30,7 +30,8 @@
       "Bash(netstat:*)",
       "Bash(findstr:*)",
       "Bash(taskkill:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 28020 -Force\")"
     ],
     "deny": [],
     "ask": []

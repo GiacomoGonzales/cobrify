@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Search,
   Plus,
@@ -38,6 +39,7 @@ import {
 } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse } from '@/services/warehouseService'
+import { releaseTable } from '@/services/tableService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 const PAYMENT_METHODS = {
@@ -88,6 +90,8 @@ const getAllSubcategoryIds = (categories, parentId) => {
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
   const ticketRef = useRef(null)
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
@@ -98,6 +102,9 @@ export default function POS() {
   const [documentType, setDocumentType] = useState('boleta')
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Estado para datos de mesa
+  const [tableData, setTableData] = useState(null)
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -141,6 +148,28 @@ export default function POS() {
     email: '',
     phone: ''
   })
+
+  // Detectar si viene de una mesa y cargar items
+  useEffect(() => {
+    if (location.state?.fromTable) {
+      const tableInfo = location.state
+      setTableData(tableInfo)
+
+      // Cargar items de la mesa al carrito
+      if (tableInfo.items && tableInfo.items.length > 0) {
+        const cartItems = tableInfo.items.map(item => ({
+          ...item,
+          id: item.productId || item.id,
+          // Mantener todos los datos del item de la mesa
+        }))
+        setCart(cartItems)
+        toast.success(`Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items`)
+      }
+
+      // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.state])
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -790,7 +819,24 @@ export default function POS() {
 
       await Promise.all(stockUpdates)
 
-      // 5. Mostrar éxito
+      // 5. Si viene de una mesa, liberar la mesa automáticamente
+      if (tableData?.tableId) {
+        try {
+          const releaseResult = await releaseTable(businessId, tableData.tableId)
+          if (releaseResult.success) {
+            toast.success(`Mesa ${tableData.tableNumber} liberada exitosamente`)
+            // Limpiar datos de mesa
+            setTableData(null)
+          } else {
+            toast.warning(`Comprobante generado, pero no se pudo liberar la mesa automáticamente`)
+          }
+        } catch (error) {
+          console.error('Error al liberar mesa:', error)
+          toast.warning(`Comprobante generado, pero no se pudo liberar la mesa automáticamente`)
+        }
+      }
+
+      // 6. Mostrar éxito
       setLastInvoiceNumber(numberResult.number)
       setLastInvoiceData(invoiceData)
 
@@ -798,7 +844,7 @@ export default function POS() {
       const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
       toast.success(`${documentName} ${numberResult.number} generada exitosamente`, 5000)
 
-      // 6. Recargar productos para actualizar stock
+      // 7. Recargar productos para actualizar stock
       const productsResult = await getProducts(businessId)
       if (productsResult.success) {
         setProducts(productsResult.data || [])
@@ -898,8 +944,17 @@ ${companySettings?.website ? companySettings.website : ''}`
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Punto de Venta</h1>
-              <p className="text-sm text-gray-600 mt-1">Selecciona productos para la venta</p>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Punto de Venta</h1>
+                {tableData && (
+                  <Badge variant="default" className="bg-blue-600 text-white">
+                    Mesa {tableData.tableNumber} - {tableData.orderNumber}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                {tableData ? `Generando comprobante para Mesa ${tableData.tableNumber}` : 'Selecciona productos para la venta'}
+              </p>
             </div>
             <div className="flex gap-2">
               {companySettings?.allowCustomProducts && (

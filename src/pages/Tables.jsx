@@ -14,7 +14,6 @@ import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import { printPreBill } from '@/utils/printPreBill'
-import { createInvoice } from '@/services/firestoreService'
 import {
   getTables,
   getTablesStats,
@@ -372,49 +371,12 @@ export default function Tables() {
 
   const handleConfirmCloseTable = async (closeData) => {
     try {
-      const { generateReceipt, documentType, documentNumber, customerName, paymentMethod } = closeData
-
-      // Si se debe generar comprobante
-      if (generateReceipt === 'boleta' || generateReceipt === 'factura') {
-        // Generar el comprobante usando los datos de la orden
-        const invoiceData = {
-          documentType: generateReceipt === 'boleta' ? 'boleta' : 'factura',
-          customer: {
-            documentType: documentType,
-            documentNumber: documentNumber || '',
-            name: customerName || 'Cliente',
-          },
-          items: selectedOrder.items.map(item => ({
-            productId: item.productId,
-            code: item.code || item.productId,
-            name: item.name,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.total,
-            category: item.category || 'Platos',
-          })),
-          subtotal: selectedOrder.subtotal,
-          tax: selectedOrder.tax,
-          total: selectedOrder.total,
-          paymentMethod: paymentMethod,
-          notes: `Mesa ${selectedTable.number} - Orden ${selectedOrder.orderNumber || selectedOrder.id.slice(-6)}`,
-        }
-
-        const result = await createInvoice(getBusinessId(), invoiceData)
-
-        if (!result.success) {
-          toast.error('Error al generar comprobante: ' + result.error)
-          return
-        }
-
-        toast.success(`${generateReceipt === 'boleta' ? 'Boleta' : 'Factura'} generada exitosamente`)
-      }
-
-      // Liberar la mesa
+      // Solo cierra sin comprobante (el comprobante se genera desde el POS si es necesario)
       const result = await releaseTable(getBusinessId(), selectedTable.id)
       if (result.success) {
         toast.success('Mesa cerrada exitosamente')
         setIsActionModalOpen(false)
+        setIsCloseTableModalOpen(false)
       } else {
         toast.error(result.error || 'Error al liberar mesa')
       }
