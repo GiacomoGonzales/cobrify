@@ -8,6 +8,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
+import TableActionModal from '@/components/restaurant/TableActionModal'
 import {
   getTables,
   getTablesStats,
@@ -19,6 +20,7 @@ import {
   reserveTable,
   cancelReservation,
 } from '@/services/tableService'
+import { getWaiters } from '@/services/waiterService'
 
 export default function Tables() {
   const { user, getBusinessId } = useAppContext()
@@ -36,6 +38,11 @@ export default function Tables() {
   const [editingTable, setEditingTable] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Table action modal
+  const [isActionModalOpen, setIsActionModalOpen] = useState(false)
+  const [selectedTable, setSelectedTable] = useState(null)
+  const [waiters, setWaiters] = useState([])
+
   // Form state
   const [formData, setFormData] = useState({
     number: '',
@@ -47,6 +54,7 @@ export default function Tables() {
 
   useEffect(() => {
     loadTables()
+    loadWaiters()
   }, [user])
 
   const loadTables = async () => {
@@ -73,6 +81,19 @@ export default function Tables() {
       toast.error('Error al cargar mesas')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadWaiters = async () => {
+    if (!user?.uid) return
+
+    try {
+      const result = await getWaiters(getBusinessId())
+      if (result.success) {
+        setWaiters(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar mozos:', error)
     }
   }
 
@@ -154,9 +175,68 @@ export default function Tables() {
   }
 
   const handleTableClick = (table) => {
-    // TODO: Abrir modal con opciones según el estado
-    // Por ahora solo mostramos info
-    console.log('Table clicked:', table)
+    setSelectedTable(table)
+    setIsActionModalOpen(true)
+  }
+
+  const handleOccupyTable = async (tableId, occupyData) => {
+    try {
+      const result = await occupyTable(getBusinessId(), tableId, occupyData)
+      if (result.success) {
+        toast.success('Mesa ocupada exitosamente')
+        loadTables()
+      } else {
+        toast.error(result.error || 'Error al ocupar mesa')
+      }
+    } catch (error) {
+      console.error('Error al ocupar mesa:', error)
+      toast.error('Error al ocupar mesa')
+    }
+  }
+
+  const handleReleaseTable = async (tableId) => {
+    try {
+      const result = await releaseTable(getBusinessId(), tableId)
+      if (result.success) {
+        toast.success('Mesa liberada exitosamente')
+        loadTables()
+      } else {
+        toast.error(result.error || 'Error al liberar mesa')
+      }
+    } catch (error) {
+      console.error('Error al liberar mesa:', error)
+      toast.error('Error al liberar mesa')
+    }
+  }
+
+  const handleReserveTable = async (tableId, reservationData) => {
+    try {
+      const result = await reserveTable(getBusinessId(), tableId, reservationData)
+      if (result.success) {
+        toast.success('Mesa reservada exitosamente')
+        loadTables()
+      } else {
+        toast.error(result.error || 'Error al reservar mesa')
+      }
+    } catch (error) {
+      console.error('Error al reservar mesa:', error)
+      toast.error('Error al reservar mesa')
+    }
+  }
+
+  const handleCancelReservation = async (tableId) => {
+    try {
+      const result = await cancelReservation(getBusinessId(), tableId)
+      if (result.success) {
+        toast.success('Reserva cancelada exitosamente')
+        loadTables()
+      } else {
+        toast.error(result.error || 'Error al cancelar reserva')
+      }
+    } catch (error) {
+      console.error('Error al cancelar reserva:', error)
+      toast.error('Error al cancelar reserva')
+    }
   }
 
   const getStatusColor = (status) => {
@@ -502,6 +582,21 @@ export default function Tables() {
           </div>
         </form>
       </Modal>
+
+      {/* Modal de Acciones de Mesa */}
+      <TableActionModal
+        isOpen={isActionModalOpen}
+        onClose={() => {
+          setIsActionModalOpen(false)
+          setSelectedTable(null)
+        }}
+        table={selectedTable}
+        waiters={waiters}
+        onOccupy={handleOccupyTable}
+        onRelease={handleReleaseTable}
+        onReserve={handleReserveTable}
+        onCancelReservation={handleCancelReservation}
+      />
     </div>
   )
 }
