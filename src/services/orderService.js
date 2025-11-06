@@ -167,10 +167,10 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
     const currentItems = orderData.items || []
     const updatedItems = [...currentItems, ...newItems]
 
-    // Recalcular totales
-    const subtotal = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const tax = subtotal * 0.18 // IGV 18%
-    const total = subtotal + tax
+    // Recalcular totales (el precio YA incluye IGV)
+    const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
+    const subtotal = total / 1.18 // Precio sin IGV
+    const tax = total - subtotal // IGV = Total - Subtotal
 
     // Actualizar la orden
     await updateDoc(orderRef, {

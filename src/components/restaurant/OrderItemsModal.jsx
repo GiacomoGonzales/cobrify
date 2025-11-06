@@ -109,8 +109,17 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
     }
   }
 
-  const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + item.total, 0)
+  const calculateTotals = () => {
+    // El precio del producto YA incluye IGV
+    const total = cart.reduce((sum, item) => sum + item.total, 0)
+    const subtotal = total / 1.18 // Precio sin IGV
+    const igv = total - subtotal // IGV = Total - Subtotal
+
+    return {
+      subtotal: subtotal,
+      igv: igv,
+      total: total
+    }
   }
 
   const handleSave = async () => {
@@ -285,16 +294,16 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
                 <div className="border-t pt-3 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">S/ {calculateTotal().toFixed(2)}</span>
+                    <span className="font-medium">S/ {calculateTotals().subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGV (18%):</span>
-                    <span className="font-medium">S/ {(calculateTotal() * 0.18).toFixed(2)}</span>
+                    <span className="font-medium">S/ {calculateTotals().igv.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-lg font-bold border-t pt-2">
                     <span>Total:</span>
                     <span className="text-primary-600">
-                      S/ {(calculateTotal() * 1.18).toFixed(2)}
+                      S/ {calculateTotals().total.toFixed(2)}
                     </span>
                   </div>
                 </div>
