@@ -4,7 +4,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://cobrify.com/sitemap.xml
+Sitemap: https://cobrifyperu.com/sitemap.xml
 
 # Crawl-delay
 Crawl-delay: 10
@@ -12,7 +12,14 @@ Crawl-delay: 10
 # Disallow admin and API routes
 Disallow: /api/
 Disallow: /admin/
+Disallow: /app/
 
-# Allow logo and assets
+# Allow public images and assets (important for WhatsApp/Facebook previews)
 Allow: /logo.png
+Allow: /socialmedia.png
+Allow: /heroimage.png
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.webp$
 Allow: /assets/
