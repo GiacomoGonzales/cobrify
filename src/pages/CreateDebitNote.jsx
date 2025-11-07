@@ -184,7 +184,12 @@ export default function CreateDebitNote() {
 
         // Metadata
         userId: user.uid,
-        issueDate: new Date()
+        issueDate: new Date(),
+
+        // Información del vendedor
+        createdBy: user.uid,
+        createdByName: user.displayName || user.email || 'Usuario',
+        createdByEmail: user.email || '',
       }
 
       const result = await createInvoice(user.uid, debitNoteData)

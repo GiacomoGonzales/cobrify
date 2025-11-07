@@ -56,6 +56,7 @@ export default function InvoiceList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  const [filterSeller, setFilterSeller] = useState('all')
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingInvoice, setViewingInvoice] = useState(null)
@@ -280,6 +281,15 @@ ${companySettings?.website ? companySettings.website : ''}`
     }
   }
 
+  // Obtener lista única de vendedores
+  const sellers = Array.from(
+    new Set(
+      invoices
+        .filter(inv => inv.createdBy)
+        .map(inv => JSON.stringify({ id: inv.createdBy, name: inv.createdByName || inv.createdByEmail || 'Sin nombre' }))
+    )
+  ).map(str => JSON.parse(str))
+
   // Filtrar facturas
   const filteredInvoices = invoices.filter(invoice => {
     const search = searchTerm.toLowerCase()
@@ -290,6 +300,7 @@ ${companySettings?.website ? companySettings.website : ''}`
 
     const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
     const matchesType = filterType === 'all' || invoice.documentType === filterType
+    const matchesSeller = filterSeller === 'all' || invoice.createdBy === filterSeller
 
     // Filtrar por rango de fechas
     let matchesDateRange = true
@@ -313,7 +324,7 @@ ${companySettings?.website ? companySettings.website : ''}`
       }
     }
 
-    return matchesSearch && matchesStatus && matchesType && matchesDateRange
+    return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesDateRange
   })
 
   // Apply pagination
@@ -327,7 +338,7 @@ ${companySettings?.website ? companySettings.website : ''}`
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleInvoicesCount(20)
-  }, [searchTerm, filterStatus, filterType, filterStartDate, filterEndDate])
+  }, [searchTerm, filterStatus, filterType, filterSeller, filterStartDate, filterEndDate])
 
   const getStatusBadge = status => {
     switch (status) {
@@ -490,7 +501,7 @@ ${companySettings?.website ? companySettings.website : ''}`
             </div>
 
             {/* Filtros */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <Select
                 value={filterType}
                 onChange={e => setFilterType(e.target.value)}
@@ -511,6 +522,17 @@ ${companySettings?.website ? companySettings.website : ''}`
                 <option value="pending">Pendientes</option>
                 <option value="overdue">Vencidas</option>
                 <option value="cancelled">Anuladas</option>
+              </Select>
+              <Select
+                value={filterSeller}
+                onChange={e => setFilterSeller(e.target.value)}
+              >
+                <option value="all">Todos los vendedores</option>
+                {sellers.map(seller => (
+                  <option key={seller.id} value={seller.id}>
+                    {seller.name}
+                  </option>
+                ))}
               </Select>
               <Input
                 type="date"

@@ -280,6 +280,41 @@ export default function Reports() {
       .slice(0, 10)
   }, [filteredInvoices])
 
+  // Estadísticas por vendedor
+  const sellerStats = useMemo(() => {
+    const sellers = {}
+
+    filteredInvoices.forEach(invoice => {
+      const sellerId = invoice.createdBy || 'unknown'
+      const sellerName = invoice.createdByName || invoice.createdByEmail || 'Sin asignar'
+
+      if (!sellers[sellerId]) {
+        sellers[sellerId] = {
+          id: sellerId,
+          name: sellerName,
+          email: invoice.createdByEmail || '',
+          salesCount: 0,
+          totalRevenue: 0,
+          facturas: 0,
+          boletas: 0,
+          notasCredito: 0,
+          notasDebito: 0,
+        }
+      }
+
+      sellers[sellerId].salesCount += 1
+      sellers[sellerId].totalRevenue += invoice.total || 0
+
+      if (invoice.documentType === 'factura') sellers[sellerId].facturas += 1
+      else if (invoice.documentType === 'boleta') sellers[sellerId].boletas += 1
+      else if (invoice.documentType === 'nota_credito') sellers[sellerId].notasCredito += 1
+      else if (invoice.documentType === 'nota_debito') sellers[sellerId].notasDebito += 1
+    })
+
+    return Object.values(sellers)
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+  }, [filteredInvoices])
+
   // Ventas por mes (últimos 12 meses)
   const salesByMonth = useMemo(() => {
     const monthsData = {}
@@ -441,6 +476,17 @@ export default function Reports() {
         >
           <Users className="w-4 h-4 inline-block mr-2" />
           Clientes
+        </button>
+        <button
+          onClick={() => setSelectedReport('sellers')}
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+            selectedReport === 'sellers'
+              ? 'bg-primary-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <Users className="w-4 h-4 inline-block mr-2" />
+          Vendedores
         </button>
       </div>
 
@@ -989,6 +1035,168 @@ export default function Reports() {
                           </TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(customer.totalSpent || 0)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Reporte por Vendedores */}
+      {selectedReport === 'sellers' && (
+        <>
+          {/* Resumen de ventas por vendedor */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Vendedores</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">{sellerStats.length}</p>
+                  </div>
+                  <Users className="w-8 h-8 text-primary-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Top Vendedor</p>
+                    <p className="text-lg font-bold text-gray-900 mt-2">
+                      {sellerStats.length > 0 ? sellerStats[0].name : 'N/A'}
+                    </p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Ventas Top Vendedor</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">
+                      {sellerStats.length > 0 ? sellerStats[0].salesCount : 0}
+                    </p>
+                  </div>
+                  <ShoppingCart className="w-8 h-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Ingresos Top Vendedor</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">
+                      {sellerStats.length > 0 ? formatCurrency(sellerStats[0].totalRevenue) : formatCurrency(0)}
+                    </p>
+                  </div>
+                  <DollarSign className="w-8 h-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Gráfico de ventas por vendedor */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Ingresos por Vendedor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={sellerStats}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={100} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="totalRevenue" fill={COLORS[0]} name="Total Vendido" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Tabla detallada por vendedor */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalles de Ventas por Vendedor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Posición</TableHead>
+                      <TableHead>Vendedor</TableHead>
+                      <TableHead className="text-right">Total Ventas</TableHead>
+                      <TableHead className="text-right">Facturas</TableHead>
+                      <TableHead className="text-right">Boletas</TableHead>
+                      <TableHead className="text-right">N. Crédito</TableHead>
+                      <TableHead className="text-right">N. Débito</TableHead>
+                      <TableHead className="text-right">Ingresos Totales</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sellerStats.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                          No hay datos de vendedores
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      sellerStats.map((seller, index) => (
+                        <TableRow key={seller.id}>
+                          <TableCell>
+                            <div
+                              className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold ${
+                                index === 0
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : index === 1
+                                  ? 'bg-gray-200 text-gray-700'
+                                  : index === 2
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {index + 1}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{seller.name}</p>
+                              {seller.email && (
+                                <p className="text-xs text-gray-500">{seller.email}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
+                              <span className="text-sm font-semibold">{seller.salesCount}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="primary">{seller.facturas}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="default">{seller.boletas}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="warning">{seller.notasCredito}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="danger">{seller.notasDebito}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-green-600">
+                            {formatCurrency(seller.totalRevenue)}
                           </TableCell>
                         </TableRow>
                       ))

@@ -773,6 +773,10 @@ export default function POS() {
         sunatStatus: (documentType === 'factura' || documentType === 'boleta') ? 'pending' : 'not_applicable',
         sunatResponse: null,
         sunatSentAt: null,
+        // Información del vendedor
+        createdBy: user.uid,
+        createdByName: user.displayName || user.email || 'Usuario',
+        createdByEmail: user.email || '',
       }
 
       const result = await createInvoice(businessId, invoiceData)
