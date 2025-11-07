@@ -1,10 +1,29 @@
 import { Link } from 'react-router-dom'
-import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock } from 'lucide-react'
+import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle } from 'lucide-react'
 import Button from '@/components/ui/Button'
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white relative overflow-hidden">
+      {/* WhatsApp Floating Button */}
+      <a
+        href="https://wa.me/51900434988?text=Hola%2C%20quiero%20información%20sobre%20Cobrify"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 group"
+      >
+        <div className="relative">
+          {/* Pulse animation ring */}
+          <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
+          {/* Glow effect */}
+          <div className="absolute inset-0 bg-green-400 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
+          {/* Main button */}
+          <div className="relative w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center shadow-2xl transform group-hover:scale-110 transition-all duration-300 cursor-pointer">
+            <MessageCircle className="w-8 h-8 text-white" fill="white" />
+          </div>
+        </div>
+      </a>
+
       {/* Header / Navigation */}
       <header className="fixed top-0 w-full bg-white/80 backdrop-blur-lg z-50 border-b border-gray-200/50">
         <nav className="container mx-auto px-4 lg:px-6 py-4">
@@ -47,11 +66,18 @@ export default function LandingPage() {
                   Demo Retail
                 </Button>
               </Link>
-              <Link to="/demorestaurant">
-                <Button className="bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 shadow-lg shadow-primary-200/50 font-semibold">
-                  Demo Restaurante
+              <a
+                href="https://wa.me/51900434988?text=Hola%2C%20quiero%20aprovechar%20la%20promoci%C3%B3n%20del%2050%25%20de%20descuento%20en%20Cobrify"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-200/50 font-semibold text-white relative overflow-hidden group">
+                  <span className="relative z-10 flex items-center gap-2">
+                    <span className="hidden sm:inline">Obtén</span> 50% de Dscto.
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 to-orange-400 opacity-0 group-hover:opacity-20 transition-opacity"></div>
                 </Button>
-              </Link>
+              </a>
             </div>
           </div>
         </nav>
@@ -83,7 +109,20 @@ export default function LandingPage() {
 
         <div className="container mx-auto max-w-6xl relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="text-white">
+            {/* Image First on Mobile, Second on Desktop */}
+            <div className="flex justify-center items-center order-1 lg:order-2">
+              <div className="relative w-[85%]">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-blue-500 rounded-3xl blur-2xl opacity-20 transform rotate-6"></div>
+                <img
+                  src="/heroimage.png"
+                  alt="Sistema de facturación Cobrify"
+                  className="relative z-10 w-full h-auto rounded-3xl shadow-2xl border-4 border-white/20 transform hover:scale-105 transition-transform duration-300"
+                />
+              </div>
+            </div>
+
+            {/* Text Second on Mobile, First on Desktop */}
+            <div className="text-white order-2 lg:order-1">
               <h1 className="text-5xl lg:text-6xl font-bold mb-6 leading-tight">
                 Facturación Electrónica para tu Negocio
               </h1>
@@ -113,16 +152,6 @@ export default function LandingPage() {
                   <span>Prueba todas las funciones</span>
                 </div>
               </div>
-            </div>
-            <div className="hidden lg:block">
-              <img
-                src="/hero-image.png"
-                alt="Sistema de facturación Cobrify"
-                className="w-full h-auto rounded-lg shadow-2xl"
-                onError={(e) => {
-                  e.target.style.display = 'none'
-                }}
-              />
             </div>
           </div>
         </div>
@@ -321,84 +350,216 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4 bg-white">
-        <div className="container mx-auto max-w-4xl text-center">
+      <section id="pricing" className="py-20 px-4 bg-gradient-to-b from-white via-gray-50 to-white relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary-100 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
+
+        <div className="container mx-auto max-w-6xl text-center relative z-10">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Explora nuestras demos interactivas
+            Planes que se adaptan a tu negocio
           </h2>
           <p className="text-xl text-gray-600 mb-12">
-            Prueba el sistema completo con datos de ejemplo
+            Todos los planes incluyen las mismas funcionalidades completas
           </p>
 
-          <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-            {/* Demo Retail */}
-            <div className="relative bg-white p-8 rounded-2xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-lg">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {/* Plan Mensual */}
+            <div className="relative bg-white p-8 rounded-2xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-xl group">
               <div className="mb-6">
-                <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <ShoppingCart className="w-8 h-8 text-white" />
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Mensual</h3>
+                <div className="flex items-baseline justify-center mb-2">
+                  <span className="text-4xl font-bold text-gray-900">S/19.90</span>
+                  <span className="text-gray-600 ml-2">/mes</span>
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Demo Retail</h3>
-                <p className="text-gray-600">Ideal para tiendas y comercios</p>
+                <p className="text-sm text-gray-500">Pago mes a mes</p>
               </div>
               <ul className="space-y-3 mb-8 text-left">
-                <li className="flex items-center text-gray-700">
-                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" />
-                  <span>Punto de venta completo</span>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Facturación ilimitada SUNAT</span>
                 </li>
-                <li className="flex items-center text-gray-700">
-                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" />
-                  <span>Gestión de inventario</span>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Control de stock completo</span>
                 </li>
-                <li className="flex items-center text-gray-700">
-                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" />
-                  <span>Control de clientes</span>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Múltiples usuarios</span>
                 </li>
-                <li className="flex items-center text-gray-700">
-                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" />
-                  <span>Reportes y análisis</span>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Soporte prioritario</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Software a medida</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>100% Web (sin instalación)</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Reportes avanzados exportables</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Adaptado a cualquier negocio</span>
                 </li>
               </ul>
-              <Link to="/demo">
-                <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50">
-                  Explorar Demo Retail
+              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50 font-semibold">
+                  Contratar Plan
                 </Button>
-              </Link>
+              </a>
             </div>
 
-            {/* Demo Restaurante */}
-            <div className="relative bg-gradient-to-br from-primary-600 to-primary-700 p-8 rounded-2xl shadow-2xl transform md:scale-105">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
-                Más Completo
+            {/* Plan Semestral - Destacado */}
+            <div className="relative bg-gradient-to-br from-primary-600 to-primary-700 p-8 rounded-2xl shadow-2xl transform md:scale-105 border-4 border-primary-400">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-6 py-1.5 rounded-full text-sm font-bold shadow-lg">
+                Más Popular
               </div>
               <div className="mb-6">
-                <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Users className="w-8 h-8 text-white" />
+                <h3 className="text-2xl font-bold text-white mb-2">Semestral</h3>
+                <div className="flex items-baseline justify-center mb-2">
+                  <span className="text-4xl font-bold text-white">S/99.90</span>
+                  <span className="text-primary-100 ml-2">/6 meses</span>
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Demo Restaurante</h3>
-                <p className="text-primary-100">Especializado para restaurantes</p>
+                <p className="text-sm text-primary-100">Ahorra S/19.50 (16%)</p>
               </div>
               <ul className="space-y-3 mb-8 text-left">
-                <li className="flex items-center text-white">
-                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0" />
-                  <span>Gestión de mesas</span>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Facturación ilimitada SUNAT</span>
                 </li>
-                <li className="flex items-center text-white">
-                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0" />
-                  <span>Control de mozos</span>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Control de stock completo</span>
                 </li>
-                <li className="flex items-center text-white">
-                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0" />
-                  <span>Vista de cocina</span>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Múltiples usuarios</span>
                 </li>
-                <li className="flex items-center text-white">
-                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0" />
-                  <span>Comandas digitales</span>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Soporte prioritario</span>
+                </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Software a medida</span>
+                </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>100% Web (sin instalación)</span>
+                </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Reportes avanzados exportables</span>
+                </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Adaptado a cualquier negocio</span>
                 </li>
               </ul>
-              <Link to="/demorestaurant">
+              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Semestral%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-white text-primary-700 hover:bg-primary-50 font-semibold shadow-lg">
-                  Explorar Demo Restaurante
+                  Contratar Plan
                 </Button>
+              </a>
+            </div>
+
+            {/* Plan Anual */}
+            <div className="relative bg-white p-8 rounded-2xl border-2 border-primary-300 hover:border-primary-400 transition-all hover:shadow-xl group">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-1 rounded-full text-sm font-bold">
+                Mejor Ahorro
+              </div>
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Anual</h3>
+                <div className="flex items-baseline justify-center mb-2">
+                  <span className="text-4xl font-bold text-gray-900">S/149.90</span>
+                  <span className="text-gray-600 ml-2">/año</span>
+                </div>
+                <p className="text-sm text-green-600 font-semibold">Ahorra S/88.90 (37%)</p>
+              </div>
+              <ul className="space-y-3 mb-8 text-left">
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Facturación ilimitada SUNAT</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Control de stock completo</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Múltiples usuarios</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Soporte prioritario</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Software a medida</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>100% Web (sin instalación)</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Reportes avanzados exportables</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Adaptado a cualquier negocio</span>
+                </li>
+              </ul>
+              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Anual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+                <Button className="w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 font-semibold shadow-lg">
+                  Contratar Plan
+                </Button>
+              </a>
+            </div>
+          </div>
+
+          {/* Demos Section */}
+          <div className="mt-20 pt-12 border-t border-gray-200">
+            <h3 className="text-3xl font-bold text-gray-900 mb-4">
+              Prueba nuestras demos antes de contratar
+            </h3>
+            <p className="text-lg text-gray-600 mb-8">
+              Explora todas las funcionalidades sin compromiso
+            </p>
+            <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+              <Link to="/demo">
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-lg group cursor-pointer">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center">
+                      <ShoppingCart className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">Demo Retail</h4>
+                  <p className="text-gray-600 text-sm mb-4">Ideal para tiendas y comercios</p>
+                  <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50">
+                    Explorar Demo
+                  </Button>
+                </div>
+              </Link>
+              <Link to="/demorestaurant">
+                <div className="bg-gradient-to-br from-primary-600 to-primary-700 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all group cursor-pointer">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                      <Users className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <h4 className="text-xl font-bold text-white mb-2">Demo Restaurante</h4>
+                  <p className="text-primary-100 text-sm mb-4">Especializado para restaurantes</p>
+                  <Button className="w-full bg-white text-primary-700 hover:bg-primary-50 font-semibold">
+                    Explorar Demo
+                  </Button>
+                </div>
               </Link>
             </div>
           </div>
