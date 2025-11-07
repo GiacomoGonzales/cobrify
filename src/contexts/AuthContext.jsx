@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
   const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant'
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     // Timeout de seguridad para evitar loading infinito
@@ -287,14 +288,18 @@ export const AuthProvider = ({ children }) => {
   // Verificar si la cuenta está bloqueada
   const isBlocked = subscription?.accessBlocked === true && !isAdmin
 
+  // Solo mostrar el modal en rutas protegidas (/app), no en landing, login, o demos
+  const isProtectedRoute = location.pathname.startsWith('/app')
+  const shouldShowBlockedModal = isBlocked && isProtectedRoute
+
   return (
     <AuthContext.Provider value={value}>
       {children}
 
-      {/* Modal de cuenta suspendida - Solo para usuarios NO admin */}
-      {isBlocked && (
+      {/* Modal de cuenta suspendida - Solo para usuarios NO admin en rutas protegidas */}
+      {shouldShowBlockedModal && (
         <SubscriptionBlockedModal
-          isOpen={isBlocked}
+          isOpen={shouldShowBlockedModal}
           subscription={subscription}
           businessName={subscription?.businessName || user?.email}
         />
