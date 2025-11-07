@@ -34,7 +34,8 @@
       "Bash(powershell -Command \"Stop-Process -Id 28020 -Force\")",
       "Bash(tasklist:*)",
       "Bash(powershell -Command \"Get-Process node | Stop-Process -Force\")",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

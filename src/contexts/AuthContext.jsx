@@ -191,7 +191,7 @@ export const AuthProvider = ({ children }) => {
 
       if (result.success) {
         // El onAuthChange se encargará de actualizar el estado
-        navigate('/dashboard')
+        navigate('/app/dashboard')
         return { success: true }
       } else {
         return { success: false, error: result.error }
@@ -212,7 +212,7 @@ export const AuthProvider = ({ children }) => {
       setHasAccess(false)
       setUserPermissions(null)
       setAllowedPages([])
-      navigate('/login')
+      navigate('/')
     } catch (error) {
       console.error('Error al cerrar sesión:', error)
     }

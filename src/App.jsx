@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import MainLayout from './layouts/MainLayout'
+import LandingPage from './pages/LandingPage'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import InvoiceList from './pages/InvoiceList'
@@ -49,6 +50,9 @@ function App() {
       <AuthProvider>
         <ToastProvider>
           <Routes>
+            {/* Landing Page */}
+            <Route path="/" element={<LandingPage />} />
+
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
 
@@ -104,8 +108,8 @@ function App() {
             <Route path="/get-my-uid" element={<GetMyUID />} />
 
             {/* Rutas protegidas con layout */}
-            <Route path="/" element={<MainLayout />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="/app" element={<MainLayout />}>
+              <Route index element={<Navigate to="/app/dashboard" replace />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="pos" element={<POS />} />
               <Route path="facturas" element={<InvoiceList />} />
@@ -140,7 +144,7 @@ function App() {
             </Route>
 
             {/* Ruta 404 */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ToastProvider>
       </AuthProvider>
