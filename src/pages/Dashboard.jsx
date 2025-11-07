@@ -9,7 +9,7 @@ import {
   TrendingUp,
   Loader2,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -21,10 +21,22 @@ import { getInvoices, getCustomers, getProducts } from '@/services/firestoreServ
 
 export default function Dashboard() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const location = useLocation()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+
+  // Determinar el prefijo de ruta según el contexto
+  const getRoutePrefix = () => {
+    if (isDemoMode) {
+      const isRestaurantDemo = location.pathname.startsWith('/demorestaurant')
+      return isRestaurantDemo ? '/demorestaurant' : '/demo'
+    }
+    return '/app'
+  }
+
+  const routePrefix = getRoutePrefix()
 
   useEffect(() => {
     loadDashboardData()
@@ -239,7 +251,7 @@ export default function Dashboard() {
             Bienvenido a Cobrify - Resumen de tu negocio
           </p>
         </div>
-        <Link to="/pos" className="w-full sm:w-auto">
+        <Link to={`${routePrefix}/pos`} className="w-full sm:w-auto">
           <Button className="w-full sm:w-auto">
             <Package className="w-4 h-4 mr-2" />
             Punto de Venta
@@ -318,7 +330,7 @@ export default function Dashboard() {
                 <span className="text-3xl font-bold text-gray-900">{customers.length}</span>
               </div>
               <p className="text-sm text-gray-600">Total Clientes</p>
-              <Link to="/clientes" className="text-xs text-primary-600 hover:underline mt-1 inline-block">
+              <Link to={`${routePrefix}/clientes`} className="text-xs text-primary-600 hover:underline mt-1 inline-block">
                 Ver clientes →
               </Link>
             </CardContent>
@@ -331,7 +343,7 @@ export default function Dashboard() {
                 <span className="text-3xl font-bold text-gray-900">{products.length}</span>
               </div>
               <p className="text-sm text-gray-600">Productos Activos</p>
-              <Link to="/productos" className="text-xs text-primary-600 hover:underline mt-1 inline-block">
+              <Link to={`${routePrefix}/productos`} className="text-xs text-primary-600 hover:underline mt-1 inline-block">
                 Ver productos →
               </Link>
             </CardContent>
@@ -361,7 +373,7 @@ export default function Dashboard() {
               </p>
             )}
           </div>
-          <Link to="/productos" className="inline-block mt-3">
+          <Link to={`${routePrefix}/productos`} className="inline-block mt-3">
             <Button variant="outline" size="sm" className="w-full sm:w-auto">
               Ver Inventario
             </Button>
@@ -374,7 +386,7 @@ export default function Dashboard() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Facturas Recientes</CardTitle>
-            <Link to="/facturas">
+            <Link to={`${routePrefix}/facturas`}>
               <Button variant="ghost" size="sm">
                 Ver todas
               </Button>
@@ -386,7 +398,7 @@ export default function Dashboard() {
             <div className="text-center py-12">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 mb-4">No hay facturas registradas</p>
-              <Link to="/pos">
+              <Link to={`${routePrefix}/pos`}>
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   Crear Primera Venta
