@@ -33,13 +33,15 @@ function Sidebar() {
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
+  // Si no, añadir prefijo /app para rutas protegidas
   const getPath = (path) => {
     if (isDemoMode) {
       // Detectar si estamos en demo de restaurante
       const isRestaurantDemo = location.pathname.startsWith('/demorestaurant')
       return isRestaurantDemo ? `/demorestaurant${path}` : `/demo${path}`
     }
-    return path
+    // Para rutas normales (no demo), agregar prefijo /app
+    return `/app${path}`
   }
 
   // Menú para modo RETAIL (tiendas, comercios)

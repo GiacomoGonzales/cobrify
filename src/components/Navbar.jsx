@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Bell, Search, User, LogOut, Menu, FileText, Users, Package, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useStore } from '@/stores/useStore'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -12,7 +12,7 @@ import Button from './ui/Button'
 function Navbar() {
   const { user, logout, subscription, isDemoMode, demoData } = useAppContext()
   const { toggleMobileMenu } = useStore()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
 
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState({ invoices: [], customers: [], products: [] })
