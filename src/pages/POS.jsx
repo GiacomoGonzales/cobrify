@@ -149,6 +149,11 @@ export default function POS() {
     phone: ''
   })
 
+  // Scroll to top when component mounts
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
     if (location.state?.fromTable) {
