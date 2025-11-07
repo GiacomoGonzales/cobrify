@@ -41,14 +41,9 @@ export const createManagedUser = async (ownerId, userData) => {
   try {
     const { email, password, displayName, allowedPages } = userData
 
-    console.log('🔍 createManagedUser - Creating user with ownerId:', ownerId)
-    console.log('🔍 createManagedUser - User data:', { email, displayName, allowedPages })
-
     // 1. Crear usuario en Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
     const newUserId = userCredential.user.uid
-
-    console.log('🔍 createManagedUser - Created auth user with UID:', newUserId)
 
     // 2. Crear documento en Firestore con permisos
     const userDocRef = doc(db, 'users', newUserId)
@@ -65,10 +60,7 @@ export const createManagedUser = async (ownerId, userData) => {
       lastLogin: null,
     }
 
-    console.log('🔍 createManagedUser - Saving Firestore document:', userDocData)
     await setDoc(userDocRef, userDocData)
-
-    console.log('✅ createManagedUser - User created successfully')
 
     return {
       success: true,
@@ -91,21 +83,18 @@ export const createManagedUser = async (ownerId, userData) => {
  */
 export const getManagedUsers = async (ownerId) => {
   try {
-    console.log('🔍 getManagedUsers - Buscando usuarios con ownerId:', ownerId)
     const usersRef = collection(db, 'users')
     const q = query(usersRef, where('ownerId', '==', ownerId))
     const querySnapshot = await getDocs(q)
 
     const users = []
     querySnapshot.forEach((doc) => {
-      console.log('🔍 getManagedUsers - Encontrado usuario:', doc.id, doc.data())
       users.push({
         id: doc.id,
         ...doc.data(),
       })
     })
 
-    console.log('🔍 getManagedUsers - Total usuarios encontrados:', users.length)
     return { success: true, data: users }
   } catch (error) {
     console.error('Error al obtener usuarios:', error)
