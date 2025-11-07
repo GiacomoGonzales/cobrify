@@ -142,16 +142,17 @@ function Sidebar() {
       pageId: 'dashboard',
     },
     {
-      path: '/mesas',
-      icon: Grid3x3,
-      label: 'Mesas',
-      pageId: 'tables',
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
     },
     {
-      path: '/mozos',
-      icon: Users,
-      label: 'Mozos',
-      pageId: 'waiters',
+      path: '/caja',
+      icon: Wallet,
+      label: 'Caja',
+      pageId: 'cash-register',
     },
     {
       path: '/ordenes',
@@ -160,17 +161,16 @@ function Sidebar() {
       pageId: 'orders',
     },
     {
+      path: '/mesas',
+      icon: Grid3x3,
+      label: 'Mesas',
+      pageId: 'tables',
+    },
+    {
       path: '/cocina',
       icon: ChefHat,
       label: 'Cocina',
       pageId: 'kitchen',
-    },
-    {
-      path: '/pos',
-      icon: ShoppingCart,
-      label: 'Punto de Venta',
-      badge: 'POS',
-      pageId: 'pos',
     },
     {
       path: '/facturas',
@@ -185,16 +185,16 @@ function Sidebar() {
       pageId: 'products',
     },
     {
+      path: '/mozos',
+      icon: Users,
+      label: 'Mozos',
+      pageId: 'waiters',
+    },
+    {
       path: '/clientes',
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
-    },
-    {
-      path: '/caja',
-      icon: Wallet,
-      label: 'Caja',
-      pageId: 'cash-register',
     },
     {
       path: '/reportes',
