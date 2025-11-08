@@ -91,10 +91,13 @@ export default function RegisterPurchase() {
 
   // Manejar input numérico con punto decimal
   const handleNumberInput = (e, id, field) => {
-    const value = e.target.value.replace(',', '.') // Convertir coma a punto
-    // Si está vacío, guardar string vacío. Si tiene valor, parsear a número
-    const numValue = value === '' ? '' : parseFloat(value) || ''
-    updateCartItem(id, field, numValue)
+    let value = e.target.value.replace(',', '.') // Convertir coma a punto
+
+    // Permitir valores vacíos, números, puntos y valores parciales como "0.", "0.0", etc.
+    // No parsear mientras se escribe para permitir "0." o ".5"
+    if (value === '' || value === '.' || value === '0.' || /^-?\d*\.?\d*$/.test(value)) {
+      updateCartItem(id, field, value)
+    }
   }
 
   const removeFromCart = (id) => {
@@ -102,15 +105,24 @@ export default function RegisterPurchase() {
   }
 
   const incrementQuantity = (id) => {
-    setCart(cart.map(item =>
-      item.id === id ? { ...item, quantity: item.quantity + 1 } : item
-    ))
+    setCart(cart.map(item => {
+      if (item.id === id) {
+        const current = parseFloat(item.quantity) || 0
+        return { ...item, quantity: (current + 1).toString() }
+      }
+      return item
+    }))
   }
 
   const decrementQuantity = (id) => {
-    setCart(cart.map(item =>
-      item.id === id ? { ...item, quantity: Math.max(0.01, item.quantity - 1) } : item
-    ))
+    setCart(cart.map(item => {
+      if (item.id === id) {
+        const current = parseFloat(item.quantity) || 0
+        const newValue = Math.max(0, current - 1)
+        return { ...item, quantity: newValue.toString() }
+      }
+      return item
+    }))
   }
 
   const calculateTotal = () => {
@@ -132,23 +144,36 @@ export default function RegisterPurchase() {
       return
     }
 
+    // Validar que todos los items tengan cantidad y precio
+    const invalidItems = cart.filter(item =>
+      !item.quantity || !item.unitPrice || parseFloat(item.quantity) <= 0 || parseFloat(item.unitPrice) <= 0
+    )
+
+    if (invalidItems.length > 0) {
+      toast.error('Todos los ingredientes deben tener cantidad y precio válidos')
+      return
+    }
+
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
 
       // Registrar cada compra de ingrediente
-      const purchases = cart.map(item =>
-        registerPurchase(businessId, {
+      const purchases = cart.map(item => {
+        const quantity = parseFloat(item.quantity)
+        const unitPrice = parseFloat(item.unitPrice)
+
+        return registerPurchase(businessId, {
           ingredientId: item.id,
           ingredientName: item.name,
-          quantity: parseFloat(item.quantity),
+          quantity: quantity,
           unit: item.unit,
-          unitPrice: parseFloat(item.unitPrice),
-          totalCost: parseFloat(item.quantity) * parseFloat(item.unitPrice),
+          unitPrice: unitPrice,
+          totalCost: quantity * unitPrice,
           supplier: purchaseInfo.supplier,
           invoiceNumber: purchaseInfo.invoiceNumber
         })
-      )
+      })
 
       await Promise.all(purchases)
 
