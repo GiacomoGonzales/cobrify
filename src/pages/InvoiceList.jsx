@@ -728,6 +728,29 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </button>
                   )}
 
+                  {/* Reenviar a SUNAT (para facturas rechazadas) */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.sunatStatus === 'rejected' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        handleSendToSunat(invoice.id)
+                      }}
+                      disabled={sendingToSunat === invoice.id}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {sendingToSunat === invoice.id ? (
+                        <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 text-orange-600" />
+                      )}
+                      <div className="flex flex-col">
+                        <span className="text-orange-600 font-medium">Reintentar envío a SUNAT</span>
+                        <span className="text-xs text-gray-500">Corregir y reenviar</span>
+                      </div>
+                    </button>
+                  )}
+
                   {/* Crear Nota de Crédito */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
                    invoice.sunatStatus === 'accepted' && (
@@ -832,7 +855,60 @@ ${companySettings?.website ? companySettings.website : ''}`
                 <p className="text-sm text-gray-600">Estado</p>
                 <div className="mt-1">{getStatusBadge(viewingInvoice.status)}</div>
               </div>
+              <div className="col-span-2">
+                <p className="text-sm text-gray-600">Estado SUNAT</p>
+                <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus)}</div>
+              </div>
             </div>
+
+            {/* Mostrar error de SUNAT si está rechazado */}
+            {viewingInvoice.sunatStatus === 'rejected' && viewingInvoice.sunatResponse && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-red-900 mb-1">Factura Rechazada por SUNAT</h4>
+                    <p className="text-sm text-red-800 mb-2">
+                      {viewingInvoice.sunatResponse.description || 'Error desconocido'}
+                    </p>
+                    {viewingInvoice.sunatResponse.observations && viewingInvoice.sunatResponse.observations.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-semibold text-red-900 mb-1">Observaciones:</p>
+                        <ul className="text-xs text-red-800 list-disc list-inside space-y-1">
+                          {viewingInvoice.sunatResponse.observations.map((obs, idx) => (
+                            <li key={idx}>{obs}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setViewingInvoice(null)
+                          handleSendToSunat(viewingInvoice.id)
+                        }}
+                        disabled={sendingToSunat === viewingInvoice.id}
+                        className="border-red-300 text-red-700 hover:bg-red-100"
+                      >
+                        {sendingToSunat === viewingInvoice.id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Reenviando...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 mr-2" />
+                            Reintentar envío a SUNAT
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Customer Info */}
             <div>
