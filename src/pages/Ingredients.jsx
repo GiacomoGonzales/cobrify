@@ -61,15 +61,15 @@ export default function Ingredients() {
     name: '',
     category: 'otros',
     purchaseUnit: 'kg',
-    currentStock: 0,
-    minimumStock: 0,
-    averageCost: 0,
+    currentStock: '',
+    minimumStock: '',
+    averageCost: '',
     supplier: ''
   })
 
   const [purchaseData, setPurchaseData] = useState({
-    quantity: 0,
-    unitPrice: 0,
+    quantity: '',
+    unitPrice: '',
     supplier: '',
     invoiceNumber: ''
   })
@@ -108,7 +108,16 @@ export default function Ingredients() {
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
-      const result = await createIngredient(businessId, formData)
+
+      // Convertir strings vacíos a 0
+      const dataToSave = {
+        ...formData,
+        currentStock: parseFloat(formData.currentStock) || 0,
+        minimumStock: parseFloat(formData.minimumStock) || 0,
+        averageCost: parseFloat(formData.averageCost) || 0
+      }
+
+      const result = await createIngredient(businessId, dataToSave)
 
       if (result.success) {
         toast.success('Ingrediente agregado exitosamente')
@@ -132,7 +141,16 @@ export default function Ingredients() {
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
-      const result = await updateIngredient(businessId, selectedIngredient.id, formData)
+
+      // Convertir strings vacíos a 0
+      const dataToSave = {
+        ...formData,
+        currentStock: parseFloat(formData.currentStock) || 0,
+        minimumStock: parseFloat(formData.minimumStock) || 0,
+        averageCost: parseFloat(formData.averageCost) || 0
+      }
+
+      const result = await updateIngredient(businessId, selectedIngredient.id, dataToSave)
 
       if (result.success) {
         toast.success('Ingrediente actualizado exitosamente')
@@ -175,8 +193,21 @@ export default function Ingredients() {
   }
 
   const handleRegisterPurchase = async () => {
-    if (!selectedIngredient || !purchaseData.quantity || !purchaseData.unitPrice) {
-      toast.error('Todos los campos son requeridos')
+    if (!selectedIngredient) {
+      toast.error('Selecciona un ingrediente')
+      return
+    }
+
+    const quantity = parseFloat(purchaseData.quantity)
+    const unitPrice = parseFloat(purchaseData.unitPrice)
+
+    if (!quantity || quantity <= 0) {
+      toast.error('Ingresa una cantidad válida')
+      return
+    }
+
+    if (!unitPrice || unitPrice <= 0) {
+      toast.error('Ingresa un precio válido')
       return
     }
 
@@ -186,10 +217,10 @@ export default function Ingredients() {
       const result = await registerPurchase(businessId, {
         ingredientId: selectedIngredient.id,
         ingredientName: selectedIngredient.name,
-        quantity: parseFloat(purchaseData.quantity),
+        quantity: quantity,
         unit: selectedIngredient.purchaseUnit,
-        unitPrice: parseFloat(purchaseData.unitPrice),
-        totalCost: parseFloat(purchaseData.quantity) * parseFloat(purchaseData.unitPrice),
+        unitPrice: unitPrice,
+        totalCost: quantity * unitPrice,
         supplier: purchaseData.supplier || 'Sin proveedor',
         invoiceNumber: purchaseData.invoiceNumber
       })
@@ -245,9 +276,9 @@ export default function Ingredients() {
       name: '',
       category: 'otros',
       purchaseUnit: 'kg',
-      currentStock: 0,
-      minimumStock: 0,
-      averageCost: 0,
+      currentStock: '',
+      minimumStock: '',
+      averageCost: '',
       supplier: ''
     })
     setSelectedIngredient(null)
@@ -255,8 +286,8 @@ export default function Ingredients() {
 
   const resetPurchaseForm = () => {
     setPurchaseData({
-      quantity: 0,
-      unitPrice: 0,
+      quantity: '',
+      unitPrice: '',
       supplier: '',
       invoiceNumber: ''
     })
@@ -529,17 +560,25 @@ export default function Ingredients() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Stock Mínimo"
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              placeholder="Ej: 10"
               value={formData.minimumStock}
-              onChange={e => setFormData({ ...formData, minimumStock: parseFloat(e.target.value) || 0 })}
+              onChange={e => {
+                const value = e.target.value.replace(',', '.')
+                setFormData({ ...formData, minimumStock: value })
+              }}
             />
             <Input
               label="Stock Inicial"
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
+              placeholder="Ej: 50"
               value={formData.currentStock}
-              onChange={e => setFormData({ ...formData, currentStock: parseFloat(e.target.value) || 0 })}
+              onChange={e => {
+                const value = e.target.value.replace(',', '.')
+                setFormData({ ...formData, currentStock: value })
+              }}
             />
           </div>
 
@@ -590,28 +629,34 @@ export default function Ingredients() {
         <div className="space-y-4">
           <Input
             label={`Cantidad (${selectedIngredient?.purchaseUnit})`}
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={purchaseData.quantity}
-            onChange={e => setPurchaseData({ ...purchaseData, quantity: e.target.value })}
-            placeholder="0"
+            onChange={e => {
+              const value = e.target.value.replace(',', '.')
+              setPurchaseData({ ...purchaseData, quantity: value })
+            }}
+            placeholder="Ej: 50"
             required
           />
 
           <Input
             label={`Precio Unitario (por ${selectedIngredient?.purchaseUnit})`}
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={purchaseData.unitPrice}
-            onChange={e => setPurchaseData({ ...purchaseData, unitPrice: e.target.value })}
-            placeholder="0.00"
+            onChange={e => {
+              const value = e.target.value.replace(',', '.')
+              setPurchaseData({ ...purchaseData, unitPrice: value })
+            }}
+            placeholder="Ej: 0.08"
             required
           />
 
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-600">Costo Total:</p>
             <p className="text-xl font-bold text-gray-900">
-              {formatCurrency((purchaseData.quantity || 0) * (purchaseData.unitPrice || 0))}
+              {formatCurrency((parseFloat(purchaseData.quantity) || 0) * (parseFloat(purchaseData.unitPrice) || 0))}
             </p>
           </div>
 
