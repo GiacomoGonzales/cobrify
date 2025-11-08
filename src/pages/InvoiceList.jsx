@@ -746,7 +746,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                       )}
                       <div className="flex flex-col">
                         <span className="text-orange-600 font-medium">Reintentar envío a SUNAT</span>
-                        <span className="text-xs text-gray-500">Corregir y reenviar</span>
+                        <span className="text-xs text-gray-500">Volver a intentar</span>
                       </div>
                     </button>
                   )}
