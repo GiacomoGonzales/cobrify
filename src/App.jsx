@@ -40,6 +40,7 @@ import Orders from './pages/Orders'
 import Kitchen from './pages/Kitchen'
 import Ingredients from './pages/Ingredients'
 import Recipes from './pages/Recipes'
+import RegisterPurchase from './pages/RegisterPurchase'
 
 function App() {
   return (
@@ -85,6 +86,7 @@ function App() {
               <Route path="ordenes" element={<Orders />} />
               <Route path="cocina" element={<Kitchen />} />
               <Route path="ingredientes" element={<Ingredients />} />
+              <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="recetas" element={<Recipes />} />
             </Route>
 
@@ -104,6 +106,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="ingredientes" element={<Ingredients />} />
+              <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="recetas" element={<Recipes />} />
             </Route>
 
@@ -144,6 +147,7 @@ function App() {
               <Route path="ordenes" element={<Orders />} />
               <Route path="cocina" element={<Kitchen />} />
               <Route path="ingredientes" element={<Ingredients />} />
+              <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="recetas" element={<Recipes />} />
 
               {/* Rutas de administración */}

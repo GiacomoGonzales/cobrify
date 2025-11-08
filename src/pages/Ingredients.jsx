@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -39,7 +40,8 @@ const UNITS = [
 ]
 
 export default function Ingredients() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const navigate = useNavigate()
   const toast = useToast()
   const [ingredients, setIngredients] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -311,10 +313,22 @@ export default function Ingredients() {
             Gestiona tu inventario de materia prima
           </p>
         </div>
-        <Button onClick={() => setShowAddModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Ingrediente
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="primary"
+            onClick={() => {
+              const basePath = isDemoMode ? '/demo' : '/app'
+              navigate(`${basePath}/ingredientes/compra`)
+            }}
+          >
+            <Receipt className="w-4 h-4 mr-2" />
+            Registrar Compra
+          </Button>
+          <Button variant="outline" onClick={() => setShowAddModal(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Ingrediente
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
