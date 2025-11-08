@@ -23,6 +23,8 @@ import {
   Grid3x3,
   ChefHat,
   ListOrdered,
+  Carrot,
+  CookingPot,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -183,6 +185,18 @@ function Sidebar() {
       icon: UtensilsCrossed,
       label: 'Menú',
       pageId: 'products',
+    },
+    {
+      path: '/ingredientes',
+      icon: Carrot,
+      label: 'Ingredientes',
+      pageId: 'ingredients',
+    },
+    {
+      path: '/recetas',
+      icon: CookingPot,
+      label: 'Recetas',
+      pageId: 'recipes',
     },
     {
       path: '/mozos',

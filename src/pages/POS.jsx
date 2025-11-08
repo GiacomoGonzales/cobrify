@@ -38,6 +38,8 @@ import {
   sendInvoiceToSunat,
 } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { deductIngredients } from '@/services/ingredientService'
+import { getRecipeByProductId } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse } from '@/services/warehouseService'
 import { releaseTable } from '@/services/tableService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -827,6 +829,39 @@ export default function POS() {
         })
 
       await Promise.all(stockUpdates)
+
+      // 4.5. Descontar ingredientes del inventario (para restaurantes)
+      // Procesar cada producto del carrito y descontar sus ingredientes si tiene receta
+      for (const item of cart) {
+        if (item.isCustom) continue // Saltar productos personalizados
+
+        try {
+          const recipeResult = await getRecipeByProductId(businessId, item.id)
+
+          if (recipeResult.success && recipeResult.data) {
+            const recipe = recipeResult.data
+
+            // Calcular ingredientes necesarios para la cantidad vendida
+            const ingredientsToDeduct = recipe.ingredients.map(ing => ({
+              ...ing,
+              quantity: ing.quantity * item.quantity // Multiplicar por cantidad vendida
+            }))
+
+            // Descontar ingredientes del stock
+            await deductIngredients(
+              businessId,
+              ingredientsToDeduct,
+              invoiceId,
+              item.name
+            )
+
+            console.log(`✅ Ingredientes descontados para: ${item.name} (x${item.quantity})`)
+          }
+        } catch (error) {
+          // No bloquear la venta si falla el descuento de ingredientes
+          console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
+        }
+      }
 
       // 5. Si viene de una mesa, liberar la mesa automáticamente
       if (tableData?.tableId) {
