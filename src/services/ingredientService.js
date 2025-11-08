@@ -194,9 +194,18 @@ export const registerPurchase = async (businessId, purchaseData) => {
     const newStock = currentStock + quantityToAdd
 
     // Calcular nuevo costo promedio ponderado
-    const totalCurrentValue = currentStock * currentAvgCost
-    const totalPurchaseValue = quantityToAdd * purchaseData.unitPrice
-    const newAvgCost = (totalCurrentValue + totalPurchaseValue) / newStock
+    // Si el costo actual es 0, solo usar el valor de la nueva compra
+    // (esto evita diluir el precio cuando hay stock inicial sin costo)
+    let newAvgCost
+    if (currentAvgCost === 0 || currentStock === 0) {
+      // Primera compra o stock sin costo: usar precio de compra directamente
+      newAvgCost = purchaseData.unitPrice
+    } else {
+      // Calcular promedio ponderado con stock existente
+      const totalCurrentValue = currentStock * currentAvgCost
+      const totalPurchaseValue = quantityToAdd * purchaseData.unitPrice
+      newAvgCost = (totalCurrentValue + totalPurchaseValue) / newStock
+    }
 
     batch.update(ingredientRef, {
       currentStock: newStock,
