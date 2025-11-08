@@ -76,8 +76,8 @@ export default function RegisterPurchase() {
       id: ingredient.id,
       name: ingredient.name,
       unit: ingredient.purchaseUnit,
-      quantity: 1,
-      unitPrice: ingredient.lastPurchasePrice || ingredient.averageCost || 0
+      quantity: '',
+      unitPrice: ingredient.lastPurchasePrice || ingredient.averageCost || ''
     }])
 
     toast.success(`${ingredient.name} agregado`)
@@ -87,6 +87,14 @@ export default function RegisterPurchase() {
     setCart(cart.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ))
+  }
+
+  // Manejar input numérico con punto decimal
+  const handleNumberInput = (e, id, field) => {
+    const value = e.target.value.replace(',', '.') // Convertir coma a punto
+    // Si está vacío, guardar string vacío. Si tiene valor, parsear a número
+    const numValue = value === '' ? '' : parseFloat(value) || ''
+    updateCartItem(id, field, numValue)
   }
 
   const removeFromCart = (id) => {
@@ -106,7 +114,11 @@ export default function RegisterPurchase() {
   }
 
   const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
+    return cart.reduce((sum, item) => {
+      const qty = parseFloat(item.quantity) || 0
+      const price = parseFloat(item.unitPrice) || 0
+      return sum + (qty * price)
+    }, 0)
   }
 
   const handleSavePurchase = async () => {
@@ -314,10 +326,10 @@ export default function RegisterPurchase() {
                             <Minus className="w-4 h-4" />
                           </button>
                           <input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={item.quantity}
-                            onChange={e => updateCartItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                            onChange={e => handleNumberInput(e, item.id, 'quantity')}
                             className="flex-1 px-2 py-1 text-center border rounded text-sm"
                           />
                           <button
@@ -333,10 +345,10 @@ export default function RegisterPurchase() {
                       <div>
                         <label className="text-xs text-gray-600">Precio/{item.unit}</label>
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
+                          inputMode="decimal"
                           value={item.unitPrice}
-                          onChange={e => updateCartItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onChange={e => handleNumberInput(e, item.id, 'unitPrice')}
                           className="w-full px-2 py-1 border rounded text-sm mt-1"
                         />
                       </div>
@@ -346,7 +358,7 @@ export default function RegisterPurchase() {
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-gray-600">Subtotal:</span>
                           <span className="font-semibold text-sm">
-                            {formatCurrency(item.quantity * item.unitPrice)}
+                            {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0))}
                           </span>
                         </div>
                       </div>
