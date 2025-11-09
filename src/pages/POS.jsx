@@ -165,10 +165,17 @@ export default function POS() {
     window.scrollTo(0, 0)
   }, [])
 
+  // Ref para evitar ejecución duplicada del efecto de carga de mesa
+  const tableLoadedRef = useRef(false)
+
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
-    if (location.state?.fromTable) {
+    if (location.state?.fromTable && !tableLoadedRef.current) {
       const tableInfo = location.state
+
+      // Marcar como cargado para evitar duplicados
+      tableLoadedRef.current = true
+
       setTableData(tableInfo)
       setOrderType('dine-in') // Establecer automáticamente como "En Mesa"
 
