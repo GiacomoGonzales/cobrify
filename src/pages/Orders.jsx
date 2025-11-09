@@ -26,8 +26,9 @@ export default function Orders() {
 
     // Si estamos en modo demo, usar datos de demo
     if (isDemoMode && demoData?.orders) {
+      // Solo mostrar órdenes activas (excluir delivered y cancelled)
       const ordersData = demoData.orders.filter(o =>
-        ['pending', 'preparing', 'ready', 'delivered', 'active'].includes(o.status)
+        ['pending', 'preparing', 'ready'].includes(o.status)
       )
 
       // Ordenar por fecha de creación (más recientes primero)
@@ -45,8 +46,6 @@ export default function Orders() {
         pending: ordersData.filter(o => o.status === 'pending').length,
         preparing: ordersData.filter(o => o.status === 'preparing').length,
         ready: ordersData.filter(o => o.status === 'ready').length,
-        delivered: ordersData.filter(o => o.status === 'delivered').length,
-        active: ordersData.filter(o => o.status === 'active').length,
         totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
       }
       setStats(newStats)
@@ -58,11 +57,11 @@ export default function Orders() {
     const businessId = getBusinessId()
     const ordersRef = collection(db, 'businesses', businessId, 'orders')
 
-    // Query simplificada sin orderBy para evitar índice compuesto
+    // Solo consultar órdenes activas (excluir delivered y cancelled)
     // Ordenaremos los datos en el cliente después de recibirlos
     const q = query(
       ordersRef,
-      where('status', 'in', ['pending', 'preparing', 'ready', 'delivered'])
+      where('status', 'in', ['pending', 'preparing', 'ready'])
     )
 
     // Listener en tiempo real - se ejecuta cada vez que hay cambios
@@ -89,7 +88,6 @@ export default function Orders() {
           pending: ordersData.filter(o => o.status === 'pending').length,
           preparing: ordersData.filter(o => o.status === 'preparing').length,
           ready: ordersData.filter(o => o.status === 'ready').length,
-          delivered: ordersData.filter(o => o.status === 'delivered').length,
           totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
         }
         setStats(newStats)
