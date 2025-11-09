@@ -6,7 +6,8 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { db, storage } from '@/lib/firebase'
+import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
+import { db, storage, auth } from '@/lib/firebase'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -77,6 +78,15 @@ export default function Settings() {
     kitchenEnabled: true,
     deliveryEnabled: false,
   })
+
+  // Estados para cambio de contraseña
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
 
   const {
     register,
@@ -529,6 +539,73 @@ export default function Settings() {
     }
   }
 
+  // Función para cambiar contraseña
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden cambiar contraseñas en modo demo. Crea una cuenta para gestionar tu seguridad.')
+      return
+    }
+
+    if (!user) return
+
+    // Validaciones
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Todos los campos son requeridos')
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('La nueva contraseña debe tener al menos 6 caracteres')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+
+    if (currentPassword === newPassword) {
+      toast.error('La nueva contraseña debe ser diferente a la actual')
+      return
+    }
+
+    setIsChangingPassword(true)
+
+    try {
+      // Reautenticar al usuario con su contraseña actual
+      const credential = EmailAuthProvider.credential(user.email, currentPassword)
+      await reauthenticateWithCredential(auth.currentUser, credential)
+
+      // Actualizar la contraseña
+      await updatePassword(auth.currentUser, newPassword)
+
+      // Limpiar campos
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+
+      toast.success('Contraseña actualizada exitosamente')
+    } catch (error) {
+      console.error('Error al cambiar contraseña:', error)
+
+      // Mensajes de error específicos
+      if (error.code === 'auth/wrong-password') {
+        toast.error('La contraseña actual es incorrecta')
+      } else if (error.code === 'auth/weak-password') {
+        toast.error('La nueva contraseña es muy débil')
+      } else if (error.code === 'auth/requires-recent-login') {
+        toast.error('Por seguridad, debes cerrar sesión y volver a iniciar para cambiar tu contraseña')
+      } else {
+        toast.error('Error al cambiar la contraseña. Inténtalo nuevamente.')
+      }
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -548,6 +625,7 @@ export default function Settings() {
     { id: 'informacion', label: 'Información', icon: Building2 },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'series', label: 'Series', icon: FileText },
+    { id: 'seguridad', label: 'Seguridad', icon: Shield },
   ]
 
   return (
@@ -1309,6 +1387,178 @@ export default function Settings() {
             </div>
           </div>
         </CardContent>
+        </Card>
+      )}
+
+      {/* Tab Content - Seguridad */}
+      {activeTab === 'seguridad' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Shield className="w-5 h-5 text-primary-600" />
+              <CardTitle>Seguridad de la Cuenta</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Info del usuario */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <Info className="w-5 h-5 text-gray-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Correo electrónico</p>
+                    <p className="text-sm text-gray-600 mt-1">{user?.email}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Formulario de cambio de contraseña */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Cambiar Contraseña</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Asegúrate de usar una contraseña segura con al menos 6 caracteres
+                </p>
+
+                <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                  {/* Contraseña actual */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña Actual
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showCurrentPassword ? 'text' : 'password'}
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Ingresa tu contraseña actual"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showCurrentPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nueva contraseña */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nueva Contraseña
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Ingresa tu nueva contraseña"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Mínimo 6 caracteres</p>
+                  </div>
+
+                  {/* Confirmar contraseña */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Confirmar Nueva Contraseña
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Confirma tu nueva contraseña"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Botón de submit */}
+                  <div className="pt-2">
+                    <Button
+                      type="submit"
+                      disabled={isChangingPassword}
+                    >
+                      {isChangingPassword ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Cambiando contraseña...
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4 mr-2" />
+                          Cambiar Contraseña
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Recomendaciones de seguridad */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">Recomendaciones de Seguridad</h4>
+                <ul className="space-y-1 text-sm text-blue-800">
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Usa una contraseña única que no uses en otros sitios</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Combina letras mayúsculas, minúsculas, números y símbolos</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Cambia tu contraseña regularmente</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>No compartas tu contraseña con nadie</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </CardContent>
         </Card>
       )}
     </div>
