@@ -22,7 +22,6 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
   // Cargar productos
   useEffect(() => {
     if (isOpen) {
-      console.log('Modal abierto, cargando productos...')
       loadProducts()
     }
   }, [isOpen])
@@ -46,7 +45,6 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
     try {
       const result = await getProducts(getBusinessId())
       if (result.success) {
-        console.log('Productos cargados:', result.data)
         // Mostrar todos los productos por ahora (sin filtro restrictivo)
         const allProducts = result.data || []
         setProducts(allProducts)
