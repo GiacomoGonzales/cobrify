@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FileText, ShoppingCart, Loader2, CheckCircle, X } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 
@@ -12,7 +12,12 @@ export default function CloseTableModal({
   onConfirm
 }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Detectar si estamos en demo mode basado en la ruta actual
+  const isDemoMode = location.pathname.startsWith('/demo')
+  const isDemoRestaurant = location.pathname.startsWith('/demorestaurant')
 
   if (!table || !order) return null
 
@@ -21,8 +26,16 @@ export default function CloseTableModal({
   }
 
   const handleCreateReceipt = () => {
+    // Construir la ruta correcta según el modo
+    let posPath = '/app/pos'
+    if (isDemoRestaurant) {
+      posPath = '/demorestaurant/pos'
+    } else if (isDemoMode) {
+      posPath = '/demo/pos'
+    }
+
     // Redirigir al POS con los datos de la orden
-    navigate('/pos', {
+    navigate(posPath, {
       state: {
         fromTable: true,
         tableId: table.id,
