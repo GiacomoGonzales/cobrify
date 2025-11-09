@@ -1049,28 +1049,30 @@ ${companySettings?.website ? companySettings.website : ''}`
                   </Select>
                 </div>
 
-                {/* Tipo de Pedido */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de Pedido
-                  </label>
-                  <Select
-                    value={orderType}
-                    onChange={e => setOrderType(e.target.value)}
-                    disabled={tableData?.fromTable} // Deshabilitar si viene de mesa
-                  >
-                    {Object.entries(ORDER_TYPES).map(([key, label]) => (
-                      <option key={key} value={key}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                  {tableData?.fromTable && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Pedido de Mesa {tableData.tableNumber}
-                    </p>
-                  )}
-                </div>
+                {/* Tipo de Pedido - Solo para modo restaurant */}
+                {businessMode === 'restaurant' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tipo de Pedido
+                    </label>
+                    <Select
+                      value={orderType}
+                      onChange={e => setOrderType(e.target.value)}
+                      disabled={tableData?.fromTable} // Deshabilitar si viene de mesa
+                    >
+                      {Object.entries(ORDER_TYPES).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label}
+                        </option>
+                      ))}
+                    </Select>
+                    {tableData?.fromTable && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Pedido de Mesa {tableData.tableNumber}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Selector de Almacén */}
                 {warehouses.length > 0 && businessMode !== 'restaurant' && (
