@@ -382,6 +382,21 @@ export default function Reports() {
     ].filter(item => item.value > 0)
   }, [filteredInvoices])
 
+  // Datos para gráfico de tipos de pedido
+  const orderTypeData = useMemo(() => {
+    const dineIn = filteredInvoices.filter(inv => inv.orderType === 'dine-in').length
+    const takeaway = filteredInvoices.filter(inv => inv.orderType === 'takeaway').length
+    const delivery = filteredInvoices.filter(inv => inv.orderType === 'delivery').length
+    const unspecified = filteredInvoices.filter(inv => !inv.orderType).length
+
+    return [
+      { name: 'En Mesa', value: dineIn, color: COLORS[0] },
+      { name: 'Para Llevar', value: takeaway, color: COLORS[1] },
+      { name: 'Delivery', value: delivery, color: COLORS[2] },
+      { name: 'Sin especificar', value: unspecified, color: COLORS[6] },
+    ].filter(item => item.value > 0)
+  }, [filteredInvoices])
+
   // Datos para gráfico de productos top 5
   const top5ProductsData = useMemo(() => {
     return topProducts.slice(0, 5).map((product, index) => ({
@@ -702,21 +717,38 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            {/* Gráfico de Cantidad de Ventas por Mes */}
+            {/* Gráfico de Tipos de Pedido */}
             <Card>
               <CardHeader>
-                <CardTitle>Cantidad de Ventas por Mes</CardTitle>
+                <CardTitle>Tipos de Pedido</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={salesByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="count" fill={COLORS[2]} name="Comprobantes" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {orderTypeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RePieChart>
+                      <Pie
+                        data={orderTypeData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        paddingAngle={5}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {orderTypeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[300px] text-gray-500">
+                    <p>No hay datos de tipos de pedido disponibles</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

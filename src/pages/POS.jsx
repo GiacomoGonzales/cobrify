@@ -52,6 +52,12 @@ const PAYMENT_METHODS = {
   PLIN: 'Plin',
 }
 
+const ORDER_TYPES = {
+  'dine-in': 'En Mesa',
+  'takeaway': 'Para Llevar',
+  'delivery': 'Delivery',
+}
+
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
   if (!cats || cats.length === 0) return []
@@ -128,6 +134,9 @@ export default function POS() {
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: '', amount: '' }])
 
+  // Tipo de pedido (para reportes)
+  const [orderType, setOrderType] = useState('takeaway')
+
   // Variant selection modal
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
   const [showVariantModal, setShowVariantModal] = useState(false)
@@ -161,6 +170,7 @@ export default function POS() {
     if (location.state?.fromTable) {
       const tableInfo = location.state
       setTableData(tableInfo)
+      setOrderType('dine-in') // Establecer automáticamente como "En Mesa"
 
       // Cargar items de la mesa al carrito
       if (tableInfo.items && tableInfo.items.length > 0) {
@@ -447,6 +457,7 @@ export default function POS() {
     setCart([])
     setSelectedCustomer(null)
     setDocumentType('boleta')
+    setOrderType('takeaway')
     setCustomerData({
       documentType: ID_TYPES.DNI,
       documentNumber: '',
@@ -779,6 +790,8 @@ export default function POS() {
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
         createdByEmail: user.email || '',
+        // Tipo de pedido (para reportes)
+        orderType: orderType,
       }
 
       const result = await createInvoice(businessId, invoiceData)
@@ -1031,6 +1044,29 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <option value="factura">Factura Electrónica</option>
                     <option value="nota_venta">Nota de Venta</option>
                   </Select>
+                </div>
+
+                {/* Tipo de Pedido */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de Pedido
+                  </label>
+                  <Select
+                    value={orderType}
+                    onChange={e => setOrderType(e.target.value)}
+                    disabled={tableData?.fromTable} // Deshabilitar si viene de mesa
+                  >
+                    {Object.entries(ORDER_TYPES).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                  {tableData?.fromTable && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Pedido de Mesa {tableData.tableNumber}
+                    </p>
+                  )}
                 </div>
 
                 {/* Selector de Almacén */}
