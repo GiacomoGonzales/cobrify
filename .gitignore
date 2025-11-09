@@ -38,3 +38,7 @@ fix-admin*.js
 fix-admin*.cjs
 setup-business-owner.js
 test-sunat.js
+
+# Capacitor - Mobile platforms
+android/
+ios/

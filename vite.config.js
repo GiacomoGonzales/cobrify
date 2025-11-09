@@ -10,6 +10,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Base path para compatibilidad con Capacitor (apps móviles)
+  base: './',
   server: {
     port: 3000,
     open: true,
@@ -21,4 +23,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // Optimización para apps móviles
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': ['react', 'react-dom', 'react-router-dom'],
+          'firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage', 'firebase/functions'],
+        }
+      }
+    }
+  }
 })
