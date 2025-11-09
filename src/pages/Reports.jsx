@@ -21,6 +21,7 @@ import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomersWithStats, getProducts } from '@/services/firestoreService'
+import { getRecipes } from '@/services/recipeService'
 import {
   exportGeneralReport,
   exportSalesReport,
@@ -52,6 +53,7 @@ export default function Reports() {
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  const [recipes, setRecipes] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers
@@ -70,14 +72,16 @@ export default function Reports() {
         setInvoices(demoData.invoices || [])
         setCustomers(demoData.customers || [])
         setProducts(demoData.products || [])
+        setRecipes([]) // En demo no hay recetas por ahora
         setIsLoading(false)
         return
       }
 
-      const [invoicesResult, customersResult, productsResult] = await Promise.all([
+      const [invoicesResult, customersResult, productsResult, recipesResult] = await Promise.all([
         getInvoices(getBusinessId()),
         getCustomersWithStats(getBusinessId()),
         getProducts(getBusinessId()),
+        getRecipes(getBusinessId()),
       ])
 
       if (invoicesResult.success) {
@@ -88,6 +92,9 @@ export default function Reports() {
       }
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+      if (recipesResult.success) {
+        setRecipes(recipesResult.data || [])
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -187,12 +194,22 @@ export default function Reports() {
     let totalCost = 0
     filteredInvoices.forEach(invoice => {
       invoice.items?.forEach(item => {
-        // Buscar el producto para obtener su costo
         const productId = item.productId || item.id
-        const product = products.find(p => p.id === productId)
-        const cost = product?.cost || 0
         const quantity = item.quantity || 0
-        totalCost += cost * quantity
+
+        // Buscar si el producto tiene receta (prioridad)
+        const recipe = recipes.find(r => r.productId === productId)
+
+        if (recipe) {
+          // Usar costo de la receta (calculado de ingredientes)
+          const cost = recipe.totalCost || 0
+          totalCost += cost * quantity
+        } else {
+          // Si no tiene receta, usar costo manual del producto
+          const product = products.find(p => p.id === productId)
+          const cost = product?.cost || 0
+          totalCost += cost * quantity
+        }
       })
     })
     const totalProfit = totalRevenue - totalCost
@@ -217,7 +234,7 @@ export default function Reports() {
       totalProfit,
       profitMargin,
     }
-  }, [filteredInvoices, getPreviousPeriodRevenue, products])
+  }, [filteredInvoices, getPreviousPeriodRevenue, products, recipes])
 
   // Top productos vendidos
   const topProducts = useMemo(() => {

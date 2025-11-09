@@ -41,6 +41,7 @@ import Kitchen from './pages/Kitchen'
 import Ingredients from './pages/Ingredients'
 import Recipes from './pages/Recipes'
 import RegisterPurchase from './pages/RegisterPurchase'
+import PurchaseHistory from './pages/PurchaseHistory'
 
 function App() {
   return (
@@ -87,6 +88,7 @@ function App() {
               <Route path="cocina" element={<Kitchen />} />
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
+              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
             </Route>
 
@@ -107,6 +109,7 @@ function App() {
               <Route path="configuracion" element={<Settings />} />
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
+              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
             </Route>
 
@@ -148,6 +151,7 @@ function App() {
               <Route path="cocina" element={<Kitchen />} />
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
+              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
 
               {/* Rutas de administración */}

@@ -227,23 +227,30 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
 
 /**
  * Obtener costo y margen de ganancia de un producto
+ * Prioriza el costo de la receta si existe, sino usa el costo manual del producto
  */
-export const getProductProfitability = async (businessId, productId, salePrice) => {
+export const getProductProfitability = async (businessId, productId, salePrice, productManualCost = 0) => {
   try {
     const recipeResult = await getRecipeByProductId(businessId, productId)
 
     if (!recipeResult.success) {
-      // Sin receta, no podemos calcular rentabilidad
+      // Sin receta, usar costo manual del producto
+      const cost = productManualCost || 0
+      const profit = salePrice - cost
+      const profitMargin = cost > 0 ? (profit / salePrice) * 100 : 100
+
       return {
         success: true,
-        hasCost: false,
-        cost: 0,
+        hasCost: cost > 0,
+        hasRecipe: false,
+        cost,
         price: salePrice,
-        profit: salePrice,
-        profitMargin: 100
+        profit,
+        profitMargin: profitMargin.toFixed(2)
       }
     }
 
+    // Con receta, usar costo calculado de la receta
     const recipe = recipeResult.data
     const cost = recipe.totalCost || 0
     const profit = salePrice - cost
@@ -252,6 +259,7 @@ export const getProductProfitability = async (businessId, productId, salePrice) 
     return {
       success: true,
       hasCost: true,
+      hasRecipe: true,
       cost,
       price: salePrice,
       profit,

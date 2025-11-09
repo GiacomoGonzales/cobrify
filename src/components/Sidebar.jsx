@@ -199,6 +199,12 @@ function Sidebar() {
       pageId: 'recipes',
     },
     {
+      path: '/ingredientes/historial',
+      icon: History,
+      label: 'Historial de Compras',
+      pageId: 'purchase-history',
+    },
+    {
       path: '/mozos',
       icon: Users,
       label: 'Mozos',

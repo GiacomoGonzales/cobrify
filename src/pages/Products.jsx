@@ -1363,14 +1363,19 @@ export default function Products() {
           />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Costo"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              error={errors.cost?.message}
-              {...register('cost')}
-            />
+            <div>
+              <Input
+                label="Costo"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                error={errors.cost?.message}
+                {...register('cost')}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Opcional. Para platos con receta, el costo se calcula automáticamente.
+              </p>
+            </div>
 
             <Input
               label="Precio de Venta"

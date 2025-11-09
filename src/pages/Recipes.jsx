@@ -44,7 +44,7 @@ export default function Recipes() {
   // Ingredient form
   const [ingredientForm, setIngredientForm] = useState({
     ingredientId: '',
-    quantity: 0,
+    quantity: '',
     unit: 'g'
   })
 
@@ -112,7 +112,7 @@ export default function Recipes() {
     // Reset form
     setIngredientForm({
       ingredientId: '',
-      quantity: 0,
+      quantity: '',
       unit: 'g'
     })
   }
@@ -122,6 +122,37 @@ export default function Recipes() {
       ...formData,
       ingredients: formData.ingredients.filter(i => i.ingredientId !== ingredientId)
     })
+  }
+
+  // Obtener unidades compatibles basadas en el ingrediente seleccionado
+  const getCompatibleUnits = () => {
+    if (!ingredientForm.ingredientId) return []
+
+    const ingredient = ingredients.find(i => i.id === ingredientForm.ingredientId)
+    if (!ingredient) return []
+
+    const purchaseUnit = ingredient.purchaseUnit?.toLowerCase()
+
+    // Unidades de peso
+    if (purchaseUnit === 'kg' || purchaseUnit === 'g') {
+      return [
+        { value: 'kg', label: 'kg' },
+        { value: 'g', label: 'g' }
+      ]
+    }
+
+    // Unidades de volumen
+    if (purchaseUnit === 'l' || purchaseUnit === 'ml') {
+      return [
+        { value: 'L', label: 'L' },
+        { value: 'ml', label: 'ml' }
+      ]
+    }
+
+    // Unidades, cajas, etc.
+    return [
+      { value: ingredient.purchaseUnit, label: ingredient.purchaseUnit }
+    ]
   }
 
   const handleSaveRecipe = async () => {
@@ -422,33 +453,65 @@ export default function Recipes() {
             <div className="bg-gray-50 p-4 rounded-lg mb-3 space-y-3">
               <Select
                 value={ingredientForm.ingredientId}
-                onChange={e => setIngredientForm({ ...ingredientForm, ingredientId: e.target.value })}
+                onChange={e => {
+                  const ingredientId = e.target.value
+                  const ingredient = ingredients.find(i => i.id === ingredientId)
+
+                  // Establecer la unidad por defecto basada en el tipo de ingrediente
+                  let defaultUnit = 'g'
+                  if (ingredient) {
+                    const purchaseUnit = ingredient.purchaseUnit?.toLowerCase()
+                    if (purchaseUnit === 'kg' || purchaseUnit === 'g') {
+                      defaultUnit = 'g' // Unidad más pequeña para peso
+                    } else if (purchaseUnit === 'l' || purchaseUnit === 'ml') {
+                      defaultUnit = 'ml' // Unidad más pequeña para volumen
+                    } else {
+                      defaultUnit = ingredient.purchaseUnit // Misma unidad
+                    }
+                  }
+
+                  setIngredientForm({
+                    ...ingredientForm,
+                    ingredientId,
+                    unit: defaultUnit
+                  })
+                }}
               >
                 <option value="">Selecciona un ingrediente</option>
                 {ingredients.map(ing => (
                   <option key={ing.id} value={ing.id}>
-                    {ing.name} ({ing.currentStock} {ing.purchaseUnit})
+                    {ing.name}
                   </option>
                 ))}
               </Select>
 
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Cantidad"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ej: 150"
                   value={ingredientForm.quantity}
-                  onChange={e => setIngredientForm({ ...ingredientForm, quantity: e.target.value })}
+                  onChange={e => {
+                    let value = e.target.value.replace(',', '.')
+                    if (value === '' || value === '.' || value === '0.' || /^-?\d*\.?\d*$/.test(value)) {
+                      setIngredientForm({ ...ingredientForm, quantity: value })
+                    }
+                  }}
                 />
                 <Select
                   value={ingredientForm.unit}
                   onChange={e => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
+                  disabled={!ingredientForm.ingredientId}
                 >
-                  <option value="kg">kg</option>
-                  <option value="g">g</option>
-                  <option value="L">L</option>
-                  <option value="ml">ml</option>
-                  <option value="unidades">unidades</option>
+                  {ingredientForm.ingredientId ? (
+                    getCompatibleUnits().map(unit => (
+                      <option key={unit.value} value={unit.value}>
+                        {unit.label}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Primero selecciona ingrediente</option>
+                  )}
                 </Select>
               </div>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -19,6 +19,8 @@ import {
   registerPurchase,
   getPurchases
 } from '@/services/ingredientService'
+import { generateIngredientsExcel } from '@/services/ingredientExportService'
+import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 
 const CATEGORIES = [
   { value: 'granos', label: 'Granos y Cereales' },
@@ -53,6 +55,7 @@ export default function Ingredients() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showPurchaseModal, setShowPurchaseModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [selectedIngredient, setSelectedIngredient] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -294,6 +297,43 @@ export default function Ingredients() {
     setSelectedIngredient(null)
   }
 
+  // Exportar ingredientes a Excel
+  const handleExportExcel = () => {
+    const businessData = {
+      name: user?.displayName || 'Mi Negocio',
+      ruc: user?.ruc || 'N/A'
+    }
+    generateIngredientsExcel(filteredIngredients, businessData)
+    toast.success('Excel descargado exitosamente')
+  }
+
+  // Importar ingredientes desde Excel
+  const handleImportIngredients = async (ingredientsToImport) => {
+    const businessId = getBusinessId()
+    let successCount = 0
+    const errors = []
+
+    for (const ingredientData of ingredientsToImport) {
+      try {
+        const result = await createIngredient(businessId, ingredientData)
+        if (result.success) {
+          successCount++
+        } else {
+          errors.push(`${ingredientData.name}: ${result.error}`)
+        }
+      } catch (error) {
+        errors.push(`${ingredientData.name}: Error al importar`)
+      }
+    }
+
+    await loadIngredients()
+
+    return {
+      success: successCount,
+      errors
+    }
+  }
+
   // Filter ingredients
   const filteredIngredients = ingredients.filter(ingredient => {
     const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -345,6 +385,22 @@ export default function Ingredients() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportExcel}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Exportar Excel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowImportModal(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar Excel
+          </Button>
           <Button
             variant="primary"
             onClick={() => {
@@ -494,6 +550,16 @@ export default function Ingredients() {
                         title="Registrar compra"
                       >
                         <ShoppingCart className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const basePath = isDemoMode ? '/demo' : '/app'
+                          navigate(`${basePath}/ingredientes/historial?ingredientId=${ingredient.id}`)
+                        }}
+                        className="p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                        title="Ver historial"
+                      >
+                        <History className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => openEditModal(ingredient)}
@@ -745,6 +811,13 @@ export default function Ingredients() {
           </div>
         </div>
       </Modal>
+
+      {/* Import Ingredients Modal */}
+      <ImportIngredientsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportIngredients}
+      />
     </div>
   )
 }

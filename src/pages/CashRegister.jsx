@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, ShoppingCart } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -22,6 +23,7 @@ import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashR
 export default function CashRegister() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
   const [movements, setMovements] = useState([])
@@ -291,6 +293,11 @@ export default function CashRegister() {
     setTimeout(() => {
       loadData()
     }, 500)
+  }
+
+  const handleGoToPOS = () => {
+    const basePath = isDemoMode ? '/demo' : '/app'
+    navigate(`${basePath}/pos`)
   }
 
   const handleAddMovement = async () => {
@@ -954,9 +961,17 @@ export default function CashRegister() {
               </div>
             </div>
 
-            {/* Botón finalizar */}
-            <div className="pt-4 border-t border-gray-200">
+            {/* Botones de acción */}
+            <div className="pt-4 border-t border-gray-200 space-y-3">
               <Button
+                onClick={handleGoToPOS}
+                className="w-full"
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Ir al POS (Crear Comprobante)
+              </Button>
+              <Button
+                variant="outline"
                 onClick={handleFinishClosing}
                 className="w-full"
               >
