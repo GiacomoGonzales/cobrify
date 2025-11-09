@@ -592,8 +592,6 @@ export default function POS() {
   const handleCheckout = async () => {
     if (!user?.uid) return
 
-    console.log('🔍 POS handleCheckout - isDemoMode:', isDemoMode, 'demoData:', !!demoData)
-
     // Validar carrito no vacío
     if (cart.length === 0) {
       toast.error('El carrito está vacío')
@@ -867,8 +865,6 @@ export default function POS() {
               invoiceId,
               item.name
             )
-
-            console.log(`✅ Ingredientes descontados para: ${item.name} (x${item.quantity})`)
           }
         } catch (error) {
           // No bloquear la venta si falla el descuento de ingredientes

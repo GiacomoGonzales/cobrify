@@ -59,8 +59,6 @@ try {
     connectFunctionsEmulator(functions, 'localhost', 5001)
     console.log('🔧 Usando emulador de Firebase Functions')
   }
-
-  console.log('✅ Firebase inicializado correctamente')
 } catch (error) {
   console.error('❌ Error al inicializar Firebase:', error)
 }
