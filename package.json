@@ -6,6 +6,7 @@
   "description": "Sistema de facturación y cobranza moderno para negocios en Perú",
   "scripts": {
     "dev": "vite",
+    "dev:host": "vite --host",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
@@ -13,11 +14,12 @@
     "mobile:sync": "npm run build && npx cap sync",
     "mobile:android": "npm run mobile:sync && npx cap open android",
     "mobile:ios": "npm run mobile:sync && npx cap open ios",
-    "mobile:build": "npm run build && npx cap copy"
+    "mobile:build": "npm run build && npx cap copy",
+    "mobile:dev:android": "npx cap run android --livereload --external",
+    "mobile:dev:ios": "npx cap run ios --livereload --external"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
-    "@capacitor/cli": "^7.4.4",
     "@capacitor/core": "^7.4.4",
     "@capacitor/ios": "^7.4.4",
     "@hookform/resolvers": "^3.3.4",
@@ -44,6 +46,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.4",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
