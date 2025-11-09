@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
 import { PLANS } from '@/services/subscriptionService';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading, toast }) {
@@ -155,10 +155,10 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
     setIsSavingConfig(true);
     try {
       const businessRef = doc(db, 'businesses', user.userId);
-      await updateDoc(businessRef, {
+      await setDoc(businessRef, {
         emissionConfig: emissionConfig,
         updatedAt: new Date()
-      });
+      }, { merge: true });
 
       if (toast) {
         toast.success('Configuración guardada exitosamente');
