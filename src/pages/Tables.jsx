@@ -340,9 +340,18 @@ export default function Tables() {
     // Si la mesa está ocupada, cargar la orden y abrir modal de acciones
     if (table.status === 'occupied' && table.currentOrder) {
       try {
-        const orderResult = await getOrder(getBusinessId(), table.currentOrder)
-        if (orderResult.success) {
-          setSelectedOrder(orderResult.data)
+        // En modo demo, buscar la orden en los datos de demo
+        if (isDemoMode && demoData?.orders) {
+          const order = demoData.orders.find(o => o.id === table.currentOrder)
+          if (order) {
+            setSelectedOrder(order)
+          }
+        } else {
+          // En modo normal, cargar desde Firebase
+          const orderResult = await getOrder(getBusinessId(), table.currentOrder)
+          if (orderResult.success) {
+            setSelectedOrder(orderResult.data)
+          }
         }
       } catch (error) {
         console.error('Error al cargar orden:', error)
