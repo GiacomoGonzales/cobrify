@@ -531,8 +531,8 @@ export default function Ingredients() {
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="font-semibold">{ingredient.currentStock} {ingredient.purchaseUnit}</p>
-                      <p className="text-xs text-gray-500">Mín: {ingredient.minimumStock}</p>
+                      <p className="font-semibold">{parseFloat(ingredient.currentStock || 0).toFixed(2)} {ingredient.purchaseUnit}</p>
+                      <p className="text-xs text-gray-500">Mín: {parseFloat(ingredient.minimumStock || 0).toFixed(2)}</p>
                     </div>
                   </TableCell>
                   <TableCell>
