@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
+import { Capacitor } from '@capacitor/core'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import InvoiceList from './pages/InvoiceList'
@@ -42,6 +43,7 @@ import Ingredients from './pages/Ingredients'
 import Recipes from './pages/Recipes'
 import RegisterPurchase from './pages/RegisterPurchase'
 import PurchaseHistory from './pages/PurchaseHistory'
+import MobileRedirect from './components/MobileRedirect'
 
 function App() {
   return (
@@ -54,8 +56,12 @@ function App() {
       <AuthProvider>
         <ToastProvider>
           <Routes>
-            {/* Landing Page */}
-            <Route path="/" element={<LandingPage />} />
+            {/* Landing Page - En móvil redirige a login */}
+            <Route path="/" element={
+              <MobileRedirect>
+                <LandingPage />
+              </MobileRedirect>
+            } />
 
             {/* Ruta pública */}
             <Route path="/login" element={<Login />} />
