@@ -305,6 +305,7 @@ export default function Products() {
         description: data.description || '',
         unit: data.unit,
         category: data.category || '',
+        cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null,
         hasVariants: hasVariants,
       }
 
