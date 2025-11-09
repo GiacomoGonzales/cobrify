@@ -448,10 +448,6 @@ export default function Tables() {
   const handleConfirmCloseTable = async (closeData) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
-      setIsCloseTableModalOpen(false)
-      setIsActionModalOpen(false)
-      setSelectedTable(null)
-      setSelectedOrder(null)
       return
     }
 
@@ -460,18 +456,16 @@ export default function Tables() {
       const result = await releaseTable(getBusinessId(), selectedTable.id)
       if (result.success) {
         toast.success('Mesa cerrada exitosamente')
+        // Cerrar el modal de acciones y limpiar selección
+        setIsActionModalOpen(false)
+        setSelectedTable(null)
+        setSelectedOrder(null)
       } else {
         toast.error(result.error || 'Error al liberar mesa')
       }
     } catch (error) {
       console.error('Error al cerrar mesa:', error)
       toast.error('Error al cerrar mesa')
-    } finally {
-      // Siempre cerrar ambos modales, independientemente del resultado
-      setIsCloseTableModalOpen(false)
-      setIsActionModalOpen(false)
-      setSelectedTable(null)
-      setSelectedOrder(null)
     }
   }
 
@@ -929,8 +923,6 @@ export default function Tables() {
         isOpen={isCloseTableModalOpen}
         onClose={() => {
           setIsCloseTableModalOpen(false)
-          // Reabrir el modal de acciones después de cerrar
-          setIsActionModalOpen(true)
         }}
         table={selectedTable}
         order={selectedOrder}
