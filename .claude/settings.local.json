@@ -35,7 +35,11 @@
       "Bash(tasklist:*)",
       "Bash(powershell -Command \"Get-Process node | Stop-Process -Force\")",
       "Bash(git log:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(git checkout:*)",
+      "Bash(npx cap init:*)",
+      "Bash(npx cap:*)",
+      "Bash(git merge:*)"
     ],
     "deny": [],
     "ask": []
