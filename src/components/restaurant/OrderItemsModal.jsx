@@ -49,12 +49,18 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
   const loadProducts = async () => {
     setIsLoading(true)
     try {
+      console.log('🔍 OrderItemsModal - isDemoMode:', isDemoMode)
+      console.log('🔍 OrderItemsModal - demoData:', demoData)
+      console.log('🔍 OrderItemsModal - demoContext:', demoContext)
+
       // En modo demo, usar productos del contexto de demo
       if (isDemoMode && demoData?.products) {
+        console.log('✅ Usando productos de demo:', demoData.products.length)
         const allProducts = demoData.products || []
         setProducts(allProducts)
         setFilteredProducts(allProducts)
       } else {
+        console.log('⚠️ Cargando desde Firebase')
         // En modo normal, cargar desde Firebase
         const result = await getProducts(getBusinessId())
         if (result.success) {
