@@ -10,9 +10,13 @@ import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
 export default function OrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
-  const { getBusinessId, isDemoMode } = useAppContext()
-  const { demoData } = useDemoRestaurant()
+  const { getBusinessId } = useAppContext()
+  const demoContext = useDemoRestaurant()
   const toast = useToast()
+
+  // Detectar si estamos en modo demo restaurant
+  const isDemoMode = !!demoContext?.demoData
+  const demoData = demoContext?.demoData
 
   const [products, setProducts] = useState([])
   const [filteredProducts, setFilteredProducts] = useState([])
