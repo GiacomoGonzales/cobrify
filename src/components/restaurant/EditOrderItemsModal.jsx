@@ -5,15 +5,23 @@ import Button from '@/components/ui/Button'
 import { removeOrderItem, updateOrderItemQuantity } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
 export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
   const { getBusinessId } = useAppContext()
+  const demoContext = useDemoRestaurant()
   const toast = useToast()
 
   const [isUpdating, setIsUpdating] = useState(false)
   const [updatingItemIndex, setUpdatingItemIndex] = useState(null)
 
   const handleUpdateQuantity = async (itemIndex, currentQuantity, delta) => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     const newQuantity = currentQuantity + delta
     if (newQuantity < 1) return // No permitir cantidades menores a 1
 
@@ -37,6 +45,12 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   }
 
   const handleRemoveItem = async (itemIndex) => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     if (!confirm('¿Estás seguro de eliminar este item?')) return
 
     setUpdatingItemIndex(itemIndex)
