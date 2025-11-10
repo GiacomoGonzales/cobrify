@@ -49,22 +49,34 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
   const loadProducts = async () => {
     setIsLoading(true)
     try {
-      console.log('🔍 OrderItemsModal - isDemoMode:', isDemoMode)
-      console.log('🔍 OrderItemsModal - demoData:', demoData)
-      console.log('🔍 OrderItemsModal - demoContext:', demoContext)
-
       // En modo demo, usar productos del contexto de demo
       if (isDemoMode && demoData?.products) {
-        console.log('✅ Usando productos de demo:', demoData.products.length)
         const allProducts = demoData.products || []
         setProducts(allProducts)
         setFilteredProducts(allProducts)
+      } else if (demoContext) {
+        // Si está en el layout de demo pero no hay productos, mostrar productos de ejemplo
+        const demoProducts = demoContext.demoData?.products || []
+        if (demoProducts.length > 0) {
+          setProducts(demoProducts)
+          setFilteredProducts(demoProducts)
+        } else {
+          // Fallback: productos hardcodeados para demo
+          const fallbackProducts = [
+            { id: '1', code: 'PLT001', name: 'Ceviche de Pescado', price: 32.00, category: 'Entradas', unit: 'PLATO' },
+            { id: '2', code: 'PLT002', name: 'Lomo Saltado', price: 28.00, category: 'Platos de Fondo', unit: 'PLATO' },
+            { id: '3', code: 'PLT003', name: 'Arroz con Pollo', price: 22.00, category: 'Platos de Fondo', unit: 'PLATO' },
+            { id: '4', code: 'PLT004', name: 'Ají de Gallina', price: 24.00, category: 'Platos de Fondo', unit: 'PLATO' },
+            { id: '5', code: 'BEB001', name: 'Chicha Morada', price: 12.00, category: 'Bebidas', unit: 'JARRA' },
+            { id: '6', code: 'BEB002', name: 'Inca Kola', price: 5.00, category: 'Bebidas', unit: 'UNIDAD' },
+          ]
+          setProducts(fallbackProducts)
+          setFilteredProducts(fallbackProducts)
+        }
       } else {
-        console.log('⚠️ Cargando desde Firebase')
         // En modo normal, cargar desde Firebase
         const result = await getProducts(getBusinessId())
         if (result.success) {
-          // Mostrar todos los productos por ahora (sin filtro restrictivo)
           const allProducts = result.data || []
           setProducts(allProducts)
           setFilteredProducts(allProducts)
@@ -148,11 +160,10 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
 
     setIsSaving(true)
     try {
-      // En modo demo, simular éxito sin guardar en Firebase
-      if (isDemoMode) {
-        toast.success(`${cart.length} items agregados a la orden (Demo)`)
+      // En modo demo, mostrar mensaje amigable
+      if (isDemoMode || demoContext) {
+        toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
         setCart([])
-        if (onSuccess) onSuccess()
         onClose()
       } else {
         // En modo normal, guardar en Firebase
