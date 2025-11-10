@@ -345,17 +345,26 @@ export default function Tables() {
           const order = demoData.orders.find(o => o.id === table.currentOrder)
           if (order) {
             setSelectedOrder(order)
+          } else {
+            console.warn('Orden no encontrada en datos de demo:', table.currentOrder)
+            setSelectedOrder(null)
           }
-        } else {
+        } else if (!isDemoMode) {
           // En modo normal, cargar desde Firebase
           const orderResult = await getOrder(getBusinessId(), table.currentOrder)
           if (orderResult.success) {
             setSelectedOrder(orderResult.data)
+          } else {
+            console.warn('Error al cargar orden:', orderResult.error)
+            setSelectedOrder(null)
           }
         }
       } catch (error) {
         console.error('Error al cargar orden:', error)
+        setSelectedOrder(null)
       }
+    } else {
+      setSelectedOrder(null)
     }
 
     // Abrir modal de acciones para todas las mesas
