@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -43,6 +44,7 @@ const UNITS = [
 
 export default function Ingredients() {
   const { user, getBusinessId, isDemoMode } = useAppContext()
+  const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
   const [ingredients, setIngredients] = useState([])
@@ -86,13 +88,19 @@ export default function Ingredients() {
 
     setIsLoading(true)
     try {
-      const businessId = getBusinessId()
-      const result = await getIngredients(businessId)
-
-      if (result.success) {
-        setIngredients(result.data || [])
+      // En modo demo, usar ingredientes del contexto de demo
+      if (demoContext?.demoData?.ingredients) {
+        setIngredients(demoContext.demoData.ingredients)
       } else {
-        toast.error('Error al cargar ingredientes')
+        // En modo normal, cargar desde Firebase
+        const businessId = getBusinessId()
+        const result = await getIngredients(businessId)
+
+        if (result.success) {
+          setIngredients(result.data || [])
+        } else {
+          toast.error('Error al cargar ingredientes')
+        }
       }
     } catch (error) {
       console.error('Error:', error)
@@ -103,6 +111,12 @@ export default function Ingredients() {
   }
 
   const handleAddIngredient = async () => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     if (!formData.name) {
       toast.error('El nombre del ingrediente es requerido')
       return
@@ -139,6 +153,12 @@ export default function Ingredients() {
   }
 
   const handleEditIngredient = async () => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     if (!selectedIngredient) return
 
     setIsSaving(true)
@@ -172,6 +192,12 @@ export default function Ingredients() {
   }
 
   const handleDeleteIngredient = async () => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     if (!selectedIngredient) return
 
     setIsSaving(true)
