@@ -200,7 +200,14 @@ export default function TableActionModal({
                               hour: '2-digit',
                               minute: '2-digit',
                             })
-                          : table.startTime}
+                          : typeof table.startTime === 'string'
+                          ? table.startTime
+                          : table.startTime instanceof Date
+                          ? table.startTime.toLocaleTimeString('es-PE', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : 'N/A'}
                       </span>
                     </div>
                   )}
