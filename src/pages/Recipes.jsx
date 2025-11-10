@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -16,6 +17,7 @@ import { getProducts } from '@/services/firestoreService'
 
 export default function Recipes() {
   const { user, getBusinessId } = useAppContext()
+  const demoContext = useDemoRestaurant()
   const toast = useToast()
 
   const [recipes, setRecipes] = useState([])
@@ -57,21 +59,96 @@ export default function Recipes() {
 
     setIsLoading(true)
     try {
-      const businessId = getBusinessId()
-      const [recipesResult, ingredientsResult, productsResult] = await Promise.all([
-        getRecipes(businessId),
-        getIngredients(businessId),
-        getProducts(businessId)
-      ])
+      // En modo demo, usar datos del contexto de demo o fallback
+      if (demoContext) {
+        const demoRecipes = demoContext.demoData?.recipes || [
+          {
+            id: 'rec1',
+            productId: '1',
+            productName: 'Ceviche de Pescado',
+            portions: 1,
+            totalCost: 14.25,
+            preparationTime: 20,
+            instructions: '1. Cortar el pescado en cubos\n2. Agregar limón y dejar reposar\n3. Añadir cebolla, ají y sal',
+            ingredients: [
+              { ingredientId: 'ing4', ingredientName: 'Pescado (filete)', quantity: 0.25, unit: 'kg', cost: 4.50 },
+              { ingredientId: 'ing5', ingredientName: 'Limón', quantity: 0.15, unit: 'kg', cost: 0.68 },
+              { ingredientId: 'ing6', ingredientName: 'Cebolla Roja', quantity: 0.1, unit: 'kg', cost: 0.32 },
+              { ingredientId: 'ing10', ingredientName: 'Ají Amarillo', quantity: 0.05, unit: 'kg', cost: 0.43 },
+            ],
+          },
+          {
+            id: 'rec2',
+            productId: '2',
+            productName: 'Lomo Saltado',
+            portions: 1,
+            totalCost: 11.85,
+            preparationTime: 25,
+            instructions: '1. Cortar la carne en tiras\n2. Saltear con vegetales\n3. Servir con papas y arroz',
+            ingredients: [
+              { ingredientId: 'ing2', ingredientName: 'Pollo', quantity: 0.2, unit: 'kg', cost: 2.50 },
+              { ingredientId: 'ing3', ingredientName: 'Papa', quantity: 0.15, unit: 'kg', cost: 0.38 },
+              { ingredientId: 'ing7', ingredientName: 'Tomate', quantity: 0.1, unit: 'kg', cost: 0.38 },
+              { ingredientId: 'ing6', ingredientName: 'Cebolla Roja', quantity: 0.1, unit: 'kg', cost: 0.32 },
+              { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.1, unit: 'kg', cost: 0.38 },
+            ],
+          },
+          {
+            id: 'rec3',
+            productId: '3',
+            productName: 'Arroz con Pollo',
+            portions: 1,
+            totalCost: 9.50,
+            preparationTime: 30,
+            instructions: '1. Cocinar el pollo\n2. Preparar el arroz con vegetales\n3. Servir con papa a la huancaína',
+            ingredients: [
+              { ingredientId: 'ing2', ingredientName: 'Pollo', quantity: 0.25, unit: 'kg', cost: 3.13 },
+              { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.15, unit: 'kg', cost: 0.57 },
+              { ingredientId: 'ing3', ingredientName: 'Papa', quantity: 0.15, unit: 'kg', cost: 0.38 },
+              { ingredientId: 'ing10', ingredientName: 'Ají Amarillo', quantity: 0.05, unit: 'kg', cost: 0.43 },
+            ],
+          },
+        ]
 
-      if (recipesResult.success) {
-        setRecipes(recipesResult.data || [])
-      }
-      if (ingredientsResult.success) {
-        setIngredients(ingredientsResult.data || [])
-      }
-      if (productsResult.success) {
-        setProducts(productsResult.data || [])
+        const demoIngredients = demoContext.demoData?.ingredients || [
+          { id: 'ing1', name: 'Arroz', category: 'granos', purchaseUnit: 'kg', currentStock: 45.5, averageCost: 3.80 },
+          { id: 'ing2', name: 'Pollo', category: 'carnes', purchaseUnit: 'kg', currentStock: 22.0, averageCost: 12.50 },
+          { id: 'ing3', name: 'Papa', category: 'vegetales', purchaseUnit: 'kg', currentStock: 35.0, averageCost: 2.50 },
+          { id: 'ing4', name: 'Pescado (filete)', category: 'carnes', purchaseUnit: 'kg', currentStock: 8.5, averageCost: 18.00 },
+          { id: 'ing5', name: 'Limón', category: 'vegetales', purchaseUnit: 'kg', currentStock: 12.0, averageCost: 4.50 },
+          { id: 'ing6', name: 'Cebolla Roja', category: 'vegetales', purchaseUnit: 'kg', currentStock: 18.0, averageCost: 3.20 },
+          { id: 'ing7', name: 'Tomate', category: 'vegetales', purchaseUnit: 'kg', currentStock: 15.5, averageCost: 3.80 },
+          { id: 'ing10', name: 'Ají Amarillo', category: 'condimentos', purchaseUnit: 'kg', currentStock: 3.5, averageCost: 8.50 },
+        ]
+
+        const demoProducts = demoContext.demoData?.products || [
+          { id: '1', name: 'Ceviche de Pescado', price: 32.00, category: 'Entradas' },
+          { id: '2', name: 'Lomo Saltado', price: 28.00, category: 'Platos de Fondo' },
+          { id: '3', name: 'Arroz con Pollo', price: 22.00, category: 'Platos de Fondo' },
+          { id: '4', name: 'Ají de Gallina', price: 24.00, category: 'Platos de Fondo' },
+        ]
+
+        setRecipes(demoRecipes)
+        setIngredients(demoIngredients)
+        setProducts(demoProducts)
+      } else {
+        // En modo normal, cargar desde Firebase
+        const businessId = getBusinessId()
+        const [recipesResult, ingredientsResult, productsResult] = await Promise.all([
+          getRecipes(businessId),
+          getIngredients(businessId),
+          getProducts(businessId)
+        ])
+
+        if (recipesResult.success) {
+          setRecipes(recipesResult.data || [])
+        }
+        if (ingredientsResult.success) {
+          setIngredients(ingredientsResult.data || [])
+        }
+        if (productsResult.success) {
+          setProducts(productsResult.data || [])
+        }
       }
     } catch (error) {
       console.error('Error:', error)
@@ -156,6 +233,12 @@ export default function Recipes() {
   }
 
   const handleSaveRecipe = async () => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     if (!formData.productId || formData.ingredients.length === 0) {
       toast.error('Selecciona un producto y agrega al menos un ingrediente')
       return
@@ -196,6 +279,12 @@ export default function Recipes() {
   }
 
   const handleDeleteRecipe = async () => {
+    // Verificar si está en modo demo
+    if (demoContext) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
     if (!selectedRecipe) return
 
     setIsSaving(true)
