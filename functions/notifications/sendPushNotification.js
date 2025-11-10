@@ -31,40 +31,51 @@ export async function sendPushNotification(userId, title, body, data = {}) {
     let successCount = 0
     const failedTokens = []
 
-    // Enviar notificación a cada token individualmente usando API V1
-    for (const token of tokens) {
-      try {
-        const message = {
-          token: token,
-          notification: {
-            title,
-            body
-          },
-          data: {
-            ...data,
-            click_action: 'FLUTTER_NOTIFICATION_CLICK'
-          },
-          android: {
-            priority: 'high',
-            notification: {
-              sound: 'default',
-              channelId: 'default'
+    // Enviar notificación usando sendEachForMulticast (API V1 simplificada)
+    const message = {
+      notification: {
+        title,
+        body
+      },
+      data: {
+        ...data,
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'default'
+        }
+      },
+      tokens: tokens
+    }
+
+    console.log('📤 Sending notification to', tokens.length, 'tokens')
+
+    try {
+      const response = await admin.messaging().sendEachForMulticast(message)
+      console.log('📊 Success count:', response.successCount)
+      console.log('📊 Failure count:', response.failureCount)
+
+      successCount = response.successCount
+
+      // Procesar tokens fallidos
+      if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            console.error('❌ Failed for token:', tokens[idx].substring(0, 20) + '...', resp.error?.code)
+            // Si el token es inválido, agregarlo a la lista para eliminar
+            if (resp.error?.code === 'messaging/invalid-registration-token' ||
+                resp.error?.code === 'messaging/registration-token-not-registered') {
+              failedTokens.push(tokens[idx])
             }
           }
-        }
-
-        console.log('📤 Sending to token:', token.substring(0, 20) + '...')
-        await admin.messaging().send(message)
-        console.log('✅ Sent successfully to token')
-        successCount++
-      } catch (error) {
-        console.error('❌ Failed to send to token:', error.code, error.message)
-        // Si el token es inválido, agregarlo a la lista para eliminar
-        if (error.code === 'messaging/invalid-registration-token' ||
-            error.code === 'messaging/registration-token-not-registered') {
-          failedTokens.push(token)
-        }
+        })
       }
+    } catch (error) {
+      console.error('❌ Failed to send notifications:', error.code, error.message)
+      return { success: false, error: error.message }
     }
 
     console.log(`✅ Successfully sent ${successCount}/${tokens.length} notifications`)
