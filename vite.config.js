@@ -10,8 +10,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // Base path para compatibilidad con Capacitor (apps móviles)
-  base: './',
+  // Base path: usar '/' para web, './' solo para Capacitor
+  base: process.env.CAPACITOR ? './' : '/',
   server: {
     port: 3000,
     open: true,
