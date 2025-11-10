@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Search, Package, Calendar, User, DollarSign, Loader2, Receipt, TrendingUp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
@@ -12,6 +13,7 @@ import { getIngredients } from '@/services/ingredientService'
 
 export default function PurchaseHistory() {
   const { user, getBusinessId } = useAppContext()
+  const demoContext = useDemoRestaurant()
   const toast = useToast()
 
   const [purchases, setPurchases] = useState([])
@@ -38,18 +40,136 @@ export default function PurchaseHistory() {
 
     setIsLoading(true)
     try {
-      const businessId = getBusinessId()
-      const [purchasesResult, ingredientsResult] = await Promise.all([
-        getPurchases(businessId),
-        getIngredients(businessId)
-      ])
+      // En modo demo, usar datos del contexto de demo o fallback
+      if (demoContext) {
+        const demoPurchases = demoContext.demoData?.purchases || [
+          {
+            id: 'pur1',
+            ingredientId: 'ing1',
+            ingredientName: 'Arroz',
+            quantity: 50,
+            unit: 'kg',
+            unitPrice: 3.90,
+            totalCost: 195.00,
+            supplier: 'Distribuidora San Juan',
+            invoiceNumber: 'F001-12345',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 5)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 5)),
+          },
+          {
+            id: 'pur2',
+            ingredientId: 'ing2',
+            ingredientName: 'Pollo',
+            quantity: 30,
+            unit: 'kg',
+            unitPrice: 12.80,
+            totalCost: 384.00,
+            supplier: 'Avícola El Rancho',
+            invoiceNumber: 'F001-12346',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 2)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 2)),
+          },
+          {
+            id: 'pur3',
+            ingredientId: 'ing4',
+            ingredientName: 'Pescado (filete)',
+            quantity: 15,
+            unit: 'kg',
+            unitPrice: 18.50,
+            totalCost: 277.50,
+            supplier: 'Pescados Frescos SAC',
+            invoiceNumber: 'F001-12347',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 1)),
+          },
+          {
+            id: 'pur4',
+            ingredientId: 'ing3',
+            ingredientName: 'Papa',
+            quantity: 50,
+            unit: 'kg',
+            unitPrice: 2.60,
+            totalCost: 130.00,
+            supplier: 'Verduras del Campo',
+            invoiceNumber: 'F001-12348',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 3)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 3)),
+          },
+          {
+            id: 'pur5',
+            ingredientId: 'ing5',
+            ingredientName: 'Limón',
+            quantity: 20,
+            unit: 'kg',
+            unitPrice: 4.80,
+            totalCost: 96.00,
+            supplier: 'Verduras del Campo',
+            invoiceNumber: 'F001-12349',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 1)),
+          },
+          {
+            id: 'pur6',
+            ingredientId: 'ing6',
+            ingredientName: 'Cebolla Roja',
+            quantity: 25,
+            unit: 'kg',
+            unitPrice: 3.50,
+            totalCost: 87.50,
+            supplier: 'Verduras del Campo',
+            invoiceNumber: 'F001-12350',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 4)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 4)),
+          },
+          {
+            id: 'pur7',
+            ingredientId: 'ing8',
+            ingredientName: 'Aceite Vegetal',
+            quantity: 10,
+            unit: 'litros',
+            unitPrice: 12.50,
+            totalCost: 125.00,
+            supplier: 'Mayorista La Despensa',
+            invoiceNumber: 'F001-12351',
+            purchaseDate: new Date(new Date().setDate(new Date().getDate() - 7)),
+            createdBy: 'demo@restaurante.com',
+            createdAt: new Date(new Date().setDate(new Date().getDate() - 7)),
+          },
+        ]
 
-      if (purchasesResult.success) {
-        setPurchases(purchasesResult.data || [])
-      }
+        const demoIngredients = demoContext.demoData?.ingredients || [
+          { id: 'ing1', name: 'Arroz' },
+          { id: 'ing2', name: 'Pollo' },
+          { id: 'ing3', name: 'Papa' },
+          { id: 'ing4', name: 'Pescado (filete)' },
+          { id: 'ing5', name: 'Limón' },
+          { id: 'ing6', name: 'Cebolla Roja' },
+          { id: 'ing7', name: 'Tomate' },
+          { id: 'ing8', name: 'Aceite Vegetal' },
+        ]
 
-      if (ingredientsResult.success) {
-        setIngredients(ingredientsResult.data || [])
+        setPurchases(demoPurchases)
+        setIngredients(demoIngredients)
+      } else {
+        // En modo normal, cargar desde Firebase
+        const businessId = getBusinessId()
+        const [purchasesResult, ingredientsResult] = await Promise.all([
+          getPurchases(businessId),
+          getIngredients(businessId)
+        ])
+
+        if (purchasesResult.success) {
+          setPurchases(purchasesResult.data || [])
+        }
+        if (ingredientsResult.success) {
+          setIngredients(ingredientsResult.data || [])
+        }
       }
     } catch (error) {
       console.error('Error:', error)
