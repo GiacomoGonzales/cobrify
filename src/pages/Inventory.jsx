@@ -453,7 +453,7 @@ export default function Inventory() {
               ? 'Hay productos sin stock. Es urgente reabastecer para evitar ventas perdidas.'
               : 'Algunos productos tienen stock bajo. Considera reabastecer pronto.'}
           </p>
-          <Link to="/productos" className="inline-block mt-2">
+          <Link to="/app/productos" className="inline-block mt-2">
             <Button variant="outline" size="sm">
               Gestionar Productos
             </Button>
