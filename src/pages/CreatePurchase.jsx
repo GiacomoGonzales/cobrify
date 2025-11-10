@@ -489,7 +489,7 @@ export default function CreatePurchase() {
       // 4. Mostrar éxito y redirigir
       toast.success('Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
-        navigate('/compras')
+        navigate('/app/compras')
       }, 1500)
     } catch (error) {
       console.error('Error al crear compra:', error)
@@ -657,7 +657,7 @@ export default function CreatePurchase() {
             <Alert type="warning" className="mt-4">
               No tienes proveedores registrados.{' '}
               <button
-                onClick={() => navigate('/proveedores')}
+                onClick={() => navigate('/app/proveedores')}
                 className="underline font-medium"
               >
                 Crear proveedor
@@ -848,7 +848,7 @@ export default function CreatePurchase() {
             <Alert type="warning" className="mt-4">
               No tienes productos registrados.{' '}
               <button
-                onClick={() => navigate('/productos')}
+                onClick={() => navigate('/app/productos')}
                 className="underline font-medium"
               >
                 Crear producto
