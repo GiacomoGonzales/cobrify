@@ -1,8 +1,9 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
+import { getAuth, indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
+import { Capacitor } from '@capacitor/core'
 
 // Silenciar warnings internos de Firestore en desarrollo
 if (import.meta.env.DEV) {
@@ -29,9 +30,16 @@ if (import.meta.env.DEV) {
   };
 }
 
-// Configuración de Firebase desde variables de entorno
+// Detectar si estamos en una plataforma nativa (Android/iOS)
+const isNative = Capacitor.isNativePlatform()
+
+// Configuración de Firebase
+// En plataformas nativas (Android/iOS), usamos la API key de Android que no tiene restricciones HTTP
+// En web, usamos la API key con restricciones HTTP configuradas
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  apiKey: isNative
+    ? 'AIzaSyBwo1ZQisEzdehrLFATBVzQtgXI5aBJi_k'  // API Key de Android (sin restricciones HTTP)
+    : import.meta.env.VITE_FIREBASE_API_KEY,        // API Key de Web (con restricciones HTTP)
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
@@ -39,6 +47,12 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
+
+console.log('🔥 Firebase config:', {
+  platform: isNative ? 'Native (Android/iOS)' : 'Web',
+  apiKey: firebaseConfig.apiKey.substring(0, 20) + '...',
+  projectId: firebaseConfig.projectId
+})
 
 // Inicializar Firebase
 let app
@@ -49,7 +63,21 @@ let functions
 
 try {
   app = initializeApp(firebaseConfig)
-  auth = getAuth(app)
+
+  // Inicializar Auth con persistencia local explícita
+  // Esto asegura que la sesión se mantenga incluso después de cerrar la app
+  if (isNative) {
+    // En plataformas nativas (Android/iOS), usar persistencia IndexedDB
+    auth = initializeAuth(app, {
+      persistence: indexedDBLocalPersistence,
+    })
+    console.log('🔐 Auth inicializado con persistencia LOCAL (IndexedDB) para móvil')
+  } else {
+    // En web, usar la inicialización estándar (persistencia por defecto)
+    auth = getAuth(app)
+    console.log('🔐 Auth inicializado con persistencia estándar para web')
+  }
+
   db = getFirestore(app)
   storage = getStorage(app)
   functions = getFunctions(app)

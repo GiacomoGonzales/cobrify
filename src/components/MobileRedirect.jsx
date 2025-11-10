@@ -1,25 +1,43 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 
 export default function MobileRedirect({ children }) {
   const navigate = useNavigate()
+  const [showSplash, setShowSplash] = useState(Capacitor.isNativePlatform())
 
   useEffect(() => {
-    // Si estamos en app móvil nativa, redirigir al login
     if (Capacitor.isNativePlatform()) {
-      navigate('/login', { replace: true })
+      // Mostrar splash por 2 segundos, luego ir al login
+      const timer = setTimeout(() => {
+        setShowSplash(false)
+        navigate('/login', { replace: true })
+      }, 2000)
+
+      return () => clearTimeout(timer)
     }
   }, [navigate])
 
-  // Si es móvil, mostrar pantalla de carga mientras redirige
-  if (Capacitor.isNativePlatform()) {
+  // Si es móvil y debe mostrar splash
+  if (showSplash) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-primary-600">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-white mb-4">Factuya</h1>
-          <p className="text-white">Cargando...</p>
-        </div>
+      <div style={{
+        width: '100%',
+        height: '100vh',
+        backgroundColor: '#2563eb',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <img
+          src="/logo.png"
+          alt="Cobrify"
+          style={{
+            width: '180px',
+            height: '180px',
+            objectFit: 'contain'
+          }}
+        />
       </div>
     )
   }

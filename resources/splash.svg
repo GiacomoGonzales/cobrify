@@ -1,0 +1,33 @@
+<svg width="2732" height="2732" viewBox="0 0 2732 2732" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Degradado futurista de azul oscuro a morado -->
+  <defs>
+    <linearGradient id="futuristic-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e27;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1a1f3a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d1b4e;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Gradiente adicional para efectos de luz -->
+    <radialGradient id="light-effect" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#4a5fd9;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#2d1b4e;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Fondo principal con degradado -->
+  <rect width="2732" height="2732" fill="url(#futuristic-gradient)"/>
+
+  <!-- Efecto de luz central -->
+  <circle cx="1366" cy="1366" r="800" fill="url(#light-effect)"/>
+
+  <!-- Círculos decorativos con efecto de brillo -->
+  <circle cx="1366" cy="1366" r="500" stroke="#4a5fd9" stroke-width="2" fill="none" opacity="0.2"/>
+  <circle cx="1366" cy="1366" r="600" stroke="#6b7fd9" stroke-width="1" fill="none" opacity="0.1"/>
+  <circle cx="1366" cy="1366" r="700" stroke="#8b9fd9" stroke-width="0.5" fill="none" opacity="0.05"/>
+
+  <!-- Placeholder para el logo (será reemplazado por el logo real) -->
+  <g transform="translate(966, 966)">
+    <!-- El logo se centrará aquí (800x800) -->
+    <rect x="0" y="0" width="800" height="800" fill="none"/>
+  </g>
+</svg>

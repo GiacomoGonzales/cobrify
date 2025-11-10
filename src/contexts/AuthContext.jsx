@@ -6,6 +6,7 @@ import { loginWithEmail, logout as logoutService, onAuthChange } from '@/service
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
+import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
 import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
 
 const AuthContext = createContext(null)
@@ -191,6 +192,16 @@ export const AuthProvider = ({ children }) => {
       const result = await loginWithEmail(email, password)
 
       if (result.success) {
+        // Inicializar notificaciones push en móvil
+        if (result.user?.uid) {
+          try {
+            await initializePushNotifications(result.user.uid)
+          } catch (error) {
+            console.error('Error al inicializar notificaciones push:', error)
+            // No bloquear el login si fallan las notificaciones
+          }
+        }
+
         // El onAuthChange se encargará de actualizar el estado
         navigate('/app/dashboard')
         return { success: true }
@@ -204,6 +215,9 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      // Limpiar listeners de notificaciones push antes de cerrar sesión
+      await cleanupPushNotifications()
+
       await logoutService()
       setUser(null)
       setIsAuthenticated(false)

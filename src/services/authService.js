@@ -12,6 +12,7 @@ import { setAsBusinessOwner } from './adminService'
 
 /**
  * Servicio de autenticación con Firebase
+ * Usa SDK web en todas las plataformas (web y móvil)
  */
 
 /**
@@ -19,11 +20,15 @@ import { setAsBusinessOwner } from './adminService'
  */
 export const loginWithEmail = async (email, password) => {
   try {
+    console.log('🔐 Intentando login con:', email)
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
+    console.log('✅ Login exitoso:', userCredential.user.email)
     return { success: true, user: userCredential.user }
   } catch (error) {
-    console.error('Error en login:', error)
-    return { success: false, error: getErrorMessage(error.code) }
+    console.error('❌ Error en login:', error)
+    console.error('❌ Error code:', error.code)
+    console.error('❌ Error message:', error.message)
+    return { success: false, error: getErrorMessage(error.code || error.message) }
   }
 }
 
@@ -65,7 +70,7 @@ export const registerUser = async (email, password, displayName) => {
     return { success: true, user: userCredential.user }
   } catch (error) {
     console.error('Error en registro:', error)
-    return { success: false, error: getErrorMessage(error.code) }
+    return { success: false, error: getErrorMessage(error.code || error.message) }
   }
 }
 
@@ -91,7 +96,7 @@ export const resetPassword = async email => {
     return { success: true }
   } catch (error) {
     console.error('Error al enviar email:', error)
-    return { success: false, error: getErrorMessage(error.code) }
+    return { success: false, error: getErrorMessage(error.code || error.message) }
   }
 }
 

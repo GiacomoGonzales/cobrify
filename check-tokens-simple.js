@@ -1,0 +1,24 @@
+// Script simple para verificar si hay venta reciente y si se ejecutó la Cloud Function
+console.log('Para verificar las notificaciones manualmente:');
+console.log('');
+console.log('1️⃣ Verifica si el token FCM se guardó:');
+console.log('   - Abre Firebase Console: https://console.firebase.google.com/project/cobrify-395fe/firestore');
+console.log('   - Ve a Firestore Database');
+console.log('   - Navega a: users → [tu-userId] → fcmTokens');
+console.log('   - ¿Hay algún documento ahí? Si SÍ, el token se guardó correctamente ✅');
+console.log('');
+console.log('2️⃣ Verifica si la Cloud Function se ejecutó:');
+console.log('   - Ejecuta: firebase functions:log --limit 20');
+console.log('   - Busca mensajes como:');
+console.log('     🔔 onNewSale trigger activated!');
+console.log('     📄 Invoice data: ...');
+console.log('     📨 sendPushNotification called');
+console.log('');
+console.log('3️⃣ Crea una venta de prueba:');
+console.log('   - Desde la computadora, registra una venta');
+console.log('   - Inmediatamente ejecuta: firebase functions:log --limit 20');
+console.log('   - ¿Aparecen logs? Si NO, la función no se está ejecutando');
+console.log('');
+console.log('4️⃣ Verifica permisos de Android:');
+console.log('   - En el celular: Configuración → Apps → Cobrify → Notificaciones');
+console.log('   - ¿Están activadas? Si NO, actívalas manualmente');

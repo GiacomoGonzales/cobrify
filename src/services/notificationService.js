@@ -10,9 +10,12 @@ import {
   limit,
   Timestamp,
   serverTimestamp,
-  deleteDoc
+  deleteDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { PushNotifications } from '@capacitor/push-notifications';
+import { Capacitor } from '@capacitor/core';
 
 // Tipos de notificaciones
 export const NOTIFICATION_TYPES = {
@@ -22,6 +25,111 @@ export const NOTIFICATION_TYPES = {
   PAYMENT_RECEIVED: 'payment_received', // Se recibió un pago
   PLAN_CHANGED: 'plan_changed', // Se cambió el plan
   WELCOME: 'welcome', // Bienvenida al sistema
+  NEW_SALE: 'new_sale', // Nueva venta realizada
+  LOW_STOCK: 'low_stock', // Producto con stock bajo
+  OUT_OF_STOCK: 'out_of_stock', // Producto sin stock
+};
+
+// ===========================================
+// PUSH NOTIFICATIONS (FCM)
+// ===========================================
+
+// Inicializar notificaciones push para el usuario
+export const initializePushNotifications = async (userId) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  if (!isNative) {
+    console.log('Push notifications only available on native platforms');
+    return { success: false, error: 'Not native platform' };
+  }
+
+  try {
+    // 1. Solicitar permisos
+    const permissionResult = await PushNotifications.requestPermissions();
+
+    if (permissionResult.receive !== 'granted') {
+      console.log('Permission not granted for push notifications');
+      return { success: false, error: 'Permission denied' };
+    }
+
+    // 2. Registrar para recibir notificaciones
+    await PushNotifications.register();
+
+    // 3. Escuchar el token FCM
+    PushNotifications.addListener('registration', async (token) => {
+      console.log('✅ Push registration success!');
+      console.log('📱 FCM Token:', token.value);
+      console.log('👤 User ID:', userId);
+
+      // Guardar el token en Firestore asociado al usuario
+      if (userId) {
+        const saveResult = await saveFCMToken(userId, token.value);
+        if (saveResult.success) {
+          console.log('✅ Token guardado exitosamente en Firestore');
+          alert('✅ Notificaciones activadas correctamente!');
+        } else {
+          console.error('❌ Error al guardar token:', saveResult.error);
+          alert('❌ Error al activar notificaciones: ' + saveResult.error);
+        }
+      } else {
+        console.error('❌ No userId available to save token');
+      }
+    });
+
+    // 4. Escuchar errores de registro
+    PushNotifications.addListener('registrationError', (error) => {
+      console.error('Error on registration:', error);
+    });
+
+    // 5. Escuchar notificaciones recibidas (app en foreground)
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('Push notification received:', notification);
+      // Mostrar notificación local o actualizar UI
+    });
+
+    // 6. Escuchar cuando el usuario toca una notificación
+    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('Push notification action performed:', notification);
+      // Navegar a pantalla específica según el tipo
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error initializing push notifications:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Guardar token FCM en Firestore
+export const saveFCMToken = async (userId, token) => {
+  try {
+    const tokenRef = doc(db, 'users', userId, 'fcmTokens', token);
+    await setDoc(tokenRef, {
+      token,
+      platform: 'android',
+      createdAt: serverTimestamp(),
+      lastUsed: serverTimestamp()
+    }, { merge: true });
+
+    console.log('FCM token saved to Firestore');
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving token to Firestore:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Remover todos los listeners cuando el usuario cierra sesión
+export const cleanupPushNotifications = async () => {
+  const isNative = Capacitor.isNativePlatform();
+  if (!isNative) return;
+
+  try {
+    await PushNotifications.removeAllListeners();
+    console.log('Push notification listeners removed');
+  } catch (error) {
+    console.error('Error cleaning up notifications:', error);
+  }
 };
 
 // Crear notificación

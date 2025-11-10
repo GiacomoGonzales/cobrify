@@ -44,8 +44,11 @@ import Recipes from './pages/Recipes'
 import RegisterPurchase from './pages/RegisterPurchase'
 import PurchaseHistory from './pages/PurchaseHistory'
 import MobileRedirect from './components/MobileRedirect'
+import SplashScreen from './components/SplashScreen'
 
 function App() {
+  const isNative = Capacitor.isNativePlatform()
+
   return (
     <Router
       future={{
@@ -56,14 +59,10 @@ function App() {
       <AuthProvider>
         <ToastProvider>
           <Routes>
-            {/* Landing Page - En móvil redirige a login */}
-            <Route path="/" element={
-              <MobileRedirect>
-                <LandingPage />
-              </MobileRedirect>
-            } />
+            {/* Landing Page / Splash - En móvil muestra splash primero */}
+            <Route path="/" element={isNative ? <SplashScreen /> : <LandingPage />} />
 
-            {/* Ruta pública */}
+            {/* Ruta pública de login (también disponible en /login) */}
             <Route path="/login" element={<Login />} />
 
             {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}

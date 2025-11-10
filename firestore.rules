@@ -80,6 +80,12 @@ service cloud.firestore {
       // Business Owners pueden eliminar usuarios que crearon
       allow delete: if isAuthenticated() &&
                        resource.data.ownerId == request.auth.uid;
+
+      // Subcollection: FCM Tokens (para notificaciones push)
+      match /fcmTokens/{tokenId} {
+        // Los usuarios pueden leer, escribir y eliminar sus propios tokens FCM
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
     }
 
     // Notifications collection

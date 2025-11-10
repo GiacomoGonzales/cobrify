@@ -336,3 +336,11 @@ export const sendInvoiceToSunat = onRequest(
     }
   }
 )
+
+// ========================================
+// PUSH NOTIFICATIONS - Cloud Functions
+// ========================================
+
+// Import and re-export notification functions
+export { onNewSale } from './notifications/onNewSale.js'
+export { onProductStockChange } from './notifications/onStockLow.js'
