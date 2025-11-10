@@ -131,7 +131,7 @@ export default function Purchases() {
             Gestiona tus órdenes de compra y entrada de mercadería
           </p>
         </div>
-        <Link to="/compras/nueva" className="w-full sm:w-auto">
+        <Link to="/app/compras/nueva" className="w-full sm:w-auto">
           <Button className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Nueva Compra
@@ -214,7 +214,7 @@ export default function Purchases() {
                 : 'Comienza registrando tu primera compra'}
             </p>
             {!searchTerm && (
-              <Link to="/compras/nueva">
+              <Link to="/app/compras/nueva">
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   Crear Primera Compra
