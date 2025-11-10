@@ -274,10 +274,10 @@ export default function CreatePurchase() {
 
   const calculateAmounts = () => {
     const total = purchaseItems.reduce((sum, item) => {
-      return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+      return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)
     }, 0)
 
-    // Los precios ya incluyen IGV, calculamos el IGV del total
+    // Los costos ya incluyen IGV, calculamos el IGV del total
     // Total = Subtotal + IGV
     // Total = Subtotal + (Subtotal * 0.18)
     // Total = Subtotal * 1.18
@@ -446,7 +446,7 @@ export default function CreatePurchase() {
           productId: item.productId,
           productName: item.productName,
           quantity: parseFloat(item.quantity),
-          unitPrice: parseFloat(item.unitPrice),
+          unitPrice: parseFloat(item.cost), // Precio unitario de compra (costo)
         })),
         subtotal: amounts.subtotal,
         igv: amounts.igv,
@@ -460,24 +460,35 @@ export default function CreatePurchase() {
         throw new Error(result.error || 'Error al crear la compra')
       }
 
-      // 3. Actualizar stock y costo de productos por almacén
+      // 3. Actualizar stock y costo promedio de productos
       const productUpdates = purchaseItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (product) {
+          const newQuantity = parseFloat(item.quantity)
+          const newCost = parseFloat(item.cost)
+
           // Actualizar stock usando el helper de almacén
           const updatedProduct = updateWarehouseStock(
             product,
             selectedWarehouse?.id || '',
-            parseFloat(item.quantity) // Positivo porque es una entrada
+            newQuantity // Positivo porque es una entrada
           )
 
-          // Actualizar stock y costo (si se proporcionó un costo)
+          // Calcular costo promedio ponderado
+          const currentStock = product.stock || 0
+          const currentCost = product.cost || 0
+          const totalStock = currentStock + newQuantity
+
+          let averageCost = newCost
+          if (currentStock > 0 && currentCost > 0) {
+            // Costo promedio ponderado = (Stock actual * Costo actual + Compra nueva * Costo nuevo) / Stock total
+            averageCost = ((currentStock * currentCost) + (newQuantity * newCost)) / totalStock
+          }
+
           const updates = {
             stock: updatedProduct.stock,
-            warehouseStocks: updatedProduct.warehouseStocks
-          }
-          if (item.cost && parseFloat(item.cost) > 0) {
-            updates.cost = parseFloat(item.cost)
+            warehouseStocks: updatedProduct.warehouseStocks,
+            cost: averageCost // Actualizar con costo promedio ponderado
           }
 
           return updateProduct(user.uid, item.productId, updates)
@@ -790,54 +801,30 @@ export default function CreatePurchase() {
                 {/* Costo Unitario */}
                 <div>
                   <Input
-                    label="Costo Unitario"
+                    label="Costo Unitario de Compra"
                     type="number"
+                    required
                     min="0"
                     step="0.01"
-                    placeholder="Ej: 80.00"
+                    placeholder="Ej: 3.00"
                     value={item.cost}
                     onChange={e => updateItem(index, 'cost', e.target.value)}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Costo de compra del producto
+                    Precio al que compraste el producto
                   </p>
-                </div>
-
-                {/* Precio Unitario */}
-                <div>
-                  <Input
-                    label="Precio de Venta (Inc. IGV)"
-                    type="number"
-                    required
-                    min="0.01"
-                    step="0.01"
-                    placeholder="Ej: 118.00"
-                    value={item.unitPrice}
-                    onChange={e => updateItem(index, 'unitPrice', e.target.value)}
-                  />
-                  {item.cost > 0 && item.unitPrice > 0 && (
-                    <p className="text-xs font-semibold text-green-600 mt-1">
-                      Utilidad: {formatCurrency(item.unitPrice - item.cost)} (
-                      {(((item.unitPrice - item.cost) / item.unitPrice) * 100).toFixed(1)}%)
-                    </p>
-                  )}
-                  {!item.cost && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Precio al que vendes el producto
-                    </p>
-                  )}
                 </div>
 
                 {/* Subtotal de la línea */}
                 <div className="bg-gray-50 rounded-lg p-3 flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-600">Subtotal de línea:</span>
+                  <span className="text-sm font-medium text-gray-600">Subtotal de compra:</span>
                   <div className="text-right">
                     <span className="text-lg font-bold text-gray-900">
                       {formatCurrency(
-                        (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+                        (parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)
                       )}
                     </span>
-                    <span className="block text-xs text-gray-500">Inc. IGV</span>
+                    <span className="block text-xs text-gray-500">Costo total</span>
                   </div>
                 </div>
               </div>
