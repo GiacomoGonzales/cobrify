@@ -62,30 +62,12 @@ export default function UserManagement() {
     }
   }, [isAdmin]);
 
-  // Agrupar usuarios por jerarquía: Business Owners y sus usuarios secundarios
-  const groupUsersByHierarchy = () => {
-    const businessOwners = subscriptions.filter(sub => sub.isBusinessOwner || sub.businessId === sub.userId);
-    const secondaryUsers = subscriptions.filter(sub => !sub.isBusinessOwner && sub.businessId !== sub.userId);
-
-    // Crear un mapa de Business Owners con sus usuarios secundarios
-    const hierarchy = businessOwners.map(owner => ({
-      ...owner,
-      secondaryUsers: secondaryUsers.filter(user => user.businessId === owner.userId)
-    }));
-
-    return hierarchy;
-  };
-
-  // Filtrar suscripciones (ahora con jerarquía)
-  const filteredSubscriptions = groupUsersByHierarchy().filter((sub) => {
+  // Filtrar suscripciones
+  const filteredSubscriptions = subscriptions.filter((sub) => {
     const matchesSearch =
       sub.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sub.businessName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sub.userId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sub.secondaryUsers?.some(user =>
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.businessName?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      sub.userId?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesFilter =
       filterStatus === 'all' ||
@@ -307,7 +289,6 @@ export default function UserManagement() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredSubscriptions.map((sub) => {
-                  const hasSecondaryUsers = sub.secondaryUsers && sub.secondaryUsers.length > 0;
                   // Convertir correctamente el Timestamp de Firestore para fecha de fin
                   let periodEnd = null;
                   if (sub.currentPeriodEnd) {
@@ -338,29 +319,15 @@ export default function UserManagement() {
                   const daysElapsed = periodStart ? Math.floor((new Date() - periodStart) / (1000 * 60 * 60 * 24)) : null;
 
                   return (
-                    <>
-                      {/* Fila del Business Owner */}
-                      <tr key={sub.id} className={isBlocked ? 'bg-red-50' : ''}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            {hasSecondaryUsers && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-semibold">
-                                Principal
-                              </span>
-                            )}
-                            <div className="flex flex-col">
-                              <div className="text-sm font-medium text-gray-900">
-                                {sub.businessName || 'Sin nombre'}
-                              </div>
-                              <div className="text-sm text-gray-500">{sub.email}</div>
-                              {hasSecondaryUsers && (
-                                <div className="text-xs text-blue-600 mt-1">
-                                  {sub.secondaryUsers.length} usuario(s) secundario(s)
-                                </div>
-                              )}
-                            </div>
+                    <tr key={sub.id} className={isBlocked ? 'bg-red-50' : ''}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium text-gray-900">
+                            {sub.businessName || 'Sin nombre'}
                           </div>
-                        </td>
+                          <div className="text-sm text-gray-500">{sub.email}</div>
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
                           <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -490,185 +457,6 @@ export default function UserManagement() {
                         </div>
                       </td>
                     </tr>
-
-                    {/* Filas de usuarios secundarios */}
-                    {hasSecondaryUsers && sub.secondaryUsers.map((secondaryUser) => {
-                      // Calcular datos para usuario secundario
-                      let secPeriodEnd = null;
-                      if (secondaryUser.currentPeriodEnd) {
-                        if (typeof secondaryUser.currentPeriodEnd.toDate === 'function') {
-                          secPeriodEnd = secondaryUser.currentPeriodEnd.toDate();
-                        } else if (secondaryUser.currentPeriodEnd instanceof Date) {
-                          secPeriodEnd = secondaryUser.currentPeriodEnd;
-                        } else if (typeof secondaryUser.currentPeriodEnd === 'object' && secondaryUser.currentPeriodEnd.seconds) {
-                          secPeriodEnd = new Date(secondaryUser.currentPeriodEnd.seconds * 1000);
-                        }
-                      }
-
-                      let secPeriodStart = null;
-                      if (secondaryUser.currentPeriodStart) {
-                        if (typeof secondaryUser.currentPeriodStart.toDate === 'function') {
-                          secPeriodStart = secondaryUser.currentPeriodStart.toDate();
-                        } else if (secondaryUser.currentPeriodStart instanceof Date) {
-                          secPeriodStart = secondaryUser.currentPeriodStart;
-                        } else if (typeof secondaryUser.currentPeriodStart === 'object' && secondaryUser.currentPeriodStart.seconds) {
-                          secPeriodStart = new Date(secondaryUser.currentPeriodStart.seconds * 1000);
-                        }
-                      }
-
-                      const secIsExpired = secPeriodEnd && secPeriodEnd < new Date();
-                      const secIsBlocked = secondaryUser.accessBlocked || secondaryUser.status === 'suspended';
-                      const secPlanInfo = PLANS[secondaryUser.plan];
-                      const secDaysElapsed = secPeriodStart ? Math.floor((new Date() - secPeriodStart) / (1000 * 60 * 60 * 24)) : null;
-
-                      return (
-                        <tr key={secondaryUser.id} className={`${secIsBlocked ? 'bg-red-50/50' : 'bg-gray-50/50'} border-l-4 border-l-blue-300`}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2 pl-8">
-                              <span className="text-gray-400">└─</span>
-                              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full font-semibold">
-                                Secundario
-                              </span>
-                              <div className="flex flex-col">
-                                <div className="text-sm font-medium text-gray-700">
-                                  {secondaryUser.businessName || 'Sin nombre'}
-                                </div>
-                                <div className="text-sm text-gray-500">{secondaryUser.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700">
-                                {secPlanInfo?.name || secondaryUser.plan}
-                              </span>
-                              {secPlanInfo && (
-                                <span className="text-xs text-gray-500 mt-1">
-                                  S/ {secPlanInfo.pricePerMonth}/mes
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {secPeriodStart ? (
-                              <div>
-                                <div className="text-sm font-medium text-gray-700">
-                                  {format(secPeriodStart, 'dd/MM/yyyy', { locale: es })}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  Hace {secDaysElapsed} días
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-gray-400">No disponible</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {secIsBlocked ? (
-                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                                Suspendido
-                              </span>
-                            ) : secIsExpired ? (
-                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                Vencido
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                Activo
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {secPeriodEnd ? (
-                              <div>
-                                <div className={`text-sm font-medium ${secIsExpired ? 'text-red-600' : 'text-gray-700'}`}>
-                                  {format(secPeriodEnd, 'dd/MM/yyyy', { locale: es })}
-                                </div>
-                                <div className={`text-xs ${secIsExpired ? 'text-red-500' : 'text-gray-500'}`}>
-                                  {secIsExpired
-                                    ? 'Vencido hace ' + Math.abs(Math.ceil((secPeriodEnd - new Date()) / (1000 * 60 * 60 * 24))) + ' días'
-                                    : 'Vence en ' + Math.ceil((secPeriodEnd - new Date()) / (1000 * 60 * 60 * 24)) + ' días'}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-gray-400">No disponible</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedUser(secondaryUser);
-                                  setModalType('view');
-                                  setShowModal(true);
-                                }}
-                                className="text-blue-600 hover:text-blue-900"
-                                title="Ver detalles"
-                              >
-                                <Eye className="w-5 h-5" />
-                              </button>
-
-                              {secIsBlocked ? (
-                                <button
-                                  onClick={() => handleReactivate(secondaryUser.userId)}
-                                  className="text-green-600 hover:text-green-900"
-                                  title="Reactivar"
-                                  disabled={actionLoading}
-                                >
-                                  <Unlock className="w-5 h-5" />
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleSuspend(secondaryUser.userId)}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Suspender"
-                                  disabled={actionLoading}
-                                >
-                                  <Lock className="w-5 h-5" />
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => {
-                                  setSelectedUser(secondaryUser);
-                                  setModalType('payment');
-                                  setShowModal(true);
-                                }}
-                                className="text-green-600 hover:text-green-900"
-                                title="Registrar pago"
-                              >
-                                <DollarSign className="w-5 h-5" />
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setSelectedUser(secondaryUser);
-                                  setModalType('edit');
-                                  setShowModal(true);
-                                }}
-                                className="text-gray-600 hover:text-gray-900"
-                                title="Editar"
-                              >
-                                <Edit className="w-5 h-5" />
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  setSelectedUser(secondaryUser);
-                                  setModalType('config');
-                                  setShowModal(true);
-                                }}
-                                className="text-purple-600 hover:text-purple-900"
-                                title="Configurar Emisión"
-                              >
-                                <Settings className="w-5 h-5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    </>
                   );
                 })}
               </tbody>

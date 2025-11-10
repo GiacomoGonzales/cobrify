@@ -407,24 +407,10 @@ export const getAllSubscriptions = async () => {
     const q = query(subscriptionsRef, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
 
-    // Mapear suscripciones y obtener información adicional de usuarios
-    const subscriptions = await Promise.all(querySnapshot.docs.map(async (docSnap) => {
-      const data = docSnap.data();
-      const userId = docSnap.id;
-
-      // Obtener información del usuario desde /users/{userId}
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      const userData = userDoc.exists() ? userDoc.data() : {};
-
-      return {
-        id: userId,
-        ...data,
-        isBusinessOwner: userData.isBusinessOwner || false,
-        businessId: userData.businessId || userId, // Si no tiene businessId, es su propio negocio
-      };
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
     }));
-
-    return subscriptions;
   } catch (error) {
     console.error('Error al obtener suscripciones:', error);
     throw error;
