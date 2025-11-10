@@ -7,9 +7,11 @@ import { getProducts } from '@/services/firestoreService'
 import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
 export default function OrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, isDemoMode } = useAppContext()
+  const { demoData } = useDemoRestaurant()
   const toast = useToast()
 
   const [products, setProducts] = useState([])
@@ -43,15 +45,23 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
   const loadProducts = async () => {
     setIsLoading(true)
     try {
-      const result = await getProducts(getBusinessId())
-      if (result.success) {
-        // Mostrar todos los productos por ahora (sin filtro restrictivo)
-        const allProducts = result.data || []
+      // En modo demo, usar productos del contexto de demo
+      if (isDemoMode && demoData?.products) {
+        const allProducts = demoData.products || []
         setProducts(allProducts)
         setFilteredProducts(allProducts)
       } else {
-        console.error('Error al cargar productos:', result.error)
-        toast.error('Error al cargar productos: ' + result.error)
+        // En modo normal, cargar desde Firebase
+        const result = await getProducts(getBusinessId())
+        if (result.success) {
+          // Mostrar todos los productos por ahora (sin filtro restrictivo)
+          const allProducts = result.data || []
+          setProducts(allProducts)
+          setFilteredProducts(allProducts)
+        } else {
+          console.error('Error al cargar productos:', result.error)
+          toast.error('Error al cargar productos: ' + result.error)
+        }
       }
     } catch (error) {
       console.error('Error al cargar productos:', error)
@@ -128,14 +138,23 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
 
     setIsSaving(true)
     try {
-      const result = await addOrderItems(getBusinessId(), order.id, cart)
-      if (result.success) {
-        toast.success(`${cart.length} items agregados a la orden`)
+      // En modo demo, simular éxito sin guardar en Firebase
+      if (isDemoMode) {
+        toast.success(`${cart.length} items agregados a la orden (Demo)`)
         setCart([])
-        onSuccess()
+        if (onSuccess) onSuccess()
         onClose()
       } else {
-        toast.error('Error al agregar items: ' + result.error)
+        // En modo normal, guardar en Firebase
+        const result = await addOrderItems(getBusinessId(), order.id, cart)
+        if (result.success) {
+          toast.success(`${cart.length} items agregados a la orden`)
+          setCart([])
+          if (onSuccess) onSuccess()
+          onClose()
+        } else {
+          toast.error('Error al agregar items: ' + result.error)
+        }
       }
     } catch (error) {
       console.error('Error al agregar items:', error)
