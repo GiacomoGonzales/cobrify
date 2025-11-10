@@ -391,6 +391,13 @@ export default function Tables() {
   }
 
   const handleTransferTable = async (tableId, transferData) => {
+    // Verificar si está en modo demo
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      setIsActionModalOpen(false)
+      return
+    }
+
     try {
       const result = await transferTable(getBusinessId(), tableId, transferData)
       if (result.success) {
