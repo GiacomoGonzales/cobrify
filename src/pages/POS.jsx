@@ -941,7 +941,10 @@ export default function POS() {
       console.log('isNative:', isNative)
 
       if (!isNative) {
-        // En web, primero generar y descargar el PDF, luego abrir WhatsApp
+        // En WEB - Detectar si es móvil o escritorio
+        const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        console.log('isMobileWeb:', isMobileWeb)
+
         const phone = lastInvoiceData.customer?.phone || customerData.phone
         console.log('Teléfono del cliente:', phone)
 
@@ -950,7 +953,60 @@ export default function POS() {
           return
         }
 
-        // Generar y descargar el PDF primero
+        const cleanPhone = phone.replace(/\D/g, '')
+        const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                           lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+        const customerName = lastInvoiceData.customer?.name || 'Cliente'
+
+        if (isMobileWeb && navigator.share) {
+          // MÓVIL WEB - Usar Share API nativo del navegador
+          try {
+            toast.info('Generando PDF...')
+
+            // Generar PDF como blob
+            const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings)
+            const fileName = `${docTypeName}_${lastInvoiceData.number.replace(/\//g, '-')}.pdf`
+
+            // Crear archivo para compartir
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' })
+
+            const shareData = {
+              title: `${docTypeName} ${lastInvoiceData.number}`,
+              text: `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.\n\n${companySettings?.businessName || 'Tu Empresa'}`,
+              files: [file]
+            }
+
+            // Verificar si el navegador soporta compartir archivos
+            if (navigator.canShare && navigator.canShare(shareData)) {
+              await navigator.share(shareData)
+              toast.success('Compartido exitosamente')
+            } else {
+              // Fallback: descargar PDF y abrir WhatsApp
+              await generateInvoicePDF(lastInvoiceData, companySettings)
+              toast.success('PDF descargado')
+
+              const message = `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.`
+              const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+
+              setTimeout(() => {
+                window.open(url, '_blank')
+                toast.success('Abriendo WhatsApp...')
+              }, 500)
+            }
+          } catch (error) {
+            console.error('Error al compartir:', error)
+            // Si el usuario cancela o hay error, fallback a WhatsApp Web
+            if (error.name !== 'AbortError') {
+              toast.error('Error al compartir. Abriendo WhatsApp...')
+              const message = `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.`
+              const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+              window.open(url, '_blank')
+            }
+          }
+          return
+        }
+
+        // ESCRITORIO WEB - Descargar PDF y abrir WhatsApp Web con mensaje corto
         toast.info('Generando PDF...')
         try {
           await generateInvoicePDF(lastInvoiceData, companySettings)
@@ -960,25 +1016,8 @@ export default function POS() {
           toast.error('Error al generar el PDF')
         }
 
-        // Luego abrir WhatsApp con mensaje
-        const cleanPhone = phone.replace(/\D/g, '')
-        const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
-                           lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
-        const customerName = lastInvoiceData.customer?.name || 'Cliente'
-        const total = formatCurrency(lastInvoiceData.total)
-
-        const message = `Hola ${customerName},
-
-Gracias por tu compra. Adjunto el comprobante en PDF.
-
-${docTypeName}: ${lastInvoiceData.number}
-Total: ${total}
-
-${companySettings?.businessName || 'Tu Empresa'}
-${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
-${companySettings?.website ? companySettings.website : ''}`
-
-        console.log('Abriendo WhatsApp con mensaje:', message)
+        // Mensaje corto para escritorio
+        const message = `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.`
         const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
 
         // Pequeño delay para que el usuario vea el PDF descargado antes de abrir WhatsApp
