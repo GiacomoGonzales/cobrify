@@ -202,7 +202,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="4xl">
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="6xl">
       <div className="flex items-center justify-between mb-6 pb-4 border-b">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary-100 rounded-lg">
@@ -234,7 +234,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+      <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
         {/* Info sobre fechas válidas */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <div className="flex items-start gap-2">
@@ -263,7 +263,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Select
             label="Motivo de Traslado"
             required
@@ -304,19 +304,18 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             <p className="text-xs text-blue-600 mt-1">
               ℹ️ La guía se puede emitir hasta 5 días antes del traslado
             </p>
+            <Input
+              type="number"
+              label="Peso Total (kg)"
+              placeholder="Ej: 25.5"
+              required
+              value={totalWeight}
+              onChange={(e) => setTotalWeight(e.target.value)}
+              step="0.01"
+              min="0.01"
+            />
           </div>
         </div>
-
-        <Input
-          type="number"
-          label="Peso Total (kg)"
-          placeholder="Ej: 25.5"
-          required
-          value={totalWeight}
-          onChange={(e) => setTotalWeight(e.target.value)}
-          step="0.01"
-          min="0.01"
-        />
 
         {/* Origen */}
         <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
@@ -404,7 +403,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         {transportMode === '02' ? (
           // Transporte Privado
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <Select
                 label="Tipo de Documento"
                 required
@@ -435,7 +434,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <Input
                 label="Nombres del Conductor"
                 placeholder="Juan"
@@ -530,27 +529,30 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         )}
 
         {/* Botones */}
-        <div className="flex justify-end gap-3 pt-4 border-t">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 mt-6 border-t-2 border-gray-200 sticky bottom-0 bg-white -mx-2 px-2 pb-2">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
             disabled={isSaving}
+            className="w-full sm:w-auto"
           >
             Cancelar
           </Button>
           <Button
             type="submit"
             disabled={isSaving}
+            className="w-full sm:w-auto"
+            size="lg"
           >
             {isSaving ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                Generando...
+                Generando Guía...
               </>
             ) : (
               <>
-                <Truck className="w-4 h-4 mr-2" />
+                <Truck className="w-5 h-5 mr-2" />
                 Generar Guía de Remisión
               </>
             )}

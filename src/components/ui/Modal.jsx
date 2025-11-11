@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md' }) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth }) {
   if (!isOpen) return null
 
   const sizes = {
@@ -9,7 +9,16 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
+    '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
+    '6xl': 'max-w-6xl',
+    '7xl': 'max-w-7xl',
   }
+
+  // Si se proporciona maxWidth personalizado, usarlo, sino usar el size
+  const maxWidthClass = maxWidth ? sizes[maxWidth] || maxWidth : sizes[size]
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -24,7 +33,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
         <div
           className={cn(
             'relative bg-white rounded-lg shadow-xl w-full',
-            sizes[size],
+            maxWidthClass,
             'animate-fade-in'
           )}
           onClick={e => e.stopPropagation()}
