@@ -411,7 +411,7 @@ export default function CreatePurchase() {
 
     for (let i = 0; i < purchaseItems.length; i++) {
       const item = purchaseItems[i]
-      if (!item.productId || !item.productName || !item.quantity || !item.unitPrice) {
+      if (!item.productId || !item.productName || !item.quantity || !item.cost) {
         setMessage({
           type: 'error',
           text: `Complete todos los campos del producto ${i + 1}`,
@@ -427,10 +427,10 @@ export default function CreatePurchase() {
         return false
       }
 
-      if (parseFloat(item.unitPrice) <= 0) {
+      if (parseFloat(item.cost) <= 0) {
         setMessage({
           type: 'error',
-          text: `El precio unitario del producto ${i + 1} debe ser mayor a 0`,
+          text: `El costo unitario del producto ${i + 1} debe ser mayor a 0`,
         })
         return false
       }
