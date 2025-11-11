@@ -137,6 +137,20 @@ export const productSchema = z.object({
     ])
     .nullable()
     .optional(),
+  initialStock: z
+    .union([
+      z.number().int().nonnegative('El stock inicial no puede ser negativo'),
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseInt(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable(),
+    ])
+    .nullable()
+    .optional(),
   noStock: z.boolean().optional(),
   // NUEVO: Stock por almacén para productos simples
   warehouseStocks: z.array(warehouseStockSchema).optional(),

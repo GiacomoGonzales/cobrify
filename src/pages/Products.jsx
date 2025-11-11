@@ -269,7 +269,7 @@ export default function Products() {
       cost: product.cost?.toString() || '',
       unit: product.unit || 'UNIDAD',
       category: product.category || '',
-      stock: hasNoStock ? '' : product.stock?.toString() || '',
+      initialStock: hasNoStock ? '' : (product.initialStock?.toString() || product.stock?.toString() || ''),
       noStock: hasNoStock,
     })
     setIsModalOpen(true)
@@ -327,7 +327,25 @@ export default function Products() {
       } else {
         // Regular product without variants
         productData.price = parseFloat(data.price)
-        productData.stock = noStock || data.stock === '' ? null : parseInt(data.stock)
+
+        // Manejar stock e initialStock
+        if (noStock) {
+          productData.stock = null
+          productData.initialStock = null
+        } else if (editingProduct) {
+          // Al editar, mantener el stock actual (no lo modificamos aquí)
+          // Solo actualizar initialStock si el usuario es business_owner y lo modificó
+          if (user?.role === 'business_owner' && data.initialStock !== '') {
+            productData.initialStock = parseInt(data.initialStock)
+          }
+          // No modificar stock actual en edición (se modifica con ventas/compras)
+        } else {
+          // Al crear, initialStock y stock son el mismo valor inicial
+          const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
+          productData.stock = initialStockValue
+          productData.initialStock = initialStockValue
+        }
+
         // Clear variant fields
         productData.variantAttributes = []
         productData.variants = []
@@ -1447,14 +1465,39 @@ export default function Products() {
               </div>
 
               {!noStock && (
-                <Input
-                  label="Stock Inicial"
-                  type="number"
-                  placeholder="Ingresa la cantidad inicial"
-                  error={errors.stock?.message}
-                  {...register('stock')}
-                  helperText="Ingresa la cantidad de unidades disponibles"
-                />
+                <div className="space-y-4">
+                  {/* Stock Actual - Solo informativo cuando se edita */}
+                  {editingProduct && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Stock Actual
+                      </label>
+                      <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-semibold">
+                        {editingProduct.stock ?? 0} unidades
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Este valor se actualiza automáticamente con las ventas y compras
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Stock Inicial - Editable solo por Business Owner cuando se edita */}
+                  <Input
+                    label="Stock Inicial"
+                    type="number"
+                    placeholder="Ingresa la cantidad inicial"
+                    error={errors.initialStock?.message}
+                    {...register('initialStock')}
+                    disabled={editingProduct && user?.role !== 'business_owner'}
+                    helperText={
+                      editingProduct && user?.role !== 'business_owner'
+                        ? "Solo el propietario puede modificar el stock inicial"
+                        : editingProduct
+                        ? "Stock con el que comenzó el producto (dato histórico)"
+                        : "Ingresa la cantidad inicial de unidades"
+                    }
+                  />
+                </div>
               )}
             </div>
           </div>
