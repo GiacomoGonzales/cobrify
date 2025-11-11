@@ -880,3 +880,257 @@ function getCustomerDocTypeCode(documentType) {
   }
   return docTypeMap[documentType] || '1'
 }
+
+/**
+ * Genera XML UBL 2.1 para Guía de Remisión Electrónica según especificaciones SUNAT
+ *
+ * @param {Object} guideData - Datos de la guía de remisión
+ * @param {Object} businessData - Datos del negocio emisor
+ * @returns {string} XML en formato string
+ *
+ * Referencias:
+ * - UBL 2.1 DespatchAdvice: http://docs.oasis-open.org/ubl/UBL-2.1.html
+ * - Especificaciones SUNAT GRE: https://cpe.sunat.gob.pe/
+ */
+export function generateDispatchGuideXML(guideData, businessData) {
+  // Formatear fecha de emisión (hoy)
+  const issueDate = new Date().toISOString().split('T')[0]
+
+  // Formatear fecha de inicio del traslado
+  let transferDate
+  if (guideData.transferDate) {
+    transferDate = new Date(guideData.transferDate).toISOString().split('T')[0]
+  } else {
+    transferDate = issueDate
+  }
+
+  // Construir XML según especificación UBL 2.1 - DespatchAdvice
+  const root = create({ version: '1.0', encoding: 'UTF-8' })
+    .ele('DespatchAdvice', {
+      'xmlns': 'urn:oasis:names:specification:ubl:schema:xsd:DespatchAdvice-2',
+      'xmlns:cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
+      'xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
+      'xmlns:ccts': 'urn:un:unece:uncefact:documentation:2',
+      'xmlns:ds': 'http://www.w3.org/2000/09/xmldsig#',
+      'xmlns:ext': 'urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2',
+      'xmlns:qdt': 'urn:oasis:names:specification:ubl:schema:xsd:QualifiedDatatypes-2',
+      'xmlns:sac': 'urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1',
+      'xmlns:udt': 'urn:un:unece:uncefact:data:specification:UnqualifiedDataTypesSchemaModule:2',
+      'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',
+    })
+
+  // UBL Extensions (para firma digital)
+  const extensions = root.ele('ext:UBLExtensions')
+  const extension = extensions.ele('ext:UBLExtension')
+  extension.ele('ext:ExtensionContent').txt('')
+
+  // UBL Version
+  root.ele('cbc:UBLVersionID').txt('2.1')
+
+  // Customization ID (versión de SUNAT para GRE)
+  root.ele('cbc:CustomizationID', {
+    'schemeAgencyName': 'PE:SUNAT'
+  }).txt('2.0')
+
+  // ID de la guía (Serie-Correlativo)
+  root.ele('cbc:ID').txt(guideData.number || `${guideData.series}-${String(guideData.correlative).padStart(8, '0')}`)
+
+  // Fecha de emisión
+  root.ele('cbc:IssueDate').txt(issueDate)
+
+  // Hora de emisión (opcional pero recomendado)
+  const issueTime = new Date().toTimeString().split(' ')[0] // HH:MM:SS
+  root.ele('cbc:IssueTime').txt(issueTime)
+
+  // Tipo de documento: 09 = Guía de Remisión Remitente
+  root.ele('cbc:DespatchAdviceTypeCode', {
+    'listAgencyName': 'PE:SUNAT',
+    'listName': 'Tipo de Documento',
+    'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
+  }).txt('09')
+
+  // Referencia a documento relacionado (factura/boleta origen)
+  if (guideData.referencedInvoice) {
+    const additionalDoc = root.ele('cac:AdditionalDocumentReference')
+    additionalDoc.ele('cbc:ID').txt(
+      `${guideData.referencedInvoice.series}-${guideData.referencedInvoice.number}`
+    )
+    additionalDoc.ele('cbc:DocumentTypeCode', {
+      'listAgencyName': 'PE:SUNAT',
+      'listName': 'Tipo de Documento',
+      'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
+    }).txt(guideData.referencedInvoice.documentType || '01')
+  }
+
+  // === REMITENTE (Emisor de la guía) ===
+  const despatchSupplierParty = root.ele('cac:DespatchSupplierParty')
+  const supplierParty = despatchSupplierParty.ele('cac:Party')
+
+  // Identificación del remitente (RUC)
+  const supplierPartyId = supplierParty.ele('cac:PartyIdentification')
+  supplierPartyId.ele('cbc:ID', {
+    'schemeID': '6',
+    'schemeName': 'Documento de Identidad',
+    'schemeAgencyName': 'PE:SUNAT',
+    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+  }).txt(businessData.ruc)
+
+  // Nombre o razón social del remitente
+  const supplierLegalEntity = supplierParty.ele('cac:PartyLegalEntity')
+  supplierLegalEntity.ele('cbc:RegistrationName').txt(businessData.businessName)
+
+  // === DESTINATARIO ===
+  const deliveryCustomerParty = root.ele('cac:DeliveryCustomerParty')
+  const customerParty = deliveryCustomerParty.ele('cac:Party')
+
+  // Identificación del destinatario
+  const customerPartyId = customerParty.ele('cac:PartyIdentification')
+  customerPartyId.ele('cbc:ID', {
+    'schemeID': guideData.customer?.documentType === 'RUC' ? '6' : '1',
+    'schemeName': 'Documento de Identidad',
+    'schemeAgencyName': 'PE:SUNAT',
+    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+  }).txt(guideData.customer?.documentNumber || '-')
+
+  // Nombre del destinatario
+  const customerLegalEntity = customerParty.ele('cac:PartyLegalEntity')
+  customerLegalEntity.ele('cbc:RegistrationName').txt(guideData.customer?.name || 'VARIOS')
+
+  // === ENVÍO (Shipment) ===
+  const shipment = root.ele('cac:Shipment')
+  shipment.ele('cbc:ID').txt('1')
+
+  // Motivo de traslado (Catálogo 20)
+  shipment.ele('cbc:HandlingCode', {
+    'listAgencyName': 'PE:SUNAT',
+    'listName': 'Motivo de traslado',
+    'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
+  }).txt(guideData.transferReason || '01')
+
+  // Descripción del motivo (opcional)
+  const transferReasonNames = {
+    '01': 'VENTA',
+    '02': 'COMPRA',
+    '04': 'TRASLADO ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA',
+    '08': 'IMPORTACION',
+    '09': 'EXPORTACION',
+    '13': 'OTROS'
+  }
+  if (transferReasonNames[guideData.transferReason]) {
+    shipment.ele('cbc:Information').txt(transferReasonNames[guideData.transferReason])
+  }
+
+  // Peso bruto total
+  shipment.ele('cbc:GrossWeightMeasure', {
+    'unitCode': 'KGM'
+  }).txt((guideData.totalWeight || 0).toFixed(2))
+
+  // === PUNTO DE PARTIDA (Origen) ===
+  const deliveryAddress = shipment.ele('cac:Delivery').ele('cac:DeliveryAddress')
+  deliveryAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.origin?.ubigeo || '150101')
+  deliveryAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
+
+  // === PUNTO DE LLEGADA (Destino) ===
+  const originAddress = shipment.ele('cac:OriginAddress')
+  originAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.destination?.ubigeo || '150101')
+  originAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
+
+  // === FECHA DE INICIO DEL TRASLADO ===
+  const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
+  transportHandlingUnit.ele('cac:ActualPackage').ele('cbc:ID').txt(transferDate)
+
+  // === DATOS DE TRANSPORTE ===
+  const shipmentStage = shipment.ele('cac:ShipmentStage')
+  shipmentStage.ele('cbc:ID').txt('1')
+
+  // Modalidad de transporte (01=Público, 02=Privado)
+  shipmentStage.ele('cbc:TransportModeCode', {
+    'listName': 'Modalidad de traslado',
+    'listAgencyName': 'PE:SUNAT',
+    'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo18'
+  }).txt(guideData.transportMode || '02')
+
+  // === TRANSPORTE PRIVADO ===
+  if (guideData.transportMode === '02' && guideData.transport?.driver) {
+    const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
+    transitPeriod.ele('cbc:StartDate').txt(transferDate)
+
+    // Datos del conductor
+    const driverPerson = shipmentStage.ele('cac:DriverPerson')
+    driverPerson.ele('cbc:ID', {
+      'schemeID': guideData.transport.driver.documentType || '1',
+      'schemeName': 'Documento de Identidad',
+      'schemeAgencyName': 'PE:SUNAT',
+      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    }).txt(guideData.transport.driver.documentNumber)
+
+    driverPerson.ele('cbc:FirstName').txt(guideData.transport.driver.name)
+    driverPerson.ele('cbc:FamilyName').txt(guideData.transport.driver.lastName)
+    driverPerson.ele('cbc:JobTitle').txt('Principal')
+
+    // Licencia de conducir
+    const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
+    driverLicense.ele('cbc:ID').txt(guideData.transport.driver.license)
+
+    // Datos del vehículo
+    if (guideData.transport.vehicle) {
+      const transportMeans = shipmentStage.ele('cac:TransportMeans')
+      const roadTransport = transportMeans.ele('cac:RoadTransport')
+      roadTransport.ele('cbc:LicensePlateID').txt(guideData.transport.vehicle.plate)
+    }
+  }
+
+  // === TRANSPORTE PÚBLICO ===
+  if (guideData.transportMode === '01' && guideData.transport?.carrier) {
+    const carrierParty = shipmentStage.ele('cac:CarrierParty')
+
+    // RUC del transportista
+    const carrierPartyId = carrierParty.ele('cac:PartyIdentification')
+    carrierPartyId.ele('cbc:ID', {
+      'schemeID': '6',
+      'schemeName': 'Documento de Identidad',
+      'schemeAgencyName': 'PE:SUNAT',
+      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    }).txt(guideData.transport.carrier.ruc)
+
+    // Razón social del transportista
+    const carrierLegalEntity = carrierParty.ele('cac:PartyLegalEntity')
+    carrierLegalEntity.ele('cbc:RegistrationName').txt(guideData.transport.carrier.businessName)
+  }
+
+  // === LÍNEAS DE LA GUÍA (Items a transportar) ===
+  if (guideData.items && guideData.items.length > 0) {
+    guideData.items.forEach((item, index) => {
+      const despatchLine = root.ele('cac:DespatchLine')
+      despatchLine.ele('cbc:ID').txt(String(index + 1))
+
+      // Cantidad despachada
+      despatchLine.ele('cbc:DeliveredQuantity', {
+        'unitCode': item.unit || 'NIU'
+      }).txt(String(item.quantity || 0))
+
+      // Información del item
+      const orderLineRef = despatchLine.ele('cac:OrderLineReference')
+      orderLineRef.ele('cbc:LineID').txt(String(index + 1))
+
+      // Descripción del producto
+      const itemEle = despatchLine.ele('cac:Item')
+      itemEle.ele('cbc:Description').txt(item.description || '')
+
+      // Código del producto (si existe)
+      if (item.code) {
+        const sellersItemId = itemEle.ele('cac:SellersItemIdentification')
+        sellersItemId.ele('cbc:ID').txt(item.code)
+      }
+    })
+  }
+
+  // Retornar XML como string
+  return root.end({ prettyPrint: true })
+}
