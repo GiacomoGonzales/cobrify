@@ -827,7 +827,7 @@ export default function CreatePurchase() {
                       min="0"
                       step="0.01"
                       placeholder="Ej: 2.54"
-                      value={item.costWithoutIGV > 0 ? item.costWithoutIGV.toFixed(2) : ''}
+                      value={item.costWithoutIGV || ''}
                       onChange={e => updateCostWithoutIGV(index, e.target.value)}
                     />
                     <p className="text-xs text-gray-500 mt-1">
@@ -844,7 +844,7 @@ export default function CreatePurchase() {
                       min="0"
                       step="0.01"
                       placeholder="Ej: 3.00"
-                      value={item.cost > 0 ? item.cost.toFixed(2) : ''}
+                      value={item.cost || ''}
                       onChange={e => updateCostWithIGV(index, e.target.value)}
                     />
                     <p className="text-xs text-gray-500 mt-1">
