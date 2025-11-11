@@ -70,7 +70,7 @@ export default function CreatePurchase() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0 },
+    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0 },
   ])
 
   // Warehouses
@@ -164,7 +164,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0 },
+      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0 },
     ])
   }
 
@@ -177,6 +177,26 @@ export default function CreatePurchase() {
   const updateItem = (index, field, value) => {
     const newItems = [...purchaseItems]
     newItems[index][field] = value
+    setPurchaseItems(newItems)
+  }
+
+  // Actualizar costo con IGV y calcular sin IGV
+  const updateCostWithIGV = (index, value) => {
+    const newItems = [...purchaseItems]
+    const costWithIGV = parseFloat(value) || 0
+    newItems[index].cost = costWithIGV
+    // Calcular costo sin IGV: costo con IGV / 1.18
+    newItems[index].costWithoutIGV = costWithIGV > 0 ? costWithIGV / 1.18 : 0
+    setPurchaseItems(newItems)
+  }
+
+  // Actualizar costo sin IGV y calcular con IGV
+  const updateCostWithoutIGV = (index, value) => {
+    const newItems = [...purchaseItems]
+    const costWithoutIGV = parseFloat(value) || 0
+    newItems[index].costWithoutIGV = costWithoutIGV
+    // Calcular costo con IGV: costo sin IGV * 1.18
+    newItems[index].cost = costWithoutIGV > 0 ? costWithoutIGV * 1.18 : 0
     setPurchaseItems(newItems)
   }
 
@@ -797,21 +817,40 @@ export default function CreatePurchase() {
                   />
                 </div>
 
-                {/* Costo Unitario */}
-                <div>
-                  <Input
-                    label="Costo Unitario de Compra"
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    placeholder="Ej: 3.00"
-                    value={item.cost}
-                    onChange={e => updateItem(index, 'cost', e.target.value)}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Precio al que compraste el producto
-                  </p>
+                {/* Costos */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Costo Sin IGV */}
+                  <div>
+                    <Input
+                      label="Costo Sin IGV"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej: 2.54"
+                      value={item.costWithoutIGV > 0 ? item.costWithoutIGV.toFixed(2) : ''}
+                      onChange={e => updateCostWithoutIGV(index, e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Costo base sin impuesto
+                    </p>
+                  </div>
+
+                  {/* Costo Con IGV */}
+                  <div>
+                    <Input
+                      label="Costo Con IGV"
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej: 3.00"
+                      value={item.cost > 0 ? item.cost.toFixed(2) : ''}
+                      onChange={e => updateCostWithIGV(index, e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Costo final con impuesto (18%)
+                    </p>
+                  </div>
                 </div>
 
                 {/* Subtotal de la línea */}
