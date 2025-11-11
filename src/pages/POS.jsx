@@ -927,6 +927,42 @@ export default function POS() {
     if (!lastInvoiceData) return
 
     try {
+      // Verificar si está en plataforma nativa
+      const { Capacitor } = await import('@capacitor/core')
+      const isNative = Capacitor.isNativePlatform()
+
+      if (!isNative) {
+        // En web, abrir WhatsApp Web con mensaje de texto
+        const phone = lastInvoiceData.customer?.phone || customerData.phone
+        if (!phone) {
+          toast.error('El cliente no tiene un número de teléfono registrado')
+          return
+        }
+
+        const cleanPhone = phone.replace(/\D/g, '')
+        const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                           lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+        const customerName = lastInvoiceData.customer?.name || 'Cliente'
+        const total = formatCurrency(lastInvoiceData.total)
+
+        const message = `Hola ${customerName},
+
+Gracias por tu compra. Aquí está el detalle de tu ${docTypeName}:
+
+${docTypeName}: ${lastInvoiceData.number}
+Total: ${total}
+
+${companySettings?.businessName || 'Tu Empresa'}
+${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
+${companySettings?.website ? companySettings.website : ''}`
+
+        const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+        window.open(url, '_blank')
+        toast.success('Abriendo WhatsApp...')
+        return
+      }
+
+      // En móvil nativo, compartir PDF
       toast.info('Generando PDF...')
 
       // Generar el PDF como blob
@@ -944,7 +980,7 @@ export default function POS() {
             // Crear nombre de archivo
             const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
                                lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'NotaVenta'
-            const fileName = `${docTypeName}_${lastInvoiceData.number}.pdf`
+            const fileName = `${docTypeName}_${lastInvoiceData.number.replace(/\//g, '-')}.pdf`
 
             // Guardar archivo temporalmente
             const savedFile = await Filesystem.writeFile({
@@ -952,6 +988,8 @@ export default function POS() {
               data: base64Data,
               directory: Directory.Cache,
             })
+
+            console.log('Archivo guardado:', savedFile.uri)
 
             // Crear mensaje
             const customerName = lastInvoiceData.customer?.name || 'Cliente'
@@ -974,9 +1012,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               dialogTitle: 'Compartir comprobante',
             })
 
-            toast.success('Compartiendo por WhatsApp...')
+            toast.success('PDF compartido exitosamente')
             resolve()
           } catch (error) {
+            console.error('Error al compartir:', error)
             reject(error)
           }
         }
@@ -985,7 +1024,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
     } catch (error) {
       console.error('Error al compartir por WhatsApp:', error)
-      toast.error('Error al generar o compartir el PDF')
+      toast.error(`Error: ${error.message || 'No se pudo compartir el PDF'}`)
     }
   }
 
