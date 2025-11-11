@@ -67,7 +67,8 @@
       "Bash(nul)",
       "Bash(Select-String -Pattern \"onNewSale|sendPushNotification\" -Context 3)",
       "Bash(gcloud projects get-iam-policy:*)",
-      "Bash(firebase projects:addrole:*)"
+      "Bash(firebase projects:addrole:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

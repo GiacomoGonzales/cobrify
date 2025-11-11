@@ -22,6 +22,7 @@ import {
   MoreVertical,
   FileSpreadsheet,
   Share2,
+  Truck,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -40,7 +41,7 @@ import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
@@ -773,9 +774,29 @@ ${companySettings?.website ? companySettings.website : ''}`
                         <FilePlus className="w-4 h-4 text-blue-600" />
                         <span>Crear Nota de Débito</span>
                       </button>
-
-                      <div className="border-t border-gray-100 my-1" />
                     </>
+                  )}
+
+                  {/* Generar Guía de Remisión - Solo si está habilitado en preferencias */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.sunatStatus === 'accepted' &&
+                   (businessSettings?.dispatchGuidesEnabled || isDemoMode) && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        // TODO: Abrir modal para generar guía de remisión
+                        toast.info('Funcionalidad en desarrollo')
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <Truck className="w-4 h-4 text-green-600" />
+                      <span>Generar Guía de Remisión</span>
+                    </button>
+                  )}
+
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.sunatStatus === 'accepted' && (
+                    <div className="border-t border-gray-100 my-1" />
                   )}
 
                   {/* Ver detalles */}

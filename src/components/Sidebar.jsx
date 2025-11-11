@@ -31,7 +31,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess, businessMode } = useAppContext()
+  const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess, businessMode, businessSettings } = useAppContext()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
@@ -78,6 +78,13 @@ function Sidebar() {
       icon: FileCheck,
       label: 'Cotizaciones',
       pageId: 'invoices', // Mismo permiso que facturas
+    },
+    {
+      path: '/guias-remision',
+      icon: Truck,
+      label: 'Guías de Remisión',
+      pageId: 'dispatch-guides',
+      requiresDispatchGuides: true, // Solo mostrar si está habilitado en preferencias
     },
     {
       path: '/clientes',
@@ -260,6 +267,12 @@ function Sidebar() {
 
   // Filtrar items del menú según permisos
   const filteredMenuItems = menuItems.filter((item) => {
+    // Si requiere guías de remisión habilitadas, verificar configuración
+    if (item.requiresDispatchGuides) {
+      const dispatchGuidesEnabled = businessSettings?.dispatchGuidesEnabled || false
+      if (!dispatchGuidesEnabled && !isDemoMode) return false
+    }
+
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true
 

@@ -45,6 +45,7 @@ import RegisterPurchase from './pages/RegisterPurchase'
 import PurchaseHistory from './pages/PurchaseHistory'
 import MobileRedirect from './components/MobileRedirect'
 import SplashScreen from './components/SplashScreen'
+import DispatchGuides from './pages/DispatchGuides'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -75,6 +76,7 @@ function App() {
               <Route path="nota-debito" element={<CreateDebitNote />} />
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
@@ -134,6 +136,7 @@ function App() {
               <Route path="nota-debito" element={<CreateDebitNote />} />
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />

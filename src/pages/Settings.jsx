@@ -70,6 +70,9 @@ export default function Settings() {
   // Estados para configuración de SUNAT
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
 
+  // Estados para guías de remisión
+  const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
+
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
   const [restaurantConfig, setRestaurantConfig] = useState({
@@ -205,6 +208,9 @@ export default function Settings() {
 
         // Cargar configuración de SUNAT
         setAutoSendToSunat(businessData.autoSendToSunat || false)
+
+        // Cargar configuración de guías de remisión
+        setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -1056,6 +1062,50 @@ export default function Settings() {
                   </label>
                 </div>
               </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Configuración de Guías de Remisión */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Guías de Remisión Electrónicas (GRE)</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Habilita la emisión de guías de remisión electrónicas homologadas con SUNAT
+                </p>
+
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={dispatchGuidesEnabled}
+                      onChange={e => setDispatchGuidesEnabled(e.target.checked)}
+                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 group-hover:text-primary-900">
+                        Habilitar Guías de Remisión Electrónicas
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
+                        {dispatchGuidesEnabled
+                          ? '✓ Habilitado: Aparecerá la opción "Guías de Remisión" en el menú lateral. Podrás emitir guías de remisión electrónicas validadas por SUNAT para el transporte de mercancías.'
+                          : '✗ Deshabilitado: No se mostrarán las guías de remisión en el sistema.'}
+                      </p>
+                      <div className="mt-3 p-3 bg-blue-50 rounded-md">
+                        <div className="flex items-start gap-2">
+                          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-blue-800 space-y-1">
+                            <p className="font-medium">Obligatorio desde julio 2025</p>
+                            <p>
+                              Las Guías de Remisión Electrónicas (GRE) son documentos obligatorios para el traslado de bienes.
+                              Permiten trazabilidad completa del transporte y control fiscal por SUNAT.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
             </div>
           </CardContent>
 
@@ -1078,6 +1128,7 @@ export default function Settings() {
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
                       autoSendToSunat: autoSendToSunat,
+                      dispatchGuidesEnabled: dispatchGuidesEnabled,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')
