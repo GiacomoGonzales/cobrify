@@ -269,7 +269,8 @@ export default function Products() {
       cost: product.cost?.toString() || '',
       unit: product.unit || 'UNIDAD',
       category: product.category || '',
-      initialStock: hasNoStock ? '' : (product.initialStock?.toString() || product.stock?.toString() || ''),
+      // Si no tiene initialStock definido, usar 0 (productos creados antes de esta feature o desde compras)
+      initialStock: hasNoStock ? '' : (product.initialStock !== undefined && product.initialStock !== null ? product.initialStock.toString() : '0'),
       noStock: hasNoStock,
     })
     setIsModalOpen(true)

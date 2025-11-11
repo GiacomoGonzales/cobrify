@@ -340,7 +340,8 @@ export default function CreatePurchase() {
         unit: data.unit,
         category: data.category || '',
         description: data.description || '',
-        stock: noStock ? null : 0, // Stock inicial siempre en 0, se actualizará al guardar la compra
+        stock: noStock ? null : 0, // Stock actual en 0, se actualizará al guardar la compra
+        initialStock: noStock ? null : 0, // Productos creados desde compras inician con stock inicial 0
       }
 
       const result = await createProduct(user.uid, productData)
