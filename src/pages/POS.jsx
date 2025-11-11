@@ -26,7 +26,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
-import { generateInvoicePDF } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import {
@@ -929,8 +929,8 @@ export default function POS() {
     try {
       toast.info('Generando PDF...')
 
-      // Generar el PDF
-      const pdfBlob = await generateInvoicePDF(lastInvoiceData, companySettings)
+      // Generar el PDF como blob
+      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings)
 
       // Convertir Blob a base64
       const reader = new FileReader()
