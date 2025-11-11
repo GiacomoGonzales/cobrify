@@ -169,6 +169,7 @@ export default function POS() {
 
   // Ref para evitar ejecución duplicada del efecto de carga de mesa
   const tableLoadedRef = useRef(false)
+  const orderLoadedRef = useRef(false)
 
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
@@ -190,6 +191,33 @@ export default function POS() {
         }))
         setCart(cartItems)
         toast.success(`Mesa ${tableInfo.tableNumber} cargada - ${cartItems.length} items`)
+      }
+
+      // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+
+    // Detectar si viene de una orden (para llevar/delivery) y cargar items
+    if (location.state?.fromOrder && !orderLoadedRef.current) {
+      const orderInfo = location.state
+
+      // Marcar como cargado para evitar duplicados
+      orderLoadedRef.current = true
+
+      // Establecer tipo de orden
+      setOrderType(orderInfo.orderType || 'takeaway')
+
+      // Cargar items de la orden al carrito
+      if (orderInfo.items && orderInfo.items.length > 0) {
+        const cartItems = orderInfo.items.map(item => ({
+          ...item,
+          id: item.productId || item.id,
+          // Mantener todos los datos del item
+        }))
+        setCart(cartItems)
+
+        const orderLabel = orderInfo.orderType === 'delivery' ? 'Delivery' : 'Para Llevar'
+        toast.success(`Orden ${orderInfo.orderNumber} cargada (${orderLabel}) - ${cartItems.length} items`)
       }
 
       // Limpiar el state de navegación para evitar recarga
@@ -750,6 +778,7 @@ export default function POS() {
         quantity: item.quantity,
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
+        ...(item.notes && { notes: item.notes }), // Incluir notas si existen
       }))
 
       // 3. Crear factura

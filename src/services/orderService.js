@@ -120,18 +120,24 @@ export const createOrder = async (businessId, orderData) => {
       // Número de orden diario
       orderNumber: orderNumber,
 
-      // Información de la mesa y mozo
-      tableId: orderData.tableId,
-      tableNumber: orderData.tableNumber,
-      waiterId: orderData.waiterId,
-      waiterName: orderData.waiterName,
+      // Información de la mesa y mozo (solo si existen)
+      ...(orderData.tableId && { tableId: orderData.tableId }),
+      ...(orderData.tableNumber && { tableNumber: orderData.tableNumber }),
+      ...(orderData.waiterId && { waiterId: orderData.waiterId }),
+      ...(orderData.waiterName && { waiterName: orderData.waiterName }),
+
+      // Tipo de orden (para llevar, delivery, dine-in)
+      ...(orderData.orderType && { orderType: orderData.orderType }),
+
+      // Fuente del pedido (Rappi, PedidosYa, etc.)
+      ...(orderData.source && { source: orderData.source }),
 
       // Items de la orden
       items: orderData.items || [],
 
       // Información del cliente (opcional)
-      customerName: orderData.customerName || null,
-      customerPhone: orderData.customerPhone || null,
+      ...(orderData.customerName && { customerName: orderData.customerName }),
+      ...(orderData.customerPhone && { customerPhone: orderData.customerPhone }),
 
       // Cálculos
       subtotal: orderData.subtotal || 0,
@@ -139,17 +145,17 @@ export const createOrder = async (businessId, orderData) => {
       total: orderData.total || 0,
 
       // Estado de la orden
-      status: 'pending', // pending, preparing, ready, delivered, cancelled
+      status: orderData.status || 'pending', // pending, preparing, ready, delivered, cancelled
 
       // Notas especiales
-      notes: orderData.notes || '',
+      ...(orderData.notes && { notes: orderData.notes }),
 
       // Timestamps
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       statusHistory: [
         {
-          status: 'pending',
+          status: orderData.status || 'pending',
           timestamp: now,
           note: 'Orden creada',
         },

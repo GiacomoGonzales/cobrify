@@ -806,3 +806,141 @@ export const getCashMovements = async (userId, sessionId) => {
     return { success: false, error: error.message }
   }
 }
+
+// ==================== GUÍAS DE REMISIÓN ====================
+
+/**
+ * Crear una nueva guía de remisión
+ */
+export const createDispatchGuide = async (businessId, guideData) => {
+  try {
+    // Obtener la serie actual y el siguiente número correlativo
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessDoc = await getDoc(businessRef)
+
+    if (!businessDoc.exists()) {
+      throw new Error('Negocio no encontrado')
+    }
+
+    const businessData = businessDoc.data()
+    const series = businessData.series?.guia_remision || { serie: 'T001', lastNumber: 0 }
+
+    // Incrementar el número correlativo
+    const newCorrelative = (series.lastNumber || 0) + 1
+    const guideNumber = `${series.serie}-${String(newCorrelative).padStart(8, '0')}`
+
+    // Crear la guía en la subcolección
+    const guideToSave = {
+      ...guideData,
+      number: guideNumber,
+      series: series.serie,
+      correlative: newCorrelative,
+      status: 'pending', // pending, sent, accepted, rejected
+      sunatStatus: 'pending', // pending, sent, accepted, rejected
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      businessId: businessId,
+    }
+
+    const docRef = await addDoc(
+      collection(db, 'businesses', businessId, 'dispatchGuides'),
+      guideToSave
+    )
+
+    // Actualizar el contador de series
+    await updateDoc(businessRef, {
+      'series.guia_remision.lastNumber': newCorrelative,
+      updatedAt: serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      id: docRef.id,
+      number: guideNumber,
+      guide: { id: docRef.id, ...guideToSave }
+    }
+  } catch (error) {
+    console.error('Error al crear guía de remisión:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener guías de remisión de un negocio
+ */
+export const getDispatchGuides = async (businessId) => {
+  try {
+    const querySnapshot = await getDocs(
+      collection(db, 'businesses', businessId, 'dispatchGuides')
+    )
+
+    const guides = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+
+    // Ordenar por fecha de creación (más reciente primero)
+    guides.sort((a, b) => {
+      if (!a.createdAt) return 1
+      if (!b.createdAt) return -1
+      return b.createdAt.seconds - a.createdAt.seconds
+    })
+
+    return { success: true, data: guides }
+  } catch (error) {
+    console.error('Error al obtener guías de remisión:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener una guía de remisión por ID
+ */
+export const getDispatchGuide = async (businessId, guideId) => {
+  try {
+    const docRef = doc(db, 'businesses', businessId, 'dispatchGuides', guideId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Guía no encontrada' }
+    }
+
+    return {
+      success: true,
+      data: { id: docSnap.id, ...docSnap.data() }
+    }
+  } catch (error) {
+    console.error('Error al obtener guía de remisión:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar una guía de remisión
+ */
+export const updateDispatchGuide = async (businessId, guideId, updates) => {
+  try {
+    const docRef = doc(db, 'businesses', businessId, 'dispatchGuides', guideId)
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar guía de remisión:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Eliminar una guía de remisión
+ */
+export const deleteDispatchGuide = async (businessId, guideId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', businessId, 'dispatchGuides', guideId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar guía de remisión:', error)
+    return { success: false, error: error.message }
+  }
+}

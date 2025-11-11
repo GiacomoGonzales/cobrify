@@ -1,22 +1,80 @@
-import { useState, useEffect } from 'react'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, Users, DollarSign, Loader2, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import { getActiveOrders, getOrdersStats, updateOrderStatus } from '@/services/orderService'
+import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getCompanySettings } from '@/services/firestoreService'
+import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
+import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
+import KitchenTicket from '@/components/KitchenTicket'
+import { useReactToPrint } from 'react-to-print'
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
+  const navigate = useNavigate()
 
   const [orders, setOrders] = useState([])
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
+
+  // Modales para nueva orden
+  const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
+  const [showOrderItemsModal, setShowOrderItemsModal] = useState(false)
+  const [newOrderData, setNewOrderData] = useState(null)
+
+  // Estado para impresión de comanda
+  const [companySettings, setCompanySettings] = useState(null)
+  const [orderToPrint, setOrderToPrint] = useState(null)
+  const kitchenTicketRef = useRef()
+
+  // Cargar configuración de la empresa
+  useEffect(() => {
+    const loadCompanySettings = async () => {
+      if (!user?.uid) return
+
+      try {
+        const result = await getCompanySettings(getBusinessId())
+        if (result.success) {
+          setCompanySettings(result.data)
+        }
+      } catch (error) {
+        console.error('Error al cargar configuración:', error)
+      }
+    }
+
+    loadCompanySettings()
+  }, [user, getBusinessId])
+
+  // Configurar react-to-print con la nueva API
+  const handlePrint = useReactToPrint({
+    contentRef: kitchenTicketRef,
+    onAfterPrint: () => {
+      toast.success('Comanda enviada a impresora')
+      setOrderToPrint(null)
+    },
+  })
+
+  // Función para imprimir comanda
+  const handlePrintKitchenTicket = (order) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    setOrderToPrint(order)
+    // Esperar a que se renderice el ticket antes de imprimir
+    setTimeout(() => {
+      handlePrint()
+    }, 300)
+  }
 
   // Listener en tiempo real para órdenes activas
   useEffect(() => {
@@ -108,6 +166,69 @@ export default function Orders() {
   const loadOrders = async () => {
     // Esta función ya no es necesaria con listeners en tiempo real
     // Los datos se actualizan automáticamente vía onSnapshot
+  }
+
+  const handleCreateOrderClick = () => {
+    setShowCreateOrderModal(true)
+  }
+
+  const handleOrderTypeSelected = (orderData) => {
+    // Guardar datos de la orden (tipo, fuente, cliente)
+    setNewOrderData(orderData)
+    setShowCreateOrderModal(false)
+    // Abrir modal de items
+    setShowOrderItemsModal(true)
+  }
+
+  const handleOrderItemsAdded = async (items) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    try {
+      // Calcular total
+      const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+      // Crear la orden
+      const orderPayload = {
+        ...newOrderData,
+        items: items.map(item => ({
+          ...item,
+          total: item.price * item.quantity
+        })),
+        total,
+        status: 'pending',
+        tableId: null,
+        tableNumber: null,
+      }
+
+      const result = await createOrder(getBusinessId(), orderPayload)
+
+      if (result.success) {
+        toast.success('Orden creada exitosamente')
+        setShowOrderItemsModal(false)
+        setNewOrderData(null)
+      } else {
+        toast.error('Error al crear orden: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al crear orden:', error)
+      toast.error('Error al crear la orden')
+    }
+  }
+
+  const handleCloseOrder = (order) => {
+    // Navegar al POS con los items de la orden precargados
+    navigate('/app/pos', {
+      state: {
+        fromOrder: true,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        items: order.items,
+        orderType: order.orderType,
+      }
+    })
   }
 
   const handleStatusChange = async (orderId, currentStatus) => {
@@ -233,6 +354,10 @@ export default function Orders() {
           </h1>
           <p className="text-gray-600 mt-1">Monitorea las órdenes en tiempo real</p>
         </div>
+        <Button onClick={handleCreateOrderClick} size="lg">
+          <Plus className="w-5 h-5 mr-2" />
+          Nueva Orden
+        </Button>
       </div>
 
       {/* Estadísticas */}
@@ -324,36 +449,88 @@ export default function Orders() {
                         {statusConfig.label}
                       </Badge>
                     </div>
-                    <span className={`text-sm font-semibold ${statusConfig.color}`}>
-                      {elapsed}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${statusConfig.color}`}>
+                        {elapsed}
+                      </span>
+                      <Button
+                        onClick={() => handlePrintKitchenTicket(order)}
+                        variant="outline"
+                        size="sm"
+                        className="p-1.5"
+                        title="Imprimir Comanda"
+                      >
+                        <Printer className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {/* Info de Mesa y Mozo */}
+                  {/* Info de Mesa/Tipo y Mozo/Fuente */}
                   <div className="flex items-center justify-between text-sm pb-3 border-b border-gray-200">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-700">
-                        {order.tableNumber}
+                    {order.tableNumber ? (
+                      <div className="flex items-center gap-2">
+                        <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-700">
+                          {order.tableNumber}
+                        </div>
+                        <span className="text-gray-600">Mesa {order.tableNumber}</span>
                       </div>
-                      <span className="text-gray-600">Mesa {order.tableNumber}</span>
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {order.orderType === 'delivery' ? (
+                          <Bike className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ShoppingBag className="w-4 h-4 text-green-600" />
+                        )}
+                        <span className="text-gray-600">
+                          {order.orderType === 'delivery' ? 'Delivery' : 'Para Llevar'}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1 text-gray-600">
-                      <Users className="w-4 h-4" />
-                      <span>{order.waiterName}</span>
+                      {order.waiterName ? (
+                        <>
+                          <Users className="w-4 h-4" />
+                          <span>{order.waiterName}</span>
+                        </>
+                      ) : order.source ? (
+                        <>
+                          <Smartphone className="w-4 h-4" />
+                          <span>{order.source}</span>
+                        </>
+                      ) : null}
                     </div>
                   </div>
+
+                  {/* Nombre del cliente si existe */}
+                  {order.customerName && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 pb-2">
+                      <User className="w-4 h-4" />
+                      <span>{order.customerName}</span>
+                      {order.customerPhone && (
+                        <span className="text-gray-400">• {order.customerPhone}</span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Items */}
                   <div className="space-y-2">
                     {(order.items || []).map((item, idx) => (
-                      <div key={idx} className="flex justify-between text-sm">
-                        <span className="text-gray-700">
-                          {item.quantity}x {item.name}
-                        </span>
-                        <span className="font-medium text-gray-900">
-                          S/ {(item.total || 0).toFixed(2)}
-                        </span>
+                      <div key={idx} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-700">
+                            {item.quantity}x {item.name}
+                          </span>
+                          <span className="font-medium text-gray-900">
+                            S/ {(item.total || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        {item.notes && (
+                          <div className="flex items-start gap-1 text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded ml-6">
+                            <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                            <span>{item.notes}</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -372,36 +549,89 @@ export default function Orders() {
                     <span>Iniciada a las {formatTime(order.createdAt)}</span>
                   </div>
 
-                  {/* Botón de avanzar estado */}
-                  {order.status !== 'delivered' && (
-                    <Button
-                      onClick={() => handleStatusChange(order.id, order.status)}
-                      disabled={isUpdating}
-                      className="w-full mt-3"
-                      size="sm"
-                    >
-                      {isUpdating ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Actualizando...
-                        </>
-                      ) : (
-                        <>
-                          Marcar como {getStatusConfig(
-                            order.status === 'pending' ? 'preparing' :
-                            order.status === 'preparing' ? 'ready' : 'delivered'
-                          ).label}
-                          <ChevronRight className="w-4 h-4 ml-1" />
-                        </>
-                      )}
-                    </Button>
-                  )}
+                  {/* Botones de acción */}
+                  <div className="flex gap-2 mt-3">
+                    {/* Botón de cerrar cuenta (solo para órdenes listas) */}
+                    {order.status === 'ready' && (
+                      <Button
+                        onClick={() => handleCloseOrder(order)}
+                        variant="success"
+                        className="flex-1"
+                        size="sm"
+                      >
+                        <Receipt className="w-4 h-4 mr-2" />
+                        Cerrar Cuenta
+                      </Button>
+                    )}
+
+                    {/* Botón de avanzar estado (para pending y preparing) */}
+                    {order.status !== 'delivered' && order.status !== 'ready' && (
+                      <Button
+                        onClick={() => handleStatusChange(order.id, order.status)}
+                        disabled={isUpdating}
+                        className="flex-1"
+                        size="sm"
+                      >
+                        {isUpdating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Actualizando...
+                          </>
+                        ) : (
+                          <>
+                            Marcar como {getStatusConfig(
+                              order.status === 'pending' ? 'preparing' : 'ready'
+                            ).label}
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )
           })
         )}
       </div>
+
+      {/* Modal para crear nueva orden */}
+      <CreateOrderModal
+        isOpen={showCreateOrderModal}
+        onClose={() => setShowCreateOrderModal(false)}
+        onConfirm={handleOrderTypeSelected}
+      />
+
+      {/* Modal para agregar items a la orden */}
+      {showOrderItemsModal && newOrderData && (
+        <OrderItemsModal
+          isOpen={showOrderItemsModal}
+          onClose={() => {
+            setShowOrderItemsModal(false)
+            setNewOrderData(null)
+          }}
+          table={{ number: newOrderData.orderType === 'delivery' ? 'Delivery' : 'Para Llevar' }}
+          order={{ id: 'temp', items: [] }}
+          onSuccess={() => {
+            // Este callback se ejecutará después de que OrderItemsModal llame a addOrderItems
+            // Pero nosotros lo interceptaremos
+          }}
+          isNewOrder={true}
+          newOrderData={newOrderData}
+          onSaveNewOrder={handleOrderItemsAdded}
+        />
+      )}
+
+      {/* Comanda para imprimir (oculta) */}
+      {orderToPrint && (
+        <div style={{ display: 'none' }}>
+          <KitchenTicket
+            ref={kitchenTicketRef}
+            order={orderToPrint}
+            companySettings={companySettings}
+          />
+        </div>
+      )}
     </div>
   )
 }

@@ -9,7 +9,16 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
-export default function OrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
+export default function OrderItemsModal({
+  isOpen,
+  onClose,
+  table,
+  order,
+  onSuccess,
+  isNewOrder = false,
+  newOrderData = null,
+  onSaveNewOrder = null
+}) {
   const { getBusinessId } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
@@ -116,6 +125,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
           price: product.price || 0,
           quantity: 1,
           total: product.price || 0,
+          notes: '', // Inicializar campo de notas vacío
         },
       ])
     }
@@ -139,6 +149,16 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
     }
   }
 
+  const updateNotes = (productId, notes) => {
+    setCart(
+      cart.map((item) =>
+        item.productId === productId
+          ? { ...item, notes: notes }
+          : item
+      )
+    )
+  }
+
   const calculateTotals = () => {
     // El precio del producto YA incluye IGV
     const total = cart.reduce((sum, item) => sum + item.total, 0)
@@ -160,13 +180,19 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
 
     setIsSaving(true)
     try {
+      // Si es una nueva orden (desde Orders.jsx), usar el callback especial
+      if (isNewOrder && onSaveNewOrder) {
+        await onSaveNewOrder(cart)
+        setCart([])
+        onClose()
+      }
       // En modo demo, mostrar mensaje amigable
-      if (isDemoMode || demoContext) {
+      else if (isDemoMode || demoContext) {
         toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
         setCart([])
         onClose()
       } else {
-        // En modo normal, guardar en Firebase
+        // En modo normal, agregar items a orden existente
         const result = await addOrderItems(getBusinessId(), order.id, cart)
         if (result.success) {
           toast.success(`${cart.length} items agregados a la orden`)
@@ -191,7 +217,8 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
     onClose()
   }
 
-  if (!table || !order) return null
+  // Solo validar si NO es una nueva orden
+  if (!isNewOrder && (!table || !order)) return null
 
   return (
     <Modal
@@ -201,10 +228,16 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
         <div className="flex items-center gap-2">
           <ShoppingCart className="w-5 h-5" />
           <div>
-            <div className="text-lg font-bold">Agregar Items - Mesa {table.number}</div>
-            <div className="text-sm font-normal text-gray-600">
-              Mozo: {table.waiter} | Orden: {order.orderNumber || '#' + order.id.slice(-6)}
+            <div className="text-lg font-bold">
+              {isNewOrder
+                ? `Agregar Items - ${table?.number || 'Nueva Orden'}`
+                : `Agregar Items - Mesa ${table?.number}`}
             </div>
+            {!isNewOrder && (
+              <div className="text-sm font-normal text-gray-600">
+                Mozo: {table?.waiter} | Orden: {order?.orderNumber || '#' + order?.id.slice(-6)}
+              </div>
+            )}
           </div>
         </div>
       }
@@ -284,7 +317,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
               <>
                 <div className="flex-1 overflow-y-auto space-y-2 mb-4">
                   {cart.map((item) => (
-                    <div key={item.productId} className="border rounded-lg p-3">
+                    <div key={item.productId} className="border rounded-lg p-3 bg-white">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="font-medium text-sm text-gray-900">{item.name}</div>
@@ -300,7 +333,7 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
                         </button>
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
@@ -323,6 +356,17 @@ export default function OrderItemsModal({ isOpen, onClose, table, order, onSucce
                         <div className="font-bold text-gray-900">
                           S/ {item.total.toFixed(2)}
                         </div>
+                      </div>
+
+                      {/* Campo de notas/especificaciones */}
+                      <div className="mt-2">
+                        <textarea
+                          value={item.notes || ''}
+                          onChange={(e) => updateNotes(item.productId, e.target.value)}
+                          placeholder="Especificaciones: sin lechuga, extra crema, etc..."
+                          className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                          rows={2}
+                        />
                       </div>
                     </div>
                   ))}

@@ -504,13 +504,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         <div className="items-table">
           {invoice.items?.map((item, index) => (
             <div key={index} className="item-row">
-              <div className="item-desc">{item.description}</div>
+              <div className="item-desc">{item.description || item.name}</div>
               <div className="item-details">
-                <span>{item.quantity} x {formatCurrency(item.price)}</span>
-                <span>{formatCurrency(item.quantity * item.price)}</span>
+                <span>{item.quantity} x {formatCurrency(item.price || item.unitPrice)}</span>
+                <span>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
               </div>
               {item.code && (
                 <div className="item-code">Código: {item.code}</div>
+              )}
+              {item.notes && (
+                <div className="item-code" style={{ color: '#d97706', fontWeight: '600', marginTop: '2px' }}>
+                  ⚠ {item.notes}
+                </div>
               )}
             </div>
           ))}

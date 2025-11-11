@@ -624,7 +624,9 @@ export default function TableActionModal({
       title={action ? '' : `Mesa ${table?.number || ''}`}
       size="md"
     >
-      {renderContent()}
+      <div className={action ? 'p-6' : ''}>
+        {renderContent()}
+      </div>
     </Modal>
   )
 }

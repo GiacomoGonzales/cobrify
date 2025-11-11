@@ -23,8 +23,15 @@ export const exportGeneralReport = (data) => {
     ['KPIs PRINCIPALES'],
     ['Indicador', 'Valor'],
     ['Ingresos Totales', formatCurrency(stats.totalRevenue)],
+    ['Costo Total', formatCurrency(stats.totalCost || 0)],
+    ['Utilidad Total', formatCurrency(stats.totalProfit || 0)],
+    ['Margen de Utilidad', `${(stats.profitMargin || 0).toFixed(2)}%`],
+    [],
+    ['DESGLOSE DE INGRESOS'],
     ['Ingresos Pagados', formatCurrency(stats.paidRevenue)],
     ['Ingresos Pendientes', formatCurrency(stats.pendingRevenue)],
+    [],
+    ['DOCUMENTOS'],
     ['Total Comprobantes', stats.totalInvoices],
     ['Facturas', stats.facturas],
     ['Boletas', stats.boletas],
@@ -47,7 +54,7 @@ export const exportGeneralReport = (data) => {
   const salesData = salesByMonth.map(item => [
     item.month,
     item.count,
-    item.revenue
+    Number((item.revenue || 0).toFixed(2))
   ])
 
   const ws2 = XLSX.utils.aoa_to_sheet([...salesHeader, ...salesData])
@@ -60,8 +67,8 @@ export const exportGeneralReport = (data) => {
     const productsData = topProducts.map((product, index) => [
       index + 1,
       product.name,
-      product.quantity.toFixed(2),
-      product.revenue
+      Number((product.quantity || 0).toFixed(2)),
+      Number((product.revenue || 0).toFixed(2))
     ])
 
     const ws3 = XLSX.utils.aoa_to_sheet([...productsHeader, ...productsData])
@@ -78,7 +85,7 @@ export const exportGeneralReport = (data) => {
       customer.documentType === '6' ? 'RUC' : 'DNI',
       customer.documentNumber,
       customer.ordersCount || 0,
-      customer.totalSpent || 0
+      Number((customer.totalSpent || 0).toFixed(2))
     ])
 
     const ws4 = XLSX.utils.aoa_to_sheet([...customersHeader, ...customersData])
@@ -88,7 +95,7 @@ export const exportGeneralReport = (data) => {
 
   // Hoja 5: Detalle de Ventas
   if (filteredInvoices && filteredInvoices.length > 0) {
-    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Subtotal', 'IGV', 'Total']]
+    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV']]
     const invoicesData = filteredInvoices.slice(0, 1000).map(invoice => [
       invoice.number,
       invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
@@ -96,28 +103,37 @@ export const exportGeneralReport = (data) => {
       invoice.customer?.name || 'Cliente General',
       invoice.customer?.documentNumber || '-',
       invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
-      invoice.subtotal || 0,
-      invoice.igv || 0,
-      invoice.total || 0
+      Number((invoice.total || 0).toFixed(2)),
+      Number((invoice.totalCost || 0).toFixed(2)),
+      Number((invoice.profit || 0).toFixed(2)),
+      Number((invoice.profitMargin || 0).toFixed(2)),
+      Number((invoice.subtotal || 0).toFixed(2)),
+      Number((invoice.igv || 0).toFixed(2))
     ])
 
     const ws5 = XLSX.utils.aoa_to_sheet([...invoicesHeader, ...invoicesData])
     ws5['!cols'] = [
-      { wch: 15 },
-      { wch: 12 },
-      { wch: 10 },
-      { wch: 30 },
-      { wch: 15 },
-      { wch: 12 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 15 }
+      { wch: 15 },  // Número
+      { wch: 12 },  // Fecha
+      { wch: 10 },  // Tipo
+      { wch: 30 },  // Cliente
+      { wch: 15 },  // Documento
+      { wch: 12 },  // Estado
+      { wch: 15 },  // Precio Venta
+      { wch: 15 },  // Costo
+      { wch: 15 },  // Utilidad
+      { wch: 12 },  // Margen %
+      { wch: 15 },  // Subtotal
+      { wch: 15 }   // IGV
     ]
     XLSX.utils.book_append_sheet(wb, ws5, 'Detalle de Ventas')
   }
 
-  // Generar archivo
-  const fileName = `Reporte_General_${dateRange}_${Date.now()}.xlsx`
+  // Generar archivo con nombre atractivo
+  const today = new Date()
+  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
+  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const fileName = `Reporte_General_${rangeLabel}_${dateStr}.xlsx`
   XLSX.writeFile(wb, fileName)
 }
 
@@ -135,11 +151,18 @@ export const exportSalesReport = (data) => {
     ['Período:', getRangeLabel(dateRange)],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
-    ['RESUMEN'],
+    ['RESUMEN FINANCIERO'],
     ['Concepto', 'Valor'],
     ['Total Ventas', formatCurrency(stats.totalRevenue)],
+    ['Costo Total', formatCurrency(stats.totalCost || 0)],
+    ['Utilidad Total', formatCurrency(stats.totalProfit || 0)],
+    ['Margen de Utilidad', `${(stats.profitMargin || 0).toFixed(2)}%`],
+    [],
+    ['ESTADO DE COBRO'],
     ['Ventas Pagadas', formatCurrency(stats.paidRevenue)],
     ['Ventas Pendientes', formatCurrency(stats.pendingRevenue)],
+    [],
+    ['OTROS INDICADORES'],
     ['Total Comprobantes', stats.totalInvoices],
     ['Crecimiento', `${stats.revenueGrowth.toFixed(2)}%`],
   ]
@@ -153,7 +176,7 @@ export const exportSalesReport = (data) => {
   const salesData = salesByMonth.map(item => [
     item.month,
     item.count,
-    item.revenue
+    Number((item.revenue || 0).toFixed(2))
   ])
 
   const ws2 = XLSX.utils.aoa_to_sheet([...salesHeader, ...salesData])
@@ -161,7 +184,7 @@ export const exportSalesReport = (data) => {
   XLSX.utils.book_append_sheet(wb, ws2, 'Ventas Mensuales')
 
   // Hoja 3: Detalle Completo
-  const detailHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente', 'Estado', 'Método Pago', 'Subtotal', 'IGV', 'Total', 'Notas']]
+  const detailHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente', 'Estado', 'Método Pago', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV', 'Notas']]
   const detailData = filteredInvoices.map(invoice => [
     invoice.number,
     invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
@@ -170,29 +193,39 @@ export const exportSalesReport = (data) => {
     `${invoice.customer?.documentType || ''} ${invoice.customer?.documentNumber || ''}`,
     invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
     invoice.paymentMethod || '-',
-    invoice.subtotal || 0,
-    invoice.igv || 0,
-    invoice.total || 0,
+    Number((invoice.total || 0).toFixed(2)),
+    Number((invoice.totalCost || 0).toFixed(2)),
+    Number((invoice.profit || 0).toFixed(2)),
+    Number((invoice.profitMargin || 0).toFixed(2)),
+    Number((invoice.subtotal || 0).toFixed(2)),
+    Number((invoice.igv || 0).toFixed(2)),
     invoice.notes || ''
   ])
 
   const ws3 = XLSX.utils.aoa_to_sheet([...detailHeader, ...detailData])
   ws3['!cols'] = [
-    { wch: 15 },
-    { wch: 12 },
-    { wch: 10 },
-    { wch: 30 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 15 },
-    { wch: 30 }
+    { wch: 15 },  // Número
+    { wch: 12 },  // Fecha
+    { wch: 10 },  // Tipo
+    { wch: 30 },  // Cliente
+    { wch: 18 },  // Doc Cliente
+    { wch: 12 },  // Estado
+    { wch: 15 },  // Método Pago
+    { wch: 15 },  // Precio Venta
+    { wch: 15 },  // Costo
+    { wch: 15 },  // Utilidad
+    { wch: 12 },  // Margen %
+    { wch: 15 },  // Subtotal
+    { wch: 15 },  // IGV
+    { wch: 30 }   // Notas
   ]
   XLSX.utils.book_append_sheet(wb, ws3, 'Detalle Completo')
 
-  const fileName = `Reporte_Ventas_${dateRange}_${Date.now()}.xlsx`
+  // Generar archivo con nombre atractivo
+  const today = new Date()
+  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
+  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const fileName = `Reporte_Ventas_${rangeLabel}_${dateStr}.xlsx`
   XLSX.writeFile(wb, fileName)
 }
 
@@ -217,18 +250,18 @@ export const exportProductsReport = (data) => {
     productsData.push([
       index + 1,
       product.name,
-      product.quantity.toFixed(2),
-      product.revenue,
-      product.quantity > 0 ? (product.revenue / product.quantity).toFixed(2) : 0
+      Number((product.quantity || 0).toFixed(2)),
+      Number((product.revenue || 0).toFixed(2)),
+      product.quantity > 0 ? Number(((product.revenue || 0) / product.quantity).toFixed(2)) : 0
     ])
   })
 
   // Agregar totales
-  const totalQuantity = topProducts.reduce((sum, p) => sum + p.quantity, 0)
-  const totalRevenue = topProducts.reduce((sum, p) => sum + p.revenue, 0)
+  const totalQuantity = topProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
+  const totalRevenue = topProducts.reduce((sum, p) => sum + (p.revenue || 0), 0)
 
   productsData.push([])
-  productsData.push(['TOTALES', '', totalQuantity.toFixed(2), totalRevenue, ''])
+  productsData.push(['TOTALES', '', Number(totalQuantity.toFixed(2)), Number(totalRevenue.toFixed(2)), ''])
 
   const ws = XLSX.utils.aoa_to_sheet(productsData)
   ws['!cols'] = [
@@ -241,7 +274,11 @@ export const exportProductsReport = (data) => {
 
   XLSX.utils.book_append_sheet(wb, ws, 'Productos')
 
-  const fileName = `Reporte_Productos_${dateRange}_${Date.now()}.xlsx`
+  // Generar archivo con nombre atractivo
+  const today = new Date()
+  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
+  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const fileName = `Reporte_Productos_${rangeLabel}_${dateStr}.xlsx`
   XLSX.writeFile(wb, fileName)
 }
 
@@ -271,8 +308,8 @@ export const exportCustomersReport = (data) => {
       customer.email || '-',
       customer.phone || '-',
       customer.ordersCount || 0,
-      customer.totalSpent || 0,
-      customer.ordersCount > 0 ? ((customer.totalSpent || 0) / customer.ordersCount).toFixed(2) : 0
+      Number((customer.totalSpent || 0).toFixed(2)),
+      customer.ordersCount > 0 ? Number(((customer.totalSpent || 0) / customer.ordersCount).toFixed(2)) : 0
     ])
   })
 
@@ -281,7 +318,7 @@ export const exportCustomersReport = (data) => {
   const totalSpent = topCustomers.reduce((sum, c) => sum + (c.totalSpent || 0), 0)
 
   customersData.push([])
-  customersData.push(['TOTALES', '', '', '', '', '', totalOrders, totalSpent, totalOrders > 0 ? (totalSpent / totalOrders).toFixed(2) : 0])
+  customersData.push(['TOTALES', '', '', '', '', '', totalOrders, Number(totalSpent.toFixed(2)), totalOrders > 0 ? Number((totalSpent / totalOrders).toFixed(2)) : 0])
 
   const ws = XLSX.utils.aoa_to_sheet(customersData)
   ws['!cols'] = [
@@ -298,7 +335,11 @@ export const exportCustomersReport = (data) => {
 
   XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
 
-  const fileName = `Reporte_Clientes_${dateRange}_${Date.now()}.xlsx`
+  // Generar archivo con nombre atractivo
+  const today = new Date()
+  const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
+  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const fileName = `Reporte_Clientes_${rangeLabel}_${dateStr}.xlsx`
   XLSX.writeFile(wb, fileName)
 }
 

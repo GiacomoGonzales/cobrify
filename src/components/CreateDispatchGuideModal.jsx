@@ -5,6 +5,8 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
+import { useAppContext } from '@/hooks/useAppContext'
+import { createDispatchGuide } from '@/services/firestoreService'
 
 const TRANSFER_REASONS = [
   { value: '01', label: '01 - Venta' },
@@ -28,6 +30,7 @@ const DOCUMENT_TYPES = [
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null }) {
   const toast = useToast()
+  const { getBusinessId } = useAppContext()
 
   // Datos básicos de la guía
   const [transferReason, setTransferReason] = useState('01')
@@ -134,6 +137,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     setIsSaving(true)
 
     try {
+      const businessId = getBusinessId()
+
       const dispatchGuide = {
         // Documento de referencia (si viene de factura)
         referencedInvoice: referenceInvoice ? {
@@ -179,23 +184,23 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         // Items
         items,
-
-        // Metadatos
-        createdAt: new Date(),
-        status: 'draft', // Estado inicial
       }
 
-      console.log('📦 Guía de remisión a guardar:', dispatchGuide)
+      console.log('📦 Creando guía de remisión:', dispatchGuide)
 
-      // TODO: Guardar en Firestore y generar XML
-      toast.success('Funcionalidad en desarrollo - Datos capturados correctamente')
+      // Guardar en Firestore
+      const result = await createDispatchGuide(businessId, dispatchGuide)
 
-      // Cerrar modal
-      onClose()
+      if (result.success) {
+        toast.success(`Guía de remisión ${result.number} creada exitosamente`)
+        onClose()
+      } else {
+        throw new Error(result.error || 'Error al crear la guía')
+      }
 
     } catch (error) {
       console.error('Error al crear guía de remisión:', error)
-      toast.error('Error al crear la guía de remisión')
+      toast.error(error.message || 'Error al crear la guía de remisión')
     } finally {
       setIsSaving(false)
     }

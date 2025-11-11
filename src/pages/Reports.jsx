@@ -103,7 +103,25 @@ export default function Reports() {
     }
   }
 
-  // Filtrar facturas por rango de fecha
+  // Función para calcular el costo de un item
+  const calculateItemCost = useCallback((item) => {
+    const productId = item.productId || item.id
+    const quantity = item.quantity || 0
+
+    // Buscar si el producto tiene receta (prioridad)
+    const recipe = recipes.find(r => r.productId === productId)
+
+    if (recipe) {
+      // Usar costo de la receta (calculado de ingredientes)
+      return (recipe.totalCost || 0) * quantity
+    } else {
+      // Si no tiene receta, usar costo manual del producto
+      const product = products.find(p => p.id === productId)
+      return (product?.cost || 0) * quantity
+    }
+  }, [products, recipes])
+
+  // Filtrar facturas por rango de fecha y calcular costos
   const filteredInvoices = useMemo(() => {
     const now = new Date()
     const filterDate = new Date()
@@ -122,19 +140,56 @@ export default function Reports() {
         filterDate.setFullYear(now.getFullYear() - 1)
         break
       case 'all':
-        return invoices
+        return invoices.map(invoice => {
+          // Calcular costo total de la venta
+          let totalCost = 0
+          invoice.items?.forEach(item => {
+            totalCost += calculateItemCost(item)
+          })
+          return {
+            ...invoice,
+            totalCost,
+            profit: (invoice.total || 0) - totalCost,
+            profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
+          }
+        })
       default:
-        return invoices
+        return invoices.map(invoice => {
+          let totalCost = 0
+          invoice.items?.forEach(item => {
+            totalCost += calculateItemCost(item)
+          })
+          return {
+            ...invoice,
+            totalCost,
+            profit: (invoice.total || 0) - totalCost,
+            profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
+          }
+        })
     }
 
-    return invoices.filter(invoice => {
-      if (!invoice.createdAt) return false
-      const invoiceDate = invoice.createdAt.toDate
-        ? invoice.createdAt.toDate()
-        : new Date(invoice.createdAt)
-      return invoiceDate >= filterDate
-    })
-  }, [invoices, dateRange])
+    return invoices
+      .filter(invoice => {
+        if (!invoice.createdAt) return false
+        const invoiceDate = invoice.createdAt.toDate
+          ? invoice.createdAt.toDate()
+          : new Date(invoice.createdAt)
+        return invoiceDate >= filterDate
+      })
+      .map(invoice => {
+        // Calcular costo total de la venta
+        let totalCost = 0
+        invoice.items?.forEach(item => {
+          totalCost += calculateItemCost(item)
+        })
+        return {
+          ...invoice,
+          totalCost,
+          profit: (invoice.total || 0) - totalCost,
+          profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
+        }
+      })
+  }, [invoices, dateRange, calculateItemCost])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -537,7 +592,7 @@ export default function Reports() {
           </div>
 
           {/* KPIs principales */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -574,11 +629,49 @@ export default function Reports() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
+                    <p className="text-sm font-medium text-gray-600">Costo Total</p>
+                    <p className="text-2xl font-bold text-red-600 mt-2">
+                      {formatCurrency(stats.totalCost)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Productos vendidos
+                    </p>
+                  </div>
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <Package className="w-6 h-6 text-red-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Utilidad Total</p>
+                    <p className="text-2xl font-bold text-green-600 mt-2">
+                      {formatCurrency(stats.totalProfit)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Margen: {stats.profitMargin.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
                     <p className="text-sm font-medium text-gray-600">Total Comprobantes</p>
                     <p className="text-2xl font-bold text-gray-900 mt-2">{stats.totalInvoices}</p>
                     <div className="flex gap-2 mt-2">
-                      <Badge variant="primary">{stats.facturas} Facturas</Badge>
-                      <Badge>{stats.boletas} Boletas</Badge>
+                      <Badge variant="primary">{stats.facturas} F</Badge>
+                      <Badge>{stats.boletas} B</Badge>
                     </div>
                   </div>
                   <div className="p-3 bg-blue-100 rounded-lg">
@@ -599,25 +692,6 @@ export default function Reports() {
                   </div>
                   <div className="p-3 bg-purple-100 rounded-lg">
                     <ShoppingCart className="w-6 h-6 text-purple-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Utilidad Total</p>
-                    <p className="text-2xl font-bold text-green-600 mt-2">
-                      {formatCurrency(stats.totalProfit)}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Margen: {stats.profitMargin.toFixed(1)}%
-                    </p>
-                  </div>
-                  <div className="p-3 bg-green-100 rounded-lg">
-                    <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
                 </div>
               </CardContent>
@@ -769,7 +843,43 @@ export default function Reports() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Ventas</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-2">
+                    {formatCurrency(stats.totalRevenue)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">{stats.totalInvoices} comprobantes</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Costo Total</p>
+                  <p className="text-2xl font-bold text-red-600 mt-2">
+                    {formatCurrency(stats.totalCost)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">Productos vendidos</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Utilidad Total</p>
+                  <p className="text-2xl font-bold text-green-600 mt-2">
+                    {formatCurrency(stats.totalProfit)}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">Margen: {stats.profitMargin.toFixed(1)}%</p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardContent className="p-6">
                 <div>
@@ -794,18 +904,6 @@ export default function Reports() {
                   <p className="text-sm text-gray-500 mt-1">
                     {filteredInvoices.filter(inv => inv.status === 'pending').length} comprobantes
                   </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">
-                    {formatCurrency(stats.totalRevenue)}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">{stats.totalInvoices} comprobantes</p>
                 </div>
               </CardContent>
             </Card>
@@ -851,7 +949,10 @@ export default function Reports() {
                       <TableHead>Fecha</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead className="text-right">Precio Venta</TableHead>
+                      <TableHead className="text-right">Costo</TableHead>
+                      <TableHead className="text-right">Utilidad</TableHead>
+                      <TableHead className="text-right">Margen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -888,6 +989,23 @@ export default function Reports() {
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {formatCurrency(invoice.total)}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {formatCurrency(invoice.totalCost || 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-green-600">
+                          {formatCurrency(invoice.profit || 0)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={`font-medium ${
+                            (invoice.profitMargin || 0) >= 30
+                              ? 'text-green-600'
+                              : (invoice.profitMargin || 0) >= 15
+                              ? 'text-yellow-600'
+                              : 'text-red-600'
+                          }`}>
+                            {(invoice.profitMargin || 0).toFixed(1)}%
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))}
