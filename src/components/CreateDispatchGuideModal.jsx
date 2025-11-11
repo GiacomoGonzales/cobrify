@@ -213,9 +213,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               Generar Guía de Remisión Electrónica
             </h2>
             {referenceInvoice && (
-              <p className="text-sm text-gray-600 mt-0.5">
-                Referencia: {referenceInvoice.number} - {referenceInvoice.customer?.name}
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-gray-600">
+                  Referencia: {referenceInvoice.number} - {referenceInvoice.customer?.name}
+                </p>
+                {referenceInvoice.createdAt && (
+                  <p className="text-xs text-gray-500">
+                    Factura emitida: {new Date(referenceInvoice.createdAt.toDate ? referenceInvoice.createdAt.toDate() : referenceInvoice.createdAt).toLocaleDateString('es-PE')}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -228,6 +235,21 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+        {/* Info sobre fechas válidas */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-start gap-2">
+            <Calendar className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-blue-800">
+              <p className="font-medium">Nota importante sobre fechas:</p>
+              <p className="mt-1">
+                • La guía se puede generar para facturas de <strong>cualquier fecha</strong><br/>
+                • La fecha de inicio del traslado debe ser <strong>hoy o en el futuro</strong><br/>
+                • Según SUNAT: La guía puede emitirse hasta <strong>5 días antes</strong> del traslado
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Datos Básicos */}
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
           <div className="flex items-start gap-2">
@@ -268,15 +290,21 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             ))}
           </Select>
 
-          <Input
-            type="date"
-            label="Fecha de Inicio del Traslado"
-            icon={Calendar}
-            required
-            value={transferDate}
-            onChange={(e) => setTransferDate(e.target.value)}
-            min={new Date().toISOString().split('T')[0]}
-          />
+          <div>
+            <Input
+              type="date"
+              label="Fecha de Inicio del Traslado"
+              icon={Calendar}
+              required
+              value={transferDate}
+              onChange={(e) => setTransferDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+              helperText="Debe ser hoy o fecha futura"
+            />
+            <p className="text-xs text-blue-600 mt-1">
+              ℹ️ La guía se puede emitir hasta 5 días antes del traslado
+            </p>
+          </div>
         </div>
 
         <Input

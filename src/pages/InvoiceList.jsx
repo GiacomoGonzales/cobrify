@@ -783,8 +783,9 @@ ${companySettings?.website ? companySettings.website : ''}`
                   )}
 
                   {/* Generar Guía de Remisión - Solo si está habilitado en preferencias */}
-                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                   invoice.sunatStatus === 'accepted' &&
+                  {/* Permitir para facturas/boletas/notas de venta (excepto rechazadas) */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') &&
+                   invoice.sunatStatus !== 'rejected' &&
                    (businessSettings?.dispatchGuidesEnabled || isDemoMode) && (
                     <button
                       onClick={() => {
