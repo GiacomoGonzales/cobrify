@@ -924,16 +924,27 @@ export default function POS() {
   }
 
   const handleSendWhatsApp = async () => {
-    if (!lastInvoiceData) return
+    console.log('=== handleSendWhatsApp llamado ===')
+    console.log('lastInvoiceData:', lastInvoiceData)
+    console.log('companySettings:', companySettings)
+
+    if (!lastInvoiceData) {
+      console.error('No hay datos de factura')
+      toast.error('No hay datos de factura disponibles')
+      return
+    }
 
     try {
       // Verificar si está en plataforma nativa
       const { Capacitor } = await import('@capacitor/core')
       const isNative = Capacitor.isNativePlatform()
+      console.log('isNative:', isNative)
 
       if (!isNative) {
         // En web, abrir WhatsApp Web con mensaje de texto
         const phone = lastInvoiceData.customer?.phone || customerData.phone
+        console.log('Teléfono del cliente:', phone)
+
         if (!phone) {
           toast.error('El cliente no tiene un número de teléfono registrado')
           return
@@ -956,6 +967,7 @@ ${companySettings?.businessName || 'Tu Empresa'}
 ${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
 ${companySettings?.website ? companySettings.website : ''}`
 
+        console.log('Abriendo WhatsApp con mensaje:', message)
         const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
         window.open(url, '_blank')
         toast.success('Abriendo WhatsApp...')
