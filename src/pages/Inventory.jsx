@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Package,
   AlertTriangle,
@@ -10,6 +10,9 @@ import {
   Plus,
   FileSpreadsheet,
   ArrowRightLeft,
+  ChevronDown,
+  ChevronRight,
+  Warehouse,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -63,6 +66,7 @@ export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [expandedProduct, setExpandedProduct] = useState(null)
 
   // Warehouses y transferencias
   const [warehouses, setWarehouses] = useState([])
@@ -561,8 +565,12 @@ export default function Inventory() {
                 <TableBody>
                   {filteredProducts.map(product => {
                     const stockStatus = getStockStatus(product)
+                    const isExpanded = expandedProduct === product.id
+                    const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
+
                     return (
-                      <TableRow key={product.id}>
+                      <React.Fragment key={product.id}>
+                      <TableRow>
                         <TableCell>
                           <span className="font-mono text-xs sm:text-sm">
                             {product.code || '-'}
@@ -584,21 +592,41 @@ export default function Inventory() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {product.stock === null ? (
-                            <span className="text-sm text-gray-500">Sin control</span>
-                          ) : (
-                            <span
-                              className={`font-bold text-sm ${
-                                product.stock === 0
-                                  ? 'text-red-600'
-                                  : product.stock < 10
-                                  ? 'text-yellow-600'
-                                  : 'text-green-600'
-                              }`}
-                            >
-                              {product.stock}
-                            </span>
-                          )}
+                          <div className="flex items-center space-x-2">
+                            {/* Botón de expandir/contraer solo si hay almacenes */}
+                            {warehouses.length > 0 && product.stock !== null && (
+                              <button
+                                onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
+                                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                title={isExpanded ? "Ocultar detalle" : "Ver por almacén"}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                                )}
+                              </button>
+                            )}
+
+                            {/* Stock total */}
+                            <div>
+                              {product.stock === null ? (
+                                <span className="text-sm text-gray-500">Sin control</span>
+                              ) : (
+                                <span
+                                  className={`font-bold text-sm ${
+                                    product.stock === 0
+                                      ? 'text-red-600'
+                                      : product.stock < 10
+                                      ? 'text-yellow-600'
+                                      : 'text-green-600'
+                                  }`}
+                                >
+                                  {product.stock}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           <span className="text-sm">{formatCurrency(product.price)}</span>
@@ -630,6 +658,61 @@ export default function Inventory() {
                           </TableCell>
                         )}
                       </TableRow>
+
+                      {/* Fila expandible con detalle por almacén */}
+                      {isExpanded && warehouses.length > 0 && product.stock !== null && (
+                        <TableRow className="bg-gray-50">
+                          <TableCell colSpan={warehouses.length > 1 ? 8 : 7} className="py-3">
+                            <div className="pl-8 space-y-2">
+                              <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                                <Warehouse className="w-4 h-4" />
+                                <span className="font-medium">Stock por Almacén:</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {warehouses.map(warehouse => {
+                                  const warehouseStock = hasWarehouseStocks
+                                    ? product.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                    : null
+                                  const stock = warehouseStock?.stock || 0
+
+                                  return (
+                                    <div
+                                      key={warehouse.id}
+                                      className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
+                                    >
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-sm font-medium text-gray-700">
+                                          {warehouse.name}
+                                        </span>
+                                        {warehouse.isDefault && (
+                                          <Badge variant="default" className="text-xs">Principal</Badge>
+                                        )}
+                                      </div>
+                                      <span
+                                        className={`font-semibold ${
+                                          stock > 10
+                                            ? 'text-green-600'
+                                            : stock > 0
+                                            ? 'text-yellow-600'
+                                            : 'text-red-600'
+                                        }`}
+                                      >
+                                        {stock}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                              {!hasWarehouseStocks && (
+                                <p className="text-xs text-gray-500 mt-2">
+                                  Stock no distribuido por almacenes
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
                     )
                   })}
                 </TableBody>
