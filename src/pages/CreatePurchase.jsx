@@ -361,9 +361,14 @@ export default function CreatePurchase() {
 
           // Auto-llenar cantidad, costo y precio de venta en el formulario de compra
           const newItems = [...purchaseItems]
+          const costValue = productData.cost || 0
+
           newItems[currentItemIndex].quantity = data.stock ? parseFloat(data.stock) : 1
-          newItems[currentItemIndex].cost = productData.cost || 0
+          newItems[currentItemIndex].cost = costValue
           newItems[currentItemIndex].unitPrice = productData.price || 0
+          // Calcular costo sin IGV automáticamente
+          newItems[currentItemIndex].costWithoutIGV = costValue > 0 ? Math.round((costValue / 1.18) * 100) / 100 : 0
+
           setPurchaseItems(newItems)
         }
 
