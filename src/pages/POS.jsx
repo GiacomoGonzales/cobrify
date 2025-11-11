@@ -27,6 +27,8 @@ import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
+import { Share } from '@capacitor/share'
+import { Filesystem, Directory } from '@capacitor/filesystem'
 import {
   getProducts,
   getCustomers,
@@ -921,43 +923,70 @@ export default function POS() {
     window.print()
   }
 
-  const handleSendWhatsApp = () => {
+  const handleSendWhatsApp = async () => {
     if (!lastInvoiceData) return
 
-    // Verificar si hay teléfono del cliente
-    const phone = lastInvoiceData.customer?.phone || customerData.phone
+    try {
+      toast.info('Generando PDF...')
 
-    if (!phone) {
-      toast.error('El cliente no tiene un número de teléfono registrado')
-      return
-    }
+      // Generar el PDF
+      const pdfBlob = await generateInvoicePDF(lastInvoiceData, companySettings)
 
-    // Limpiar el número de teléfono (solo dígitos)
-    const cleanPhone = phone.replace(/\D/g, '')
+      // Convertir Blob a base64
+      const reader = new FileReader()
+      reader.readAsDataURL(pdfBlob)
 
-    // Crear mensaje
-    const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
-                       lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+      await new Promise((resolve, reject) => {
+        reader.onloadend = async () => {
+          try {
+            const base64Data = reader.result.split(',')[1]
 
-    const customerName = lastInvoiceData.customer?.name || 'Cliente'
-    const total = formatCurrency(lastInvoiceData.total)
+            // Crear nombre de archivo
+            const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                               lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'NotaVenta'
+            const fileName = `${docTypeName}_${lastInvoiceData.number}.pdf`
 
-    const message = `Hola ${customerName},
+            // Guardar archivo temporalmente
+            const savedFile = await Filesystem.writeFile({
+              path: fileName,
+              data: base64Data,
+              directory: Directory.Cache,
+            })
 
-Gracias por tu compra. Aquí está el detalle de tu ${docTypeName}:
+            // Crear mensaje
+            const customerName = lastInvoiceData.customer?.name || 'Cliente'
+            const total = formatCurrency(lastInvoiceData.total)
+
+            const message = `Hola ${customerName},
+
+Gracias por tu compra. Adjunto encontrarás tu ${docTypeName}.
 
 ${docTypeName}: ${lastInvoiceData.number}
 Total: ${total}
 
-${companySettings?.businessName || 'Tu Empresa'}
-${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
-${companySettings?.website ? companySettings.website : ''}`
+${companySettings?.businessName || 'Tu Empresa'}`
 
-    // Abrir WhatsApp Web
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-    window.open(url, '_blank')
+            // Compartir usando Capacitor Share
+            await Share.share({
+              title: `${docTypeName} ${lastInvoiceData.number}`,
+              text: message,
+              url: savedFile.uri,
+              dialogTitle: 'Compartir comprobante',
+            })
 
-    toast.success('Abriendo WhatsApp...')
+            toast.success('Compartiendo por WhatsApp...')
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        }
+        reader.onerror = reject
+      })
+
+    } catch (error) {
+      console.error('Error al compartir por WhatsApp:', error)
+      toast.error('Error al generar o compartir el PDF')
+    }
   }
 
   // Obtener stock del almacén seleccionado
