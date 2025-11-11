@@ -192,7 +192,7 @@ function Navbar() {
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
                   <p className="text-xs font-semibold text-gray-600 uppercase flex items-center gap-2">
                     <FileText className="w-4 h-4" />
-                    Facturas ({searchResults.invoices.length})
+                    Ventas ({searchResults.invoices.length})
                   </p>
                 </div>
                 {searchResults.invoices.map((invoice) => (

@@ -70,7 +70,7 @@ function Sidebar() {
     {
       path: '/facturas',
       icon: FileText,
-      label: 'Facturas',
+      label: 'Ventas',
       pageId: 'invoices',
     },
     {
@@ -177,7 +177,7 @@ function Sidebar() {
     {
       path: '/facturas',
       icon: FileText,
-      label: 'Facturas',
+      label: 'Ventas',
       pageId: 'invoices',
     },
     {
