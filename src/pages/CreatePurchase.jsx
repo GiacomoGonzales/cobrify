@@ -447,6 +447,14 @@ export default function CreatePurchase() {
 
   const handleSave = async () => {
     if (!user?.uid) return
+
+    // Asegurar que todos los items tengan costWithoutIGV calculado
+    const itemsWithCostWithoutIGV = purchaseItems.map(item => ({
+      ...item,
+      costWithoutIGV: item.costWithoutIGV || (item.cost > 0 ? Math.round((item.cost / 1.18) * 100) / 100 : 0)
+    }))
+    setPurchaseItems(itemsWithCostWithoutIGV)
+
     if (!validateForm()) return
 
     setIsSaving(true)
