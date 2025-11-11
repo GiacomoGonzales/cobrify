@@ -39,6 +39,7 @@ import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
+import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
@@ -78,6 +79,10 @@ export default function InvoiceList() {
     startDate: '',
     endDate: '',
   })
+
+  // Estados para modal de guía de remisión
+  const [showDispatchGuideModal, setShowDispatchGuideModal] = useState(false)
+  const [selectedInvoiceForGuide, setSelectedInvoiceForGuide] = useState(null)
 
   // Función para imprimir ticket
   const handlePrintTicket = () => {
@@ -784,8 +789,8 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
-                        // TODO: Abrir modal para generar guía de remisión
-                        toast.info('Funcionalidad en desarrollo')
+                        setSelectedInvoiceForGuide(invoice)
+                        setShowDispatchGuideModal(true)
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
@@ -1184,6 +1189,16 @@ ${companySettings?.website ? companySettings.website : ''}`
           <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} />
         </div>
       )}
+
+      {/* Modal para crear Guía de Remisión */}
+      <CreateDispatchGuideModal
+        isOpen={showDispatchGuideModal}
+        onClose={() => {
+          setShowDispatchGuideModal(false)
+          setSelectedInvoiceForGuide(null)
+        }}
+        referenceInvoice={selectedInvoiceForGuide}
+      />
     </div>
   )
 }

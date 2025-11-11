@@ -28,6 +28,7 @@ export default function Settings() {
     nota_venta: { serie: 'N001', lastNumber: 0 },
     nota_credito: { serie: 'FC01', lastNumber: 0 },
     nota_debito: { serie: 'FD01', lastNumber: 0 },
+    guia_remision: { serie: 'T001', lastNumber: 0 },
   })
   const [editingSeries, setEditingSeries] = useState(false)
 
@@ -168,6 +169,7 @@ export default function Settings() {
             nota_venta: businessData.series.nota_venta || { serie: 'N001', lastNumber: 0 },
             nota_credito: businessData.series.nota_credito || { serie: 'FC01', lastNumber: 0 },
             nota_debito: businessData.series.nota_debito || { serie: 'FD01', lastNumber: 0 },
+            guia_remision: businessData.series.guia_remision || { serie: 'T001', lastNumber: 0 },
           })
         }
 
@@ -1434,6 +1436,54 @@ export default function Settings() {
               </div>
               <p className="text-xs text-gray-500 mt-2">
                 Para aumentar el valor de facturas/boletas aceptadas por SUNAT (intereses, penalidades, etc.)
+              </p>
+            </div>
+
+            {/* Guías de Remisión */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Guías de Remisión Electrónicas (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.guia_remision.serie}
+                    onChange={e => handleSeriesChange('guia_remision', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="T001"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.guia_remision.lastNumber}
+                    onChange={e => handleSeriesChange('guia_remision', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.guia_remision.serie, series.guia_remision.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para documentar el traslado de bienes. Obligatorio desde julio 2025 para transporte de mercancías.
               </p>
             </div>
           </div>
