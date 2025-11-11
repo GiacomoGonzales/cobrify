@@ -30,12 +30,6 @@
     height: 100%;
   }
 
-  /* FORZAR: Sin degradados en móvil - solo colores sólidos */
-  @media (max-width: 768px) {
-    * {
-      background-image: none !important;
-    }
-  }
 
   /* Prevent iOS zoom on input focus - minimum 16px font size */
   input,
