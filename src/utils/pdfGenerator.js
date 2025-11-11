@@ -43,135 +43,112 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const grayMedium = [107, 114, 128] // gray-500
   const grayLight = [243, 244, 246] // gray-100
 
-  let yPos = 20
+  let yPos = 15
 
-  // ========== ENCABEZADO ==========
+  // ========== ENCABEZADO - INFORMACIÓN DE EMPRESA (IZQUIERDA) ==========
 
   // Logo de empresa (si existe)
+  let hasLogo = false
   if (companySettings?.logoUrl) {
     try {
-      // Cargar logo como imagen
       const imgData = await loadImageAsBase64(companySettings.logoUrl)
-      doc.addImage(imgData, 'PNG', 20, yPos, 30, 30)
-
-      // Mover texto a la derecha del logo
-      doc.setFontSize(18)
-      doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
-      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 55, yPos + 5)
-
-      // Ajustar posición para información de empresa
-      const companyInfoX = 55
-      yPos += 13
-
-      // Información de empresa (debajo del nombre)
-      doc.setFontSize(9)
-      doc.setTextColor(...grayMedium)
-      doc.setFont('helvetica', 'normal')
-
-      if (companySettings?.ruc) {
-        doc.text(`RUC: ${companySettings.ruc}`, companyInfoX, yPos)
-        yPos += 4
-      }
-
-      if (companySettings?.address) {
-        const addressLines = doc.splitTextToSize(companySettings.address, 80)
-        doc.text(addressLines, companyInfoX, yPos)
-        yPos += 4 * addressLines.length
-      }
-
-      if (companySettings?.phone) {
-        doc.text(`Tel: ${companySettings.phone}`, companyInfoX, yPos)
-        yPos += 4
-      }
-
-      if (companySettings?.email) {
-        doc.text(`Email: ${companySettings.email}`, companyInfoX, yPos)
-      }
-
-      // Resetear yPos para continuar
-      yPos = 20
+      doc.addImage(imgData, 'PNG', 15, yPos, 25, 25)
+      hasLogo = true
     } catch (error) {
       console.error('Error cargando logo:', error)
-      // Si falla, usar el diseño sin logo
-      doc.setFontSize(18)
-      doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
-      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
-    }
-  } else {
-    // Diseño sin logo (original)
-    doc.setFontSize(18)
-    doc.setTextColor(...primaryColor)
-    doc.setFont('helvetica', 'bold')
-    doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
-
-    yPos += 8
-
-    // Información de empresa (izquierda)
-    doc.setFontSize(9)
-    doc.setTextColor(...grayMedium)
-    doc.setFont('helvetica', 'normal')
-
-    if (companySettings?.ruc) {
-      doc.text(`RUC: ${companySettings.ruc}`, 20, yPos)
-      yPos += 4
-    }
-
-    if (companySettings?.address) {
-      const addressLines = doc.splitTextToSize(companySettings.address, 80)
-      doc.text(addressLines, 20, yPos)
-      yPos += 4 * addressLines.length
-    }
-
-    if (companySettings?.phone) {
-      doc.text(`Tel: ${companySettings.phone}`, 20, yPos)
-      yPos += 4
-    }
-
-    if (companySettings?.email) {
-      doc.text(`Email: ${companySettings.email}`, 20, yPos)
     }
   }
 
-  // Tipo de documento (derecha)
-  doc.setFontSize(16)
-  doc.setTextColor(...grayDark)
-  const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA'
-  doc.text(documentTitle, 200, 28, { align: 'right' })
-
-  // Número de documento y fecha (derecha)
-  yPos = 28
-  doc.setFontSize(10)
+  // Información de empresa
+  const companyX = hasLogo ? 45 : 15
+  doc.setFontSize(14)
   doc.setTextColor(...grayDark)
   doc.setFont('helvetica', 'bold')
-  doc.text(invoice.number, 200, yPos, { align: 'right' })
+  doc.text(companySettings?.businessName || 'MI EMPRESA SAC', companyX, yPos + 5)
 
-  yPos += 6
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
+  yPos += 10
+  doc.setFontSize(8)
   doc.setTextColor(...grayMedium)
+  doc.setFont('helvetica', 'normal')
 
-  let invoiceDate = 'N/A'
+  if (companySettings?.ruc) {
+    doc.text(`RUC: ${companySettings.ruc}`, companyX, yPos)
+    yPos += 4
+  }
+
+  if (companySettings?.address) {
+    const addressLines = doc.splitTextToSize(companySettings.address, 80)
+    doc.text(addressLines, companyX, yPos)
+    yPos += 3.5 * addressLines.length
+  }
+
+  if (companySettings?.phone) {
+    doc.text(`Teléfono: ${companySettings.phone}`, companyX, yPos)
+    yPos += 4
+  }
+
+  if (companySettings?.email) {
+    doc.text(`Email: ${companySettings.email}`, companyX, yPos)
+  }
+
+  // ========== CUADRO DE COMPROBANTE (DERECHA) ==========
+
+  // Recuadro para el tipo de comprobante
+  const boxX = 130
+  const boxY = 15
+  const boxWidth = 65
+  const boxHeight = 35
+
+  // Borde del recuadro
+  doc.setDrawColor(...primaryColor)
+  doc.setLineWidth(0.8)
+  doc.rect(boxX, boxY, boxWidth, boxHeight)
+
+  // Línea divisoria horizontal en el medio
+  doc.setLineWidth(0.3)
+  doc.line(boxX, boxY + 18, boxX + boxWidth, boxY + 18)
+
+  // Tipo de documento (arriba del recuadro)
+  doc.setFontSize(12)
+  doc.setTextColor(...primaryColor)
+  doc.setFont('helvetica', 'bold')
+  const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' :
+                       invoice.documentType === 'boleta' ? 'BOLETA DE VENTA' : 'NOTA DE VENTA'
+  const titleX = boxX + (boxWidth / 2)
+  doc.text(documentTitle, titleX, boxY + 8, { align: 'center' })
+
+  // Serie y número (centro del recuadro)
+  doc.setFontSize(9)
+  doc.setTextColor(...grayDark)
+  doc.text(invoice.number || 'N/A', titleX, boxY + 14, { align: 'center' })
+
+  // Fecha (abajo del recuadro)
+  doc.setFontSize(8)
+  doc.setTextColor(...grayMedium)
+  doc.setFont('helvetica', 'normal')
+
+  let invoiceDate = new Date().toLocaleDateString('es-PE')
   if (invoice.createdAt) {
     if (invoice.createdAt.toDate) {
-      // Es un Timestamp de Firestore
       invoiceDate = formatDate(invoice.createdAt.toDate())
-    } else {
-      // Es un objeto Date normal
+    } else if (invoice.createdAt instanceof Date) {
       invoiceDate = formatDate(invoice.createdAt)
+    } else {
+      invoiceDate = formatDate(new Date(invoice.createdAt))
     }
   }
-  doc.text(`Fecha: ${invoiceDate}`, 200, yPos, { align: 'right' })
 
-  yPos += 10
+  doc.text(`Fecha: ${invoiceDate}`, titleX, boxY + 26, { align: 'center' })
+
+  // Resetear yPos después del header
+  yPos = boxY + boxHeight + 8
 
   // Línea separadora
-  doc.setDrawColor(...grayMedium)
+  doc.setDrawColor(...grayLight)
   doc.setLineWidth(0.5)
-  doc.line(20, yPos, 190, yPos)
+  doc.line(15, yPos, 195, yPos)
 
-  yPos += 10
+  yPos += 8
 
   // ========== DATOS DEL CLIENTE ==========
 
