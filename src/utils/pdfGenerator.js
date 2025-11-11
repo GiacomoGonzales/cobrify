@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import QRCode from 'qrcode'
 
 /**
  * Carga una imagen desde una URL y la convierte a base64
@@ -27,6 +28,69 @@ const loadImageAsBase64 = (url) => {
     img.onerror = reject
     img.src = url
   })
+}
+
+/**
+ * Genera el código QR para SUNAT
+ * Formato: RUC|TipoDoc|Serie|Numero|IGV|Total|Fecha|TipoDocCliente|NumDocCliente|
+ * @param {Object} invoice - Datos de la factura
+ * @param {Object} companySettings - Configuración de la empresa
+ * @returns {Promise<string>} - QR en formato base64
+ */
+const generateSunatQR = async (invoice, companySettings) => {
+  try {
+    // Tipo de documento SUNAT: 01=Factura, 03=Boleta, 07=Nota de Crédito, 08=Nota de Débito
+    const docTypeCode = invoice.documentType === 'factura' ? '01' :
+                       invoice.documentType === 'boleta' ? '03' : '00'
+
+    // Extraer serie y número del formato "F001-00000001"
+    const [serie = '', numero = ''] = (invoice.number || '').split('-')
+
+    // Tipo de documento del cliente: 6=RUC, 1=DNI, 0=Otros
+    const clientDocType = invoice.customer?.documentType === 'RUC' ? '6' :
+                         invoice.customer?.documentType === 'DNI' ? '1' : '0'
+
+    // Número de documento del cliente
+    const clientDocNumber = invoice.customer?.documentNumber || '-'
+
+    // Fecha en formato DD/MM/YYYY
+    let invoiceDate = new Date().toLocaleDateString('es-PE')
+    if (invoice.createdAt) {
+      if (invoice.createdAt.toDate) {
+        const date = invoice.createdAt.toDate()
+        invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+      } else if (invoice.createdAt instanceof Date) {
+        invoiceDate = `${String(invoice.createdAt.getDate()).padStart(2, '0')}/${String(invoice.createdAt.getMonth() + 1).padStart(2, '0')}/${invoice.createdAt.getFullYear()}`
+      }
+    }
+
+    // Formato del texto del QR según SUNAT
+    // RUC|TipoDoc|Serie|Numero|IGV|Total|Fecha|TipoDocCliente|NumDocCliente|
+    const qrData = [
+      companySettings?.ruc || '',
+      docTypeCode,
+      serie,
+      numero,
+      (invoice.igv || 0).toFixed(2),
+      (invoice.total || 0).toFixed(2),
+      invoiceDate,
+      clientDocType,
+      clientDocNumber,
+      ''
+    ].join('|')
+
+    // Generar QR como data URL
+    const qrDataUrl = await QRCode.toDataURL(qrData, {
+      width: 150,
+      margin: 1,
+      errorCorrectionLevel: 'M'
+    })
+
+    return qrDataUrl
+  } catch (error) {
+    console.error('Error generando QR:', error)
+    return null
+  }
 }
 
 /**
@@ -295,6 +359,29 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const notesLines = doc.splitTextToSize(invoice.notes, 170)
     doc.text(notesLines, 20, yPos)
     yPos += 4 * notesLines.length
+  }
+
+  // ========== CÓDIGO QR SUNAT ==========
+
+  // Generar y agregar el código QR
+  try {
+    const qrImage = await generateSunatQR(invoice, companySettings)
+    if (qrImage) {
+      // Posicionar QR en la parte inferior derecha
+      const qrSize = 35
+      const qrX = 160
+      const qrY = 245
+
+      doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
+
+      // Texto explicativo bajo el QR
+      doc.setFontSize(6)
+      doc.setTextColor(...grayMedium)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Código QR SUNAT', qrX + (qrSize / 2), qrY + qrSize + 4, { align: 'center' })
+    }
+  } catch (error) {
+    console.error('Error agregando QR al PDF:', error)
   }
 
   // ========== FOOTER ==========
