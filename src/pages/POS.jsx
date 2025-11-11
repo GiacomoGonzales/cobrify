@@ -941,7 +941,7 @@ export default function POS() {
       console.log('isNative:', isNative)
 
       if (!isNative) {
-        // En web, abrir WhatsApp Web con mensaje de texto
+        // En web, primero generar y descargar el PDF, luego abrir WhatsApp
         const phone = lastInvoiceData.customer?.phone || customerData.phone
         console.log('Teléfono del cliente:', phone)
 
@@ -950,6 +950,17 @@ export default function POS() {
           return
         }
 
+        // Generar y descargar el PDF primero
+        toast.info('Generando PDF...')
+        try {
+          await generateInvoicePDF(lastInvoiceData, companySettings)
+          toast.success('PDF descargado')
+        } catch (error) {
+          console.error('Error generando PDF:', error)
+          toast.error('Error al generar el PDF')
+        }
+
+        // Luego abrir WhatsApp con mensaje
         const cleanPhone = phone.replace(/\D/g, '')
         const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
                            lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
@@ -958,7 +969,7 @@ export default function POS() {
 
         const message = `Hola ${customerName},
 
-Gracias por tu compra. Aquí está el detalle de tu ${docTypeName}:
+Gracias por tu compra. Adjunto el comprobante en PDF.
 
 ${docTypeName}: ${lastInvoiceData.number}
 Total: ${total}
@@ -969,8 +980,13 @@ ${companySettings?.website ? companySettings.website : ''}`
 
         console.log('Abriendo WhatsApp con mensaje:', message)
         const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-        window.open(url, '_blank')
-        toast.success('Abriendo WhatsApp...')
+
+        // Pequeño delay para que el usuario vea el PDF descargado antes de abrir WhatsApp
+        setTimeout(() => {
+          window.open(url, '_blank')
+          toast.success('Abriendo WhatsApp...')
+        }, 500)
+
         return
       }
 
