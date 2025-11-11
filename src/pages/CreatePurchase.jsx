@@ -185,8 +185,8 @@ export default function CreatePurchase() {
     const newItems = [...purchaseItems]
     const costWithIGV = parseFloat(value) || 0
     newItems[index].cost = costWithIGV
-    // Calcular costo sin IGV: costo con IGV / 1.18
-    newItems[index].costWithoutIGV = costWithIGV > 0 ? costWithIGV / 1.18 : 0
+    // Calcular costo sin IGV: costo con IGV / 1.18 (redondeado a 2 decimales)
+    newItems[index].costWithoutIGV = costWithIGV > 0 ? Math.round((costWithIGV / 1.18) * 100) / 100 : 0
     setPurchaseItems(newItems)
   }
 
@@ -195,8 +195,8 @@ export default function CreatePurchase() {
     const newItems = [...purchaseItems]
     const costWithoutIGV = parseFloat(value) || 0
     newItems[index].costWithoutIGV = costWithoutIGV
-    // Calcular costo con IGV: costo sin IGV * 1.18
-    newItems[index].cost = costWithoutIGV > 0 ? costWithoutIGV * 1.18 : 0
+    // Calcular costo con IGV: costo sin IGV * 1.18 (redondeado a 2 decimales)
+    newItems[index].cost = costWithoutIGV > 0 ? Math.round((costWithoutIGV * 1.18) * 100) / 100 : 0
     setPurchaseItems(newItems)
   }
 
