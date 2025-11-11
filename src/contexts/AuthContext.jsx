@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
   const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant'
+  const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -148,7 +149,7 @@ export const AuthProvider = ({ children }) => {
             setSubscription(null)
           }
 
-          // Cargar configuración del negocio (businessMode)
+          // Cargar configuración del negocio (businessMode y settings completos)
           try {
             const businessId = businessOwnerStatus || superAdminStatus ? firebaseUser.uid : (await getUserData(firebaseUser.uid))?.ownerId || firebaseUser.uid
             const businessRef = doc(db, 'businesses', businessId)
@@ -156,10 +157,15 @@ export const AuthProvider = ({ children }) => {
             if (businessDoc.exists()) {
               const businessData = businessDoc.data()
               setBusinessMode(businessData.businessMode || 'retail')
+              setBusinessSettings(businessData) // Guardar toda la configuración
+            } else {
+              setBusinessMode('retail')
+              setBusinessSettings(null)
             }
           } catch (error) {
             console.error('Error al cargar configuración del negocio:', error)
             setBusinessMode('retail') // Fallback a retail
+            setBusinessSettings(null)
           }
         } else {
           // Usuario no autenticado
@@ -171,6 +177,8 @@ export const AuthProvider = ({ children }) => {
           setHasAccess(false)
           setUserPermissions(null)
           setAllowedPages([])
+          setBusinessMode('retail')
+          setBusinessSettings(null)
         }
       } catch (error) {
         console.error('Error en AuthContext:', error)
@@ -227,6 +235,8 @@ export const AuthProvider = ({ children }) => {
       setHasAccess(false)
       setUserPermissions(null)
       setAllowedPages([])
+      setBusinessMode('retail')
+      setBusinessSettings(null)
       navigate('/')
     } catch (error) {
       console.error('Error al cerrar sesión:', error)
@@ -294,6 +304,7 @@ export const AuthProvider = ({ children }) => {
     hasPageAccess,
     getBusinessId, // Función para obtener el ID del negocio (owner)
     businessMode, // Modo de negocio: 'retail' | 'restaurant'
+    businessSettings, // Configuración completa del negocio (incluye dispatchGuidesEnabled)
     login,
     logout,
     refreshSubscription,
