@@ -203,7 +203,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} maxWidth="6xl">
-      <div className="flex items-center justify-between mb-6 pb-4 border-b">
+      {/* Header personalizado */}
+      <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary-100 rounded-lg">
             <Truck className="w-6 h-6 text-primary-600" />
@@ -234,7 +235,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
+      {/* Form con scroll interno */}
+      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)]">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
         {/* Info sobre fechas válidas */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <div className="flex items-start gap-2">
@@ -527,36 +530,39 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             </table>
           </div>
         )}
+        </div>
 
-        {/* Botones */}
-        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 mt-6 border-t-2 border-gray-200 sticky bottom-0 bg-white -mx-2 px-2 pb-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={isSaving}
-            className="w-full sm:w-auto"
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            disabled={isSaving}
-            className="w-full sm:w-auto"
-            size="lg"
-          >
-            {isSaving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                Generando Guía...
-              </>
-            ) : (
-              <>
-                <Truck className="w-5 h-5 mr-2" />
-                Generar Guía de Remisión
-              </>
-            )}
-          </Button>
+        {/* Footer con botones - fuera del scroll */}
+        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
+          <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSaving}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSaving}
+              className="w-full sm:w-auto"
+              size="lg"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Generando Guía...
+                </>
+              ) : (
+                <>
+                  <Truck className="w-5 h-5 mr-2" />
+                  Generar Guía de Remisión
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </form>
     </Modal>
