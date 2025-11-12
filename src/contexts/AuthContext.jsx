@@ -156,29 +156,49 @@ export const AuthProvider = ({ children }) => {
           // Cargar configuración del negocio (businessMode y settings completos)
           try {
             let businessId
+            let ownerIdFromUser = null
+
             if (businessOwnerStatus || superAdminStatus) {
               businessId = firebaseUser.uid
               console.log('👑 Owner/Admin - usando propio UID como businessId:', businessId)
             } else {
-              const userData = await getUserData(firebaseUser.uid)
-              businessId = userData?.data?.ownerId || firebaseUser.uid
-              console.log('👤 Usuario secundario - ownerId:', userData?.data?.ownerId, '| businessId final:', businessId)
+              // Para usuarios secundarios, obtener el ownerId
+              const userDataResult = await getUserData(firebaseUser.uid)
+              console.log('👤 Usuario secundario - Resultado completo de getUserData:', userDataResult)
+
+              ownerIdFromUser = userDataResult?.data?.ownerId
+              businessId = ownerIdFromUser || firebaseUser.uid
+
+              console.log('👤 Usuario secundario - ownerId extraído:', ownerIdFromUser)
+              console.log('👤 Usuario secundario - businessId final:', businessId)
+              console.log('👤 Usuario secundario - Datos completos del usuario:', userDataResult?.data)
             }
 
+            console.log('🔍 Intentando cargar documento de businesses/' + businessId)
             const businessRef = doc(db, 'businesses', businessId)
             const businessDoc = await getDoc(businessRef)
+
+            console.log('🔍 Documento existe?', businessDoc.exists())
+
             if (businessDoc.exists()) {
               const businessData = businessDoc.data()
-              console.log('🏢 Configuración del negocio cargada:', { businessMode: businessData.businessMode, dispatchGuidesEnabled: businessData.dispatchGuidesEnabled })
+              console.log('🏢 Configuración del negocio cargada completa:', businessData)
+              console.log('🏢 businessMode específico:', businessData.businessMode)
+              console.log('🏢 dispatchGuidesEnabled:', businessData.dispatchGuidesEnabled)
+
               setBusinessMode(businessData.businessMode || 'retail')
               setBusinessSettings(businessData) // Guardar toda la configuración
+
+              console.log('✅ businessMode establecido a:', businessData.businessMode || 'retail')
             } else {
               console.warn('⚠️ No se encontró documento del negocio en businesses/', businessId)
+              console.warn('⚠️ Verificar que existe el documento en Firestore')
               setBusinessMode('retail')
               setBusinessSettings(null)
             }
           } catch (error) {
-            console.error('Error al cargar configuración del negocio:', error)
+            console.error('❌ Error al cargar configuración del negocio:', error)
+            console.error('❌ Stack trace:', error.stack)
             setBusinessMode('retail') // Fallback a retail
             setBusinessSettings(null)
           }
