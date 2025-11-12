@@ -828,6 +828,9 @@ export default function POS() {
         createdByEmail: user.email || '',
         // Tipo de pedido (para reportes)
         orderType: orderType,
+        // Información del mozo (si viene de una mesa)
+        waiterId: tableData?.waiterId || null,
+        waiterName: tableData?.waiterName || null,
       }
 
       const result = await createInvoice(businessId, invoiceData)
@@ -910,7 +913,30 @@ export default function POS() {
         }
       }
 
-      // 5. Si viene de una mesa, liberar la mesa automáticamente
+      // 5. Actualizar métricas del mozo (si la venta fue atendida por un mozo)
+      if (tableData?.waiterId) {
+        try {
+          const { increment } = await import('firebase/firestore')
+          const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+          const { db } = await import('@/lib/firebase')
+
+          const waiterRef = doc(db, 'businesses', businessId, 'waiters', tableData.waiterId)
+          await updateDoc(waiterRef, {
+            todaySales: increment(amounts.total),
+            todayOrders: increment(1),
+            totalSales: increment(amounts.total),
+            totalOrders: increment(1),
+            updatedAt: serverTimestamp(),
+          }).catch(err => {
+            console.warn('No se pudo actualizar métricas del mozo:', err)
+            // No fallar si no se puede actualizar las métricas
+          })
+        } catch (error) {
+          console.warn('Error al actualizar métricas del mozo:', error)
+        }
+      }
+
+      // 6. Si viene de una mesa, liberar la mesa automáticamente
       if (tableData?.tableId) {
         try {
           const releaseResult = await releaseTable(businessId, tableData.tableId)
@@ -927,7 +953,7 @@ export default function POS() {
         }
       }
 
-      // 6. Mostrar éxito
+      // 7. Mostrar éxito
       setLastInvoiceNumber(numberResult.number)
       setLastInvoiceData(invoiceData)
 

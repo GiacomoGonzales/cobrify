@@ -582,7 +582,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
                 className="qr-code"
                 includeMargin={true}
               />
-              <div style={{ fontSize: '8px', color: '#666', marginTop: '5px' }}>
+              <div style={{ fontSize: '8px', color: '#000', marginTop: '5px', fontWeight: '500' }}>
                 Escanea para validar
               </div>
             </div>

@@ -10,6 +10,7 @@ import {
   orderBy,
   serverTimestamp,
   where,
+  increment,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { createOrder, completeOrder } from './orderService'
@@ -179,6 +180,18 @@ export const occupyTable = async (businessId, tableId, occupyData) => {
       updatedAt: serverTimestamp(),
     })
 
+    // Actualizar métricas del mozo (incrementar mesas activas)
+    if (occupyData.waiterId) {
+      const waiterRef = doc(db, 'businesses', businessId, 'waiters', occupyData.waiterId)
+      await updateDoc(waiterRef, {
+        activeTables: increment(1),
+        updatedAt: serverTimestamp(),
+      }).catch(err => {
+        console.warn('No se pudo actualizar métricas del mozo:', err)
+        // No fallar si no se puede actualizar las métricas
+      })
+    }
+
     return { success: true, orderId }
   } catch (error) {
     console.error('Error al ocupar mesa:', error)
@@ -207,6 +220,18 @@ export const releaseTable = async (businessId, tableId) => {
         console.warn('No se pudo completar la orden:', orderResult.error)
         // Continuar de todos modos para liberar la mesa
       }
+    }
+
+    // Actualizar métricas del mozo (decrementar mesas activas)
+    if (tableData.waiterId) {
+      const waiterRef = doc(db, 'businesses', businessId, 'waiters', tableData.waiterId)
+      await updateDoc(waiterRef, {
+        activeTables: increment(-1),
+        updatedAt: serverTimestamp(),
+      }).catch(err => {
+        console.warn('No se pudo actualizar métricas del mozo:', err)
+        // No fallar si no se puede actualizar las métricas
+      })
     }
 
     // Liberar la mesa

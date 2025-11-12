@@ -435,7 +435,7 @@ export default function Tables() {
       if (businessSnap.exists()) {
         const businessData = businessSnap.data()
         businessInfo = {
-          tradeName: businessData.tradeName || 'RESTAURANTE',
+          tradeName: businessData.tradeName || businessData.name || 'RESTAURANTE',
           address: businessData.address || '',
           phone: businessData.phone || '',
           logoUrl: businessData.logoUrl || ''

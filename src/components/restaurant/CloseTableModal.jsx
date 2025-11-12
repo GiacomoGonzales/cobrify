@@ -46,6 +46,9 @@ export default function CloseTableModal({
         subtotal: order.subtotal,
         tax: order.tax,
         total: order.total,
+        // Información del mozo
+        waiterId: table.waiterId || order.waiterId || null,
+        waiterName: table.waiter || order.waiterName || null,
       }
     })
     handleClose()
