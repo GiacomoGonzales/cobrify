@@ -54,6 +54,19 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           print-color-adjust: exact;
         }
 
+        @media print {
+          body {
+            width: 72mm !important;
+            max-width: 72mm !important;
+            margin: 0 4mm !important;
+            padding: 3mm 2mm !important;
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            overflow: hidden;
+          }
+        }
+
         .header {
           text-align: center;
           margin-bottom: 12px;
