@@ -240,6 +240,10 @@ function Sidebar() {
   // Seleccionar menú según el modo de negocio (default: retail)
   const menuItems = businessMode === 'restaurant' ? restaurantMenuItems : retailMenuItems
 
+  // Debug: ver qué modo está activo
+  console.log('🏪 Modo de negocio:', businessMode)
+  console.log('📋 Menu items a mostrar:', menuItems.length, 'items')
+
   // Agregar opciones adicionales según el rol
   const additionalItems = [
     {
@@ -283,8 +287,12 @@ function Sidebar() {
     if (!item.pageId) return true
 
     // Verificar si tiene permiso para esta página
-    return hasPageAccess && hasPageAccess(item.pageId)
+    const hasAccess = hasPageAccess && hasPageAccess(item.pageId)
+    console.log(`🔍 Verificando acceso a "${item.label}" (${item.pageId}):`, hasAccess)
+    return hasAccess
   })
+
+  console.log('✅ Items filtrados:', filteredMenuItems.length, 'de', menuItems.length)
 
   const filteredAdditionalItems = additionalItems.filter((item) => {
     // Si es solo para admin y el usuario no es admin, no mostrar
