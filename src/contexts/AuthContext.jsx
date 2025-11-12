@@ -155,14 +155,25 @@ export const AuthProvider = ({ children }) => {
 
           // Cargar configuración del negocio (businessMode y settings completos)
           try {
-            const businessId = businessOwnerStatus || superAdminStatus ? firebaseUser.uid : (await getUserData(firebaseUser.uid))?.ownerId || firebaseUser.uid
+            let businessId
+            if (businessOwnerStatus || superAdminStatus) {
+              businessId = firebaseUser.uid
+              console.log('👑 Owner/Admin - usando propio UID como businessId:', businessId)
+            } else {
+              const userData = await getUserData(firebaseUser.uid)
+              businessId = userData?.data?.ownerId || firebaseUser.uid
+              console.log('👤 Usuario secundario - ownerId:', userData?.data?.ownerId, '| businessId final:', businessId)
+            }
+
             const businessRef = doc(db, 'businesses', businessId)
             const businessDoc = await getDoc(businessRef)
             if (businessDoc.exists()) {
               const businessData = businessDoc.data()
+              console.log('🏢 Configuración del negocio cargada:', { businessMode: businessData.businessMode, dispatchGuidesEnabled: businessData.dispatchGuidesEnabled })
               setBusinessMode(businessData.businessMode || 'retail')
               setBusinessSettings(businessData) // Guardar toda la configuración
             } else {
+              console.warn('⚠️ No se encontró documento del negocio en businesses/', businessId)
               setBusinessMode('retail')
               setBusinessSettings(null)
             }
