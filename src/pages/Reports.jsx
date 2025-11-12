@@ -311,7 +311,8 @@ export default function Reports() {
         }
         productSales[key].quantity += item.quantity || 0
         const itemRevenue = item.subtotal || ((item.quantity || 0) * itemPrice)
-        productSales[key].revenue += itemRevenue
+        // Redondear a 2 decimales para evitar errores de punto flotante
+        productSales[key].revenue = Number((productSales[key].revenue + itemRevenue).toFixed(2))
       })
     })
 
@@ -344,7 +345,8 @@ export default function Reports() {
       }
 
       customerStats[key].ordersCount += 1
-      customerStats[key].totalSpent += invoice.total || 0
+      // Redondear a 2 decimales para evitar errores de punto flotante
+      customerStats[key].totalSpent = Number((customerStats[key].totalSpent + (invoice.total || 0)).toFixed(2))
     })
 
     return Object.values(customerStats)
@@ -410,7 +412,8 @@ export default function Reports() {
       const key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`
 
       if (monthsData[key]) {
-        monthsData[key].revenue += invoice.total || 0
+        // Redondear a 2 decimales para evitar errores de punto flotante
+        monthsData[key].revenue = Number((monthsData[key].revenue + (invoice.total || 0)).toFixed(2))
         monthsData[key].count += 1
       }
     })
