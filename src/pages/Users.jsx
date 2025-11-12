@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -10,7 +11,7 @@ import Modal from '@/components/ui/Modal'
 import { useForm } from 'react-hook-form'
 import { useToast } from '@/contexts/ToastContext'
 import {
-  AVAILABLE_PAGES,
+  getAvailablePagesByMode,
   createManagedUser,
   getManagedUsers,
   updateUserPermissions,
@@ -22,6 +23,7 @@ import { formatDate } from '@/lib/utils'
 
 export default function Users() {
   const { user, isAdmin, isBusinessOwner } = useAuth()
+  const { businessMode } = useAppContext()
   const toast = useToast()
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -30,6 +32,9 @@ export default function Users() {
   const [selectedUser, setSelectedUser] = useState(null)
   const [selectedPages, setSelectedPages] = useState([])
   const [showPassword, setShowPassword] = useState(false)
+
+  // Obtener páginas disponibles según el modo del negocio
+  const availablePages = getAvailablePagesByMode(businessMode)
 
   const {
     register,
@@ -93,10 +98,10 @@ export default function Users() {
   }
 
   const selectAllPages = () => {
-    if (selectedPages.length === AVAILABLE_PAGES.length) {
+    if (selectedPages.length === availablePages.length) {
       setSelectedPages([])
     } else {
-      setSelectedPages(AVAILABLE_PAGES.map((page) => page.id))
+      setSelectedPages(availablePages.map((page) => page.id))
     }
   }
 
@@ -389,7 +394,7 @@ export default function Users() {
                 onClick={selectAllPages}
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
-                {selectedPages.length === AVAILABLE_PAGES.length
+                {selectedPages.length === availablePages.length
                   ? 'Desmarcar Todas'
                   : 'Marcar Todas'}
               </button>
@@ -401,7 +406,7 @@ export default function Users() {
 
             <div className="border border-gray-200 rounded-lg p-4 max-h-80 overflow-y-auto">
               <div className="space-y-3">
-                {AVAILABLE_PAGES.map((page) => (
+                {availablePages.map((page) => (
                   <label
                     key={page.id}
                     className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"

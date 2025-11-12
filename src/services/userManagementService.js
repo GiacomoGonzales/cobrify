@@ -18,18 +18,57 @@ import { createUserWithEmailAndPassword } from 'firebase/auth'
  */
 
 // Lista de todas las páginas/módulos disponibles en el sistema
-export const AVAILABLE_PAGES = [
-  { id: 'dashboard', name: 'Dashboard', path: '/dashboard' },
-  { id: 'pos', name: 'Punto de Venta (POS)', path: '/pos' },
-  { id: 'invoices', name: 'Facturas/Boletas', path: '/invoices' },
-  { id: 'customers', name: 'Clientes', path: '/customers' },
-  { id: 'products', name: 'Productos/Servicios', path: '/products' },
-  { id: 'purchases', name: 'Compras', path: '/purchases' },
-  { id: 'reports', name: 'Reportes', path: '/reports' },
-  { id: 'cash-register', name: 'Control de Caja', path: '/cash-register' },
-  { id: 'settings', name: 'Configuración', path: '/settings' },
-  { id: 'users', name: 'Gestión de Usuarios', path: '/users' },
+// Páginas comunes a ambos modos
+export const COMMON_PAGES = [
+  { id: 'dashboard', name: 'Dashboard', path: '/dashboard', mode: 'both' },
+  { id: 'pos', name: 'Punto de Venta (POS)', path: '/pos', mode: 'both' },
+  { id: 'invoices', name: 'Facturas/Boletas', path: '/invoices', mode: 'both' },
+  { id: 'customers', name: 'Clientes', path: '/customers', mode: 'both' },
+  { id: 'products', name: 'Productos/Servicios', path: '/products', mode: 'both' },
+  { id: 'reports', name: 'Reportes', path: '/reports', mode: 'both' },
+  { id: 'cash-register', name: 'Control de Caja', path: '/cash-register', mode: 'both' },
+  { id: 'settings', name: 'Configuración', path: '/settings', mode: 'both' },
+  { id: 'users', name: 'Gestión de Usuarios', path: '/users', mode: 'both' },
 ]
+
+// Páginas específicas de modo retail
+export const RETAIL_PAGES = [
+  { id: 'purchases', name: 'Compras', path: '/purchases', mode: 'retail' },
+  { id: 'inventory', name: 'Inventario', path: '/inventory', mode: 'retail' },
+  { id: 'suppliers', name: 'Proveedores', path: '/suppliers', mode: 'retail' },
+  { id: 'quotations', name: 'Cotizaciones', path: '/quotations', mode: 'retail' },
+]
+
+// Páginas específicas de modo restaurante
+export const RESTAURANT_PAGES = [
+  { id: 'tables', name: 'Mesas', path: '/tables', mode: 'restaurant' },
+  { id: 'waiters', name: 'Mozos', path: '/waiters', mode: 'restaurant' },
+  { id: 'orders', name: 'Órdenes Activas', path: '/orders', mode: 'restaurant' },
+  { id: 'kitchen', name: 'Vista de Cocina', path: '/kitchen', mode: 'restaurant' },
+  { id: 'ingredients', name: 'Ingredientes', path: '/ingredients', mode: 'restaurant' },
+  { id: 'recipes', name: 'Recetas', path: '/recipes', mode: 'restaurant' },
+]
+
+// Lista completa de todas las páginas
+export const AVAILABLE_PAGES = [
+  ...COMMON_PAGES,
+  ...RETAIL_PAGES,
+  ...RESTAURANT_PAGES,
+]
+
+/**
+ * Obtener páginas disponibles según el modo del negocio
+ * @param {string} businessMode - 'retail' o 'restaurant'
+ * @returns {array} - Array de páginas disponibles
+ */
+export const getAvailablePagesByMode = (businessMode) => {
+  if (businessMode === 'restaurant') {
+    return [...COMMON_PAGES, ...RESTAURANT_PAGES]
+  } else {
+    // Modo retail o por defecto
+    return [...COMMON_PAGES, ...RETAIL_PAGES]
+  }
+}
 
 /**
  * Crear un nuevo usuario con permisos personalizados
