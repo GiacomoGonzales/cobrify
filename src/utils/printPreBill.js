@@ -42,10 +42,10 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         body {
-          font-family: 'Courier New', monospace;
-          font-size: 14px;
-          font-weight: 700;
-          line-height: 1.5;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+          font-size: 11px;
+          font-weight: 500;
+          line-height: 1.4;
           padding: 8px;
           width: 80mm;
           background: white;
@@ -75,28 +75,31 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         .header .logo {
-          width: 120px;
-          height: 120px;
-          margin: 0 auto 10px;
+          max-width: 100px;
+          max-height: 100px;
+          width: auto;
+          height: auto;
+          margin: 0 auto 4px;
           object-fit: contain;
+          display: block;
         }
 
         .header h1 {
-          font-size: 22px;
-          font-weight: 900;
-          margin-bottom: 8px;
-          letter-spacing: 2px;
+          font-size: 18pt;
+          font-weight: 700;
+          margin-bottom: 6px;
+          letter-spacing: 1px;
         }
 
         .header .business-name {
-          font-size: 16px;
-          font-weight: 900;
-          margin-bottom: 5px;
+          font-size: 13pt;
+          font-weight: 700;
+          margin-bottom: 4px;
         }
 
         .header .info {
-          font-size: 13px;
-          font-weight: 700;
+          font-size: 9pt;
+          font-weight: 500;
           color: #000;
           margin: 2px 0;
         }
@@ -106,23 +109,24 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         .section-title {
-          font-weight: 900;
-          font-size: 14px;
-          margin-bottom: 6px;
+          font-weight: 700;
+          font-size: 10pt;
+          margin-bottom: 5px;
           text-transform: uppercase;
+          letter-spacing: 0.3px;
         }
 
         .info-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 5px;
-          font-size: 14px;
-          font-weight: 700;
+          margin-bottom: 3px;
+          font-size: 9pt;
+          font-weight: 500;
         }
 
         .info-row strong {
-          font-weight: 900;
-          font-size: 16px;
+          font-weight: 700;
+          font-size: 10pt;
         }
 
         .items-table {
@@ -133,36 +137,36 @@ export const printPreBill = (table, order, businessInfo = {}) => {
 
         .items-table th {
           text-align: left;
-          border-bottom: 2px solid #000;
-          padding: 6px 0;
-          font-weight: 900;
-          font-size: 14px;
+          border-bottom: 1px solid #000;
+          padding: 5px 0;
+          font-weight: 700;
+          font-size: 9pt;
         }
 
         .items-table td {
-          padding: 6px 0;
-          border-bottom: 1px dashed #666;
-          font-size: 14px;
-          font-weight: 700;
+          padding: 5px 0;
+          border-bottom: 1px dotted #ccc;
+          font-size: 9pt;
+          font-weight: 500;
         }
 
         .items-table .qty {
           width: 35px;
           text-align: center;
-          font-weight: 900;
-          font-size: 15px;
+          font-weight: 600;
+          font-size: 9pt;
         }
 
         .items-table .item {
           width: auto;
-          font-weight: 700;
+          font-weight: 600;
         }
 
         .items-table .price {
           width: 70px;
           text-align: right;
-          font-weight: 900;
-          font-size: 14px;
+          font-weight: 600;
+          font-size: 9pt;
         }
 
         .totals {
@@ -174,17 +178,17 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         .totals .row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 6px;
-          font-size: 15px;
-          font-weight: 800;
+          margin-bottom: 4px;
+          font-size: 10pt;
+          font-weight: 600;
         }
 
         .totals .total {
-          font-size: 18px;
-          font-weight: 900;
+          font-size: 12pt;
+          font-weight: 700;
           border-top: 2px solid #000;
           padding-top: 8px;
-          margin-top: 8px;
+          margin-top: 6px;
         }
 
         .footer {
@@ -192,15 +196,15 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           margin-top: 20px;
           padding-top: 12px;
           border-top: 3px double #000;
-          font-size: 13px;
-          font-weight: 700;
+          font-size: 9pt;
+          font-weight: 500;
         }
 
         .footer .precuenta {
-          font-size: 20px;
-          font-weight: 900;
+          font-size: 14pt;
+          font-weight: 700;
           margin-bottom: 12px;
-          letter-spacing: 1px;
+          letter-spacing: 0.5px;
         }
 
         @media print {

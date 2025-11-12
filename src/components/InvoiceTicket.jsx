@@ -35,7 +35,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
     const tipoDoc = getDocumentTypeCode()
     const serie = invoice.series || 'B001'
     const numero = invoice.number || '1'
-    const igv = (invoice.tax || 0).toFixed(2)
+    const igv = (invoice.igv || invoice.tax || 0).toFixed(2)
     const total = (invoice.total || 0).toFixed(2)
 
     // Formatear fecha en formato ISO (YYYY-MM-DD)
@@ -422,11 +422,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           />
         )}
 
-        <div className="company-name">{companySettings?.businessName || 'MI EMPRESA'}</div>
-        {companySettings?.name && (
-          <div className="company-info">{companySettings.name}</div>
-        )}
+        <div className="company-name">{companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
         <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
+        {companySettings?.businessName && (
+          <div className="company-info">{companySettings.businessName}</div>
+        )}
         <div className="company-info">{companySettings?.address || 'Dirección no configurada'}</div>
         {companySettings?.phone && (
           <div className="company-info">Tel: {companySettings.phone}</div>
@@ -512,11 +512,6 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
               {item.code && (
                 <div className="item-code">Código: {item.code}</div>
               )}
-              {item.notes && (
-                <div className="item-code" style={{ color: '#d97706', fontWeight: '600', marginTop: '2px' }}>
-                  ⚠ {item.notes}
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -530,7 +525,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         </div>
         <div className="total-row">
           <span>IGV (18%):</span>
-          <span>{formatCurrency(invoice.tax || 0)}</span>
+          <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
         </div>
         <div className="total-row final">
           <span>TOTAL A PAGAR:</span>

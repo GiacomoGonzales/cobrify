@@ -117,10 +117,13 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
         }
 
         .kitchen-logo {
-          width: 120px;
-          height: 120px;
-          margin: 0 auto 10px;
+          max-width: 100px;
+          max-height: 100px;
+          width: auto;
+          height: auto;
+          margin: 0 auto 4px;
           object-fit: contain;
+          display: block;
         }
 
         .kitchen-title {
@@ -219,10 +222,10 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
         .item-notes {
           margin-top: 6px;
           padding: 6px;
-          background: #fff9e6;
-          border: 2px solid #ff9800;
+          background: #fff;
+          border: 3px double #000;
           font-size: 10pt;
-          font-weight: 700;
+          font-weight: 900;
           color: #000;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
@@ -230,8 +233,9 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
 
         .notes-label {
           font-weight: 900;
-          color: #ff6600;
+          color: #000;
           margin-bottom: 3px;
+          text-decoration: underline;
         }
 
         .kitchen-footer {
