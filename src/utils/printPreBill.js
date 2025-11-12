@@ -212,7 +212,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
     <body>
       <div class="header">
         ${businessInfo.logoUrl ? `<img src="${businessInfo.logoUrl}" alt="Logo" class="logo" />` : ''}
-        <div class="business-name">${businessInfo.tradeName || businessInfo.name || 'RESTAURANTE'}</div>
+        <div class="business-name">${businessInfo.tradeName || 'RESTAURANTE'}</div>
         <div class="info">${businessInfo.address || ''}</div>
         <div class="info">${businessInfo.phone || ''}</div>
         <h1>PRECUENTA</h1>

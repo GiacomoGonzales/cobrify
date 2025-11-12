@@ -426,7 +426,6 @@ export default function Tables() {
       const businessSnap = await getDoc(businessRef)
 
       let businessInfo = {
-        name: 'RESTAURANTE',
         tradeName: 'RESTAURANTE',
         address: '',
         phone: '',
@@ -436,12 +435,12 @@ export default function Tables() {
       if (businessSnap.exists()) {
         const businessData = businessSnap.data()
         businessInfo = {
-          name: businessData.businessName || 'RESTAURANTE',
-          tradeName: businessData.tradeName || businessData.businessName || 'RESTAURANTE',
+          tradeName: businessData.tradeName || 'RESTAURANTE',
           address: businessData.address || '',
           phone: businessData.phone || '',
           logoUrl: businessData.logoUrl || ''
         }
+        console.log('📄 Datos del negocio para precuenta:', businessInfo)
       }
 
       printPreBill(selectedTable, selectedOrder, businessInfo)
