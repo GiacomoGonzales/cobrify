@@ -437,7 +437,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
         <div className="document-type">{getDocumentTypeName()}</div>
         <div className="document-number">
-          {invoice.series}-{invoice.number}
+          {invoice.number}
         </div>
       </div>
 
