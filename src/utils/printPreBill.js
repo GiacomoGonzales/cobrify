@@ -43,122 +43,157 @@ export const printPreBill = (table, order, businessInfo = {}) => {
 
         body {
           font-family: 'Courier New', monospace;
-          font-size: 12px;
-          line-height: 1.4;
-          padding: 10px;
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.5;
+          padding: 8px;
           width: 80mm;
           background: white;
+          color: #000;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
 
         .header {
           text-align: center;
-          margin-bottom: 15px;
-          border-bottom: 2px dashed #000;
+          margin-bottom: 12px;
+          border-bottom: 3px double #000;
           padding-bottom: 10px;
         }
 
         .header h1 {
-          font-size: 18px;
-          font-weight: bold;
-          margin-bottom: 5px;
+          font-size: 22px;
+          font-weight: 900;
+          margin-bottom: 8px;
+          letter-spacing: 2px;
         }
 
         .header .business-name {
-          font-size: 14px;
-          font-weight: bold;
-          margin-bottom: 3px;
+          font-size: 16px;
+          font-weight: 900;
+          margin-bottom: 5px;
         }
 
         .header .info {
-          font-size: 11px;
-          color: #333;
+          font-size: 13px;
+          font-weight: 700;
+          color: #000;
+          margin: 2px 0;
         }
 
         .section {
-          margin-bottom: 10px;
+          margin-bottom: 12px;
         }
 
         .section-title {
-          font-weight: bold;
-          margin-bottom: 5px;
+          font-weight: 900;
+          font-size: 14px;
+          margin-bottom: 6px;
           text-transform: uppercase;
         }
 
         .info-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 3px;
+          margin-bottom: 5px;
+          font-size: 14px;
+          font-weight: 700;
+        }
+
+        .info-row strong {
+          font-weight: 900;
+          font-size: 16px;
         }
 
         .items-table {
           width: 100%;
           border-collapse: collapse;
-          margin: 10px 0;
+          margin: 12px 0;
         }
 
         .items-table th {
           text-align: left;
-          border-bottom: 1px solid #000;
-          padding: 5px 0;
-          font-weight: bold;
+          border-bottom: 2px solid #000;
+          padding: 6px 0;
+          font-weight: 900;
+          font-size: 14px;
         }
 
         .items-table td {
-          padding: 5px 0;
-          border-bottom: 1px dashed #ccc;
+          padding: 6px 0;
+          border-bottom: 1px dashed #666;
+          font-size: 14px;
+          font-weight: 700;
         }
 
         .items-table .qty {
-          width: 30px;
+          width: 35px;
           text-align: center;
+          font-weight: 900;
+          font-size: 15px;
         }
 
         .items-table .item {
           width: auto;
+          font-weight: 700;
         }
 
         .items-table .price {
-          width: 60px;
+          width: 70px;
           text-align: right;
+          font-weight: 900;
+          font-size: 14px;
         }
 
         .totals {
           margin-top: 15px;
-          border-top: 2px solid #000;
-          padding-top: 10px;
+          border-top: 3px double #000;
+          padding-top: 12px;
         }
 
         .totals .row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 5px;
+          margin-bottom: 6px;
+          font-size: 15px;
+          font-weight: 800;
         }
 
         .totals .total {
-          font-size: 14px;
-          font-weight: bold;
-          border-top: 1px solid #000;
-          padding-top: 5px;
-          margin-top: 5px;
+          font-size: 18px;
+          font-weight: 900;
+          border-top: 2px solid #000;
+          padding-top: 8px;
+          margin-top: 8px;
         }
 
         .footer {
           text-align: center;
           margin-top: 20px;
-          padding-top: 10px;
-          border-top: 2px dashed #000;
-          font-size: 11px;
+          padding-top: 12px;
+          border-top: 3px double #000;
+          font-size: 13px;
+          font-weight: 700;
         }
 
         .footer .precuenta {
-          font-size: 16px;
-          font-weight: bold;
-          margin-bottom: 10px;
+          font-size: 20px;
+          font-weight: 900;
+          margin-bottom: 12px;
+          letter-spacing: 1px;
         }
 
         @media print {
           body {
             width: 80mm;
+            font-weight: 700;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          * {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
 
           .no-print {
@@ -212,8 +247,8 @@ export const printPreBill = (table, order, businessInfo = {}) => {
             ${item.notes ? `
               <tr>
                 <td></td>
-                <td colspan="2" style="font-size: 10px; font-style: italic; padding: 0 0 5px 0;">
-                  Nota: ${item.notes}
+                <td colspan="2" style="font-size: 12px; font-weight: 700; font-style: italic; padding: 2px 0 6px 0; color: #000;">
+                  ⚠ ${item.notes}
                 </td>
               </tr>
             ` : ''}
