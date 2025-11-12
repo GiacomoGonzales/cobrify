@@ -1143,7 +1143,7 @@ export default function Products() {
                   </TableHead>
                   <TableHead className="w-24">Código</TableHead>
                   <TableHead className="min-w-[180px]">Nombre</TableHead>
-                  <TableHead className="hidden lg:table-cell w-48">Descripción</TableHead>
+                  <TableHead className="hidden lg:table-cell max-w-xs">Descripción</TableHead>
                   <TableHead className="w-28">Precio</TableHead>
                   <TableHead className="hidden xl:table-cell w-24">Utilidad</TableHead>
                   <TableHead className="hidden md:table-cell w-32">Categoría</TableHead>
@@ -1179,8 +1179,8 @@ export default function Products() {
                         <TableCell>
                           <p className="text-sm font-medium truncate">{product.name}</p>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          <p className="text-xs text-gray-600 truncate">
+                        <TableCell className="hidden lg:table-cell max-w-xs">
+                          <p className="text-xs text-gray-600 line-clamp-2">
                             {product.description || '-'}
                           </p>
                         </TableCell>
