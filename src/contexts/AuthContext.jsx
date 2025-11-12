@@ -89,10 +89,12 @@ export const AuthProvider = ({ children }) => {
           if (!superAdminStatus && !businessOwnerStatus) {
             try {
               const userDataResult = await getUserData(firebaseUser.uid)
+              console.log('📋 Datos del usuario secundario:', userDataResult)
               if (userDataResult.success && userDataResult.data) {
                 const userData = userDataResult.data
                 setUserPermissions(userData)
                 setAllowedPages(userData.allowedPages || [])
+                console.log('✅ Permisos cargados:', userData.allowedPages)
 
                 // Si el usuario no está activo, cerrar sesión
                 if (!userData.isActive) {
@@ -101,6 +103,7 @@ export const AuthProvider = ({ children }) => {
                   return
                 }
               } else {
+                console.warn('⚠️ No se encontraron datos de usuario en Firestore')
                 // Usuario no tiene datos en Firestore, permitir acceso total temporalmente
                 setAllowedPages([])
               }
@@ -111,6 +114,7 @@ export const AuthProvider = ({ children }) => {
           } else {
             // Super Admin o Business Owner tienen acceso total
             setAllowedPages([])
+            console.log('👑 Business Owner o Admin - Acceso total')
           }
 
           // Obtener suscripción con timeout
