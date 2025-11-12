@@ -61,6 +61,13 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           padding-bottom: 10px;
         }
 
+        .header .logo {
+          width: 60px;
+          height: 60px;
+          margin: 0 auto 8px;
+          object-fit: contain;
+        }
+
         .header h1 {
           font-size: 22px;
           font-weight: 900;
@@ -204,7 +211,8 @@ export const printPreBill = (table, order, businessInfo = {}) => {
     </head>
     <body>
       <div class="header">
-        <div class="business-name">${businessInfo.name || 'RESTAURANTE'}</div>
+        ${businessInfo.logoUrl ? `<img src="${businessInfo.logoUrl}" alt="Logo" class="logo" />` : ''}
+        <div class="business-name">${businessInfo.tradeName || businessInfo.name || 'RESTAURANTE'}</div>
         <div class="info">${businessInfo.address || ''}</div>
         <div class="info">${businessInfo.phone || ''}</div>
         <h1>PRECUENTA</h1>

@@ -116,6 +116,13 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
           padding-bottom: 8px;
         }
 
+        .kitchen-logo {
+          width: 60px;
+          height: 60px;
+          margin: 0 auto 8px;
+          object-fit: contain;
+        }
+
         .kitchen-title {
           font-size: 18pt;
           font-weight: 900;
@@ -245,9 +252,16 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
 
       {/* HEADER */}
       <div className="kitchen-header">
+        {companySettings?.logoUrl && (
+          <img
+            src={companySettings.logoUrl}
+            alt="Logo"
+            className="kitchen-logo"
+          />
+        )}
         <div className="kitchen-title">COMANDA</div>
         <div className="kitchen-subtitle">
-          {companySettings?.businessName || companySettings?.name || 'RESTAURANTE'}
+          {companySettings?.tradeName || companySettings?.name || 'RESTAURANTE'}
         </div>
       </div>
 
