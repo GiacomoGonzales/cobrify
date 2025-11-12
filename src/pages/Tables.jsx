@@ -28,7 +28,7 @@ import {
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder } from '@/services/orderService'
-import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export default function Tables() {
@@ -413,18 +413,35 @@ export default function Tables() {
     }
   }
 
-  const handlePrintPreBill = () => {
+  const handlePrintPreBill = async () => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
       return
     }
 
     try {
-      // TODO: Obtener información del negocio desde el contexto
-      const businessInfo = {
-        name: 'MI RESTAURANTE',
+      // Obtener información del negocio desde Firestore
+      const businessId = getBusinessId()
+      const businessRef = doc(db, 'businesses', businessId)
+      const businessSnap = await getDoc(businessRef)
+
+      let businessInfo = {
+        name: 'RESTAURANTE',
+        tradeName: 'RESTAURANTE',
         address: '',
-        phone: ''
+        phone: '',
+        logoUrl: ''
+      }
+
+      if (businessSnap.exists()) {
+        const businessData = businessSnap.data()
+        businessInfo = {
+          name: businessData.businessName || 'RESTAURANTE',
+          tradeName: businessData.tradeName || businessData.businessName || 'RESTAURANTE',
+          address: businessData.address || '',
+          phone: businessData.phone || '',
+          logoUrl: businessData.logoUrl || ''
+        }
       }
 
       printPreBill(selectedTable, selectedOrder, businessInfo)

@@ -117,9 +117,9 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
         }
 
         .kitchen-logo {
-          width: 60px;
-          height: 60px;
-          margin: 0 auto 8px;
+          width: 120px;
+          height: 120px;
+          margin: 0 auto 10px;
           object-fit: contain;
         }
 
