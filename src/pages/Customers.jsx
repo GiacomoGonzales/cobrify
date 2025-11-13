@@ -306,15 +306,15 @@ export default function Customers() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Total Clientes</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{customers.length}</p>
               </div>
-              <div className="p-3 bg-primary-100 rounded-lg">
+              <div className="p-3 bg-primary-100 rounded-lg flex-shrink-0">
                 <User className="w-6 h-6 text-primary-600" />
               </div>
             </div>
@@ -323,13 +323,13 @@ export default function Customers() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Total Pedidos</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
                   {customers.reduce((sum, c) => sum + (c.ordersCount || 0), 0)}
                 </p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
+              <div className="p-3 bg-blue-100 rounded-lg flex-shrink-0">
                 <ShoppingCart className="w-6 h-6 text-blue-600" />
               </div>
             </div>
@@ -338,13 +338,13 @@ export default function Customers() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Ingresos Totales</p>
                 <p className="text-xl font-bold text-gray-900 mt-2">
                   {formatCurrency(customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0))}
                 </p>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg">
+              <div className="p-3 bg-green-100 rounded-lg flex-shrink-0">
                 <DollarSign className="w-6 h-6 text-green-600" />
               </div>
             </div>
@@ -353,7 +353,7 @@ export default function Customers() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-600">Promedio por Cliente</p>
                 <p className="text-xl font-bold text-gray-900 mt-2">
                   {formatCurrency(
@@ -363,7 +363,7 @@ export default function Customers() {
                   )}
                 </p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
+              <div className="p-3 bg-purple-100 rounded-lg flex-shrink-0">
                 <TrendingUp className="w-6 h-6 text-purple-600" />
               </div>
             </div>
