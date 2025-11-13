@@ -488,6 +488,8 @@ export default function Tables() {
       const result = await releaseTable(getBusinessId(), selectedTable.id)
       if (result.success) {
         toast.success('Mesa cerrada exitosamente')
+        // Recargar las mesas para actualizar el estado
+        loadTables()
         // Cerrar el modal de acciones y limpiar selección
         setIsActionModalOpen(false)
         setSelectedTable(null)
