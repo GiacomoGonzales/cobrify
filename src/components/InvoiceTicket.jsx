@@ -119,15 +119,15 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             position: absolute;
             left: 0;
             top: 0;
-            width: 72mm !important;
-            max-width: 72mm !important;
-            margin: 0 4mm !important;
-            padding: 3mm 2mm !important;
+            width: 70mm !important;
+            max-width: 70mm !important;
+            margin: 0 auto !important;
+            padding: 2mm 1.5mm !important;
             box-sizing: border-box;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
             font-size: 8.5pt;
             font-weight: 500;
-            line-height: 1.3;
+            line-height: 1.25;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: hidden;
@@ -195,10 +195,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .company-logo {
-          width: 50px;
-          height: 50px;
+          max-width: 120px;
+          max-height: 120px;
+          width: auto;
+          height: auto;
           object-fit: contain;
-          margin: 0 auto 6px auto;
+          margin: 0 auto 4px auto;
           display: block;
         }
 
