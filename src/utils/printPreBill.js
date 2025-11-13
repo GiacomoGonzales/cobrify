@@ -206,24 +206,6 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           margin-bottom: 12px;
           letter-spacing: 0.5px;
         }
-
-        @media print {
-          body {
-            width: 80mm;
-            font-weight: 700;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-
-          * {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-
-          .no-print {
-            display: none;
-          }
-        }
       </style>
     </head>
     <body>
