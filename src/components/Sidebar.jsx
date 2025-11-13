@@ -93,6 +93,12 @@ function Sidebar() {
       pageId: 'customers',
     },
     {
+      path: '/vendedores',
+      icon: UserCog,
+      label: 'Vendedores',
+      pageId: 'sellers',
+    },
+    {
       path: '/productos',
       icon: Package,
       label: 'Productos',

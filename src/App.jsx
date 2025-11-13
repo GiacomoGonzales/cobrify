@@ -37,6 +37,7 @@ import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
 // Restaurant pages
 import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
+import Sellers from './pages/Sellers'
 import Orders from './pages/Orders'
 import Kitchen from './pages/Kitchen'
 import Ingredients from './pages/Ingredients'
@@ -78,6 +79,7 @@ function App() {
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
@@ -110,6 +112,7 @@ function App() {
               <Route path="cocina" element={<Kitchen />} />
               <Route path="facturas" element={<InvoiceList />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
@@ -138,6 +141,7 @@ function App() {
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
               <Route path="almacenes" element={<Warehouses />} />
