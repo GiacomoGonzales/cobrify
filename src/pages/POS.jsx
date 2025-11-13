@@ -339,6 +339,34 @@ export default function POS() {
     }
   }, [searchTerm, selectedCategoryFilter])
 
+  // Auto-agregar producto cuando se escanea código de barras
+  useEffect(() => {
+    // Solo ejecutar si hay un término de búsqueda
+    if (!searchTerm || searchTerm.length < 3) return
+
+    // Buscar productos que coincidan exactamente con el código
+    const exactMatches = products.filter(p =>
+      p.code?.toLowerCase() === searchTerm.toLowerCase()
+    )
+
+    // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
+    if (exactMatches.length === 1) {
+      const product = exactMatches[0]
+
+      // Verificar que el producto tenga stock disponible
+      if (product.stock > 0 || !product.trackStock) {
+        addToCart(product)
+        // Limpiar el campo de búsqueda después de agregar
+        setSearchTerm('')
+        // Mostrar feedback al usuario
+        toast.success(`${product.name} agregado al carrito`)
+      } else {
+        toast.error(`${product.name} no tiene stock disponible`)
+        setSearchTerm('')
+      }
+    }
+  }, [searchTerm, products])
+
   const addToCart = product => {
     // If product has variants, show variant selection modal
     if (product.hasVariants) {
