@@ -31,11 +31,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
   // Formatear el número de documento con serie
   const getFormattedDocumentNumber = () => {
     // Si ya tiene el formato completo (contiene guión), retornarlo tal cual
-    if (invoice.number && invoice.number.includes('-')) {
+    if (invoice.number && invoice.number.toString().includes('-')) {
       return invoice.number
     }
 
-    // Para notas de venta, usar serie N001
+    // Para notas de venta sin formato, usar serie N001
     if (invoice.documentType === 'nota_venta') {
       const series = invoice.series || 'N001'
       const number = invoice.number || '1'
@@ -44,13 +44,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
       return `${series}-${paddedNumber}`
     }
 
-    // Para boletas y facturas, usar la serie existente
+    // Para boletas y facturas sin formato, usar la serie existente
     const series = invoice.series || 'B001'
     const number = invoice.number || '1'
-    // Si el número ya está formateado (es un string largo), retornarlo
-    if (number.length > 6) {
-      return number
-    }
     // Pad number to 8 digits
     const paddedNumber = number.toString().padStart(8, '0')
     return `${series}-${paddedNumber}`
