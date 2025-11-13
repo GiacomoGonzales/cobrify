@@ -94,6 +94,18 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         return
       }
 
+      // Determinar si debe controlar stock
+      const trackStockValue = row.trackStock || row.controlarStock || row.ControlarStock || row.CONTROLAR_STOCK || row.track_stock || row.TRACK_STOCK
+      let trackStock = true // Por defecto controla stock
+
+      if (trackStockValue !== undefined && trackStockValue !== null && trackStockValue !== '') {
+        const valueStr = String(trackStockValue).toLowerCase().trim()
+        // Valores que indican NO controlar stock: no, false, 0, n
+        if (valueStr === 'no' || valueStr === 'false' || valueStr === '0' || valueStr === 'n') {
+          trackStock = false
+        }
+      }
+
       // Mapear campos (soportar diferentes nombres de columnas)
       const product = {
         code: String(row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim(),
@@ -103,6 +115,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
+        trackStock: trackStock,
         hasVariants: false,
         variantAttributes: [],
         variants: []
@@ -181,20 +194,32 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     const template = [
       {
         codigo: 'PROD001',
-        nombre: 'Producto Ejemplo',
+        nombre: 'Producto con Stock',
         descripcion: 'Descripción del producto',
         precio: 10.50,
         stock: 100,
+        trackStock: 'SI',
         unidad: 'UNIDAD',
         categoria: 'Categoría Ejemplo'
       },
       {
         codigo: 'PROD002',
-        nombre: 'Otro Producto',
-        descripcion: '',
+        nombre: 'Servicio (Sin Stock)',
+        descripcion: 'No controla inventario',
         precio: 25.00,
+        stock: '',
+        trackStock: 'NO',
+        unidad: 'SERVICIO',
+        categoria: 'Servicios'
+      },
+      {
+        codigo: 'PROD003',
+        nombre: 'Producto Normal',
+        descripcion: '',
+        precio: 15.00,
         stock: 50,
-        unidad: 'KILOGRAMO',
+        trackStock: 'SI',
+        unidad: 'UNIDAD',
         categoria: ''
       }
     ]
@@ -210,6 +235,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       { wch: 40 }, // descripcion
       { wch: 10 }, // precio
       { wch: 10 }, // stock
+      { wch: 15 }, // trackStock
       { wch: 15 }, // unidad
       { wch: 20 }  // categoria
     ]
@@ -246,7 +272,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: codigo, nombre, descripcion, precio, stock, unidad, categoria
+            Columnas: codigo, nombre, descripcion, precio, stock, trackStock (SI/NO), unidad, categoria
           </p>
         </div>
 
@@ -319,6 +345,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nombre</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Precio</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stock</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Control Stock</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Unidad</th>
                   </tr>
                 </thead>
@@ -329,6 +356,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
                       <td className="px-3 py-2 text-sm text-gray-900">{product.name}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">S/ {product.price.toFixed(2)}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{product.stock ?? 'N/A'}</td>
+                      <td className="px-3 py-2 text-sm">
+                        {product.trackStock ? (
+                          <span className="text-green-600 font-medium">SÍ</span>
+                        ) : (
+                          <span className="text-gray-400">NO</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-sm text-gray-600">{product.unit}</td>
                     </tr>
                   ))}
