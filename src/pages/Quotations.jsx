@@ -396,7 +396,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             Gestiona tus cotizaciones y conviértelas en facturas
           </p>
         </div>
-        <Link to="/cotizaciones/nueva" className="w-full sm:w-auto">
+        <Link to="/app/cotizaciones/nueva" className="w-full sm:w-auto">
           <Button className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Nueva Cotización
@@ -502,7 +502,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 : 'Comienza creando tu primera cotización'}
             </p>
             {!searchTerm && filterStatus === 'all' && (
-              <Link to="/cotizaciones/nueva">
+              <Link to="/app/cotizaciones/nueva">
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   Nueva Cotización
