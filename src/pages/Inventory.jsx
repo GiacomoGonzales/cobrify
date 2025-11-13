@@ -374,12 +374,6 @@ export default function Inventory() {
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
-          <Link to="/app/productos" className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar Producto
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -536,16 +530,8 @@ export default function Inventory() {
               <p className="text-gray-600 mb-4">
                 {searchTerm || filterCategory !== 'all' || filterStatus !== 'all'
                   ? 'Intenta con otros filtros de búsqueda'
-                  : 'Comienza agregando productos a tu catálogo'}
+                  : 'Ve a la página de Productos para agregar productos a tu catálogo'}
               </p>
-              {!searchTerm && filterCategory === 'all' && filterStatus === 'all' && (
-                <Link to="/app/productos">
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Agregar Producto
-                  </Button>
-                </Link>
-              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
