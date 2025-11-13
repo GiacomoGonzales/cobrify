@@ -1446,7 +1446,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {/* Campos para BOLETA */}
                 {documentType === 'boleta' && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           DNI
@@ -1548,7 +1548,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {/* Campos para FACTURA */}
                 {documentType === 'factura' && (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           RUC <span className="text-red-500">*</span>
