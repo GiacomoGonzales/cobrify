@@ -77,15 +77,15 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
             position: absolute;
             left: 0;
             top: 0;
-            width: 72mm !important;
-            max-width: 72mm !important;
+            width: 70mm !important;
+            max-width: 70mm !important;
             margin: 0 auto !important;
-            padding: 2mm 3mm !important;
+            padding: 2mm 1.5mm !important;
             box-sizing: border-box;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 9pt;
+            font-size: 8.5pt;
             font-weight: 600;
-            line-height: 1.3;
+            line-height: 1.25;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: hidden;
@@ -117,11 +117,11 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
         }
 
         .kitchen-logo {
-          max-width: 140px;
-          max-height: 140px;
+          max-width: 120px;
+          max-height: 120px;
           width: auto;
           height: auto;
-          margin: 0 auto 6px;
+          margin: 0 auto 4px;
           object-fit: contain;
           display: block;
         }

@@ -56,10 +56,10 @@ export const printPreBill = (table, order, businessInfo = {}) => {
 
         @media print {
           body {
-            width: 72mm !important;
-            max-width: 72mm !important;
+            width: 70mm !important;
+            max-width: 70mm !important;
             margin: 0 auto !important;
-            padding: 2mm 3mm !important;
+            padding: 2mm 1.5mm !important;
             box-sizing: border-box;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -75,11 +75,11 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         .header .logo {
-          max-width: 140px;
-          max-height: 140px;
+          max-width: 120px;
+          max-height: 120px;
           width: auto;
           height: auto;
-          margin: 0 auto 6px;
+          margin: 0 auto 4px;
           object-fit: contain;
           display: block;
         }
