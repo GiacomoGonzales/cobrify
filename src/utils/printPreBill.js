@@ -75,8 +75,8 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         .header .logo {
-          max-width: 120px;
-          max-height: 120px;
+          max-width: 240px;
+          max-height: 240px;
           width: auto;
           height: auto;
           margin: 0 auto 4px;
