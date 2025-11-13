@@ -877,7 +877,8 @@ export default function POS() {
           console.log('🚀 Enviando automáticamente a SUNAT...')
           toast.info('Enviando comprobante a SUNAT...', 3000)
 
-          await sendInvoiceToSunat(user.uid, invoiceId)
+          // Usar businessId para obtener las credenciales correctas (del owner)
+          await sendInvoiceToSunat(businessId, invoiceId)
 
           console.log('✅ Comprobante enviado a SUNAT exitosamente')
           toast.success('Comprobante enviado a SUNAT exitosamente', 5000)

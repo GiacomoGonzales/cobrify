@@ -125,10 +125,39 @@ export const sendInvoiceToSunat = onRequest(
         return
       }
 
-      // Verificar que el usuario autenticado coincida con el userId
+      // Verificar autorización: debe ser el owner O un usuario secundario del owner
       if (authenticatedUserId !== userId) {
-        res.status(403).json({ error: 'No autorizado para esta operación' })
-        return
+        // Verificar si el usuario autenticado es un sub-usuario del owner
+        try {
+          const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+
+          if (!userDoc.exists) {
+            res.status(403).json({ error: 'Usuario no encontrado' })
+            return
+          }
+
+          const userData = userDoc.data()
+
+          // Verificar si es un sub-usuario del owner (ownerId coincide con userId)
+          if (userData.ownerId !== userId) {
+            res.status(403).json({
+              error: 'No autorizado para esta operación. Usuario no pertenece a este negocio.'
+            })
+            return
+          }
+
+          // Verificar que el sub-usuario esté activo
+          if (!userData.isActive) {
+            res.status(403).json({ error: 'Usuario inactivo' })
+            return
+          }
+
+          console.log(`✅ Sub-usuario autorizado: ${authenticatedUserId} del owner: ${userId}`)
+        } catch (error) {
+          console.error('Error al verificar sub-usuario:', error)
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
       }
 
       console.log(`📤 Iniciando envío a SUNAT - Usuario: ${userId}, Factura: ${invoiceId}`)
