@@ -191,6 +191,12 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Sellers (Vendedores)
+      match /sellers/{sellerId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Orders (Órdenes - para modo restaurante)
       match /orders/{orderId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
