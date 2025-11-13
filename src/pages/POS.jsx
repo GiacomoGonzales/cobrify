@@ -44,6 +44,7 @@ import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse } from '@/services/warehouseService'
 import { releaseTable } from '@/services/tableService'
+import { getSellers } from '@/services/sellerService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 const PAYMENT_METHODS = {
@@ -124,6 +125,10 @@ export default function POS() {
   // Warehouses
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+
+  // Sellers
+  const [sellers, setSellers] = useState([])
+  const [selectedSeller, setSelectedSeller] = useState(null)
 
   // Categories
   const [categories, setCategories] = useState([])
@@ -289,6 +294,14 @@ export default function POS() {
         // Seleccionar almacén por defecto
         const defaultWarehouse = warehouseList.find(w => w.isDefault) || warehouseList[0] || null
         setSelectedWarehouse(defaultWarehouse)
+      }
+
+      // Cargar vendedores activos
+      const sellersResult = await getSellers(businessId)
+      if (sellersResult.success) {
+        // Filtrar solo vendedores activos
+        const activeSellers = (sellersResult.data || []).filter(s => s.status === 'active')
+        setSellers(activeSellers)
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -859,6 +872,10 @@ export default function POS() {
         // Información del mozo (si viene de una mesa)
         waiterId: tableData?.waiterId || null,
         waiterName: tableData?.waiterName || null,
+        // Información del vendedor
+        sellerId: selectedSeller?.id || null,
+        sellerName: selectedSeller?.name || null,
+        sellerCode: selectedSeller?.code || null,
       }
 
       const result = await createInvoice(businessId, invoiceData)
@@ -962,6 +979,29 @@ export default function POS() {
           })
         } catch (error) {
           console.warn('Error al actualizar métricas del mozo:', error)
+        }
+      }
+
+      // 5.1. Actualizar métricas del vendedor seleccionado
+      if (selectedSeller?.id) {
+        try {
+          const { increment } = await import('firebase/firestore')
+          const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+          const { db } = await import('@/lib/firebase')
+
+          const sellerRef = doc(db, 'businesses', businessId, 'sellers', selectedSeller.id)
+          await updateDoc(sellerRef, {
+            todaySales: increment(amounts.total),
+            todayOrders: increment(1),
+            totalSales: increment(amounts.total),
+            totalOrders: increment(1),
+            updatedAt: serverTimestamp(),
+          }).catch(err => {
+            console.warn('No se pudo actualizar métricas del vendedor:', err)
+            // No fallar si no se puede actualizar las métricas
+          })
+        } catch (error) {
+          console.warn('Error al actualizar métricas del vendedor:', error)
         }
       }
 
@@ -1439,6 +1479,45 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
                     <p className="text-xs text-gray-500 mt-2">
                       Busca y selecciona un cliente registrado o deja vacío para ingresar datos manualmente
+                    </p>
+                  </div>
+                )}
+
+                {/* Selector de Vendedor */}
+                {sellers.length > 0 && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Vendedor (Opcional)
+                    </label>
+                    <select
+                      value={selectedSeller?.id || ''}
+                      onChange={e => {
+                        const seller = sellers.find(s => s.id === e.target.value)
+                        setSelectedSeller(seller || null)
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">Sin vendedor</option>
+                      {sellers.map(seller => (
+                        <option key={seller.id} value={seller.id}>
+                          {seller.code} - {seller.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedSeller && (
+                      <div className="mt-2 p-2 bg-purple-100 border border-purple-200 rounded text-sm">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-purple-600" />
+                          <span className="text-purple-800 font-medium">
+                            Vendedor: {selectedSeller.code} - {selectedSeller.name}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 mt-2">
+                      Selecciona el vendedor que realizará esta venta
                     </p>
                   </div>
                 )}
