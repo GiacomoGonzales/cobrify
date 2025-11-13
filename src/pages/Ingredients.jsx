@@ -525,18 +525,19 @@ export default function Ingredients() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Ingredientes</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona tu inventario de materia prima
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={handleExportExcel}
+            className="w-full sm:w-auto"
           >
             <Download className="w-4 h-4 mr-2" />
             Exportar Excel
@@ -545,6 +546,7 @@ export default function Ingredients() {
             variant="outline"
             size="sm"
             onClick={() => setShowImportModal(true)}
+            className="w-full sm:w-auto"
           >
             <Upload className="w-4 h-4 mr-2" />
             Importar Excel
@@ -555,11 +557,12 @@ export default function Ingredients() {
               const basePath = isDemoMode ? '/demo' : '/app'
               navigate(`${basePath}/ingredientes/compra`)
             }}
+            className="w-full sm:w-auto"
           >
             <Receipt className="w-4 h-4 mr-2" />
             Registrar Compra
           </Button>
-          <Button variant="outline" onClick={() => setShowAddModal(true)}>
+          <Button variant="outline" onClick={() => setShowAddModal(true)} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Ingrediente
           </Button>
