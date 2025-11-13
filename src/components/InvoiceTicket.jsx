@@ -28,6 +28,34 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
     return 'NV'
   }
 
+  // Formatear el número de documento con serie
+  const getFormattedDocumentNumber = () => {
+    // Si ya tiene el formato completo (contiene guión), retornarlo tal cual
+    if (invoice.number && invoice.number.includes('-')) {
+      return invoice.number
+    }
+
+    // Para notas de venta, usar serie N001
+    if (invoice.documentType === 'nota_venta') {
+      const series = invoice.series || 'N001'
+      const number = invoice.number || '1'
+      // Pad number to 8 digits
+      const paddedNumber = number.toString().padStart(8, '0')
+      return `${series}-${paddedNumber}`
+    }
+
+    // Para boletas y facturas, usar la serie existente
+    const series = invoice.series || 'B001'
+    const number = invoice.number || '1'
+    // Si el número ya está formateado (es un string largo), retornarlo
+    if (number.length > 6) {
+      return number
+    }
+    // Pad number to 8 digits
+    const paddedNumber = number.toString().padStart(8, '0')
+    return `${series}-${paddedNumber}`
+  }
+
   // Generar código QR según formato SUNAT
   // Formato: RUC_EMISOR|TIPO_DOC|SERIE|NUMERO|IGV|TOTAL|FECHA_EMISION|TIPO_DOC_CLIENTE|NUM_DOC_CLIENTE|
   const generateQRData = () => {
@@ -439,7 +467,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
         <div className="document-type">{getDocumentTypeName()}</div>
         <div className="document-number">
-          {invoice.number}
+          {getFormattedDocumentNumber()}
         </div>
       </div>
 
