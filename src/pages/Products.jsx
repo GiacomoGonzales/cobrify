@@ -453,10 +453,72 @@ export default function Products() {
     let successCount = 0
 
     try {
+      // Obtener almacén predeterminado para asignar stock
+      const defaultWarehouseResult = await getDefaultWarehouse(getBusinessId())
+      const defaultWarehouse = defaultWarehouseResult.success ? defaultWarehouseResult.data : null
+
+      // Crear un mapa de categorías nuevas que se necesitan crear
+      const newCategoriesNeeded = new Set()
+      const updatedCategories = [...categories]
+
+      // Identificar categorías que no existen
+      for (const product of productsToImport) {
+        if (product.category && product.category.trim() !== '') {
+          const categoryName = product.category.trim()
+          // Verificar si la categoría ya existe (por nombre)
+          const categoryExists = updatedCategories.some(cat => cat.name.toLowerCase() === categoryName.toLowerCase())
+
+          if (!categoryExists) {
+            newCategoriesNeeded.add(categoryName)
+          }
+        }
+      }
+
+      // Crear las categorías nuevas
+      if (newCategoriesNeeded.size > 0) {
+        for (const categoryName of newCategoriesNeeded) {
+          const newCategory = {
+            id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name: categoryName,
+            parentId: null,
+          }
+          updatedCategories.push(newCategory)
+        }
+
+        // Guardar las nuevas categorías en Firestore
+        const saveCategoriesResult = await saveProductCategories(getBusinessId(), updatedCategories)
+        if (saveCategoriesResult.success) {
+          setCategories(updatedCategories)
+          toast.info(`${newCategoriesNeeded.size} categoría(s) creada(s) automáticamente`)
+        }
+      }
+
+      // Importar productos
       for (let i = 0; i < productsToImport.length; i++) {
         const product = productsToImport[i]
 
         try {
+          // Convertir nombre de categoría a ID si existe
+          if (product.category && product.category.trim() !== '') {
+            const categoryName = product.category.trim()
+            const foundCategory = updatedCategories.find(cat => cat.name.toLowerCase() === categoryName.toLowerCase())
+            if (foundCategory) {
+              product.category = foundCategory.id
+            }
+          }
+
+          // Asignar stock al almacén predeterminado si hay stock y trackStock es true
+          if (product.stock && product.stock > 0 && product.trackStock && defaultWarehouse) {
+            product.warehouseStocks = [{
+              warehouseId: defaultWarehouse.id,
+              stock: product.stock,
+              minStock: 0
+            }]
+          } else if (!product.trackStock) {
+            // Si no controla stock, asegurar que warehouseStocks esté vacío
+            product.warehouseStocks = []
+          }
+
           const result = await createProduct(getBusinessId(), product)
 
           if (result.success) {
