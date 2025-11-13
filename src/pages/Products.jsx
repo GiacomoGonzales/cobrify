@@ -23,7 +23,7 @@ import {
 } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
-import { getWarehouses } from '@/services/warehouseService'
+import { getWarehouses, updateWarehouseStock, getDefaultWarehouse } from '@/services/warehouseService'
 
 // Unidades de medida
 const UNITS = [
@@ -100,6 +100,7 @@ export default function Products() {
   const [isSaving, setIsSaving] = useState(false)
   const [noStock, setNoStock] = useState(false)
   const [expandedProduct, setExpandedProduct] = useState(null)
+  const [selectedWarehouse, setSelectedWarehouse] = useState('') // Almacén para stock inicial
 
   // Variant management state
   const [hasVariants, setHasVariants] = useState(false)
@@ -230,6 +231,9 @@ export default function Products() {
     setVariants([])
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+    // Resetear almacén seleccionado al almacén por defecto
+    const defaultWh = warehouses.find(wh => wh.isDefault)
+    setSelectedWarehouse(defaultWh?.id || (warehouses.length > 0 ? warehouses[0].id : ''))
     reset({
       code: '',
       name: '',
@@ -279,6 +283,7 @@ export default function Products() {
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingProduct(null)
+    setSelectedWarehouse('')
     reset()
   }
 
@@ -345,6 +350,17 @@ export default function Products() {
           const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
           productData.stock = initialStockValue
           productData.initialStock = initialStockValue
+
+          // Si hay stock inicial y almacenes disponibles, asignar al almacén seleccionado
+          if (initialStockValue && initialStockValue > 0 && selectedWarehouse) {
+            productData.warehouseStocks = [{
+              warehouseId: selectedWarehouse,
+              stock: initialStockValue,
+              minStock: 0
+            }]
+          } else {
+            productData.warehouseStocks = []
+          }
         }
 
         // Clear variant fields
@@ -1498,6 +1514,30 @@ export default function Products() {
                         : "Ingresa la cantidad inicial de unidades"
                     }
                   />
+
+                  {/* Selector de Almacén - Solo al crear nuevo producto */}
+                  {!editingProduct && warehouses.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Almacén de Stock Inicial
+                      </label>
+                      <select
+                        value={selectedWarehouse}
+                        onChange={(e) => setSelectedWarehouse(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Seleccionar almacén...</option>
+                        {warehouses.filter(wh => wh.isActive).map((wh) => (
+                          <option key={wh.id} value={wh.id}>
+                            {wh.name} {wh.isDefault ? '(Predeterminado)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Selecciona el almacén donde se registrará el stock inicial
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
