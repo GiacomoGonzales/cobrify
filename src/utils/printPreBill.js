@@ -122,7 +122,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           margin-bottom: 3px;
           font-size: 9pt;
           font-weight: 500;
-          padding: 0 4mm;
+          padding-right: 6mm;
         }
 
         .info-row strong {
@@ -131,8 +131,8 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         .items-table {
-          width: calc(100% - 8mm);
-          margin: 12px 4mm;
+          width: calc(100% - 6mm);
+          margin: 12px 0 12px 0;
           border-collapse: collapse;
         }
 
@@ -145,7 +145,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
         }
 
         .items-table th:last-child {
-          padding-right: 4mm;
+          padding-right: 6mm;
         }
 
         .items-table td {
@@ -172,7 +172,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           text-align: right;
           font-weight: 600;
           font-size: 9pt;
-          padding-right: 4mm;
+          padding-right: 6mm;
         }
 
         .totals {
@@ -187,7 +187,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           margin-bottom: 4px;
           font-size: 10pt;
           font-weight: 600;
-          padding: 0 4mm;
+          padding-right: 6mm;
         }
 
         .totals .total {
