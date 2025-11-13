@@ -374,7 +374,7 @@ export default function Inventory() {
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
-          <Link to="/productos" className="w-full sm:w-auto">
+          <Link to="/app/productos" className="w-full sm:w-auto">
             <Button className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Agregar Producto
@@ -539,7 +539,7 @@ export default function Inventory() {
                   : 'Comienza agregando productos a tu catálogo'}
               </p>
               {!searchTerm && filterCategory === 'all' && filterStatus === 'all' && (
-                <Link to="/productos">
+                <Link to="/app/productos">
                   <Button>
                     <Plus className="w-4 h-4 mr-2" />
                     Agregar Producto
