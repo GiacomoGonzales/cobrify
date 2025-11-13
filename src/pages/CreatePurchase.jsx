@@ -565,7 +565,7 @@ export default function CreatePurchase() {
         <div>
           <Button
             variant="outline"
-            onClick={() => navigate('/compras')}
+            onClick={() => navigate('/app/compras')}
             className="mb-4"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -928,7 +928,7 @@ export default function CreatePurchase() {
             <div className="flex justify-end gap-3">
               <Button
                 variant="outline"
-                onClick={() => navigate('/compras')}
+                onClick={() => navigate('/app/compras')}
                 disabled={isSaving}
               >
                 Cancelar
