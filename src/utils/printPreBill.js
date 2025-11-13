@@ -45,9 +45,9 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
           font-size: 11px;
           font-weight: 500;
-          line-height: 1.4;
+          line-height: 1.25;
           padding: 8px;
-          width: 80mm;
+          width: 70mm;
           background: white;
           color: #000;
           -webkit-print-color-adjust: exact;
