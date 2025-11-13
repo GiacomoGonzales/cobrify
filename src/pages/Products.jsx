@@ -968,14 +968,14 @@ export default function Products() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Productos y Servicios</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Gestiona tu catálogo de productos y servicios
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
           <Button
             variant="outline"
             onClick={() => setIsImportModalOpen(true)}
