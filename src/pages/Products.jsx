@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -87,6 +87,27 @@ const getAllDescendantCategoryIds = (categories, parentId) => {
   return descendants
 }
 
+// Helper function to get expiration status
+const getExpirationStatus = (expirationDate) => {
+  if (!expirationDate) return null
+
+  const expDate = expirationDate.toDate ? expirationDate.toDate() : new Date(expirationDate)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  expDate.setHours(0, 0, 0, 0)
+
+  const diffTime = expDate - today
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    return { status: 'expired', days: Math.abs(diffDays), color: 'red' }
+  } else if (diffDays <= 7) {
+    return { status: 'warning', days: diffDays, color: 'yellow' }
+  } else {
+    return { status: 'ok', days: diffDays, color: 'green' }
+  }
+}
+
 export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
@@ -94,11 +115,13 @@ export default function Products() {
   const [warehouses, setWarehouses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showExpiringOnly, setShowExpiringOnly] = useState(false) // Filtro de vencimiento
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [deletingProduct, setDeletingProduct] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [noStock, setNoStock] = useState(false)
+  const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [selectedWarehouse, setSelectedWarehouse] = useState('') // Almacén para stock inicial
 
@@ -146,6 +169,8 @@ export default function Products() {
       category: '',
       stock: '',
       noStock: false,
+      trackExpiration: false,
+      expirationDate: '',
     },
   })
 
@@ -226,6 +251,7 @@ export default function Products() {
     }
     setEditingProduct(null)
     setNoStock(false)
+    setTrackExpiration(false)
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -244,6 +270,8 @@ export default function Products() {
       category: '',
       stock: '',
       noStock: false,
+      trackExpiration: false,
+      expirationDate: '',
     })
     setIsModalOpen(true)
   }
@@ -257,6 +285,10 @@ export default function Products() {
     const hasNoStock = product.stock === null || product.stock === undefined
     setNoStock(hasNoStock)
 
+    // Set expiration tracking state
+    const hasExpiration = product.trackExpiration || false
+    setTrackExpiration(hasExpiration)
+
     // Load variant data if product has variants
     const productHasVariants = product.hasVariants || false
     setHasVariants(productHasVariants)
@@ -264,6 +296,13 @@ export default function Products() {
     setVariants(product.variants || [])
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+
+    // Format expiration date if exists (from Firestore Timestamp to YYYY-MM-DD)
+    let formattedExpirationDate = ''
+    if (product.expirationDate) {
+      const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
+      formattedExpirationDate = expDate.toISOString().split('T')[0]
+    }
 
     reset({
       code: product.code,
@@ -276,6 +315,8 @@ export default function Products() {
       // Si no tiene initialStock definido, usar 0 (productos creados antes de esta feature o desde compras)
       initialStock: hasNoStock ? '' : (product.initialStock !== undefined && product.initialStock !== null ? product.initialStock.toString() : '0'),
       noStock: hasNoStock,
+      trackExpiration: hasExpiration,
+      expirationDate: formattedExpirationDate,
     })
     setIsModalOpen(true)
   }
@@ -313,6 +354,8 @@ export default function Products() {
         category: data.category || '',
         cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null,
         hasVariants: hasVariants,
+        trackExpiration: trackExpiration,
+        expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
       }
 
       if (hasVariants) {
@@ -941,7 +984,19 @@ export default function Products() {
         descendantIds.includes(product.category)
     }
 
-    return matchesSearch && matchesCategory
+    // Check expiration filter
+    let matchesExpiration = true
+    if (showExpiringOnly) {
+      if (!product.trackExpiration || !product.expirationDate) {
+        matchesExpiration = false
+      } else {
+        const expStatus = getExpirationStatus(product.expirationDate)
+        // Mostrar solo productos vencidos o próximos a vencer (≤7 días)
+        matchesExpiration = expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
+      }
+    }
+
+    return matchesSearch && matchesCategory && matchesExpiration
   })
 
   // Calcular estadísticas
@@ -953,6 +1008,13 @@ export default function Products() {
   }, 0)
 
   const lowStockCount = products.filter(product => product.stock !== null && product.stock < 10).length
+
+  // Contar productos próximos a vencer o vencidos
+  const expiringProductsCount = products.filter(product => {
+    if (!product.trackExpiration || !product.expirationDate) return false
+    const expStatus = getExpirationStatus(product.expirationDate)
+    return expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
+  }).length
 
   if (isLoading) {
     return (
@@ -1012,15 +1074,35 @@ export default function Products() {
       {/* Search and Category Filter */}
       <Card>
         <CardContent className="p-4 space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por código, nombre, categoría..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por código, nombre, categoría..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            {/* Filtro de vencimiento */}
+            {expiringProductsCount > 0 && (
+              <button
+                onClick={() => setShowExpiringOnly(!showExpiringOnly)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                  showExpiringOnly
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Próximos a vencer</span>
+                <Badge variant="danger" className="bg-white text-red-700 ml-1">
+                  {expiringProductsCount}
+                </Badge>
+              </button>
+            )}
           </div>
 
           {/* Category Filter Chips */}
@@ -1226,6 +1308,7 @@ export default function Products() {
                   <TableHead className="hidden xl:table-cell w-24">Utilidad</TableHead>
                   <TableHead className="hidden md:table-cell w-32">Categoría</TableHead>
                   <TableHead className="w-20">Stock</TableHead>
+                  <TableHead className="hidden lg:table-cell w-32">Vencimiento</TableHead>
                   <TableHead className="text-right w-32">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1338,6 +1421,32 @@ export default function Products() {
                               )}
                             </div>
                           </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          {product.trackExpiration && product.expirationDate ? (() => {
+                            const expStatus = getExpirationStatus(product.expirationDate)
+                            const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
+                            const formattedDate = expDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+                            return (
+                              <div className="flex flex-col space-y-1">
+                                <Badge
+                                  variant={expStatus.status === 'expired' ? 'danger' : expStatus.status === 'warning' ? 'warning' : 'success'}
+                                  className="text-xs"
+                                >
+                                  {expStatus.status === 'expired'
+                                    ? `Vencido hace ${expStatus.days}d`
+                                    : expStatus.status === 'warning'
+                                    ? `${expStatus.days}d restantes`
+                                    : `${expStatus.days}d restantes`
+                                  }
+                                </Badge>
+                                <span className="text-xs text-gray-500">{formattedDate}</span>
+                              </div>
+                            )
+                          })() : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end space-x-2">
@@ -1600,6 +1709,46 @@ export default function Products() {
                       </p>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Control de Vencimiento */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Control de Vencimiento
+            </label>
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="trackExpiration"
+                  checked={trackExpiration}
+                  onChange={e => {
+                    const checked = e.target.checked
+                    setTrackExpiration(checked)
+                    if (!checked) {
+                      setValue('expirationDate', '')
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="trackExpiration" className="ml-2 text-sm text-gray-700">
+                  Controlar fecha de vencimiento del producto
+                </label>
+              </div>
+
+              {trackExpiration && (
+                <div>
+                  <Input
+                    label="Fecha de Vencimiento"
+                    type="date"
+                    placeholder="Selecciona la fecha de vencimiento"
+                    error={errors.expirationDate?.message}
+                    {...register('expirationDate')}
+                    helperText="Fecha en la que este producto vence o caduca"
+                  />
                 </div>
               )}
             </div>
