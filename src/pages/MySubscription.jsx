@@ -141,16 +141,40 @@ export default function MySubscription() {
           {/* Facturas */}
           <div className="flex items-start gap-3">
             <FileText className="w-5 h-5 text-blue-600 mt-0.5" />
-            <div>
-              <p className="text-sm text-gray-500">Facturas/mes</p>
+            <div className="flex-1">
+              <p className="text-sm text-gray-500">Comprobantes/mes</p>
               <p className="text-lg font-semibold text-gray-900">
                 {subscription.limits?.maxInvoicesPerMonth === -1
                   ? 'Ilimitado'
                   : subscription.limits?.maxInvoicesPerMonth || 0}
               </p>
-              {subscription.usage?.invoicesThisMonth !== undefined && (
-                <p className="text-xs text-gray-500">
-                  Usados: {subscription.usage.invoicesThisMonth}
+              {subscription.usage?.invoicesThisMonth !== undefined && subscription.limits?.maxInvoicesPerMonth !== -1 && (
+                <>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Emitidos: {subscription.usage.invoicesThisMonth} / {subscription.limits.maxInvoicesPerMonth}
+                  </p>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                    <div
+                      className={`h-2 rounded-full ${
+                        (subscription.usage.invoicesThisMonth / subscription.limits.maxInvoicesPerMonth) >= 0.9
+                          ? 'bg-red-600'
+                          : (subscription.usage.invoicesThisMonth / subscription.limits.maxInvoicesPerMonth) >= 0.7
+                          ? 'bg-yellow-600'
+                          : 'bg-green-600'
+                      }`}
+                      style={{
+                        width: `${Math.min((subscription.usage.invoicesThisMonth / subscription.limits.maxInvoicesPerMonth) * 100, 100)}%`
+                      }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Disponibles: {Math.max(0, subscription.limits.maxInvoicesPerMonth - subscription.usage.invoicesThisMonth)}
+                  </p>
+                </>
+              )}
+              {subscription.usage?.invoicesThisMonth !== undefined && subscription.limits?.maxInvoicesPerMonth === -1 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Emitidos este mes: {subscription.usage.invoicesThisMonth}
                 </p>
               )}
             </div>

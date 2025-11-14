@@ -249,6 +249,50 @@ export const sendInvoiceToSunat = onRequest(
 
       console.log(`🏢 Empresa: ${businessData.businessName} - RUC: ${businessData.ruc}`)
 
+      // 2.5. Verificar límite de documentos del plan (solo si no es reenvío)
+      if (invoiceData.sunatStatus === 'pending') {
+        try {
+          const subscriptionRef = db.collection('subscriptions').doc(userId)
+          const subscriptionDoc = await subscriptionRef.get()
+
+          if (subscriptionDoc.exists) {
+            const subscription = subscriptionDoc.data()
+            const currentUsage = subscription.usage?.invoicesThisMonth || 0
+            const maxInvoices = subscription.limits?.maxInvoicesPerMonth || -1
+
+            // Si hay límite (no es -1 = ilimitado) y ya lo alcanzó
+            if (maxInvoices !== -1 && currentUsage >= maxInvoices) {
+              console.log(`🚫 Límite de documentos alcanzado: ${currentUsage}/${maxInvoices}`)
+
+              await invoiceRef.update({
+                sunatStatus: 'rejected',
+                sunatResponse: {
+                  code: 'LIMIT_EXCEEDED',
+                  description: `Límite de ${maxInvoices} comprobantes por mes alcanzado. Actual: ${currentUsage}`,
+                  observations: ['Actualiza tu plan para emitir más comprobantes'],
+                  error: true,
+                  method: 'validation'
+                },
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+
+              res.status(400).json({
+                error: `Límite de ${maxInvoices} comprobantes por mes alcanzado`,
+                currentUsage,
+                maxInvoices,
+                message: 'Actualiza tu plan para emitir más comprobantes'
+              })
+              return
+            }
+
+            console.log(`✅ Límite OK: ${currentUsage}/${maxInvoices === -1 ? '∞' : maxInvoices}`)
+          }
+        } catch (limitError) {
+          console.error('⚠️ Error al verificar límite (continuando):', limitError)
+          // Continuar con la emisión si falla la verificación del límite
+        }
+      }
+
       // 3. Emitir comprobante usando el router (decide automáticamente SUNAT, QPse o NubeFact)
       console.log('📨 Emitiendo comprobante electrónico...')
 
@@ -341,6 +385,22 @@ export const sendInvoiceToSunat = onRequest(
 
       await invoiceRef.update(updateData)
       console.log(`💾 Estado actualizado en Firestore`)
+
+      // 5. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO por SUNAT
+      if (emissionResult.accepted === true) {
+        try {
+          const subscriptionRef = db.collection('subscriptions').doc(userId)
+          await subscriptionRef.update({
+            'usage.invoicesThisMonth': FieldValue.increment(1)
+          })
+          console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+        } catch (counterError) {
+          console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
+          // No fallar la operación si el contador falla
+        }
+      } else {
+        console.log(`⏭️ Documento rechazado - No se incrementa el contador`)
+      }
 
       res.status(200).json({
         success: true,
