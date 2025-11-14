@@ -40,5 +40,22 @@ setup-business-owner.js
 test-sunat.js
 
 # Capacitor - Mobile platforms
-android/
 ios/
+
+# Android - ignore most but keep configuration
+android/build/
+android/.gradle/
+android/app/build/
+android/app/release/
+android/app/debug/
+android/.idea/
+android/local.properties
+android/captures/
+android/output.json
+
+# Android signing - NUNCA subir estos archivos
+android/key.properties
+android/app/*.keystore
+android/app/*.jks
+*.keystore
+*.jks
