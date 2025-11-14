@@ -281,33 +281,33 @@ export default function POS() {
         setCompanySettings(settingsResult.data)
       }
 
-      // Cargar configuración de impuestos (taxConfig)
+      // Cargar configuración de impuestos (taxConfig) desde el documento del business
       try {
         console.log('🔍 Cargando taxConfig para businessId:', businessId)
-        const emissionConfigRef = doc(db, 'businesses', businessId, 'emissionConfig', 'config')
-        const emissionConfigSnap = await getDoc(emissionConfigRef)
+        const businessRef = doc(db, 'businesses', businessId)
+        const businessSnap = await getDoc(businessRef)
 
-        console.log('📄 emissionConfig existe?', emissionConfigSnap.exists())
+        console.log('📄 Business documento existe?', businessSnap.exists())
 
-        if (emissionConfigSnap.exists()) {
-          const emissionData = emissionConfigSnap.data()
-          console.log('📦 emissionData completo:', emissionData)
-          console.log('💰 taxConfig encontrado:', emissionData.taxConfig)
+        if (businessSnap.exists()) {
+          const businessData = businessSnap.data()
+          console.log('📦 emissionConfig encontrado:', businessData.emissionConfig)
+          console.log('💰 taxConfig encontrado:', businessData.emissionConfig?.taxConfig)
 
-          if (emissionData.taxConfig) {
+          if (businessData.emissionConfig?.taxConfig) {
             const newTaxConfig = {
-              igvRate: emissionData.taxConfig.igvRate ?? 18,
-              igvExempt: emissionData.taxConfig.igvExempt ?? false,
-              exemptionReason: emissionData.taxConfig.exemptionReason ?? '',
-              exemptionCode: emissionData.taxConfig.exemptionCode ?? '10'
+              igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
+              igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false,
+              exemptionReason: businessData.emissionConfig.taxConfig.exemptionReason ?? '',
+              exemptionCode: businessData.emissionConfig.taxConfig.exemptionCode ?? '10'
             }
             console.log('✅ TaxConfig a aplicar:', newTaxConfig)
             setTaxConfig(newTaxConfig)
           } else {
-            console.warn('⚠️ emissionData.taxConfig no existe, usando valores por defecto')
+            console.warn('⚠️ taxConfig no existe en emissionConfig, usando valores por defecto')
           }
         } else {
-          console.warn('⚠️ Documento emissionConfig no existe para businessId:', businessId)
+          console.warn('⚠️ Documento business no existe para businessId:', businessId)
         }
       } catch (error) {
         console.error('❌ Error al cargar taxConfig:', error)
