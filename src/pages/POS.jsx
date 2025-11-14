@@ -29,6 +29,8 @@ import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
+import { getDoc, doc } from 'firebase/firestore'
+import { db } from '@/services/firebase'
 import {
   getProducts,
   getCustomers,
@@ -107,6 +109,7 @@ export default function POS() {
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
+  const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false }) // Configuración de impuestos
   const [cart, setCart] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -276,6 +279,27 @@ export default function POS() {
       const settingsResult = await getCompanySettings(businessId)
       if (settingsResult.success && settingsResult.data) {
         setCompanySettings(settingsResult.data)
+      }
+
+      // Cargar configuración de impuestos (taxConfig)
+      try {
+        const emissionConfigRef = doc(db, 'businesses', businessId, 'emissionConfig', 'config')
+        const emissionConfigSnap = await getDoc(emissionConfigRef)
+
+        if (emissionConfigSnap.exists()) {
+          const emissionData = emissionConfigSnap.data()
+          if (emissionData.taxConfig) {
+            setTaxConfig({
+              igvRate: emissionData.taxConfig.igvRate ?? 18,
+              igvExempt: emissionData.taxConfig.igvExempt ?? false,
+              exemptionReason: emissionData.taxConfig.exemptionReason ?? '',
+              exemptionCode: emissionData.taxConfig.exemptionCode ?? '10'
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error al cargar taxConfig:', error)
+        // Si hay error, mantener los valores por defecto (IGV 18%)
       }
 
       // Cargar categorías
@@ -615,7 +639,8 @@ export default function POS() {
     cart.map(item => ({
       price: item.price,
       quantity: item.quantity,
-    }))
+    })),
+    taxConfig.igvRate
   )
 
   // Calcular totales de pago
@@ -853,6 +878,8 @@ export default function POS() {
         subtotal: amounts.subtotal,
         igv: amounts.igv,
         total: amounts.total,
+        // Configuración de impuestos
+        taxConfig: taxConfig,
         // Guardar los métodos de pago
         payments: allPayments,
         // Guardar el primer método como principal para compatibilidad
@@ -2046,7 +2073,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="font-medium">{formatCurrency(amounts.subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IGV (18%):</span>
+                  <span className="text-gray-600">IGV ({taxConfig.igvRate}%):</span>
                   <span className="font-medium">{formatCurrency(amounts.igv)}</span>
                 </div>
                 <div className="flex justify-between text-xl sm:text-2xl font-bold border-t pt-2">
