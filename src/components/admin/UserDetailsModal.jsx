@@ -277,6 +277,73 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                     Estadísticas de Uso
                   </h3>
 
+                  {/* Contador Oficial de Documentos del Período */}
+                  {user.usage?.invoicesThisMonth !== undefined && (
+                    <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-white bg-opacity-20 p-3 rounded-lg">
+                            <FileText className="w-8 h-8" />
+                          </div>
+                          <div>
+                            <p className="text-sm opacity-90">Comprobantes Emitidos (SUNAT Aceptados)</p>
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-4xl font-bold">{user.usage.invoicesThisMonth}</p>
+                              <p className="text-lg opacity-90">
+                                / {user.limits?.maxInvoicesPerMonth === -1 ? '∞' : user.limits?.maxInvoicesPerMonth}
+                              </p>
+                            </div>
+                            {user.limits?.maxInvoicesPerMonth !== -1 && (
+                              <p className="text-sm mt-1 opacity-90">
+                                Disponibles: {Math.max(0, user.limits.maxInvoicesPerMonth - user.usage.invoicesThisMonth)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs opacity-75">Periodo actual</p>
+                          <p className="text-sm font-medium">
+                            {user.currentPeriodStart
+                              ? format(user.currentPeriodStart.toDate(), "d MMM", { locale: es })
+                              : 'N/A'
+                            }
+                            {' - '}
+                            {periodEnd
+                              ? format(new Date(periodEnd), "d MMM", { locale: es })
+                              : 'N/A'
+                            }
+                          </p>
+                          {user.lastCounterReset && (
+                            <p className="text-xs opacity-75 mt-1">
+                              Último reseteo: {format(user.lastCounterReset.toDate(), "d MMM HH:mm", { locale: es })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {user.limits?.maxInvoicesPerMonth !== -1 && (
+                        <div className="mt-3">
+                          <div className="w-full bg-white bg-opacity-30 rounded-full h-3">
+                            <div
+                              className={`h-3 rounded-full transition-all duration-300 ${
+                                (user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) >= 0.9
+                                  ? 'bg-red-400'
+                                  : (user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) >= 0.7
+                                  ? 'bg-yellow-400'
+                                  : 'bg-green-400'
+                              }`}
+                              style={{
+                                width: `${Math.min((user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) * 100, 100)}%`
+                              }}
+                            ></div>
+                          </div>
+                          <p className="text-xs mt-1 opacity-75 text-right">
+                            {((user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) * 100).toFixed(1)}% usado
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Tarjetas de Estadísticas */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     {/* Facturas */}
@@ -284,7 +351,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                       <div className="flex items-center gap-3 mb-2">
                         <FileText className="w-6 h-6 text-blue-600" />
                         <div>
-                          <p className="text-sm text-blue-600 font-medium">Comprobantes</p>
+                          <p className="text-sm text-blue-600 font-medium">Comprobantes Totales</p>
                           <p className="text-2xl font-bold text-blue-900">{stats.invoices.total}</p>
                         </div>
                       </div>
