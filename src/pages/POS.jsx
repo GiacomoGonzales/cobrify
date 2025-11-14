@@ -30,7 +30,7 @@ import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { getDoc, doc } from 'firebase/firestore'
-import { db } from '@/services/firebase'
+import { db } from '@/lib/firebase'
 import {
   getProducts,
   getCustomers,

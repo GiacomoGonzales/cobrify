@@ -11,6 +11,12 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const isFactura = invoiceData.documentType === 'factura'
   const documentTypeCode = isFactura ? '01' : '03' // 01=Factura, 03=Boleta
 
+  // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
+  const igvRate = invoiceData.taxConfig?.igvRate ?? 18
+  const igvExempt = invoiceData.taxConfig?.igvExempt ?? false
+  const exemptionReason = invoiceData.taxConfig?.exemptionReason ?? ''
+  const igvMultiplier = igvRate / 100
+
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   let issueDate
   if (invoiceData.issueDate?.toDate) {
@@ -251,8 +257,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
     // Impuesto de la línea
     const lineTaxTotal = invoiceLine.ele('cac:TaxTotal')
-    // Solo calcular IGV para items gravados (18%), exonerados e inafectos = 0%
-    const lineIGV = isGravado ? lineTotal * 0.18 : 0
+    // Calcular IGV según la tasa configurada (puede ser 0% para exonerados)
+    const lineIGV = isGravado ? lineTotal * igvMultiplier : 0
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(lineIGV.toFixed(2))
 
@@ -280,7 +286,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
     // Solo incluir porcentaje para items gravados
     if (isGravado) {
-      lineTaxCategory.ele('cbc:Percent').txt('18.00')
+      lineTaxCategory.ele('cbc:Percent').txt(igvRate.toFixed(2))
     }
 
     lineTaxCategory.ele('cbc:TaxExemptionReasonCode', {
@@ -333,6 +339,12 @@ export function generateInvoiceXML(invoiceData, businessData) {
  * - '13' = Otros conceptos
  */
 export function generateCreditNoteXML(creditNoteData, businessData) {
+  // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
+  const igvRate = creditNoteData.taxConfig?.igvRate ?? 18
+  const igvExempt = creditNoteData.taxConfig?.igvExempt ?? false
+  const exemptionReason = creditNoteData.taxConfig?.exemptionReason ?? ''
+  const igvMultiplier = igvRate / 100
+
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   let issueDate
   if (creditNoteData.issueDate?.toDate) {
@@ -533,7 +545,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
     // Impuesto de la línea
     const lineTaxTotal = creditNoteLine.ele('cac:TaxTotal')
-    const lineIGV = isGravado ? lineTotal * 0.18 : 0
+    const lineIGV = isGravado ? lineTotal * igvMultiplier : 0
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(lineIGV.toFixed(2))
 
@@ -557,7 +569,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     }).txt(taxCategoryId)
 
     if (isGravado) {
-      lineTaxCategory.ele('cbc:Percent').txt('18.00')
+      lineTaxCategory.ele('cbc:Percent').txt(igvRate.toFixed(2))
     }
 
     lineTaxCategory.ele('cbc:TaxExemptionReasonCode', {
@@ -832,7 +844,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     }).txt(taxCategoryId)
 
     if (isGravado) {
-      lineTaxCategory.ele('cbc:Percent').txt('18.00')
+      lineTaxCategory.ele('cbc:Percent').txt(igvRate.toFixed(2))
     }
 
     lineTaxCategory.ele('cbc:TaxExemptionReasonCode', {
