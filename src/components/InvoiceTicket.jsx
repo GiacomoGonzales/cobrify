@@ -460,6 +460,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         {companySettings?.email && (
           <div className="company-info">Email: {companySettings.email}</div>
         )}
+        {companySettings?.socialMedia && (
+          <div className="company-info">{companySettings.socialMedia}</div>
+        )}
 
         <div className="document-type">{getDocumentTypeName()}</div>
         <div className="document-number">
