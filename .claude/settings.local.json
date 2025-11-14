@@ -69,7 +69,9 @@
       "Bash(gcloud projects get-iam-policy:*)",
       "Bash(firebase projects:addrole:*)",
       "WebSearch",
-      "WebFetch(domain:www.sunat.gob.pe)"
+      "WebFetch(domain:www.sunat.gob.pe)",
+      "Bash(npm run lint)",
+      "Bash(npm run)"
     ],
     "deny": [],
     "ask": []

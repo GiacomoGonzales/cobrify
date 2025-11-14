@@ -121,6 +121,7 @@ export default function Settings() {
         phone: '01-2345678',
         email: 'demo@empresa.com',
         website: 'www.empresademo.com',
+        socialMedia: '@empresademo',
         address: 'Av. Demo 123',
         urbanization: '',
         district: 'Miraflores',
@@ -153,6 +154,7 @@ export default function Settings() {
           phone: businessData.phone || '',
           email: businessData.email || '',
           website: businessData.website || '',
+          socialMedia: businessData.socialMedia || '',
           address: businessData.address || '',
           urbanization: businessData.urbanization || '',
           district: businessData.district || '',
@@ -325,6 +327,7 @@ export default function Settings() {
         phone: data.phone,
         email: data.email,
         website: data.website,
+        socialMedia: data.socialMedia || '',
         address: data.address,
         urbanization: data.urbanization,
         district: data.district,
@@ -826,6 +829,15 @@ export default function Settings() {
                 placeholder="https://miempresa.com"
                 error={errors.website?.message}
                 {...register('website')}
+              />
+
+              <Input
+                label="Redes Sociales"
+                type="text"
+                placeholder="@miempresa o facebook.com/miempresa"
+                error={errors.socialMedia?.message}
+                {...register('socialMedia')}
+                helperText="Usuario de Facebook, Instagram u otra red social"
               />
 
               <div className="md:col-span-2">

@@ -273,6 +273,7 @@ export const companySettingsSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email('Correo electrónico inválido'),
   website: z.string().url('URL inválida').optional().or(z.literal('')),
+  socialMedia: z.string().optional(), // Redes sociales (Facebook, Instagram, etc.)
   logo: z.string().optional(),
 })
 
