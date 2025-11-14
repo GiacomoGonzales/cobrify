@@ -50,6 +50,12 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
       certificatePassword: '',
       certificateData: '',
       homologated: false
+    },
+    taxConfig: {
+      igvExempt: false,
+      igvRate: 18,
+      exemptionReason: '',
+      exemptionCode: '10' // Código 10 = Gravado por defecto
     }
   });
 
@@ -107,7 +113,16 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
       if (data?.emissionConfig) {
         // Si ya existe emissionConfig del admin, usarlo
         console.log('✅ Cargando desde emissionConfig');
-        setEmissionConfig(data.emissionConfig);
+        // Asegurar que taxConfig exista, si no, usar valores por defecto
+        setEmissionConfig({
+          ...data.emissionConfig,
+          taxConfig: data.emissionConfig.taxConfig || {
+            igvExempt: false,
+            igvRate: 18,
+            exemptionReason: '',
+            exemptionCode: '10'
+          }
+        });
       } else {
         // Si no existe, cargar desde la configuración antigua (Settings)
         console.log('✅ Cargando desde configuración antigua (qpse/sunat)');
@@ -143,6 +158,12 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
             certificatePassword: data?.sunat?.certificatePassword || '',
             certificateData: data?.sunat?.certificateData || '',
             homologated: data?.sunat?.homologated || false
+          },
+          taxConfig: data?.taxConfig || {
+            igvExempt: false,
+            igvRate: 18,
+            exemptionReason: '',
+            exemptionCode: '10'
           }
         });
       }
@@ -752,6 +773,98 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                     <p className="text-xs text-gray-600">CDT propio del negocio</p>
                   </button>
                 </div>
+              </div>
+
+              {/* Configuración de Impuestos (IGV) */}
+              <div className="border-t pt-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                  <DollarSign className="w-5 h-5" />
+                  Configuración de Impuestos
+                </h3>
+
+                {/* Checkbox de Exoneración */}
+                <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                  <input
+                    type="checkbox"
+                    id="igvExempt"
+                    checked={emissionConfig.taxConfig.igvExempt}
+                    onChange={(e) => {
+                      const isExempt = e.target.checked
+                      setEmissionConfig({
+                        ...emissionConfig,
+                        taxConfig: {
+                          ...emissionConfig.taxConfig,
+                          igvExempt: isExempt,
+                          igvRate: isExempt ? 0 : 18,
+                          exemptionCode: isExempt ? '20' : '10'
+                        }
+                      })
+                    }}
+                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 mt-0.5"
+                  />
+                  <label htmlFor="igvExempt" className="flex-1 cursor-pointer">
+                    <p className="font-semibold text-gray-900">Empresa exonerada de IGV</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Marcar si la empresa está acogida a beneficios tributarios (Ej: Amazonía, Zona Franca, etc.)
+                    </p>
+                  </label>
+                </div>
+
+                {/* Configuración cuando está exonerado */}
+                {emissionConfig.taxConfig.igvExempt && (
+                  <div className="space-y-4 pl-4 border-l-4 border-yellow-400">
+                    {/* Info Box */}
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                      <strong>⚠️ Importante:</strong> Los comprobantes se emitirán con IGV 0% (exonerado).
+                      Asegúrate de tener el respaldo legal correspondiente.
+                    </div>
+
+                    {/* Motivo de Exoneración */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Motivo de Exoneración <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={emissionConfig.taxConfig.exemptionReason}
+                        onChange={(e) => setEmissionConfig({
+                          ...emissionConfig,
+                          taxConfig: { ...emissionConfig.taxConfig, exemptionReason: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Seleccionar motivo...</option>
+                        <option value="Amazonía - Ley 27037">Amazonía - Ley 27037</option>
+                        <option value="Zona Franca">Zona Franca</option>
+                        <option value="Convenio Internacional">Convenio Internacional</option>
+                        <option value="Exportación">Exportación</option>
+                        <option value="Otro">Otro motivo</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Este motivo aparecerá en los comprobantes electrónicos
+                      </p>
+                    </div>
+
+                    {/* Tasa de IGV (solo informativo) */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tasa de IGV
+                      </label>
+                      <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-semibold">
+                        {emissionConfig.taxConfig.igvRate}%
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Tasa aplicada automáticamente según la configuración
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Configuración cuando NO está exonerado (IGV normal) */}
+                {!emissionConfig.taxConfig.igvExempt && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+                    <strong>✓ IGV Normal:</strong> Los comprobantes se emitirán con IGV 18% (gravado).
+                  </div>
+                )}
               </div>
 
               {/* Configuración QPse */}
