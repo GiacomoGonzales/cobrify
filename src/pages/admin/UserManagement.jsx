@@ -26,10 +26,15 @@ import {
   Edit,
   Calendar,
   RefreshCw,
-  Settings
+  Settings,
+  ChevronDown,
+  ChevronRight,
+  UserCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function UserManagement() {
   const { isAdmin, isLoading } = useAuth();
@@ -42,6 +47,46 @@ export default function UserManagement() {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [expandedOwners, setExpandedOwners] = useState(new Set()); // Para controlar qué owners están expandidos
+  const [subUsers, setSubUsers] = useState({}); // Almacenar sub-usuarios por ownerId
+
+  // Cargar sub-usuarios de un owner
+  const loadSubUsers = async (ownerId) => {
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('ownerId', '==', ownerId));
+      const querySnapshot = await getDocs(q);
+
+      const subUsersList = [];
+      querySnapshot.forEach((doc) => {
+        subUsersList.push({ id: doc.id, ...doc.data() });
+      });
+
+      setSubUsers(prev => ({
+        ...prev,
+        [ownerId]: subUsersList
+      }));
+    } catch (error) {
+      console.error('Error al cargar sub-usuarios:', error);
+    }
+  };
+
+  // Toggle expandir/colapsar owner
+  const toggleOwnerExpand = async (ownerId) => {
+    const newExpanded = new Set(expandedOwners);
+
+    if (newExpanded.has(ownerId)) {
+      newExpanded.delete(ownerId);
+    } else {
+      newExpanded.add(ownerId);
+      // Cargar sub-usuarios si aún no están cargados
+      if (!subUsers[ownerId]) {
+        await loadSubUsers(ownerId);
+      }
+    }
+
+    setExpandedOwners(newExpanded);
+  };
 
   // Cargar suscripciones
   const loadSubscriptions = async () => {
@@ -318,16 +363,40 @@ export default function UserManagement() {
                   const planInfo = PLANS[sub.plan];
                   const daysElapsed = periodStart ? Math.floor((new Date() - periodStart) / (1000 * 60 * 60 * 24)) : null;
 
+                  const ownerSubUsers = subUsers[sub.userId] || [];
+                  const isExpanded = expandedOwners.has(sub.userId);
+
                   return (
-                    <tr key={sub.id} className={isBlocked ? 'bg-red-50' : ''}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div className="text-sm font-medium text-gray-900">
-                            {sub.businessName || 'Sin nombre'}
+                    <>
+                      {/* Fila principal del Business Owner */}
+                      <tr key={sub.id} className={isBlocked ? 'bg-red-50' : ''}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {/* Botón expandir/colapsar */}
+                            <button
+                              onClick={() => toggleOwnerExpand(sub.userId)}
+                              className="p-1 hover:bg-gray-200 rounded transition-colors"
+                              title={isExpanded ? 'Colapsar' : 'Expandir sub-usuarios'}
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-gray-600" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-gray-600" />
+                              )}
+                            </button>
+                            <div className="flex flex-col">
+                              <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                {sub.businessName || 'Sin nombre'}
+                                {ownerSubUsers.length > 0 && (
+                                  <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
+                                    {ownerSubUsers.length} sub-usuario{ownerSubUsers.length !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-500">{sub.email}</div>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">{sub.email}</div>
-                        </div>
-                      </td>
+                        </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
                           <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -457,6 +526,105 @@ export default function UserManagement() {
                         </div>
                       </td>
                     </tr>
+
+                    {/* Filas de sub-usuarios (cuando está expandido) */}
+                    {isExpanded && ownerSubUsers.length > 0 && ownerSubUsers.map((subUser) => {
+                      const subUserBlocked = subUser.status === 'blocked';
+
+                      return (
+                        <tr key={`sub-${subUser.id}`} className={`bg-blue-50 ${subUserBlocked ? 'opacity-60' : ''}`}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2 pl-8">
+                              <UserCircle className="w-4 h-4 text-blue-600" />
+                              <div className="flex flex-col">
+                                <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                  {subUser.name || 'Sin nombre'}
+                                  <span className="px-2 py-0.5 text-xs bg-blue-200 text-blue-800 rounded-full">
+                                    Sub-usuario
+                                  </span>
+                                </div>
+                                <div className="text-sm text-gray-500">{subUser.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                subUser.status === 'active'
+                                  ? 'bg-green-100 text-green-800'
+                                  : subUser.status === 'blocked'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}
+                            >
+                              {subUser.status === 'active'
+                                ? 'Activo'
+                                : subUser.status === 'blocked'
+                                ? 'Bloqueado'
+                                : subUser.status || 'Desconocido'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {subUser.allowedPages && subUser.allowedPages.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {subUser.allowedPages.map((page, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded"
+                                  >
+                                    {page}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">Sin permisos</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            -
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            -
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            -
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedUser(subUser);
+                                  setModalType('details');
+                                  setShowModal(true);
+                                }}
+                                className="text-blue-600 hover:text-blue-900"
+                                title="Ver detalles"
+                              >
+                                <Eye className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleToggleBlockUser(subUser.id, subUser.status === 'blocked')
+                                }
+                                className={
+                                  subUser.status === 'blocked'
+                                    ? 'text-green-600 hover:text-green-900'
+                                    : 'text-red-600 hover:text-red-900'
+                                }
+                                title={subUser.status === 'blocked' ? 'Activar' : 'Bloquear'}
+                              >
+                                {subUser.status === 'blocked' ? (
+                                  <CheckCircle className="w-5 h-5" />
+                                ) : (
+                                  <XCircle className="w-5 h-5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </>
                   );
                 })}
               </tbody>
