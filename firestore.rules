@@ -121,19 +121,22 @@ service cloud.firestore {
 
       // Subcollection: Invoices (Facturas/Boletas)
       match /invoices/{invoiceId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Admins pueden leer todas las facturas
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Customers (Clientes)
       match /customers/{customerId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Admins pueden leer todos los clientes
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
       // Subcollection: Products (Productos)
       match /products/{productId} {
-        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Admins pueden leer todos los productos
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Navigate } from 'react-router-dom';
@@ -373,9 +373,9 @@ export default function UserManagement() {
                   const isExpanded = expandedOwners.has(sub.userId);
 
                   return (
-                    <>
+                    <React.Fragment key={sub.id}>
                       {/* Fila principal del Business Owner */}
-                      <tr key={sub.id} className={isBlocked ? 'bg-red-50' : ''}>
+                      <tr className={isBlocked ? 'bg-red-50' : ''}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             {/* Botón expandir/colapsar */}
@@ -630,7 +630,7 @@ export default function UserManagement() {
                         </tr>
                       );
                     })}
-                  </>
+                  </React.Fragment>
                   );
                 })}
               </tbody>
