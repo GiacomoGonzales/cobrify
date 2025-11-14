@@ -209,6 +209,14 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Emission Config (Configuración de emisión electrónica)
+      match /emissionConfig/{configId} {
+        // Owners y sub-usuarios pueden leer configuración para calcular IGV
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Solo admins pueden escribir (se configura desde panel admin)
+        allow write: if isAdmin();
+      }
+
       // Subcollection: Ingredients (Ingredientes - para modo restaurante)
       match /ingredients/{ingredientId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
