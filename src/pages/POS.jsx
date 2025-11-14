@@ -2072,10 +2072,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">{formatCurrency(amounts.subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IGV ({taxConfig.igvRate}%):</span>
-                  <span className="font-medium">{formatCurrency(amounts.igv)}</span>
-                </div>
+                {/* Solo mostrar IGV si la tasa es mayor que 0 */}
+                {taxConfig.igvRate > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">IGV ({taxConfig.igvRate}%):</span>
+                    <span className="font-medium">{formatCurrency(amounts.igv)}</span>
+                  </div>
+                )}
+                {/* Mostrar badge si está exonerado de IGV */}
+                {taxConfig.igvExempt && (
+                  <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md">
+                    <span className="font-medium">⚠️ Empresa exonerada de IGV</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-xl sm:text-2xl font-bold border-t pt-2">
                   <span>Total:</span>
                   <span className="text-primary-600">{formatCurrency(amounts.total)}</span>
