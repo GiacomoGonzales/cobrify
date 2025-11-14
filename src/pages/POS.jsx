@@ -283,22 +283,34 @@ export default function POS() {
 
       // Cargar configuración de impuestos (taxConfig)
       try {
+        console.log('🔍 Cargando taxConfig para businessId:', businessId)
         const emissionConfigRef = doc(db, 'businesses', businessId, 'emissionConfig', 'config')
         const emissionConfigSnap = await getDoc(emissionConfigRef)
 
+        console.log('📄 emissionConfig existe?', emissionConfigSnap.exists())
+
         if (emissionConfigSnap.exists()) {
           const emissionData = emissionConfigSnap.data()
+          console.log('📦 emissionData completo:', emissionData)
+          console.log('💰 taxConfig encontrado:', emissionData.taxConfig)
+
           if (emissionData.taxConfig) {
-            setTaxConfig({
+            const newTaxConfig = {
               igvRate: emissionData.taxConfig.igvRate ?? 18,
               igvExempt: emissionData.taxConfig.igvExempt ?? false,
               exemptionReason: emissionData.taxConfig.exemptionReason ?? '',
               exemptionCode: emissionData.taxConfig.exemptionCode ?? '10'
-            })
+            }
+            console.log('✅ TaxConfig a aplicar:', newTaxConfig)
+            setTaxConfig(newTaxConfig)
+          } else {
+            console.warn('⚠️ emissionData.taxConfig no existe, usando valores por defecto')
           }
+        } else {
+          console.warn('⚠️ Documento emissionConfig no existe para businessId:', businessId)
         }
       } catch (error) {
-        console.error('Error al cargar taxConfig:', error)
+        console.error('❌ Error al cargar taxConfig:', error)
         // Si hay error, mantener los valores por defecto (IGV 18%)
       }
 
