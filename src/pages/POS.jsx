@@ -845,8 +845,10 @@ export default function POS() {
       // 1. Obtener siguiente número de documento
       const numberResult = await getNextDocumentNumber(businessId, documentType)
       if (!numberResult.success) {
-        throw new Error('Error al generar número de comprobante')
+        console.error('❌ Error detallado al generar número:', numberResult.error)
+        throw new Error(numberResult.error || 'Error al generar número de comprobante')
       }
+      console.log('✅ Número generado:', numberResult.number)
 
       // 2. Preparar items de la factura
       const items = cart.map(item => ({
