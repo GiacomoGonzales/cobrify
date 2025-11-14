@@ -109,6 +109,11 @@ export default function UserManagement() {
 
   // Filtrar suscripciones
   const filteredSubscriptions = subscriptions.filter((sub) => {
+    // Excluir usuarios secundarios (que tienen ownerId)
+    if (sub.ownerId) {
+      return false;
+    }
+
     const matchesSearch =
       sub.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sub.businessName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -123,12 +128,13 @@ export default function UserManagement() {
     return matchesSearch && matchesFilter;
   });
 
-  // Estadísticas
+  // Estadísticas (solo usuarios principales, sin sub-usuarios)
+  const primaryUsers = subscriptions.filter(s => !s.ownerId);
   const stats = {
-    total: subscriptions.length,
-    active: subscriptions.filter(s => s.status === 'active' && !s.accessBlocked).length,
-    suspended: subscriptions.filter(s => s.status === 'suspended' || s.accessBlocked).length,
-    trial: subscriptions.filter(s => s.plan === 'free').length,
+    total: primaryUsers.length,
+    active: primaryUsers.filter(s => s.status === 'active' && !s.accessBlocked).length,
+    suspended: primaryUsers.filter(s => s.status === 'suspended' || s.accessBlocked).length,
+    trial: primaryUsers.filter(s => s.plan === 'free').length,
   };
 
   // Acciones

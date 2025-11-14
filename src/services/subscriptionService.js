@@ -407,10 +407,36 @@ export const getAllSubscriptions = async () => {
     const q = query(subscriptionsRef, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
 
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    // Obtener información adicional del usuario (para saber si es sub-usuario)
+    const subscriptionsWithUserInfo = await Promise.all(
+      querySnapshot.docs.map(async (docSnapshot) => {
+        const subscriptionData = {
+          id: docSnapshot.id,
+          ...docSnapshot.data()
+        };
+
+        // Consultar el documento del usuario para obtener ownerId si existe
+        try {
+          const userRef = doc(db, 'users', docSnapshot.id);
+          const userDoc = await getDoc(userRef);
+
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            // Agregar ownerId si el usuario es secundario
+            if (userData.ownerId) {
+              subscriptionData.ownerId = userData.ownerId;
+            }
+          }
+        } catch (userError) {
+          console.error(`Error al obtener info de usuario ${docSnapshot.id}:`, userError);
+          // Continuar sin el ownerId si hay error
+        }
+
+        return subscriptionData;
+      })
+    );
+
+    return subscriptionsWithUserInfo;
   } catch (error) {
     console.error('Error al obtener suscripciones:', error);
     throw error;
