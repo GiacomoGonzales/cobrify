@@ -1,4 +1,5 @@
 import { onRequest } from 'firebase-functions/v2/https'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
@@ -422,6 +423,103 @@ export const sendInvoiceToSunat = onRequest(
     } catch (error) {
       console.error('❌ Error general:', error)
       res.status(500).json({ error: error.message || 'Error al procesar el documento' })
+    }
+  }
+)
+
+// ========================================
+// SCHEDULED FUNCTIONS - Tareas Programadas
+// ========================================
+
+/**
+ * Cloud Function programada: Resetear contadores mensuales
+ *
+ * Se ejecuta DIARIAMENTE a las 00:00 (medianoche) hora de Perú (America/Lima)
+ * Resetea el contador de documentos (usage.invoicesThisMonth) solo para usuarios
+ * cuyo período mensual está iniciando HOY.
+ *
+ * Ejemplo: Si un usuario contrató el 10 de octubre, su contador se resetea
+ * el 10 de cada mes (10 de noviembre, 10 de diciembre, etc.)
+ */
+export const resetMonthlyCounters = onSchedule(
+  {
+    schedule: '0 0 * * *', // Todos los días a las 00:00
+    timeZone: 'America/Lima', // Zona horaria de Perú
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (event) => {
+    try {
+      console.log('🔄 Iniciando reseteo de contadores mensuales...')
+
+      const today = new Date()
+      const dayOfMonth = today.getDate() // Día del mes (1-31)
+
+      console.log(`📅 Hoy es día ${dayOfMonth} del mes`)
+
+      // Obtener todas las suscripciones activas
+      const subscriptionsSnapshot = await db.collection('subscriptions').get()
+
+      let resetCount = 0
+      let skippedCount = 0
+
+      // Procesar cada suscripción
+      const batch = db.batch()
+
+      for (const docSnapshot of subscriptionsSnapshot.docs) {
+        const subscription = docSnapshot.data()
+        const userId = docSnapshot.id
+
+        // Solo procesar suscripciones activas
+        if (subscription.status !== 'active') {
+          continue
+        }
+
+        // Obtener la fecha de inicio del período actual
+        const currentPeriodStart = subscription.currentPeriodStart?.toDate?.() || subscription.currentPeriodStart
+
+        if (!currentPeriodStart) {
+          console.log(`⏭️ Usuario ${userId}: Sin fecha de inicio de período`)
+          skippedCount++
+          continue
+        }
+
+        // Obtener el día del mes en que inició el período
+        const periodStartDay = currentPeriodStart.getDate()
+
+        // Si el día de inicio del período coincide con el día de hoy, resetear
+        if (periodStartDay === dayOfMonth) {
+          console.log(`✅ Usuario ${userId}: Reseteando contador (día ${dayOfMonth})`)
+
+          batch.update(docSnapshot.ref, {
+            'usage.invoicesThisMonth': 0,
+            lastCounterReset: FieldValue.serverTimestamp()
+          })
+
+          resetCount++
+        } else {
+          skippedCount++
+        }
+      }
+
+      // Ejecutar todas las actualizaciones en batch
+      if (resetCount > 0) {
+        await batch.commit()
+        console.log(`✅ Reseteo completado: ${resetCount} contadores reseteados, ${skippedCount} omitidos`)
+      } else {
+        console.log(`ℹ️ No hay contadores para resetear hoy. Total revisados: ${skippedCount}`)
+      }
+
+      return {
+        success: true,
+        resetCount,
+        skippedCount,
+        date: today.toISOString()
+      }
+
+    } catch (error) {
+      console.error('❌ Error al resetear contadores:', error)
+      throw error
     }
   }
 )
