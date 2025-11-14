@@ -29,6 +29,7 @@
     "@capacitor/splash-screen": "^7.0.3",
     "@hookform/resolvers": "^3.3.4",
     "axios": "^1.12.2",
+    "capacitor-thermal-printer": "^0.2.5",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
     "dayjs": "^1.11.18",

@@ -40,6 +40,8 @@ import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/s
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
+import { Capacitor } from '@capacitor/core'
+import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
@@ -85,8 +87,39 @@ export default function InvoiceList() {
   const [selectedInvoiceForGuide, setSelectedInvoiceForGuide] = useState(null)
 
   // Función para imprimir ticket
-  const handlePrintTicket = () => {
+  const handlePrintTicket = async () => {
     if (!viewingInvoice || !companySettings) return
+
+    const isNative = Capacitor.isNativePlatform()
+
+    // Si es móvil, intentar imprimir en impresora térmica
+    if (isNative) {
+      try {
+        // Obtener configuración de impresora
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          // Reconectar a la impresora
+          await connectPrinter(printerConfigResult.config.address)
+
+          // Imprimir en impresora térmica
+          const result = await printInvoiceTicket(viewingInvoice, companySettings)
+
+          if (result.success) {
+            toast.success('Comprobante impreso en ticketera')
+            return
+          } else {
+            toast.error('Error al imprimir en ticketera: ' + result.error)
+            toast.info('Usando impresión estándar...')
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir en ticketera:', error)
+        toast.info('Usando impresión estándar...')
+      }
+    }
+
+    // Fallback: impresión estándar (web o si falla la térmica)
     window.print()
   }
 
@@ -443,12 +476,6 @@ ${companySettings?.website ? companySettings.website : ''}`
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
           </Button>
-          <Link to="/pos" className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Nueva Venta
-            </Button>
-          </Link>
         </div>
       </div>
 

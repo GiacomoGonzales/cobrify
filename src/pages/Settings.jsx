@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -14,6 +14,13 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
+import {
+  scanPrinters,
+  connectPrinter,
+  savePrinterConfig,
+  getPrinterConfig,
+  testPrinter
+} from '@/services/thermalPrinterService'
 
 export default function Settings() {
   const { user, isDemoMode, getBusinessId } = useAppContext()
@@ -91,6 +98,18 @@ export default function Settings() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
+
+  // Estados para impresora térmica
+  const [printerConfig, setPrinterConfig] = useState({
+    enabled: false,
+    address: '',
+    name: '',
+    type: 'bluetooth', // bluetooth o wifi
+  })
+  const [availablePrinters, setAvailablePrinters] = useState([])
+  const [isScanning, setIsScanning] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
 
   const {
     register,
@@ -220,6 +239,11 @@ export default function Settings() {
         setBusinessMode(businessData.businessMode || 'retail')
         if (businessData.restaurantConfig) {
           setRestaurantConfig(businessData.restaurantConfig)
+        }
+
+        // Cargar configuración de impresora
+        if (businessData.printerConfig) {
+          setPrinterConfig(businessData.printerConfig)
         }
       }
     } catch (error) {
@@ -617,6 +641,88 @@ export default function Settings() {
     }
   }
 
+  // Funciones para impresora térmica
+  const handleScanPrinters = async () => {
+    setIsScanning(true)
+    try {
+      const result = await scanPrinters()
+      if (result.success) {
+        setAvailablePrinters(result.devices)
+        toast.success(`${result.devices.length} impresoras encontradas`)
+      } else {
+        toast.error(result.error || 'Error al escanear impresoras')
+      }
+    } catch (error) {
+      console.error('Error scanning printers:', error)
+      toast.error('Error al escanear impresoras')
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  const handleConnectPrinter = async (printerAddress, printerName) => {
+    setIsConnecting(true)
+    try {
+      const result = await connectPrinter(printerAddress)
+      if (result.success) {
+        // Guardar configuración
+        const newConfig = {
+          enabled: true,
+          address: printerAddress,
+          name: printerName,
+          type: 'bluetooth'
+        }
+        setPrinterConfig(newConfig)
+
+        // Guardar en Firestore
+        await savePrinterConfig(getBusinessId(), newConfig)
+
+        toast.success('Impresora conectada exitosamente')
+      } else {
+        toast.error(result.error || 'Error al conectar impresora')
+      }
+    } catch (error) {
+      console.error('Error connecting printer:', error)
+      toast.error('Error al conectar impresora')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const handleTestPrinter = async () => {
+    setIsTesting(true)
+    try {
+      // Primero reconectar a la impresora guardada
+      if (printerConfig.address) {
+        await connectPrinter(printerConfig.address)
+      }
+
+      const result = await testPrinter()
+      if (result.success) {
+        toast.success('Impresión de prueba enviada')
+      } else {
+        toast.error(result.error || 'Error al imprimir prueba')
+      }
+    } catch (error) {
+      console.error('Error testing printer:', error)
+      toast.error('Error al imprimir prueba')
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const handleDisablePrinter = async () => {
+    try {
+      const newConfig = { ...printerConfig, enabled: false }
+      setPrinterConfig(newConfig)
+      await savePrinterConfig(getBusinessId(), newConfig)
+      toast.success('Impresora deshabilitada')
+    } catch (error) {
+      console.error('Error disabling printer:', error)
+      toast.error('Error al deshabilitar impresora')
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -636,6 +742,7 @@ export default function Settings() {
     { id: 'informacion', label: 'Información', icon: Building2 },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'series', label: 'Series', icon: FileText },
+    { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
   ]
 
@@ -1501,6 +1608,165 @@ export default function Settings() {
           </div>
         </CardContent>
         </Card>
+      )}
+
+      {/* Tab Content - Impresora */}
+      {activeTab === 'impresora' && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Printer className="w-5 h-5 text-primary-600" />
+                <CardTitle>Configuración de Impresora Térmica</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Información */}
+                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                  <div className="flex items-start">
+                    <Info className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-semibold mb-1">Impresión Térmica WiFi/Bluetooth</p>
+                      <p>
+                        Conecta una impresora térmica (ticketera) para imprimir automáticamente tickets,
+                        comandas de cocina y precuentas desde la app móvil.
+                      </p>
+                      <p className="mt-2">
+                        <strong>Nota:</strong> Esta funcionalidad solo está disponible en la app móvil Android.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Impresora configurada */}
+                {printerConfig.enabled && printerConfig.address && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-green-100 p-2 rounded-full">
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{printerConfig.name || 'Impresora Térmica'}</p>
+                          <p className="text-sm text-gray-600">Dirección: {printerConfig.address}</p>
+                          <p className="text-sm text-gray-600">Tipo: {printerConfig.type === 'bluetooth' ? 'Bluetooth' : 'WiFi'}</p>
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleTestPrinter}
+                          disabled={isTesting}
+                        >
+                          {isTesting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Imprimiendo...
+                            </>
+                          ) : (
+                            <>
+                              <Printer className="w-4 h-4 mr-2" />
+                              Probar
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDisablePrinter}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Deshabilitar
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Escanear impresoras */}
+                {(!printerConfig.enabled || !printerConfig.address) && (
+                  <div>
+                    <Button
+                      onClick={handleScanPrinters}
+                      disabled={isScanning}
+                      className="w-full sm:w-auto"
+                    >
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Escaneando...
+                        </>
+                      ) : (
+                        <>
+                          <Printer className="w-4 h-4 mr-2" />
+                          Buscar Impresoras Bluetooth
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Asegúrate de que tu impresora esté encendida y en modo de emparejamiento
+                    </p>
+                  </div>
+                )}
+
+                {/* Lista de impresoras encontradas */}
+                {availablePrinters.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                      Impresoras encontradas ({availablePrinters.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {availablePrinters.map((printer) => (
+                        <div
+                          key={printer.address}
+                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        >
+                          <div>
+                            <p className="font-medium text-gray-900">{printer.name || 'Impresora sin nombre'}</p>
+                            <p className="text-sm text-gray-500">{printer.address}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleConnectPrinter(printer.address, printer.name)}
+                            disabled={isConnecting}
+                          >
+                            {isConnecting ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Conectando...
+                              </>
+                            ) : (
+                              'Conectar'
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Instrucciones */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">¿Cómo configurar tu impresora?</h3>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                    <li>Enciende tu impresora térmica (ticketera)</li>
+                    <li>Activa el Bluetooth en tu dispositivo móvil</li>
+                    <li>Haz clic en "Buscar Impresoras Bluetooth"</li>
+                    <li>Selecciona tu impresora de la lista y haz clic en "Conectar"</li>
+                    <li>Una vez conectada, prueba la impresión con el botón "Probar"</li>
+                    <li>¡Listo! Ahora puedes imprimir tickets, comandas y precuentas directamente desde la app</li>
+                  </ol>
+                  <p className="text-xs text-gray-500 mt-3">
+                    <strong>Compatibilidad:</strong> Compatible con impresoras térmicas ESC/POS de 58mm y 80mm
+                    (Epson, Star, Bixolon, y otras marcas compatibles con ESC/POS)
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Tab Content - Seguridad */}

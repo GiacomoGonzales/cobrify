@@ -34,6 +34,9 @@ export const NOTIFICATION_TYPES = {
 // PUSH NOTIFICATIONS (FCM)
 // ===========================================
 
+// Variable para evitar registrar listeners múltiples veces
+let listenersRegistered = false;
+
 // Inicializar notificaciones push para el usuario
 export const initializePushNotifications = async (userId) => {
   const isNative = Capacitor.isNativePlatform();
@@ -52,46 +55,50 @@ export const initializePushNotifications = async (userId) => {
       return { success: false, error: 'Permission denied' };
     }
 
-    // 2. Registrar para recibir notificaciones
-    await PushNotifications.register();
+    // 2. Registrar listeners solo una vez
+    if (!listenersRegistered) {
+      // 3. Escuchar el token FCM
+      PushNotifications.addListener('registration', async (token) => {
+        console.log('✅ Push registration success!');
+        console.log('📱 FCM Token:', token.value);
+        console.log('👤 User ID:', userId);
 
-    // 3. Escuchar el token FCM
-    PushNotifications.addListener('registration', async (token) => {
-      console.log('✅ Push registration success!');
-      console.log('📱 FCM Token:', token.value);
-      console.log('👤 User ID:', userId);
-
-      // Guardar el token en Firestore asociado al usuario
-      if (userId) {
-        const saveResult = await saveFCMToken(userId, token.value);
-        if (saveResult.success) {
-          console.log('✅ Token guardado exitosamente en Firestore');
-          alert('✅ Notificaciones activadas correctamente!');
+        // Guardar el token en Firestore asociado al usuario
+        if (userId) {
+          const saveResult = await saveFCMToken(userId, token.value);
+          if (saveResult.success) {
+            console.log('✅ Token guardado exitosamente en Firestore');
+            // Notificación silenciosa - solo log en consola
+          } else {
+            console.error('❌ Error al guardar token:', saveResult.error);
+          }
         } else {
-          console.error('❌ Error al guardar token:', saveResult.error);
-          alert('❌ Error al activar notificaciones: ' + saveResult.error);
+          console.error('❌ No userId available to save token');
         }
-      } else {
-        console.error('❌ No userId available to save token');
-      }
-    });
+      });
 
-    // 4. Escuchar errores de registro
-    PushNotifications.addListener('registrationError', (error) => {
-      console.error('Error on registration:', error);
-    });
+      // 4. Escuchar errores de registro
+      PushNotifications.addListener('registrationError', (error) => {
+        console.error('Error on registration:', error);
+      });
 
-    // 5. Escuchar notificaciones recibidas (app en foreground)
-    PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      console.log('Push notification received:', notification);
-      // Mostrar notificación local o actualizar UI
-    });
+      // 5. Escuchar notificaciones recibidas (app en foreground)
+      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('Push notification received:', notification);
+        // Mostrar notificación local o actualizar UI
+      });
 
-    // 6. Escuchar cuando el usuario toca una notificación
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('Push notification action performed:', notification);
-      // Navegar a pantalla específica según el tipo
-    });
+      // 6. Escuchar cuando el usuario toca una notificación
+      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+        console.log('Push notification action performed:', notification);
+        // Navegar a pantalla específica según el tipo
+      });
+
+      listenersRegistered = true;
+    }
+
+    // 3. Registrar para recibir notificaciones (después de configurar listeners)
+    await PushNotifications.register();
 
     return { success: true };
   } catch (error) {
@@ -126,6 +133,7 @@ export const cleanupPushNotifications = async () => {
 
   try {
     await PushNotifications.removeAllListeners();
+    listenersRegistered = false; // Resetear la bandera
     console.log('Push notification listeners removed');
   } catch (error) {
     console.error('Error cleaning up notifications:', error);

@@ -14,6 +14,8 @@ import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
+import { Capacitor } from '@capacitor/core'
+import { printKitchenOrder, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -63,12 +65,42 @@ export default function Orders() {
   })
 
   // Función para imprimir comanda
-  const handlePrintKitchenTicket = (order) => {
+  const handlePrintKitchenTicket = async (order) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
 
+    const isNative = Capacitor.isNativePlatform()
+
+    // Si es móvil, intentar imprimir en impresora térmica
+    if (isNative) {
+      try {
+        // Obtener configuración de impresora
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          // Reconectar a la impresora
+          await connectPrinter(printerConfigResult.config.address)
+
+          // Imprimir en impresora térmica
+          const result = await printKitchenOrder(order, null)
+
+          if (result.success) {
+            toast.success('Comanda impresa en ticketera')
+            return
+          } else {
+            toast.error('Error al imprimir en ticketera: ' + result.error)
+            toast.info('Usando impresión estándar...')
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir en ticketera:', error)
+        toast.info('Usando impresión estándar...')
+      }
+    }
+
+    // Fallback: impresión estándar (web o si falla la térmica)
     setOrderToPrint(order)
     // Esperar a que se renderice el ticket antes de imprimir
     setTimeout(() => {

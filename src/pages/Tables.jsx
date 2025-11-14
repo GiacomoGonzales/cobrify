@@ -14,6 +14,8 @@ import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import { printPreBill } from '@/utils/printPreBill'
+import { Capacitor } from '@capacitor/core'
+import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import {
   getTables,
   getTablesStats,
@@ -443,6 +445,36 @@ export default function Tables() {
         console.log('📄 Datos del negocio para precuenta:', businessInfo)
       }
 
+      const isNative = Capacitor.isNativePlatform()
+
+      // Si es móvil, intentar imprimir en impresora térmica
+      if (isNative) {
+        try {
+          // Obtener configuración de impresora
+          const printerConfigResult = await getPrinterConfig(businessId)
+
+          if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+            // Reconectar a la impresora
+            await connectPrinter(printerConfigResult.config.address)
+
+            // Imprimir en impresora térmica
+            const result = await printPreBillThermal(selectedOrder, selectedTable, businessInfo)
+
+            if (result.success) {
+              toast.success('Precuenta impresa en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir en ticketera: ' + result.error)
+              toast.info('Usando impresión estándar...')
+            }
+          }
+        } catch (error) {
+          console.error('Error al imprimir en ticketera:', error)
+          toast.info('Usando impresión estándar...')
+        }
+      }
+
+      // Fallback: impresión estándar (web o si falla la térmica)
       printPreBill(selectedTable, selectedOrder, businessInfo)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {

@@ -525,6 +525,94 @@ export const resetMonthlyCounters = onSchedule(
 )
 
 // ========================================
+// UTILITY FUNCTIONS - Funciones de utilidad (temporal)
+// ========================================
+
+/**
+ * Cloud Function HTTP: Inicializar contadores de uso
+ *
+ * Esta función es temporal y se puede ejecutar manualmente para inicializar
+ * el campo usage en todas las suscripciones que no lo tengan.
+ *
+ * Ejecutar con: curl https://[tu-url]/initializeUsageCounters
+ * O desde el navegador visitando la URL
+ */
+export const initializeUsageCounters = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    try {
+      console.log('🔧 Inicializando contadores de uso...')
+
+      const subscriptionsSnapshot = await db.collection('subscriptions').get()
+
+      let updated = 0
+      let skipped = 0
+      const results = []
+
+      for (const docSnapshot of subscriptionsSnapshot.docs) {
+        const subscription = docSnapshot.data()
+        const userId = docSnapshot.id
+
+        // Si ya tiene usage, saltar
+        if (subscription.usage) {
+          results.push({
+            userId,
+            email: subscription.email || 'sin email',
+            status: 'skipped',
+            reason: 'Ya tiene contador'
+          })
+          skipped++
+          continue
+        }
+
+        // Inicializar contador
+        await docSnapshot.ref.update({
+          usage: {
+            invoicesThisMonth: 0,
+            totalCustomers: 0,
+            totalProducts: 0
+          }
+        })
+
+        results.push({
+          userId,
+          email: subscription.email || 'sin email',
+          status: 'updated',
+          reason: 'Contador inicializado'
+        })
+        updated++
+      }
+
+      console.log(`✅ Proceso completado: ${updated} actualizados, ${skipped} omitidos`)
+
+      res.status(200).json({
+        success: true,
+        message: 'Contadores inicializados',
+        stats: {
+          updated,
+          skipped,
+          total: updated + skipped
+        },
+        details: results
+      })
+
+    } catch (error) {
+      console.error('❌ Error al inicializar contadores:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+// ========================================
 // PUSH NOTIFICATIONS - Cloud Functions
 // ========================================
 

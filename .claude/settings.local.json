@@ -71,7 +71,9 @@
       "WebSearch",
       "WebFetch(domain:www.sunat.gob.pe)",
       "Bash(npm run lint)",
-      "Bash(npm run)"
+      "Bash(npm run)",
+      "Bash(npm run deploy:*)",
+      "Bash(./gradlew.bat:*)"
     ],
     "deny": [],
     "ask": []
