@@ -55,9 +55,10 @@ export const isSunatConfigured = () => {
  *
  * @param {Object} invoiceData - Datos de la factura/boleta
  * @param {Object} companySettings - Configuración de la empresa
+ * @param {Object} taxConfig - Configuración de impuestos (opcional)
  * @returns {Promise<Object>} { success: boolean, xml?: string, fileName?: string, error?: string }
  */
-export const prepareInvoiceXML = async (invoiceData, companySettings) => {
+export const prepareInvoiceXML = async (invoiceData, companySettings, taxConfig = null) => {
   try {
     // Validar datos antes de generar XML
     const validation = validateInvoiceData(invoiceData, companySettings)
@@ -69,8 +70,8 @@ export const prepareInvoiceXML = async (invoiceData, companySettings) => {
       }
     }
 
-    // Generar el XML UBL 2.1
-    const xml = generateInvoiceXML(invoiceData, companySettings)
+    // Generar el XML UBL 2.1 con configuración de impuestos
+    const xml = generateInvoiceXML(invoiceData, companySettings, taxConfig)
 
     // Generar nombre del archivo
     // Extraer series y número correlativo
@@ -117,9 +118,10 @@ export const prepareInvoiceXML = async (invoiceData, companySettings) => {
  *
  * @param {Object} invoiceData - Datos de la factura/boleta
  * @param {Object} companySettings - Configuración de la empresa
+ * @param {Object} taxConfig - Configuración de impuestos (opcional)
  * @returns {Promise<Object>} { success: boolean, cdr?: Object, error?: string }
  */
-export const sendInvoiceToSunat = async (invoiceData, companySettings) => {
+export const sendInvoiceToSunat = async (invoiceData, companySettings, taxConfig = null) => {
   try {
     // Verificar configuración
     if (!isSunatConfigured()) {
@@ -129,8 +131,8 @@ export const sendInvoiceToSunat = async (invoiceData, companySettings) => {
       }
     }
 
-    // Preparar el XML
-    const prepareResult = await prepareInvoiceXML(invoiceData, companySettings)
+    // Preparar el XML con configuración de impuestos
+    const prepareResult = await prepareInvoiceXML(invoiceData, companySettings, taxConfig)
 
     if (!prepareResult.success) {
       return prepareResult
