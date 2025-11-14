@@ -54,9 +54,10 @@ export const UNIT_CODES = {
  *
  * @param {Object} invoiceData - Datos de la factura/boleta
  * @param {Object} companySettings - Configuración de la empresa
+ * @param {Object} taxConfig - Configuración de impuestos (opcional)
  * @returns {string} XML en formato UBL 2.1
  */
-export const generateInvoiceXML = (invoiceData, companySettings) => {
+export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = null) => {
   const {
     documentType,
     series: seriesField,
@@ -80,6 +81,14 @@ export const generateInvoiceXML = (invoiceData, companySettings) => {
     urbanization,
     ubigeo
   } = companySettings
+
+  // Configuración de impuestos (IGV)
+  // Si no se proporciona taxConfig, usar valores por defecto (IGV 18%)
+  const igvRate = taxConfig?.igvRate ?? 18
+  const igvExempt = taxConfig?.igvExempt ?? false
+  const exemptionReason = taxConfig?.exemptionReason ?? ''
+  const exemptionCode = taxConfig?.exemptionCode ?? '10' // 10=Gravado, 20=Exonerado
+  const igvMultiplier = igvRate / 100
 
   // Extraer series del número formateado si no existe el campo series
   // Ejemplo: "F001-00000001" -> series = "F001"
@@ -113,8 +122,14 @@ export const generateInvoiceXML = (invoiceData, companySettings) => {
     // Soportar tanto 'price' como 'unitPrice' para compatibilidad
     const unitPrice = item.unitPrice || item.price || 0
     const lineExtensionAmount = item.quantity * unitPrice
-    const priceWithTax = unitPrice * 1.18
-    const lineIgv = lineExtensionAmount * 0.18
+    // Calcular precio con IGV usando la tasa dinámica
+    const priceWithTax = unitPrice * (1 + igvMultiplier)
+    const lineIgv = lineExtensionAmount * igvMultiplier
+
+    // Si está exonerado y hay motivo, incluirlo en el XML
+    const exemptionReasonTag = igvExempt && exemptionReason
+      ? `<cbc:TaxExemptionReason><![CDATA[${exemptionReason}]]></cbc:TaxExemptionReason>`
+      : ''
 
     return `
     <cac:InvoiceLine>
@@ -133,8 +148,9 @@ export const generateInvoiceXML = (invoiceData, companySettings) => {
           <cbc:TaxableAmount currencyID="${CURRENCY_CODES.PEN}">${lineExtensionAmount.toFixed(2)}</cbc:TaxableAmount>
           <cbc:TaxAmount currencyID="${CURRENCY_CODES.PEN}">${lineIgv.toFixed(2)}</cbc:TaxAmount>
           <cac:TaxCategory>
-            <cbc:Percent>18.00</cbc:Percent>
-            <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReasonCode>
+            <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
+            <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>
+            ${exemptionReasonTag}
             <cac:TaxScheme>
               <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
               <cbc:Name>IGV</cbc:Name>
@@ -234,6 +250,9 @@ export const generateInvoiceXML = (invoiceData, companySettings) => {
       <cbc:TaxableAmount currencyID="${CURRENCY_CODES.PEN}">${subtotal.toFixed(2)}</cbc:TaxableAmount>
       <cbc:TaxAmount currencyID="${CURRENCY_CODES.PEN}">${igv.toFixed(2)}</cbc:TaxAmount>
       <cac:TaxCategory>
+        <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
+        <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>${igvExempt && exemptionReason ? `
+        <cbc:TaxExemptionReason><![CDATA[${exemptionReason}]]></cbc:TaxExemptionReason>` : ''}
         <cac:TaxScheme>
           <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
           <cbc:Name>IGV</cbc:Name>
