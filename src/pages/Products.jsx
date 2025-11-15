@@ -373,6 +373,8 @@ export default function Products() {
         // Don't include single price/stock for variant products
         productData.price = null
         productData.stock = null
+        // Productos con variantes siempre manejan stock
+        productData.trackStock = true
       } else {
         // Regular product without variants
         productData.price = parseFloat(data.price)
@@ -381,7 +383,12 @@ export default function Products() {
         if (noStock) {
           productData.stock = null
           productData.initialStock = null
-        } else if (editingProduct) {
+          productData.trackStock = false // NO controlar stock
+        } else {
+          productData.trackStock = true // SÍ controlar stock
+        }
+
+        if (editingProduct && !noStock) {
           // Al editar, mantener el stock actual (no lo modificamos aquí)
           // Solo actualizar initialStock si el usuario es business_owner y lo modificó
           if (user?.role === 'business_owner' && data.initialStock !== '') {
