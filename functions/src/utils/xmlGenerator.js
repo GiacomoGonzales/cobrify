@@ -185,9 +185,11 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
   // SUNAT requiere PaymentTerms con el tipo de operación
-  // Tipo de Operación: Contado (default) o Crédito
+  // Catálogo 54 - Forma de Pago:
+  // FormaPago.Tipo = "Contado" o "Credito" (en PaymentMeansID)
+  // ID debe contener: "FormaPago" (no el tipo de pago)
   const paymentTerms = root.ele('cac:PaymentTerms')
-  paymentTerms.ele('cbc:ID').txt('Contado') // Puede ser "Contado" o "Credito"
+  paymentTerms.ele('cbc:ID').txt('FormaPago')
   paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === IMPUESTOS (IGV) ===
@@ -539,7 +541,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
   const paymentTermsCredit = root.ele('cac:PaymentTerms')
-  paymentTermsCredit.ele('cbc:ID').txt('Contado')
+  paymentTermsCredit.ele('cbc:ID').txt('FormaPago')
   paymentTermsCredit.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === IMPUESTOS (IGV) ===
@@ -866,7 +868,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
   // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
   const paymentTermsDebit = root.ele('cac:PaymentTerms')
-  paymentTermsDebit.ele('cbc:ID').txt('Contado')
+  paymentTermsDebit.ele('cbc:ID').txt('FormaPago')
   paymentTermsDebit.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === IMPUESTOS (IGV) ===
