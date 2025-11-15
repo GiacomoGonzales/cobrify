@@ -147,6 +147,10 @@ export default function POS() {
   // Tipo de pedido (para reportes)
   const [orderType, setOrderType] = useState('takeaway')
 
+  // Descuento
+  const [discountAmount, setDiscountAmount] = useState('')
+  const [discountPercentage, setDiscountPercentage] = useState('')
+
   // Variant selection modal
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
   const [showVariantModal, setShowVariantModal] = useState(false)
@@ -583,6 +587,8 @@ export default function POS() {
     })
     setPayments([{ method: '', amount: '' }])
     setLastInvoiceData(null)
+    setDiscountAmount('')
+    setDiscountPercentage('')
   }
 
   // Buscar datos de DNI o RUC automáticamente
@@ -647,13 +653,68 @@ export default function POS() {
     }))
   }, [documentType])
 
-  const amounts = calculateInvoiceAmounts(
+  // Handlers para descuento
+  const handleDiscountAmountChange = (value) => {
+    setDiscountAmount(value)
+
+    if (value === '') {
+      setDiscountPercentage('')
+      return
+    }
+
+    const amount = parseFloat(value)
+    if (!isNaN(amount) && amount >= 0) {
+      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      if (subtotal > 0) {
+        const percentage = ((amount / subtotal) * 100).toFixed(2)
+        setDiscountPercentage(percentage)
+      }
+    }
+  }
+
+  const handleDiscountPercentageChange = (value) => {
+    setDiscountPercentage(value)
+
+    if (value === '') {
+      setDiscountAmount('')
+      return
+    }
+
+    const percentage = parseFloat(value)
+    if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      const amount = ((subtotal * percentage) / 100).toFixed(2)
+      setDiscountAmount(amount)
+    }
+  }
+
+  const handleClearDiscount = () => {
+    setDiscountAmount('')
+    setDiscountPercentage('')
+  }
+
+  // Calcular montos sin descuento
+  const baseAmounts = calculateInvoiceAmounts(
     cart.map(item => ({
       price: item.price,
       quantity: item.quantity,
     })),
     taxConfig.igvRate
   )
+
+  // Aplicar descuento
+  const discount = parseFloat(discountAmount) || 0
+  const subtotalAfterDiscount = Math.max(0, baseAmounts.subtotal - discount)
+  const igvAfterDiscount = taxConfig.igvRate > 0 ? subtotalAfterDiscount * (taxConfig.igvRate / 100) : 0
+  const totalAfterDiscount = subtotalAfterDiscount + igvAfterDiscount
+
+  const amounts = {
+    subtotal: Number(baseAmounts.subtotal.toFixed(2)),
+    discount: Number(discount.toFixed(2)),
+    subtotalAfterDiscount: Number(subtotalAfterDiscount.toFixed(2)),
+    igv: Number(igvAfterDiscount.toFixed(2)),
+    total: Number(totalAfterDiscount.toFixed(2)),
+  }
 
   // Calcular totales de pago
   const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
@@ -804,6 +865,8 @@ export default function POS() {
               },
           items: items,
           subtotal: amounts.subtotal,
+          discount: amounts.discount || 0,
+          discountPercentage: parseFloat(discountPercentage) || 0,
           igv: amounts.igv,
           total: amounts.total,
           payments: allPayments,
@@ -835,6 +898,8 @@ export default function POS() {
         })
         setPayments([{ id: Date.now(), method: '', amount: '' }])
         setSelectedCustomer(null)
+        setDiscountAmount('')
+        setDiscountPercentage('')
 
         setIsProcessing(false)
         return
@@ -890,6 +955,8 @@ export default function POS() {
             },
         items: items,
         subtotal: amounts.subtotal,
+        discount: amounts.discount || 0,
+        discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
         total: amounts.total,
         // Configuración de impuestos
@@ -2086,6 +2153,64 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">{formatCurrency(amounts.subtotal)}</span>
                 </div>
+
+                {/* Discount Field */}
+                {cart.length > 0 && (
+                  <div className="border-t border-b py-2 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600 flex-shrink-0">Descuento:</span>
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={discountAmount}
+                            onChange={(e) => handleDiscountAmountChange(e.target.value)}
+                            placeholder="0.00"
+                            min="0"
+                            max={amounts.subtotal}
+                            step="0.01"
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            disabled={lastInvoiceData !== null}
+                          />
+                          <span className="text-sm text-gray-600">S/</span>
+                        </div>
+                        <span className="text-sm text-gray-500">o</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={discountPercentage}
+                            onChange={(e) => handleDiscountPercentageChange(e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            disabled={lastInvoiceData !== null}
+                          />
+                          <span className="text-sm text-gray-600">%</span>
+                        </div>
+                        {(discountAmount || discountPercentage) && (
+                          <button
+                            onClick={handleClearDiscount}
+                            className="ml-1 text-red-600 hover:text-red-800"
+                            title="Limpiar descuento"
+                            disabled={lastInvoiceData !== null}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Show discount amount if applied */}
+                    {amounts.discount > 0 && (
+                      <div className="flex justify-between text-sm text-green-600">
+                        <span>Descuento aplicado:</span>
+                        <span className="font-medium">-{formatCurrency(amounts.discount)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Solo mostrar IGV si la tasa es mayor que 0 */}
                 {taxConfig.igvRate > 0 && (
                   <div className="flex justify-between text-sm">
