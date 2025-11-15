@@ -212,7 +212,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // === TOTALES ===
   // IMPORTANTE: LegalMonetaryTotal DEBE ir DESPUÉS de TaxTotal y ANTES de InvoiceLine
-  // El orden de los elementos es CRÍTICO según el esquema XSD de SUNAT
+  // El orden de los elementos es CRÍTICO según el esquema XSD UBL 2.1 de SUNAT:
+  // LineExtensionAmount -> TaxInclusiveAmount -> AllowanceTotalAmount -> PayableAmount
 
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
 
@@ -220,15 +221,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(invoiceData.subtotal.toFixed(2))
 
-  // 2. Si hay descuento, incluir el monto total de descuentos
+  // 2. Total impuestos incluidos
+  legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+    .txt(invoiceData.total.toFixed(2))
+
+  // 3. Si hay descuento, incluir el monto total de descuentos (DESPUÉS de TaxInclusiveAmount)
   if (discount > 0) {
     legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(discount.toFixed(2))
   }
-
-  // 3. Total impuestos incluidos
-  legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.total.toFixed(2))
 
   // 4. Total a pagar
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
@@ -541,9 +542,12 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   // === TOTALES ===
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
 
-  // Orden correcto según XSD: LineExtensionAmount -> AllowanceTotalAmount -> PayableAmount
+  // Orden correcto según XSD UBL 2.1
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
     .txt(creditNoteData.subtotal.toFixed(2))
+
+  legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
+    .txt(creditNoteData.total.toFixed(2))
 
   if (creditDiscount > 0) {
     legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
@@ -840,9 +844,12 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
   // === TOTALES ===
   const legalMonetaryTotal = root.ele('cac:RequestedMonetaryTotal')
 
-  // Orden correcto según XSD: LineExtensionAmount -> AllowanceTotalAmount -> PayableAmount
+  // Orden correcto según XSD UBL 2.1
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
     .txt(debitNoteData.subtotal.toFixed(2))
+
+  legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
+    .txt(debitNoteData.total.toFixed(2))
 
   if (debitDiscount > 0) {
     legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
