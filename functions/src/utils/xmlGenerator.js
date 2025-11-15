@@ -240,7 +240,11 @@ export function generateInvoiceXML(invoiceData, businessData) {
     const invoiceLine = root.ele('cac:InvoiceLine')
 
     // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)
-    const taxAffectation = item.taxAffectation || '10'
+    // Si el negocio está exonerado de IGV, todos los items deben ser exonerados (20)
+    let taxAffectation = item.taxAffectation
+    if (!taxAffectation) {
+      taxAffectation = igvExempt ? '20' : '10'  // 20=Exonerado si empresa exonerada, 10=Gravado si no
+    }
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
@@ -562,7 +566,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     const creditNoteLine = root.ele('cac:CreditNoteLine')
 
     // Código de afectación al IGV
-    const taxAffectation = item.taxAffectation || '10'
+    let taxAffectation = item.taxAffectation
+    if (!taxAffectation) {
+      taxAffectation = igvExempt ? '20' : '10'  // 20=Exonerado si empresa exonerada, 10=Gravado si no
+    }
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
@@ -674,6 +681,9 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
  * - '11' = Ajuste afectos al IVAP
  */
 export function generateDebitNoteXML(debitNoteData, businessData) {
+  // Configuración de impuestos (IGV)
+  const igvExempt = debitNoteData.taxConfig?.igvExempt ?? false
+
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   let issueDate
   if (debitNoteData.issueDate?.toDate) {
@@ -864,7 +874,10 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     const debitNoteLine = root.ele('cac:DebitNoteLine')
 
     // Código de afectación al IGV
-    const taxAffectation = item.taxAffectation || '10'
+    let taxAffectation = item.taxAffectation
+    if (!taxAffectation) {
+      taxAffectation = igvExempt ? '20' : '10'  // 20=Exonerado si empresa exonerada, 10=Gravado si no
+    }
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
