@@ -61,6 +61,9 @@ export default function Tables() {
   const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
+  // Tax configuration
+  const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
+
   // Form state
   const [formData, setFormData] = useState({
     number: '',
@@ -69,6 +72,33 @@ export default function Tables() {
   })
 
   const zones = ['Salón Principal', 'Terraza', 'Salón VIP', 'Bar', 'Exterior']
+
+  // Cargar configuración de impuestos al inicio
+  useEffect(() => {
+    const loadTaxConfig = async () => {
+      if (!user?.uid || isDemoMode) return
+
+      try {
+        const businessId = getBusinessId()
+        const businessRef = doc(db, 'businesses', businessId)
+        const businessSnap = await getDoc(businessRef)
+
+        if (businessSnap.exists()) {
+          const businessData = businessSnap.data()
+          if (businessData.taxConfig) {
+            setTaxConfig({
+              igvRate: businessData.taxConfig.igvRate || 18,
+              igvExempt: businessData.taxConfig.igvExempt || false
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Error al cargar configuración de impuestos:', error)
+      }
+    }
+
+    loadTaxConfig()
+  }, [user, isDemoMode])
 
   // Listener en tiempo real para mesas
   useEffect(() => {
@@ -1008,6 +1038,7 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         onConfirm={handleConfirmCloseTable}
+        taxConfig={taxConfig}
       />
     </div>
   )

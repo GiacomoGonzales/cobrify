@@ -9,7 +9,8 @@ export default function CloseTableModal({
   onClose,
   table,
   order,
-  onConfirm
+  onConfirm,
+  taxConfig = { igvRate: 18, igvExempt: false }
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -90,7 +91,7 @@ export default function CloseTableModal({
               <span>S/ {(order.subtotal || 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span>IGV (18%):</span>
+              <span>IGV ({taxConfig.igvRate}%):</span>
               <span>S/ {(order.tax || 0).toFixed(2)}</span>
             </div>
           </div>
