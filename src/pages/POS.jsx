@@ -647,10 +647,19 @@ export default function POS() {
 
   // Actualizar tipo de documento del cliente cuando cambia el tipo de comprobante
   useEffect(() => {
-    setCustomerData(prev => ({
-      ...prev,
-      documentType: documentType === 'factura' ? ID_TYPES.RUC : ID_TYPES.DNI
-    }))
+    // Solo forzar RUC en facturas, en boletas mantener el tipo seleccionado o default DNI
+    if (documentType === 'factura') {
+      setCustomerData(prev => ({
+        ...prev,
+        documentType: ID_TYPES.RUC
+      }))
+    } else if (documentType === 'boleta' && !customerData.documentType) {
+      // Solo setear DNI por default si no hay tipo seleccionado
+      setCustomerData(prev => ({
+        ...prev,
+        documentType: ID_TYPES.DNI
+      }))
+    }
   }, [documentType])
 
   // Handlers para descuento
@@ -788,9 +797,17 @@ export default function POS() {
 
     // Si es boleta, validar datos mínimos (opcional, puede ser cliente general)
     if (documentType === 'boleta' && customerData.documentNumber) {
-      if (customerData.documentNumber.length !== 8) {
-        toast.error('El DNI debe tener 8 dígitos')
-        return
+      // Validar según el tipo de documento seleccionado
+      if (customerData.documentType === ID_TYPES.RUC) {
+        if (customerData.documentNumber.length !== 11) {
+          toast.error('El RUC debe tener 11 dígitos')
+          return
+        }
+      } else if (customerData.documentType === ID_TYPES.DNI) {
+        if (customerData.documentNumber.length !== 8) {
+          toast.error('El DNI debe tener 8 dígitos')
+          return
+        }
       }
     }
 
@@ -1638,21 +1655,43 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {/* Campos para BOLETA */}
                 {documentType === 'boleta' && (
                   <>
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                      {/* Selector de tipo de documento */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          DNI
+                          Tipo de Doc.
+                        </label>
+                        <select
+                          value={customerData.documentType}
+                          onChange={e => setCustomerData({
+                            ...customerData,
+                            documentType: e.target.value,
+                            documentNumber: '',
+                            name: '',
+                            businessName: ''
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value={ID_TYPES.DNI}>DNI</option>
+                          <option value={ID_TYPES.RUC}>RUC</option>
+                        </select>
+                      </div>
+
+                      {/* Campo de documento */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {customerData.documentType === ID_TYPES.RUC ? 'RUC' : 'DNI'}
                         </label>
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            maxLength={8}
+                            maxLength={customerData.documentType === ID_TYPES.RUC ? 11 : 8}
                             value={customerData.documentNumber}
                             onChange={e => setCustomerData({
                               ...customerData,
                               documentNumber: e.target.value.replace(/\D/g, '')
                             })}
-                            placeholder="12345678 (opcional)"
+                            placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789 (opcional)' : '12345678 (opcional)'}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
                           <Button
@@ -1660,7 +1699,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             variant="outline"
                             size="sm"
                             onClick={handleLookupDocument}
-                            disabled={isLookingUp || !customerData.documentNumber || customerData.documentNumber.length !== 8}
+                            disabled={isLookingUp || !customerData.documentNumber ||
+                              (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 : customerData.documentNumber.length !== 8)}
                             className="flex-shrink-0"
                           >
                             {isLookingUp ? (
@@ -1671,18 +1711,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </Button>
                         </div>
                       </div>
+
+                      {/* Campo de nombre / razón social */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Nombre
+                          {customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
                         </label>
                         <input
                           type="text"
-                          value={customerData.name}
+                          value={customerData.documentType === ID_TYPES.RUC ? customerData.businessName : customerData.name}
                           onChange={e => setCustomerData({
                             ...customerData,
-                            name: e.target.value
+                            ...(customerData.documentType === ID_TYPES.RUC
+                              ? { businessName: e.target.value }
+                              : { name: e.target.value }
+                            )
                           })}
-                          placeholder="Nombre del cliente (opcional)"
+                          placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social (opcional)' : 'Nombre (opcional)'}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </div>
