@@ -81,240 +81,239 @@ const loadImageAsBase64 = async (url) => {
 }
 
 /**
- * Genera un PDF para una cotización
+ * Genera un PDF para una cotización con el mismo estilo que los comprobantes
  * @param {Object} quotation - Datos de la cotización
  * @param {Object} companySettings - Configuración de la empresa
  * @param {boolean} download - Si se debe descargar automáticamente (default: true)
  * @returns {jsPDF} - El documento PDF generado
  */
 export const generateQuotationPDF = async (quotation, companySettings, download = true) => {
-  const doc = new jsPDF()
+  // Crear documento A4 en orientación vertical (portrait)
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'a4'
+  })
 
-  // Colores
-  const primaryColor = [59, 130, 246] // primary-600
-  const warningColor = [245, 158, 11] // amber-500
-  const grayDark = [31, 41, 55] // gray-800
-  const grayMedium = [107, 114, 128] // gray-500
-  const grayLight = [243, 244, 246] // gray-100
+  // Paleta de colores neutros - solo negros y grises
+  const BLACK = [0, 0, 0]
+  const DARK_GRAY = [51, 51, 51]      // Gris muy oscuro para títulos
+  const MEDIUM_GRAY = [102, 102, 102] // Gris medio para texto secundario
+  const LIGHT_GRAY = [224, 224, 224]  // Gris claro para fondos
+  const BORDER_GRAY = [189, 189, 189] // Gris para bordes
 
-  let yPos = 20
+  // Márgenes y dimensiones - A4 portrait: 595pt x 842pt
+  const MARGIN_LEFT = 40
+  const MARGIN_RIGHT = 40
+  const MARGIN_TOP = 40
+  const PAGE_WIDTH = doc.internal.pageSize.getWidth()
+  const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
+  const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
-  // ========== ENCABEZADO ==========
+  // Coordenada Y actual
+  let currentY = MARGIN_TOP
 
-  // Logo de empresa (si existe)
+  // ========== 1. ENCABEZADO PRINCIPAL ==========
+
+  // Barra superior negra elegante
+  doc.setFillColor(...BLACK)
+  doc.rect(0, 0, PAGE_WIDTH, 5, 'F')
+
+  currentY += 8
+
+  const headerY = currentY
+  const headerHeight = 85
+
+  // Columna izquierda - Información de la empresa (60%)
+  const leftColumnWidth = CONTENT_WIDTH * 0.60
+  const leftColumnX = MARGIN_LEFT
+
+  // Logo de la empresa si existe
+  let logoWidth = 0
+  let textStartX = leftColumnX
+
   if (companySettings?.logoUrl) {
     try {
-      // Cargar logo como imagen
-      const imgData = await loadImageAsBase64(companySettings.logoUrl)
-      doc.addImage(imgData, 'PNG', 20, yPos, 30, 30)
+      console.log('📸 Intentando cargar logo para cotización desde:', companySettings.logoUrl)
 
-      // Mover texto a la derecha del logo
-      doc.setFontSize(18)
-      doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
-      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 55, yPos + 5)
+      // Agregar un timeout para no bloquear la generación del PDF
+      const imgData = await Promise.race([
+        loadImageAsBase64(companySettings.logoUrl),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout loading logo')), 5000)
+        )
+      ])
 
-      // Ajustar posición para información de empresa
-      const companyInfoX = 55
-      yPos += 13
+      const logoHeight = 50
+      logoWidth = 50
 
-      // Información de empresa (debajo del nombre)
-      doc.setFontSize(9)
-      doc.setTextColor(...grayMedium)
-      doc.setFont('helvetica', 'normal')
-
-      if (companySettings?.ruc) {
-        doc.text(`RUC: ${companySettings.ruc}`, companyInfoX, yPos)
-        yPos += 4
+      // Determinar el formato de la imagen
+      let format = 'PNG'
+      if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
+          companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+        format = 'JPEG'
       }
 
-      if (companySettings?.address) {
-        const addressLines = doc.splitTextToSize(companySettings.address, 80)
-        doc.text(addressLines, companyInfoX, yPos)
-        yPos += 4 * addressLines.length
-      }
-
-      if (companySettings?.phone) {
-        doc.text(`Tel: ${companySettings.phone}`, companyInfoX, yPos)
-        yPos += 4
-      }
-
-      if (companySettings?.email) {
-        doc.text(`Email: ${companySettings.email}`, companyInfoX, yPos)
-      }
-
-      // Resetear yPos para continuar
-      yPos = 20
+      doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
+      textStartX = leftColumnX + logoWidth + 15
+      console.log('✅ Logo cargado correctamente en cotización')
     } catch (error) {
-      console.error('Error cargando logo:', error)
-      // Si falla, usar el diseño sin logo
-      doc.setFontSize(18)
-      doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
-      doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
-    }
-  } else {
-    // Diseño sin logo (original)
-    doc.setFontSize(18)
-    doc.setTextColor(...primaryColor)
-    doc.setFont('helvetica', 'bold')
-    doc.text(companySettings?.businessName || 'MI EMPRESA SAC', 20, yPos)
-
-    yPos += 8
-
-    // Información de empresa (izquierda)
-    doc.setFontSize(9)
-    doc.setTextColor(...grayMedium)
-    doc.setFont('helvetica', 'normal')
-
-    if (companySettings?.ruc) {
-      doc.text(`RUC: ${companySettings.ruc}`, 20, yPos)
-      yPos += 4
-    }
-
-    if (companySettings?.address) {
-      const addressLines = doc.splitTextToSize(companySettings.address, 80)
-      doc.text(addressLines, 20, yPos)
-      yPos += 4 * addressLines.length
-    }
-
-    if (companySettings?.phone) {
-      doc.text(`Tel: ${companySettings.phone}`, 20, yPos)
-      yPos += 4
-    }
-
-    if (companySettings?.email) {
-      doc.text(`Email: ${companySettings.email}`, 20, yPos)
+      console.warn('⚠️ No se pudo cargar el logo en cotización, continuando sin él:', error.message)
+      textStartX = leftColumnX
     }
   }
 
-  // Tipo de documento (derecha)
-  doc.setFontSize(16)
-  doc.setTextColor(...grayDark)
-  doc.text('COTIZACIÓN', 200, yPos, { align: 'right' })
-
-  yPos += 8
-
-  // Información de empresa (izquierda)
-  doc.setFontSize(9)
-  doc.setTextColor(...grayMedium)
-  doc.setFont('helvetica', 'normal')
-
-  if (companySettings?.ruc) {
-    doc.text(`RUC: ${companySettings.ruc}`, 20, yPos)
-    yPos += 4
-  }
-
-  if (companySettings?.address) {
-    const addressLines = doc.splitTextToSize(companySettings.address, 80)
-    doc.text(addressLines, 20, yPos)
-    yPos += 4 * addressLines.length
-  }
-
-  if (companySettings?.phone) {
-    doc.text(`Tel: ${companySettings.phone}`, 20, yPos)
-    yPos += 4
-  }
-
-  if (companySettings?.email) {
-    doc.text(`Email: ${companySettings.email}`, 20, yPos)
-  }
-
-  // Número de cotización y fecha (derecha)
-  yPos = 28
-  doc.setFontSize(10)
-  doc.setTextColor(...grayDark)
+  // Nombre de la empresa
+  doc.setFontSize(14)
+  doc.setTextColor(...DARK_GRAY)
   doc.setFont('helvetica', 'bold')
-  doc.text(quotation.number, 200, yPos, { align: 'right' })
 
-  yPos += 6
-  doc.setFont('helvetica', 'normal')
+  let textY = headerY + 5
+  const companyName = companySettings?.businessName || 'EMPRESA SAC'
+  doc.text(companyName, textStartX, textY)
+  textY += 16
+
+  // RUC de la empresa
   doc.setFontSize(9)
-  doc.setTextColor(...grayMedium)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  const ruc = companySettings?.ruc || ''
+  if (ruc) {
+    doc.text(`RUC: ${ruc}`, textStartX, textY)
+    textY += 12
+  }
 
+  // Dirección
+  doc.setFontSize(8)
+  if (companySettings?.address) {
+    const maxAddressWidth = leftColumnWidth - (textStartX - leftColumnX) - 10
+    const addressLines = doc.splitTextToSize(companySettings.address, maxAddressWidth)
+    doc.text(addressLines, textStartX, textY)
+    textY += 10 * Math.min(addressLines.length, 2)
+  }
+
+  // Contacto
+  const contactParts = []
+  if (companySettings?.phone) contactParts.push(companySettings.phone)
+  if (companySettings?.email) contactParts.push(companySettings.email)
+
+  if (contactParts.length > 0) {
+    doc.setFontSize(8)
+    doc.text(contactParts.join(' • '), textStartX, textY)
+  }
+
+  // Columna derecha - Recuadro del comprobante (40%)
+  const rightColumnWidth = CONTENT_WIDTH * 0.40
+  const rightColumnX = MARGIN_LEFT + leftColumnWidth
+
+  // Recuadro con borde negro
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(2)
+  doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+
+  // Contenido del recuadro - bien centrado
+  const boxCenterX = rightColumnX + (rightColumnWidth / 2)
+  let boxTextY = headerY + 25
+
+  // Tipo de documento en negro
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  doc.text('COTIZACIÓN', boxCenterX, boxTextY, { align: 'center' })
+
+  boxTextY += 18
+
+  // Número de cotización centrado
+  doc.setFontSize(15)
+  doc.setTextColor(...BLACK)
+  doc.setFont('helvetica', 'bold')
+  doc.text(quotation.number || 'N/A', boxCenterX, boxTextY, { align: 'center' })
+
+  currentY = headerY + headerHeight + 20
+
+  // Línea separadora
+  doc.setDrawColor(...LIGHT_GRAY)
+  doc.setLineWidth(1)
+  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+
+  currentY += 20
+
+  // ========== 2. DATOS DEL CLIENTE ==========
+
+  // Recuadro con fondo gris claro
+  const clientBoxHeight = 55
+  doc.setFillColor(...LIGHT_GRAY)
+  doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, clientBoxHeight, 'F')
+
+  // Título de la sección
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  const clientTitleY = currentY + 15
+  doc.text('DATOS DEL CLIENTE', MARGIN_LEFT + 10, clientTitleY)
+
+  // Datos del cliente
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...DARK_GRAY)
+
+  let clientY = clientTitleY + 14
+  const clientDataX = MARGIN_LEFT + 10
+
+  // Nombre/Razón Social
+  const customerName = quotation.customer?.name || 'Cliente General'
+  const isRUC = quotation.customer?.documentType === 'RUC'
+  doc.text(`${isRUC ? 'Razón Social' : 'Nombre'}: ${customerName}`, clientDataX, clientY)
+  clientY += 10
+
+  // Documento
+  const docType = quotation.customer?.documentType || 'Documento'
+  const docNumber = quotation.customer?.documentNumber || '-'
+  doc.text(`${docType}: ${docNumber}`, clientDataX, clientY)
+
+  // Columna derecha del cliente (si hay dirección o contacto)
+  const clientRightX = MARGIN_LEFT + (CONTENT_WIDTH / 2) + 10
+  clientY = clientTitleY + 14
+
+  if (quotation.customer?.address) {
+    const maxAddressWidth = (CONTENT_WIDTH / 2) - 20
+    const addressLines = doc.splitTextToSize(`Dirección: ${quotation.customer.address}`, maxAddressWidth)
+    doc.text(addressLines.slice(0, 2), clientRightX, clientY)
+  }
+
+  currentY += clientBoxHeight + 20
+
+  // ========== 3. FECHAS ==========
+  const datesY = currentY
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+
+  // Fecha de emisión
   let quotationDate = 'N/A'
   if (quotation.createdAt) {
     if (quotation.createdAt.toDate) {
-      // Es un Timestamp de Firestore
       quotationDate = formatDate(quotation.createdAt.toDate())
     } else {
-      // Es un objeto Date normal
       quotationDate = formatDate(quotation.createdAt)
     }
   }
-  doc.text(`Fecha: ${quotationDate}`, 200, yPos, { align: 'right' })
+  doc.text(`Fecha de emisión: ${quotationDate}`, MARGIN_LEFT, datesY)
 
-  // Fecha de expiración
+  // Fecha de vencimiento
   if (quotation.expiryDate) {
-    yPos += 5
     let expiryDate = 'N/A'
     if (quotation.expiryDate.toDate) {
       expiryDate = formatDate(quotation.expiryDate.toDate())
     } else {
       expiryDate = formatDate(quotation.expiryDate)
     }
-
-    doc.setTextColor(...warningColor)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`Válida hasta: ${expiryDate}`, 200, yPos, { align: 'right' })
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...grayMedium)
+    doc.text(`Válida hasta: ${expiryDate}`, PAGE_WIDTH - MARGIN_RIGHT, datesY, { align: 'right' })
   }
 
-  yPos += 10
+  currentY += 20
 
-  // Línea separadora
-  doc.setDrawColor(...grayMedium)
-  doc.setLineWidth(0.5)
-  doc.line(20, yPos, 190, yPos)
-
-  yPos += 10
-
-  // ========== DATOS DEL CLIENTE ==========
-
-  doc.setFontSize(11)
-  doc.setTextColor(...grayDark)
-  doc.setFont('helvetica', 'bold')
-  doc.text('DATOS DEL CLIENTE', 20, yPos)
-
-  yPos += 6
-
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...grayMedium)
-
-  // Nombre/Razón Social
-  const customerName = quotation.customer?.name || 'Cliente General'
-  const isRUC = quotation.customer?.documentType === 'RUC'
-  doc.text(`${isRUC ? 'Razón Social' : 'Nombre'}: ${customerName}`, 20, yPos)
-  yPos += 5
-
-  // Documento
-  const docType = quotation.customer?.documentType || 'Documento'
-  const docNumber = quotation.customer?.documentNumber || '-'
-  doc.text(`${docType}: ${docNumber}`, 20, yPos)
-  yPos += 5
-
-  // Dirección (si existe)
-  if (quotation.customer?.address) {
-    const addressLines = doc.splitTextToSize(`Dirección: ${quotation.customer.address}`, 170)
-    doc.text(addressLines, 20, yPos)
-    yPos += 5 * addressLines.length
-  }
-
-  // Email y Teléfono en la misma línea si existen
-  const contactInfo = []
-  if (quotation.customer?.email) contactInfo.push(`Email: ${quotation.customer.email}`)
-  if (quotation.customer?.phone) contactInfo.push(`Tel: ${quotation.customer.phone}`)
-
-  if (contactInfo.length > 0) {
-    doc.text(contactInfo.join(' | '), 20, yPos)
-    yPos += 5
-  }
-
-  yPos += 5
-
-  // ========== TABLA DE ITEMS ==========
+  // ========== 4. TABLA DE PRODUCTOS/SERVICIOS ==========
 
   const tableData = quotation.items?.map((item, index) => [
     (index + 1).toString(),
@@ -326,48 +325,59 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   ]) || []
 
   autoTable(doc, {
-    startY: yPos,
+    startY: currentY,
     head: [['#', 'Descripción', 'Cant.', 'Unidad', 'P. Unit.', 'Subtotal']],
     body: tableData,
-    theme: 'striped',
+    theme: 'plain',
     headStyles: {
-      fillColor: primaryColor,
+      fillColor: BLACK,
       textColor: [255, 255, 255],
       fontSize: 9,
       fontStyle: 'bold',
-      halign: 'left'
+      halign: 'center',
+      cellPadding: 6
     },
     bodyStyles: {
       fontSize: 8,
-      textColor: grayDark
+      textColor: DARK_GRAY,
+      cellPadding: 5
     },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 10 },
+      0: { halign: 'center', cellWidth: 25 },
       1: { halign: 'left', cellWidth: 'auto' },
-      2: { halign: 'center', cellWidth: 20 },
-      3: { halign: 'center', cellWidth: 25 },
-      4: { halign: 'right', cellWidth: 30 },
-      5: { halign: 'right', cellWidth: 30 }
+      2: { halign: 'center', cellWidth: 35 },
+      3: { halign: 'center', cellWidth: 45 },
+      4: { halign: 'right', cellWidth: 60 },
+      5: { halign: 'right', cellWidth: 70 }
     },
-    margin: { left: 20, right: 20 },
+    alternateRowStyles: {
+      fillColor: LIGHT_GRAY
+    },
+    margin: { left: MARGIN_LEFT, right: MARGIN_RIGHT },
     didDrawPage: (data) => {
-      yPos = data.cursor.y
+      currentY = data.cursor.y
     }
   })
 
-  yPos += 10
+  currentY += 15
 
-  // ========== TOTALES ==========
+  // ========== 5. TOTALES ==========
 
-  const totalsX = 140
+  const totalsBoxWidth = 200
+  const totalsBoxX = PAGE_WIDTH - MARGIN_RIGHT - totalsBoxWidth
+  let totalsY = currentY
+
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...grayMedium)
+  doc.setTextColor(...DARK_GRAY)
 
   // Subtotal
-  doc.text('Subtotal:', totalsX, yPos)
-  doc.text(formatCurrency(quotation.subtotal || 0), 190, yPos, { align: 'right' })
-  yPos += 5
+  const labelX = totalsBoxX + 10
+  const valueX = PAGE_WIDTH - MARGIN_RIGHT - 10
+
+  doc.text('Subtotal:', labelX, totalsY)
+  doc.text(formatCurrency(quotation.subtotal || 0), valueX, totalsY, { align: 'right' })
+  totalsY += 12
 
   // Descuento (si existe)
   if (quotation.discount && quotation.discount > 0) {
@@ -375,121 +385,99 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       ? `Descuento (${quotation.discount}%):`
       : 'Descuento:'
 
-    doc.text(discountLabel, totalsX, yPos)
+    doc.text(discountLabel, labelX, totalsY)
     const discountAmount = quotation.discountType === 'percentage'
       ? (quotation.subtotal * quotation.discount / 100)
       : quotation.discount
 
-    doc.text(`- ${formatCurrency(discountAmount)}`, 190, yPos, { align: 'right' })
-    yPos += 5
-
-    // Subtotal después del descuento
-    const discountedSubtotal = quotation.subtotal - discountAmount
-    doc.text('Subtotal con descuento:', totalsX, yPos)
-    doc.text(formatCurrency(discountedSubtotal), 190, yPos, { align: 'right' })
-    yPos += 5
+    doc.text(`- ${formatCurrency(discountAmount)}`, valueX, totalsY, { align: 'right' })
+    totalsY += 12
   }
 
   // IGV
-  doc.text('IGV (18%):', totalsX, yPos)
-  doc.text(formatCurrency(quotation.igv || 0), 190, yPos, { align: 'right' })
-  yPos += 7
+  doc.text('IGV (18%):', labelX, totalsY)
+  doc.text(formatCurrency(quotation.igv || 0), valueX, totalsY, { align: 'right' })
+  totalsY += 15
 
-  // Total
+  // Total en caja negra
+  const totalBoxHeight = 24
+  const totalBoxY = totalsY - 8
+  doc.setFillColor(...BLACK)
+  doc.rect(totalsBoxX, totalBoxY, totalsBoxWidth, totalBoxHeight, 'F')
+
+  // Texto del total - centrado verticalmente
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...grayDark)
-  doc.text('TOTAL:', totalsX, yPos)
-  doc.setTextColor(...primaryColor)
-  doc.text(formatCurrency(quotation.total || 0), 190, yPos, { align: 'right' })
+  doc.setTextColor(255, 255, 255)
+  const totalTextY = totalBoxY + (totalBoxHeight / 2) + 3.5
+  doc.text('TOTAL:', labelX, totalTextY)
+  doc.text(formatCurrency(quotation.total || 0), valueX, totalTextY, { align: 'right' })
 
-  yPos += 10
+  currentY = totalBoxY + totalBoxHeight + 20
 
-  // ========== INFORMACIÓN ADICIONAL ==========
+  // ========== 6. INFORMACIÓN ADICIONAL ==========
 
-  // Validez
+  // Validez de la cotización
   if (quotation.validityDays) {
     doc.setFontSize(8)
-    doc.setTextColor(...grayMedium)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Validez de la cotización: ${quotation.validityDays} días`, 20, yPos)
-    yPos += 5
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.setFont('helvetica', 'italic')
+    doc.text(`* Esta cotización tiene una validez de ${quotation.validityDays} días desde su emisión`, MARGIN_LEFT, currentY)
+    currentY += 15
   }
 
   // Términos y condiciones
   if (quotation.terms) {
-    yPos += 5
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
-    doc.text('Términos y condiciones:', 20, yPos)
-    yPos += 4
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('Términos y condiciones:', MARGIN_LEFT, currentY)
+    currentY += 12
+
     doc.setFont('helvetica', 'normal')
-    const termsLines = doc.splitTextToSize(quotation.terms, 170)
-    doc.text(termsLines, 20, yPos)
-    yPos += 4 * termsLines.length
+    doc.setFontSize(8)
+    doc.setTextColor(...MEDIUM_GRAY)
+    const termsLines = doc.splitTextToSize(quotation.terms, CONTENT_WIDTH - 20)
+    doc.text(termsLines, MARGIN_LEFT + 10, currentY)
+    currentY += 10 * termsLines.length + 10
   }
 
   // Observaciones
   if (quotation.notes) {
-    yPos += 5
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
-    doc.text('Observaciones:', 20, yPos)
-    yPos += 4
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('Observaciones:', MARGIN_LEFT, currentY)
+    currentY += 12
+
     doc.setFont('helvetica', 'normal')
-    const notesLines = doc.splitTextToSize(quotation.notes, 170)
-    doc.text(notesLines, 20, yPos)
-    yPos += 4 * notesLines.length
+    doc.setFontSize(8)
+    doc.setTextColor(...MEDIUM_GRAY)
+    const notesLines = doc.splitTextToSize(quotation.notes, CONTENT_WIDTH - 20)
+    doc.text(notesLines, MARGIN_LEFT + 10, currentY)
+    currentY += 10 * notesLines.length
   }
 
-  // ========== BANNER DE VALIDEZ ==========
+  // ========== 7. FOOTER ==========
 
-  if (quotation.expiryDate) {
-    yPos += 10
-
-    // Verificar si está próxima a vencer o vencida
-    const expiryDate = quotation.expiryDate.toDate ?
-      quotation.expiryDate.toDate() :
-      new Date(quotation.expiryDate)
-
-    const now = new Date()
-    const daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24))
-
-    if (daysUntilExpiry < 0) {
-      // Vencida
-      doc.setFillColor(239, 68, 68) // red-500
-      doc.setTextColor(255, 255, 255)
-      doc.rect(20, yPos, 170, 8, 'F')
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'bold')
-      doc.text('COTIZACIÓN VENCIDA', 105, yPos + 5.5, { align: 'center' })
-    } else if (daysUntilExpiry <= 7) {
-      // Próxima a vencer
-      doc.setFillColor(...warningColor)
-      doc.setTextColor(255, 255, 255)
-      doc.rect(20, yPos, 170, 8, 'F')
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'bold')
-      doc.text(`VÁLIDA POR ${daysUntilExpiry} DÍA${daysUntilExpiry !== 1 ? 'S' : ''} MÁS`, 105, yPos + 5.5, { align: 'center' })
-    }
-  }
-
-  // ========== FOOTER ==========
+  const footerY = PAGE_HEIGHT - 40
 
   // Línea separadora
-  const footerY = 270
-  doc.setDrawColor(...grayMedium)
-  doc.setLineWidth(0.3)
-  doc.line(20, footerY, 190, footerY)
+  doc.setDrawColor(...BORDER_GRAY)
+  doc.setLineWidth(0.5)
+  doc.line(MARGIN_LEFT, footerY, PAGE_WIDTH - MARGIN_RIGHT, footerY)
 
   // Texto del footer
   doc.setFontSize(7)
-  doc.setTextColor(...grayMedium)
+  doc.setTextColor(...MEDIUM_GRAY)
   doc.setFont('helvetica', 'italic')
-  const footerText = `Documento generado por Cobrify | ${companySettings?.website || 'www.cobrify.com'}`
-  doc.text(footerText, 105, footerY + 5, { align: 'center' })
+  const footerText = companySettings?.website || 'www.cobrify.com'
+  doc.text(footerText, PAGE_WIDTH / 2, footerY + 12, { align: 'center' })
 
   // Nota importante
   doc.setFont('helvetica', 'normal')
-  doc.text('Esta cotización no constituye un comprobante de pago', 105, footerY + 10, { align: 'center' })
+  doc.setFontSize(7)
+  doc.text('Esta cotización no constituye un comprobante de pago', PAGE_WIDTH / 2, footerY + 22, { align: 'center' })
 
   // ========== GENERAR/RETORNAR PDF ==========
 
