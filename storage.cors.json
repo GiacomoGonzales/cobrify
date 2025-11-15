@@ -4,7 +4,10 @@
       "http://localhost:3000",
       "http://localhost:5173",
       "https://cobrify-395fe.web.app",
-      "https://cobrify-395fe.firebaseapp.com"
+      "https://cobrify-395fe.firebaseapp.com",
+      "https://cobrifyperu.com",
+      "https://www.cobrifyperu.com",
+      "https://factuya.vercel.app"
     ],
     "method": ["GET", "HEAD"],
     "maxAgeSeconds": 3600,
