@@ -183,6 +183,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
       .txt(subtotalBeforeDiscount.toFixed(2))
   }
 
+  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
+  // SUNAT requiere PaymentTerms con el tipo de operación
+  // Tipo de Operación: Contado (default) o Crédito
+  const paymentTerms = root.ele('cac:PaymentTerms')
+  paymentTerms.ele('cbc:ID').txt('Contado') // Puede ser "Contado" o "Credito"
+  paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
+
   // === IMPUESTOS (IGV) ===
   // IMPORTANTE: TaxTotal DEBE ir ANTES de LegalMonetaryTotal según UBL 2.1
   const taxTotal = root.ele('cac:TaxTotal')
@@ -530,6 +537,11 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       .txt(subtotalBeforeDiscount.toFixed(2))
   }
 
+  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
+  const paymentTermsCredit = root.ele('cac:PaymentTerms')
+  paymentTermsCredit.ele('cbc:ID').txt('Contado')
+  paymentTermsCredit.ele('cbc:PaymentMeansID').txt('Contado')
+
   // === IMPUESTOS (IGV) ===
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
@@ -851,6 +863,11 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     allowanceCharge.ele('cbc:BaseAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
       .txt(subtotalBeforeDiscount.toFixed(2))
   }
+
+  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
+  const paymentTermsDebit = root.ele('cac:PaymentTerms')
+  paymentTermsDebit.ele('cbc:ID').txt('Contado')
+  paymentTermsDebit.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === IMPUESTOS (IGV) ===
   const taxTotal = root.ele('cac:TaxTotal')
