@@ -548,8 +548,24 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
       {/* Totales */}
       <div className="totals-section">
+        {/* Si hay descuento, mostrar subtotal antes del descuento */}
+        {invoice.discount && invoice.discount > 0 && (
+          <div className="total-row">
+            <span>Subtotal:</span>
+            <span>{formatCurrency(invoice.subtotalBeforeDiscount || invoice.subtotal || 0)}</span>
+          </div>
+        )}
+
+        {/* Descuento (si existe) */}
+        {invoice.discount && invoice.discount > 0 && (
+          <div className="total-row">
+            <span>Descuento:</span>
+            <span>- {formatCurrency(invoice.discount)}</span>
+          </div>
+        )}
+
         <div className="total-row">
-          <span>Subtotal:</span>
+          <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
           <span>{formatCurrency(invoice.subtotal || 0)}</span>
         </div>
         <div className="total-row">
