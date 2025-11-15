@@ -381,35 +381,38 @@ export default function Products() {
 
         // Manejar stock e initialStock
         if (noStock) {
+          // Producto SIN control de stock (servicios, etc)
           productData.stock = null
           productData.initialStock = null
           productData.trackStock = false // NO controlar stock
+          productData.warehouseStocks = [] // Limpiar stocks de almacén
         } else {
+          // Producto CON control de stock
           productData.trackStock = true // SÍ controlar stock
-        }
 
-        if (editingProduct && !noStock) {
-          // Al editar, mantener el stock actual (no lo modificamos aquí)
-          // Solo actualizar initialStock si el usuario es business_owner y lo modificó
-          if (user?.role === 'business_owner' && data.initialStock !== '') {
-            productData.initialStock = parseInt(data.initialStock)
-          }
-          // No modificar stock actual en edición (se modifica con ventas/compras)
-        } else {
-          // Al crear, initialStock y stock son el mismo valor inicial
-          const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
-          productData.stock = initialStockValue
-          productData.initialStock = initialStockValue
-
-          // Si hay stock inicial y almacenes disponibles, asignar al almacén seleccionado
-          if (initialStockValue && initialStockValue > 0 && selectedWarehouse) {
-            productData.warehouseStocks = [{
-              warehouseId: selectedWarehouse,
-              stock: initialStockValue,
-              minStock: 0
-            }]
+          if (editingProduct) {
+            // Al editar, mantener el stock actual (no lo modificamos aquí)
+            // Solo actualizar initialStock si el usuario es business_owner y lo modificó
+            if (user?.role === 'business_owner' && data.initialStock !== '') {
+              productData.initialStock = parseInt(data.initialStock)
+            }
+            // No modificar stock actual en edición (se modifica con ventas/compras)
           } else {
-            productData.warehouseStocks = []
+            // Al crear, initialStock y stock son el mismo valor inicial
+            const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
+            productData.stock = initialStockValue
+            productData.initialStock = initialStockValue
+
+            // Si hay stock inicial y almacenes disponibles, asignar al almacén seleccionado
+            if (initialStockValue && initialStockValue > 0 && selectedWarehouse) {
+              productData.warehouseStocks = [{
+                warehouseId: selectedWarehouse,
+                stock: initialStockValue,
+                minStock: 0
+              }]
+            } else {
+              productData.warehouseStocks = []
+            }
           }
         }
 
