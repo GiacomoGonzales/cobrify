@@ -389,7 +389,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ========== 2. INFORMACIÓN DEL CLIENTE Y FECHA ==========
 
   const infoBoxY = currentY
-  const infoBoxHeight = 55
+  const infoBoxHeight = 65 // Aumentado de 55 a 65 para incluir dirección
 
   // Fondo suave para la sección
   doc.setFillColor(...LIGHT_GRAY)
@@ -420,6 +420,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(8)
   doc.setTextColor(...MEDIUM_GRAY)
   doc.text(`${docType}: ${docNumber}`, clientX, clientY)
+  clientY += 10
+
+  // Dirección del cliente
+  if (invoice.customer?.address) {
+    const maxAddressWidth = leftColumnWidth - 30
+    const addressLines = doc.splitTextToSize(invoice.customer.address, maxAddressWidth)
+    doc.setFontSize(8)
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text(addressLines, clientX, clientY)
+  }
 
   // Fecha y moneda - Columna derecha (35%)
   const dateX = MARGIN_LEFT + leftColumnWidth + 15
