@@ -34,9 +34,26 @@ export const scanPrinters = async () => {
     // Escuchar dispositivos descubiertos
     await CapacitorThermalPrinter.addListener('discoverDevices', (device) => {
       console.log('Printer discovered:', device);
+
+      // Normalizar la dirección (puede venir como address, macAddress, id, etc)
+      const deviceAddress = device.address || device.macAddress || device.id || device.deviceAddress;
+      const deviceName = device.name || device.deviceName || 'Impresora sin nombre';
+
+      if (!deviceAddress) {
+        console.warn('Device without address:', device);
+        return;
+      }
+
+      // Crear objeto normalizado
+      const normalizedDevice = {
+        address: deviceAddress,
+        name: deviceName,
+        ...device // Mantener propiedades originales
+      };
+
       // Evitar duplicados
-      if (!devices.find(d => d.address === device.address)) {
-        devices.push(device);
+      if (!devices.find(d => d.address === deviceAddress)) {
+        devices.push(normalizedDevice);
       }
     });
 
