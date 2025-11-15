@@ -556,7 +556,7 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
  * @param {Object} business - Datos del negocio
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printPreBill = async (order, table, business, paperWidth = 58) => {
+export const printPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -611,7 +611,7 @@ export const printPreBill = async (order, table, business, paperWidth = 58) => {
       // Totales
       .align('right')
       .text(`Subtotal: S/ ${(order.subtotal || 0).toFixed(2)}\n`)
-      .text(`IGV (18%): S/ ${(order.tax || 0).toFixed(2)}\n`)
+      .text(`IGV (${taxConfig.igvRate}%): S/ ${(order.tax || 0).toFixed(2)}\n`)
       .bold()
       .doubleWidth()
       .text(`TOTAL: S/ ${(order.total || 0).toFixed(2)}\n`)

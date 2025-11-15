@@ -503,7 +503,7 @@ export default function Tables() {
             await connectPrinter(printerConfigResult.config.address)
 
             // Imprimir en impresora térmica
-            const result = await printPreBillThermal(selectedOrder, selectedTable, businessInfo)
+            const result = await printPreBillThermal(selectedOrder, selectedTable, businessInfo, taxConfig)
 
             if (result.success) {
               toast.success('Precuenta impresa en ticketera')
