@@ -17,6 +17,35 @@ import { db } from '@/lib/firebase'
 import { updateTableAmount } from './tableService'
 
 /**
+ * Helper: Calcular totales (subtotal, IGV, total) según configuración fiscal del negocio
+ * @param {number} total - Total incluyendo IGV
+ * @param {Object} taxConfig - Configuración fiscal {igvRate, igvExempt}
+ * @returns {Object} - {subtotal, tax, total}
+ */
+const calculateOrderTotals = (total, taxConfig = { igvRate: 18, igvExempt: false }) => {
+  // Si está exonerado del IGV
+  if (taxConfig.igvExempt) {
+    return {
+      subtotal: total,
+      tax: 0,
+      total: total
+    }
+  }
+
+  // Si no está exonerado, calcular IGV dinámicamente
+  const igvRate = taxConfig.igvRate || 18
+  const igvMultiplier = 1 + (igvRate / 100) // Ej: 1.18 para 18%
+  const subtotal = total / igvMultiplier // Precio sin IGV
+  const tax = total - subtotal // IGV = Total - Subtotal
+
+  return {
+    subtotal,
+    tax,
+    total
+  }
+}
+
+/**
  * Servicio para gestión de órdenes de restaurante
  */
 
@@ -220,10 +249,16 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
     const currentItems = orderData.items || []
     const updatedItems = [...currentItems, ...newItems]
 
-    // Recalcular totales (el precio YA incluye IGV)
+    // Obtener configuración fiscal del negocio
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
+      ? businessSnap.data().taxConfig
+      : { igvRate: 18, igvExempt: false }
+
+    // Recalcular totales usando función helper con taxConfig dinámico
     const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const subtotal = total / 1.18 // Precio sin IGV
-    const tax = total - subtotal // IGV = Total - Subtotal
+    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
@@ -272,10 +307,16 @@ export const removeOrderItem = async (businessId, orderId, itemIndex) => {
     // Eliminar el item del array
     const updatedItems = currentItems.filter((_, index) => index !== itemIndex)
 
-    // Recalcular totales (el precio YA incluye IGV)
+    // Obtener configuración fiscal del negocio
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
+      ? businessSnap.data().taxConfig
+      : { igvRate: 18, igvExempt: false }
+
+    // Recalcular totales usando función helper con taxConfig dinámico
     const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const subtotal = total / 1.18 // Precio sin IGV
-    const tax = total - subtotal // IGV = Total - Subtotal
+    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
@@ -333,10 +374,16 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
       total: updatedItems[itemIndex].price * newQuantity
     }
 
-    // Recalcular totales (el precio YA incluye IGV)
+    // Obtener configuración fiscal del negocio
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
+      ? businessSnap.data().taxConfig
+      : { igvRate: 18, igvExempt: false }
+
+    // Recalcular totales usando función helper con taxConfig dinámico
     const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
-    const subtotal = total / 1.18 // Precio sin IGV
-    const tax = total - subtotal // IGV = Total - Subtotal
+    const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
 
     // Actualizar la orden
     await updateDoc(orderRef, {
