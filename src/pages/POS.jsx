@@ -711,11 +711,17 @@ export default function POS() {
     taxConfig.igvRate
   )
 
-  // Aplicar descuento
+  // Aplicar descuento al TOTAL (no al subtotal) para que sea más intuitivo
   const discount = parseFloat(discountAmount) || 0
-  const subtotalAfterDiscount = Math.max(0, baseAmounts.subtotal - discount)
-  const igvAfterDiscount = taxConfig.igvRate > 0 ? subtotalAfterDiscount * (taxConfig.igvRate / 100) : 0
-  const totalAfterDiscount = subtotalAfterDiscount + igvAfterDiscount
+
+  // El descuento se aplica al total (con IGV incluido)
+  const totalAfterDiscount = Math.max(0, baseAmounts.total - discount)
+
+  // Recalcular subtotal e IGV desde el nuevo total
+  const subtotalAfterDiscount = taxConfig.igvRate > 0
+    ? totalAfterDiscount / (1 + taxConfig.igvRate / 100)
+    : totalAfterDiscount
+  const igvAfterDiscount = totalAfterDiscount - subtotalAfterDiscount
 
   const amounts = {
     subtotal: Number(baseAmounts.subtotal.toFixed(2)),
@@ -1175,7 +1181,43 @@ export default function POS() {
     }
   }
 
-  const handlePrintTicket = () => {
+  const handlePrintTicket = async () => {
+    const isNative = Capacitor.isNativePlatform()
+
+    // Si es móvil, intentar imprimir en impresora térmica
+    if (isNative && lastInvoiceData && companySettings) {
+      try {
+        // Obtener configuración de impresora
+        const { getPrinterConfig, connectPrinter, printInvoiceTicket } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          // Reconectar a la impresora
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+
+          if (!connectResult.success) {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+            toast.info('Usando impresión estándar...')
+          } else {
+            // Imprimir en impresora térmica
+            const result = await printInvoiceTicket(lastInvoiceData, companySettings, printerConfigResult.config.paperWidth || 58)
+
+            if (result.success) {
+              toast.success('Comprobante impreso en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir en ticketera: ' + result.error)
+              toast.info('Usando impresión estándar...')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error al imprimir en ticketera:', error)
+        toast.info('Usando impresión estándar...')
+      }
+    }
+
+    // Fallback: impresión estándar (web o si falla la térmica)
     window.print()
   }
 

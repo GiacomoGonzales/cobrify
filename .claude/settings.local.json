@@ -78,7 +78,8 @@
       "WebFetch(domain:github.com)",
       "Bash(firebase projects:list:*)",
       "Bash(gsutil cors set:*)",
-      "Bash(firebase hosting:channel:deploy:*)"
+      "Bash(firebase hosting:channel:deploy:*)",
+      "Bash(./gradlew assembleRelease:*)"
     ],
     "deny": [],
     "ask": []

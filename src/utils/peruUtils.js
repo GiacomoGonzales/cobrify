@@ -58,25 +58,23 @@ export function calculateInvoiceAmounts(items, igvRate = 18) {
   const total = items.reduce((sum, item) => {
     return sum + item.price * item.quantity
   }, 0)
+  const totalRounded = Number(total.toFixed(2))
 
   // Convertir tasa de porcentaje a decimal (18 -> 0.18, 0 -> 0)
   const igvMultiplier = igvRate / 100
 
   // Calcular el subtotal (sin IGV) a partir del total
-  const subtotal = total / (1 + igvMultiplier)
+  const subtotal = totalRounded / (1 + igvMultiplier)
   const subtotalRounded = Number(subtotal.toFixed(2))
 
-  // Calcular el IGV desde el subtotal redondeado para evitar pérdida de centavos
-  const igv = subtotalRounded * igvMultiplier
-  const igvRounded = Number(igv.toFixed(2))
-
-  // Recalcular el total para asegurar consistencia
-  const totalFinal = subtotalRounded + igvRounded
+  // Ajustar el IGV para que subtotal + IGV = total exacto (evita pérdida de centavos)
+  // En lugar de calcular IGV desde el subtotal, lo calculamos como diferencia
+  const igvAdjusted = totalRounded - subtotalRounded
 
   return {
     subtotal: subtotalRounded,
-    igv: igvRounded,
-    total: Number(totalFinal.toFixed(2)),
+    igv: Number(igvAdjusted.toFixed(2)),
+    total: totalRounded,
   }
 }
 

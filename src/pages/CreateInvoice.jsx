@@ -238,7 +238,14 @@ export default function CreateInvoice() {
         .filter(item => item.productId) // Solo items de productos existentes
         .map(async item => {
           const product = products.find(p => p.id === item.productId)
-          if (product && product.stock !== null) {
+          if (!product) return
+
+          // Solo actualizar si el producto maneja stock (trackStock !== false)
+          // Si trackStock es undefined o true, sí actualizar
+          // Si trackStock es false, NO actualizar
+          if (product.trackStock === false) return
+
+          if (product.stock !== null) {
             const newStock = product.stock - parseFloat(item.quantity)
             return updateProduct(item.productId, { stock: newStock })
           }

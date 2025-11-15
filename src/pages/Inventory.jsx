@@ -216,6 +216,12 @@ export default function Inventory() {
       return
     }
 
+    // Verificar que el producto maneja stock
+    if (transferProduct.trackStock === false) {
+      toast.error('Este producto no maneja stock y no puede ser transferido')
+      return
+    }
+
     // Verificar stock disponible en almacén origen
     const warehouseStock = transferProduct.warehouseStocks?.find(
       ws => ws.warehouseId === transferData.fromWarehouse

@@ -100,17 +100,22 @@ export default function InvoiceList() {
 
         if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
           // Reconectar a la impresora
-          await connectPrinter(printerConfigResult.config.address)
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
 
-          // Imprimir en impresora térmica
-          const result = await printInvoiceTicket(viewingInvoice, companySettings)
-
-          if (result.success) {
-            toast.success('Comprobante impreso en ticketera')
-            return
-          } else {
-            toast.error('Error al imprimir en ticketera: ' + result.error)
+          if (!connectResult.success) {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
             toast.info('Usando impresión estándar...')
+          } else {
+            // Imprimir en impresora térmica
+            const result = await printInvoiceTicket(viewingInvoice, companySettings, printerConfigResult.config.paperWidth || 58)
+
+            if (result.success) {
+              toast.success('Comprobante impreso en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir en ticketera: ' + result.error)
+              toast.info('Usando impresión estándar...')
+            }
           }
         }
       } catch (error) {
@@ -238,8 +243,9 @@ ${companySettings?.website ? companySettings.website : ''}`
 
       // Filtrar por rango de fechas
       if (exportFilters.startDate) {
-        const startDate = new Date(exportFilters.startDate);
-        startDate.setHours(0, 0, 0, 0);
+        // Crear fecha en zona horaria local (no UTC)
+        const [year, month, day] = exportFilters.startDate.split('-').map(Number);
+        const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         filteredInvoices = filteredInvoices.filter(inv => {
           const invDate = inv.createdAt?.toDate();
           return invDate && invDate >= startDate;
@@ -247,8 +253,9 @@ ${companySettings?.website ? companySettings.website : ''}`
       }
 
       if (exportFilters.endDate) {
-        const endDate = new Date(exportFilters.endDate);
-        endDate.setHours(23, 59, 59, 999);
+        // Crear fecha en zona horaria local (no UTC)
+        const [year, month, day] = exportFilters.endDate.split('-').map(Number);
+        const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
         filteredInvoices = filteredInvoices.filter(inv => {
           const invDate = inv.createdAt?.toDate();
           return invDate && invDate <= endDate;
@@ -347,16 +354,18 @@ ${companySettings?.website ? companySettings.website : ''}`
       const invoiceDate = getInvoiceDate(invoice)
 
       if (filterStartDate) {
-        const startDate = new Date(filterStartDate)
-        startDate.setHours(0, 0, 0, 0)
+        // Crear fecha en zona horaria local (no UTC)
+        const [year, month, day] = filterStartDate.split('-').map(Number);
+        const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         if (invoiceDate && invoiceDate < startDate) {
           matchesDateRange = false
         }
       }
 
       if (filterEndDate) {
-        const endDate = new Date(filterEndDate)
-        endDate.setHours(23, 59, 59, 999)
+        // Crear fecha en zona horaria local (no UTC)
+        const [year, month, day] = filterEndDate.split('-').map(Number);
+        const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
         if (invoiceDate && invoiceDate > endDate) {
           matchesDateRange = false
         }

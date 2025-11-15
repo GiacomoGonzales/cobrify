@@ -13,6 +13,30 @@ let isPrinterConnected = false;
 let connectedPrinterAddress = null;
 
 /**
+ * Constantes de formato según ancho de papel
+ */
+const PAPER_FORMATS = {
+  58: {
+    charsPerLine: 32,
+    separator: '================================',
+    halfSeparator: '----------------'
+  },
+  80: {
+    charsPerLine: 48,
+    separator: '================================================',
+    halfSeparator: '------------------------'
+  }
+};
+
+/**
+ * Obtener formato según ancho de papel configurado
+ * @param {number} paperWidth - Ancho de papel (58 o 80)
+ */
+const getFormat = (paperWidth = 58) => {
+  return PAPER_FORMATS[paperWidth] || PAPER_FORMATS[58];
+};
+
+/**
  * Escanear impresoras disponibles (Bluetooth)
  * @returns {Promise<Array>} Lista de impresoras encontradas
  */
@@ -136,24 +160,77 @@ export const scanPrinters = async () => {
  * @param {string} address - Dirección MAC o IP de la impresora
  * @returns {Promise<Object>} Resultado de la conexión
  */
-export const connectPrinter = async (address) => {
+/**
+ * Desconectar impresora
+ */
+export const disconnectPrinter = async () => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative) {
-    return { success: false, error: 'Not native platform' };
+    return { success: false, error: 'Solo disponible en app móvil' };
   }
 
   try {
-    await CapacitorThermalPrinter.connect({ address });
-    isPrinterConnected = true;
-    connectedPrinterAddress = address;
-    console.log('✅ Printer connected:', address);
-    return { success: true, address };
+    console.log('🔌 Desconectando impresora...');
+    await CapacitorThermalPrinter.disconnect();
+    isPrinterConnected = false;
+    connectedPrinterAddress = null;
+    console.log('✅ Impresora desconectada');
+    return { success: true };
   } catch (error) {
-    console.error('Error connecting to printer:', error);
+    console.error('❌ Error al desconectar:', error);
+    // Marcar como desconectado de todos modos
     isPrinterConnected = false;
     connectedPrinterAddress = null;
     return { success: false, error: error.message };
+  }
+};
+
+export const connectPrinter = async (address) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  console.log('🔌 connectPrinter - Intentando conectar a:', address);
+  console.log('📱 Plataforma nativa:', isNative);
+
+  if (!isNative) {
+    console.error('❌ No es plataforma nativa');
+    return { success: false, error: 'Solo disponible en app móvil' };
+  }
+
+  try {
+    // Primero intentar desconectar cualquier conexión anterior
+    console.log('🔄 Desconectando conexión anterior (si existe)...');
+    await disconnectPrinter();
+
+    // Pequeña espera para asegurar que la desconexión se complete
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    console.log('🔄 Llamando a CapacitorThermalPrinter.connect()...');
+    const result = await CapacitorThermalPrinter.connect({ address });
+    console.log('📋 Resultado de connect():', result);
+
+    // Solo marcar como conectado si el resultado no es null
+    if (result !== null && result !== undefined) {
+      isPrinterConnected = true;
+      connectedPrinterAddress = address;
+      console.log('✅ Printer connected:', address);
+      console.log('✅ isPrinterConnected:', isPrinterConnected);
+      console.log('✅ connectedPrinterAddress:', connectedPrinterAddress);
+      return { success: true, address };
+    } else {
+      console.error('❌ Conexión falló - resultado null');
+      isPrinterConnected = false;
+      connectedPrinterAddress = null;
+      return { success: false, error: 'No se pudo conectar a la impresora' };
+    }
+  } catch (error) {
+    console.error('❌ Error connecting to printer:', error);
+    console.error('Tipo de error:', error.constructor.name);
+    console.error('Mensaje:', error.message);
+
+    isPrinterConnected = false;
+    connectedPrinterAddress = null;
+    return { success: false, error: error.message || 'Error al conectar' };
   }
 };
 
@@ -210,11 +287,30 @@ export const getPrinterConfig = async (userId) => {
 };
 
 /**
+ * Convertir texto con tildes a formato ASCII simple (sin acentos)
+ * Ya que el plugin no soporta setCodePage en Android
+ * @param {string} text - Texto a convertir
+ */
+const convertSpanishText = (text) => {
+  // Mapeo de caracteres con tilde a sus equivalentes sin tilde
+  const charMap = {
+    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+    'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+    'ñ': 'n', 'Ñ': 'N',
+    'ü': 'u', 'Ü': 'U',
+    '¿': '?', '¡': '!'
+  };
+
+  return text.split('').map(char => charMap[char] || char).join('');
+};
+
+/**
  * Imprimir ticket de comprobante (Factura/Boleta)
  * @param {Object} invoice - Datos del comprobante
  * @param {Object} business - Datos del negocio
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printInvoiceTicket = async (invoice, business) => {
+export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -222,75 +318,153 @@ export const printInvoiceTicket = async (invoice, business) => {
   }
 
   try {
-    await CapacitorThermalPrinter.begin();
+    const format = getFormat(paperWidth);
 
-    // Encabezado - Logo y nombre del negocio
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text(business.tradeName || business.businessName || 'NEGOCIO');
-    await CapacitorThermalPrinter.clearFormatting();
+    // Determinar tipo de documento (soportar diferentes formatos)
+    const docType = invoice.documentType || invoice.type || 'boleta';
+    const isInvoice = docType === 'factura' || docType === 'invoice';
+    const isNotaVenta = docType === 'nota_venta';
 
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.text(`RUC: ${business.ruc || ''}`);
-    await CapacitorThermalPrinter.text(business.address || '');
-    await CapacitorThermalPrinter.text(business.phone || '');
-    await CapacitorThermalPrinter.text('================================');
+    // Tipo de comprobante para textos legales
+    const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA' : 'BOLETA DE VENTA');
+    const tipoComprobanteCompleto = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
 
-    // Tipo de comprobante
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text(invoice.type === 'invoice' ? 'FACTURA ELECTRÓNICA' : 'BOLETA ELECTRÓNICA');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text(`${invoice.series}-${invoice.number}`);
-    await CapacitorThermalPrinter.text('================================');
+    // Items text - optimizado para 58mm con wrapping de nombres largos
+    const descWidth = paperWidth === 80 ? 30 : 12; // Más angosto para 58mm
+    const priceWidth = paperWidth === 80 ? 10 : 8;
+    const headerLine = paperWidth === 80
+      ? 'CANT  DESCRIPCION                 IMPORTE'
+      : 'CANT  DESCRIPCION IMPORTE';
 
-    // Datos del cliente
-    await CapacitorThermalPrinter.align('left');
-    await CapacitorThermalPrinter.text(`Fecha: ${new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate).toLocaleDateString('es-PE')}`);
-    await CapacitorThermalPrinter.text(`Cliente: ${invoice.customerName}`);
-    await CapacitorThermalPrinter.text(`${invoice.type === 'invoice' ? 'RUC' : 'DNI'}: ${invoice.customerDocument}`);
-    await CapacitorThermalPrinter.text('--------------------------------');
-
-    // Items
-    await CapacitorThermalPrinter.text('CANT  DESCRIPCION      IMPORTE');
-    await CapacitorThermalPrinter.text('--------------------------------');
-
+    let itemsText = headerLine + '\n' + format.halfSeparator + '\n';
     for (const item of invoice.items) {
-      const cant = String(item.quantity).padEnd(6);
-      const desc = item.description.substring(0, 14).padEnd(14);
-      const price = `S/ ${item.total.toFixed(2)}`.padStart(8);
-      await CapacitorThermalPrinter.text(`${cant}${desc}${price}`);
+      const cant = String(item.quantity || 0).padEnd(6);
+      // Soportar tanto 'description' (facturas) como 'name' (POS)
+      const itemName = convertSpanishText(item.description || item.name || '');
+
+      // Calcular el precio total del item (cantidad * precio unitario)
+      // Soportar diferentes estructuras de datos
+      let itemTotal = 0;
+      if (item.total) {
+        itemTotal = item.total;
+      } else if (item.subtotal) {
+        itemTotal = item.subtotal;
+      } else if (item.unitPrice && item.quantity) {
+        itemTotal = item.unitPrice * item.quantity;
+      } else if (item.price && item.quantity) {
+        itemTotal = item.price * item.quantity;
+      }
+
+      const price = `S/${itemTotal.toFixed(2)}`.padStart(priceWidth);
+
+      // Si el nombre es muy largo, dividirlo en múltiples líneas
+      if (itemName.length > descWidth) {
+        // Primera línea con cantidad, nombre truncado y precio
+        const firstLine = itemName.substring(0, descWidth).padEnd(descWidth);
+        itemsText += `${cant}${firstLine}${price}\n`;
+
+        // Líneas adicionales solo con el resto del nombre (sin cantidad ni precio)
+        let remainingName = itemName.substring(descWidth);
+        while (remainingName.length > 0) {
+          const chunk = remainingName.substring(0, descWidth + 6 + priceWidth); // Usar todo el ancho disponible
+          itemsText += `      ${chunk}\n`; // 6 espacios para alinear con descripción
+          remainingName = remainingName.substring(descWidth + 6 + priceWidth);
+        }
+      } else {
+        // Nombre corto, cabe en una línea
+        const desc = itemName.padEnd(descWidth);
+        itemsText += `${cant}${desc}${price}\n`;
+      }
     }
 
-    await CapacitorThermalPrinter.text('--------------------------------');
+    // Construir comando en cadena
+    let printer = CapacitorThermalPrinter.begin()
+      .align('center');
 
-    // Totales
-    await CapacitorThermalPrinter.align('right');
-    await CapacitorThermalPrinter.text(`Subtotal: S/ ${invoice.subtotal.toFixed(2)}`);
-    await CapacitorThermalPrinter.text(`IGV (18%): S/ ${invoice.tax.toFixed(2)}`);
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text(`TOTAL: S/ ${invoice.total.toFixed(2)}`);
-    await CapacitorThermalPrinter.clearFormatting();
+    // Logo (si existe URL de logo del negocio)
+    if (business.logoUrl) {
+      printer = printer.image(business.logoUrl);
+    }
+
+    // Nombre del negocio - solo usar doubleWidth si el nombre es corto
+    const businessName = convertSpanishText(business.tradeName || business.businessName || 'NEGOCIO');
+    if (businessName.length <= (paperWidth === 80 ? 24 : 16)) {
+      printer = printer.doubleWidth().text(businessName + '\n').clearFormatting();
+    } else {
+      printer = printer.bold().text(businessName + '\n').clearFormatting();
+    }
+
+    printer = printer
+      .text(convertSpanishText(`RUC: ${business.ruc || ''}\n`))
+      .text(convertSpanishText((business.address || '') + '\n'))
+      .text(convertSpanishText((business.phone || '') + '\n'))
+      .text(format.separator + '\n')
+      // Tipo de comprobante - solo título en grande
+      .bold()
+      .text(tipoComprobanteCompleto + '\n')
+      .clearFormatting()
+      .bold()
+      .text(`${invoice.series || 'B001'}-${invoice.correlativeNumber || invoice.number || '000'}\n`)
+      .clearFormatting()
+      .text(format.separator + '\n')
+      // Datos del cliente
+      .align('left')
+      .text(convertSpanishText(`Fecha: ${new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleDateString('es-PE')}\n`))
+      .text(convertSpanishText(`Cliente: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`))
+      .text(convertSpanishText(`${isInvoice ? 'RUC' : 'DNI'}: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '-'}\n`))
+      .text(format.halfSeparator + '\n')
+      // Items
+      .text(itemsText)
+      .text(format.halfSeparator + '\n')
+      // Totales - formato optimizado para 58mm
+      .align('right')
+      .text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}\n`)
+      .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`)
+      .bold()
+      .text(`TOTAL: S/ ${(invoice.total || 0).toFixed(2)}\n`)
+      .clearFormatting()
+      // QR Code según formato SUNAT
+      .align('center');
+
+    // Generar QR Code
+    let qrData = invoice.qrCode;
+
+    // Si no hay QR, generar uno con formato SUNAT básico (solo para facturas y boletas electrónicas, NO para nota de venta)
+    if (!qrData && business.ruc && invoice.series && !isNotaVenta) {
+      // Formato QR SUNAT: RUC|Tipo|Serie|Numero|IGV|Total|Fecha|TipoDoc|NumDoc
+      const tipoDoc = isInvoice ? '01' : '03'; // 01=Factura, 03=Boleta
+      const fecha = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toISOString().split('T')[0];
+      const docCliente = isInvoice ? '6' : '1'; // 6=RUC, 1=DNI
+      const numDocCliente = invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '';
+
+      qrData = `${business.ruc}|${tipoDoc}|${invoice.series}|${invoice.correlativeNumber || invoice.number}|${(invoice.tax || invoice.igv || 0).toFixed(2)}|${(invoice.total || 0).toFixed(2)}|${fecha}|${docCliente}|${numDocCliente}`;
+    }
+
+    // Agregar QR y leyenda SUNAT solo para facturas y boletas electrónicas (NO para notas de venta)
+    if (!isNotaVenta) {
+      // Leyenda legal SUNAT (OBLIGATORIA)
+      printer = printer
+        .text(format.separator + '\n')
+        .text(convertSpanishText(`REPRESENTACION IMPRESA DE\n${tipoComprobante} ELECTRONICA\n`))
+        .text(convertSpanishText('Consulte en www.sunat.gob.pe\n'));
+
+      // QR Code (obligatorio según SUNAT desde 2020) - después del texto SUNAT
+      if (qrData) {
+        printer = printer.text('\n').qr(qrData).text('\n');
+      }
+    }
 
     // Pie de página
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.text('================================');
-    await CapacitorThermalPrinter.text('Gracias por su preferencia');
-    await CapacitorThermalPrinter.text('');
+    printer = printer
+      .text(format.separator + '\n')
+      .text(convertSpanishText('Gracias por su preferencia\n'))
+      .text('\n');
 
-    // QR Code (opcional - si la factura tiene QR)
-    if (invoice.qrCode) {
-      await CapacitorThermalPrinter.qr(invoice.qrCode);
-    }
-
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.text('');
-
-    // Enviar a imprimir
-    await CapacitorThermalPrinter.write();
-
-    // Cortar papel
-    await CapacitorThermalPrinter.cutPaper();
+    // Finalizar y enviar
+    await printer
+      .text('\n')
+      .cutPaper()
+      .write();
 
     return { success: true };
   } catch (error) {
@@ -303,62 +477,70 @@ export const printInvoiceTicket = async (invoice, business) => {
  * Imprimir comanda de cocina
  * @param {Object} order - Datos de la orden
  * @param {Object} table - Datos de la mesa (opcional)
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printKitchenOrder = async (order, table = null) => {
+export const printKitchenOrder = async (order, table = null, paperWidth = 58) => {
   const isNative = Capacitor.isNativePlatform();
 
-  if (!isNative || !isPrinterConnected) {
-    return { success: false, error: 'Printer not connected' };
+  console.log('🖨️ printKitchenOrder - Iniciando...');
+  console.log('📱 Plataforma nativa:', isNative);
+  console.log('🔌 isPrinterConnected:', isPrinterConnected);
+  console.log('📍 connectedPrinterAddress:', connectedPrinterAddress);
+
+  if (!isNative) {
+    console.error('❌ No es plataforma nativa');
+    return { success: false, error: 'Solo disponible en app móvil' };
+  }
+
+  if (!isPrinterConnected || !connectedPrinterAddress) {
+    console.error('❌ Impresora no conectada');
+    return { success: false, error: 'Impresora no conectada. Conéctala primero desde Ajustes.' };
   }
 
   try {
-    await CapacitorThermalPrinter.begin();
+    const format = getFormat(paperWidth);
 
-    // Encabezado
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.text('*** COMANDA ***');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text('================================');
+    // Construir items text
+    let itemsText = '\n';
+    for (const item of order.items || []) {
+      itemsText += `${item.quantity}x ${item.name}\n`;
+      if (item.notes) {
+        itemsText += `  Nota: ${item.notes}\n`;
+      }
+      itemsText += '\n';
+    }
 
-    // Información de la orden
-    await CapacitorThermalPrinter.align('left');
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.text(`Fecha: ${new Date().toLocaleString('es-PE')}`);
+    // Construir comando en cadena
+    let printer = CapacitorThermalPrinter.begin()
+      // Encabezado
+      .align('center')
+      .doubleWidth()
+      .bold()
+      .text('*** COMANDA ***\n')
+      .clearFormatting()
+      .text(format.separator + '\n')
+      // Información de la orden
+      .align('left')
+      .bold()
+      .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`);
 
     if (table) {
-      await CapacitorThermalPrinter.text(`Mesa: ${table.number}`);
-      await CapacitorThermalPrinter.text(`Mozo: ${table.waiter || 'N/A'}`);
+      printer = printer
+        .text(`Mesa: ${table.number}\n`)
+        .text(`Mozo: ${table.waiter || 'N/A'}\n`);
     }
 
-    await CapacitorThermalPrinter.text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`);
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text('================================');
-
-    // Items
-    await CapacitorThermalPrinter.text('');
-    for (const item of order.items || []) {
-      await CapacitorThermalPrinter.bold();
-      await CapacitorThermalPrinter.doubleWidth();
-      await CapacitorThermalPrinter.text(`${item.quantity}x ${item.name}`);
-      await CapacitorThermalPrinter.clearFormatting();
-
-      if (item.notes) {
-        await CapacitorThermalPrinter.text(`  Nota: ${item.notes}`);
-      }
-      await CapacitorThermalPrinter.text('');
-    }
-
-    await CapacitorThermalPrinter.text('================================');
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.text('');
-
-    // Enviar a imprimir
-    await CapacitorThermalPrinter.write();
-
-    // Cortar papel
-    await CapacitorThermalPrinter.cutPaper();
+    await printer
+      .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`)
+      .clearFormatting()
+      .text(format.separator + '\n')
+      // Items (aquí se resetea formato antes de cada item usando clearFormatting + bold + doubleWidth)
+      .text(itemsText)
+      .text(format.separator + '\n')
+      .text('\n')
+      .text('\n')
+      .cutPaper()
+      .write();
 
     return { success: true };
   } catch (error) {
@@ -372,8 +554,9 @@ export const printKitchenOrder = async (order, table = null) => {
  * @param {Object} order - Datos de la orden
  * @param {Object} table - Datos de la mesa
  * @param {Object} business - Datos del negocio
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printPreBill = async (order, table, business) => {
+export const printPreBill = async (order, table, business, paperWidth = 58) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -381,74 +564,72 @@ export const printPreBill = async (order, table, business) => {
   }
 
   try {
-    await CapacitorThermalPrinter.begin();
+    const format = getFormat(paperWidth);
 
-    // Encabezado
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text(business.tradeName || 'RESTAURANTE');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text(business.address || '');
-    await CapacitorThermalPrinter.text(business.phone || '');
+    // Items - ajustar columnas según ancho
+    const descWidth = paperWidth === 80 ? 26 : 14;
+    const headerLine = paperWidth === 80
+      ? 'CANT  DESCRIPCIÓN                IMPORTE'
+      : 'CANT  DESCRIPCION      IMPORTE';
 
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text('PRECUENTA');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text('================================');
-
-    // Información
-    await CapacitorThermalPrinter.align('left');
-    await CapacitorThermalPrinter.text(`Fecha: ${new Date().toLocaleString('es-PE')}`);
-    await CapacitorThermalPrinter.text(`Mesa: ${table.number}`);
-    await CapacitorThermalPrinter.text(`Mozo: ${table.waiter || 'N/A'}`);
-    await CapacitorThermalPrinter.text(`Orden: #${order.orderNumber || order.id?.slice(-6)}`);
-    await CapacitorThermalPrinter.text('--------------------------------');
-
-    // Items
-    await CapacitorThermalPrinter.text('CANT  DESCRIPCION      IMPORTE');
-    await CapacitorThermalPrinter.text('--------------------------------');
-
+    let itemsText = headerLine + '\n' + format.halfSeparator + '\n';
     for (const item of order.items || []) {
       const cant = String(item.quantity).padEnd(6);
-      const desc = item.name.substring(0, 14).padEnd(14);
-      const price = `S/${item.total.toFixed(2)}`.padStart(8);
-      await CapacitorThermalPrinter.text(`${cant}${desc}${price}`);
+      const desc = item.name.substring(0, descWidth).padEnd(descWidth);
+      const price = `S/${item.total.toFixed(2)}`.padStart(paperWidth === 80 ? 10 : 8);
+      itemsText += `${cant}${desc}${price}\n`;
 
       if (item.notes) {
-        await CapacitorThermalPrinter.text(`  * ${item.notes}`);
+        itemsText += `  * ${item.notes}\n`;
       }
     }
 
-    await CapacitorThermalPrinter.text('--------------------------------');
-
-    // Totales
-    await CapacitorThermalPrinter.align('right');
-    await CapacitorThermalPrinter.text(`Subtotal: S/ ${(order.subtotal || 0).toFixed(2)}`);
-    await CapacitorThermalPrinter.text(`IGV (18%): S/ ${(order.tax || 0).toFixed(2)}`);
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text(`TOTAL: S/ ${(order.total || 0).toFixed(2)}`);
-    await CapacitorThermalPrinter.clearFormatting();
-
-    // Pie de página
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.text('================================');
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.text('*** PRECUENTA ***');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text('No valido como comprobante');
-    await CapacitorThermalPrinter.text('Solicite su factura o boleta');
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.text('Gracias por su preferencia');
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.text('');
-
-    // Enviar a imprimir
-    await CapacitorThermalPrinter.write();
-
-    // Cortar papel
-    await CapacitorThermalPrinter.cutPaper();
+    // Construir comando en cadena
+    await CapacitorThermalPrinter.begin()
+      // Encabezado
+      .align('center')
+      .doubleWidth()
+      .text((business.tradeName || 'RESTAURANTE') + '\n')
+      .clearFormatting()
+      .text((business.address || '') + '\n')
+      .text((business.phone || '') + '\n')
+      .bold()
+      .doubleWidth()
+      .text('PRECUENTA\n')
+      .clearFormatting()
+      .text(format.separator + '\n')
+      // Información
+      .align('left')
+      .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`)
+      .text(`Mesa: ${table.number}\n`)
+      .text(`Mozo: ${table.waiter || 'N/A'}\n`)
+      .text(`Orden: #${order.orderNumber || order.id?.slice(-6)}\n`)
+      .text(format.halfSeparator + '\n')
+      // Items
+      .text(itemsText)
+      .text(format.halfSeparator + '\n')
+      // Totales
+      .align('right')
+      .text(`Subtotal: S/ ${(order.subtotal || 0).toFixed(2)}\n`)
+      .text(`IGV (18%): S/ ${(order.tax || 0).toFixed(2)}\n`)
+      .bold()
+      .doubleWidth()
+      .text(`TOTAL: S/ ${(order.total || 0).toFixed(2)}\n`)
+      .clearFormatting()
+      // Pie de página
+      .align('center')
+      .text(format.separator + '\n')
+      .bold()
+      .text('*** PRECUENTA ***\n')
+      .clearFormatting()
+      .text('No valido como comprobante\n')
+      .text('Solicite su factura o boleta\n')
+      .text('\n')
+      .text('Gracias por su preferencia\n')
+      .text('\n')
+      .text('\n')
+      .cutPaper()
+      .write();
 
     return { success: true };
   } catch (error) {
@@ -459,50 +640,70 @@ export const printPreBill = async (order, table, business) => {
 
 /**
  * Probar impresora con un ticket de prueba
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const testPrinter = async () => {
+export const testPrinter = async (paperWidth = 58) => {
   const isNative = Capacitor.isNativePlatform();
 
-  if (!isNative || !isPrinterConnected) {
-    return { success: false, error: 'Printer not connected' };
+  console.log('🖨️ testPrinter - Iniciando prueba de impresión');
+  console.log('📱 Plataforma nativa:', isNative);
+  console.log('🔌 Impresora conectada:', isPrinterConnected);
+  console.log('📏 Ancho de papel:', paperWidth);
+
+  if (!isNative) {
+    console.error('❌ No es plataforma nativa');
+    return { success: false, error: 'Solo disponible en app móvil' };
+  }
+
+  if (!isPrinterConnected) {
+    console.error('❌ Impresora no conectada');
+    return { success: false, error: 'Impresora no conectada. Conéctala primero.' };
   }
 
   try {
-    await CapacitorThermalPrinter.begin();
+    console.log('✅ Iniciando impresión de prueba...');
+    const format = getFormat(paperWidth);
+    console.log('📐 Formato seleccionado:', format);
 
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.text('PRUEBA DE IMPRESORA');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text('================================');
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.align('left');
-    await CapacitorThermalPrinter.text('Texto normal');
-    await CapacitorThermalPrinter.bold();
-    await CapacitorThermalPrinter.text('Texto en negrita');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.underline();
-    await CapacitorThermalPrinter.text('Texto subrayado');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.doubleWidth();
-    await CapacitorThermalPrinter.text('Texto grande');
-    await CapacitorThermalPrinter.clearFormatting();
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.align('center');
-    await CapacitorThermalPrinter.text(`Fecha: ${new Date().toLocaleString('es-PE')}`);
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.text('Impresora configurada');
-    await CapacitorThermalPrinter.text('correctamente!');
-    await CapacitorThermalPrinter.text('');
-    await CapacitorThermalPrinter.text('');
+    console.log('🔄 Preparando comandos de impresión...');
+    // El plugin usa method chaining - no se necesita await hasta write()
+    await CapacitorThermalPrinter.begin()
+      .align('center')
+      .bold()
+      .text('PRUEBA DE IMPRESORA\n')
+      .clearFormatting()
+      .text(format.separator + '\n')
+      .text('\n')
+      .align('left')
+      .text(convertSpanishText('Texto en español: áéíóú\n'))
+      .text(convertSpanishText('Caracteres: ñÑ ¿? ¡!\n'))
+      .bold()
+      .text('Texto en negrita\n')
+      .clearFormatting()
+      .underline()
+      .text('Texto subrayado\n')
+      .clearFormatting()
+      .text('\n')
+      .align('center')
+      .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`)
+      .text('\n')
+      .text(`Ancho: ${paperWidth}mm\n`)
+      .text(convertSpanishText('Impresora configurada\n'))
+      .text('correctamente!\n')
+      .text('\n')
+      .text('\n')
+      .cutPaper()
+      .write();
 
-    await CapacitorThermalPrinter.write();
-    await CapacitorThermalPrinter.cutPaper();
+    console.log('✅ Impresión completada');
 
+    console.log('🎉 Impresión de prueba completada exitosamente');
     return { success: true };
   } catch (error) {
-    console.error('Error testing printer:', error);
-    return { success: false, error: error.message };
+    console.error('❌ Error en testPrinter:', error);
+    console.error('Tipo de error:', error.constructor.name);
+    console.error('Mensaje:', error.message);
+    console.error('Stack:', error.stack);
+    return { success: false, error: error.message || 'Error desconocido al imprimir' };
   }
 };

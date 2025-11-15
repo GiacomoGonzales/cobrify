@@ -498,6 +498,11 @@ export default function CreatePurchase() {
       const productUpdates = purchaseItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (product) {
+          // Solo actualizar si el producto maneja stock (trackStock !== false)
+          // Si trackStock es undefined o true, sí actualizar
+          // Si trackStock es false, NO actualizar
+          if (product.trackStock === false) return
+
           const newQuantity = parseFloat(item.quantity)
           const newCost = parseFloat(item.cost)
 

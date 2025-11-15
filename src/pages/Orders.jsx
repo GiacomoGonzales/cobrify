@@ -81,17 +81,22 @@ export default function Orders() {
 
         if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
           // Reconectar a la impresora
-          await connectPrinter(printerConfigResult.config.address)
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
 
-          // Imprimir en impresora térmica
-          const result = await printKitchenOrder(order, null)
-
-          if (result.success) {
-            toast.success('Comanda impresa en ticketera')
-            return
-          } else {
-            toast.error('Error al imprimir en ticketera: ' + result.error)
+          if (!connectResult.success) {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
             toast.info('Usando impresión estándar...')
+          } else {
+            // Imprimir en impresora térmica
+            const result = await printKitchenOrder(order, null, printerConfigResult.config.paperWidth || 58)
+
+            if (result.success) {
+              toast.success('Comanda impresa en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir en ticketera: ' + result.error)
+              toast.info('Usando impresión estándar...')
+            }
           }
         }
       } catch (error) {

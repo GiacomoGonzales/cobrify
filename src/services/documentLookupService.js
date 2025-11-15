@@ -5,8 +5,25 @@
  * - apiperu.dev (API Perú - Requiere token)
  */
 
+import { Capacitor } from '@capacitor/core'
+
 // Obtener el token de las variables de entorno
 const APIPERU_TOKEN = import.meta.env.VITE_APIPERU_TOKEN
+
+// URLs de la API según plataforma
+const getApiUrl = (type) => {
+  const isNative = Capacitor.isNativePlatform()
+
+  if (isNative) {
+    // En app móvil, usar URL directa
+    return type === 'dni'
+      ? 'https://api.apis.net.pe/v2/reniec/dni'
+      : 'https://api.apis.net.pe/v2/sunat/ruc'
+  } else {
+    // En web, usar proxy de Vite
+    return `/api/${type}`
+  }
+}
 
 /**
  * Consultar DNI en RENIEC
@@ -31,8 +48,19 @@ export const consultarDNI = async (dni) => {
       }
     }
 
-    // Usar API Perú a través del proxy de Vite
-    const response = await fetch(`/api/dni`, {
+    // Usar API según plataforma (proxy en web, URL directa en app móvil)
+    const apiUrl = getApiUrl('dni')
+    const isNative = Capacitor.isNativePlatform()
+
+    // En app móvil, usar parámetros GET. En web, usar POST con el proxy
+    const url = isNative ? `${apiUrl}?numero=${dni}` : apiUrl
+    const options = isNative ? {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${APIPERU_TOKEN}`,
+        'Accept': 'application/json',
+      }
+    } : {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${APIPERU_TOKEN}`,
@@ -40,7 +68,9 @@ export const consultarDNI = async (dni) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ dni })
-    })
+    }
+
+    const response = await fetch(url, options)
 
     if (!response.ok) {
       throw new Error('No se pudo consultar el DNI')
@@ -101,8 +131,19 @@ export const consultarRUC = async (ruc) => {
       }
     }
 
-    // Usar API Perú a través del proxy de Vite
-    const response = await fetch(`/api/ruc`, {
+    // Usar API según plataforma (proxy en web, URL directa en app móvil)
+    const apiUrl = getApiUrl('ruc')
+    const isNative = Capacitor.isNativePlatform()
+
+    // En app móvil, usar parámetros GET. En web, usar POST con el proxy
+    const url = isNative ? `${apiUrl}?numero=${ruc}` : apiUrl
+    const options = isNative ? {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${APIPERU_TOKEN}`,
+        'Accept': 'application/json',
+      }
+    } : {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${APIPERU_TOKEN}`,
@@ -110,7 +151,9 @@ export const consultarRUC = async (ruc) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ ruc })
-    })
+    }
+
+    const response = await fetch(url, options)
 
     if (!response.ok) {
       throw new Error('No se pudo consultar el RUC')

@@ -106,11 +106,15 @@ export default function Settings() {
     address: '',
     name: '',
     type: 'bluetooth', // bluetooth o wifi
+    paperWidth: 58, // 58mm o 80mm
   })
   const [availablePrinters, setAvailablePrinters] = useState([])
   const [isScanning, setIsScanning] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
+  const [showManualConnect, setShowManualConnect] = useState(false)
+  const [manualAddress, setManualAddress] = useState('')
+  const [manualName, setManualName] = useState('')
 
   const {
     register,
@@ -667,12 +671,13 @@ export default function Settings() {
     try {
       const result = await connectPrinter(printerAddress)
       if (result.success) {
-        // Guardar configuración
+        // Guardar configuración (mantener paperWidth actual o usar 58mm por defecto)
         const newConfig = {
           enabled: true,
           address: printerAddress,
           name: printerName,
-          type: 'bluetooth'
+          type: 'bluetooth',
+          paperWidth: printerConfig.paperWidth || 58
         }
         setPrinterConfig(newConfig)
 
@@ -691,23 +696,56 @@ export default function Settings() {
     }
   }
 
+  const handleChangePaperWidth = async (newWidth) => {
+    try {
+      const newConfig = { ...printerConfig, paperWidth: parseInt(newWidth) }
+      setPrinterConfig(newConfig)
+      await savePrinterConfig(getBusinessId(), newConfig)
+      toast.success(`Ancho de papel actualizado a ${newWidth}mm`)
+    } catch (error) {
+      console.error('Error updating paper width:', error)
+      toast.error('Error al actualizar ancho de papel')
+    }
+  }
+
   const handleTestPrinter = async () => {
     setIsTesting(true)
     try {
       // Primero reconectar a la impresora guardada
+      console.log('🔄 Reconectando a impresora:', printerConfig.address)
       if (printerConfig.address) {
-        await connectPrinter(printerConfig.address)
+        const connectResult = await connectPrinter(printerConfig.address)
+        console.log('Resultado de conexión:', connectResult)
+
+        if (!connectResult.success) {
+          toast.error('No se pudo conectar a la impresora: ' + (connectResult.error || 'Error desconocido'))
+          setIsTesting(false)
+          return
+        }
       }
 
-      const result = await testPrinter()
+      console.log('🖨️ Llamando a testPrinter con ancho:', printerConfig.paperWidth || 58)
+
+      // Agregar timeout de 30 segundos
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout: La impresión tardó demasiado')), 30000)
+      )
+
+      const result = await Promise.race([
+        testPrinter(printerConfig.paperWidth || 58),
+        timeoutPromise
+      ])
+
+      console.log('Resultado de testPrinter:', result)
+
       if (result.success) {
         toast.success('Impresión de prueba enviada')
       } else {
         toast.error(result.error || 'Error al imprimir prueba')
       }
     } catch (error) {
-      console.error('Error testing printer:', error)
-      toast.error('Error al imprimir prueba')
+      console.error('❌ Error en handleTestPrinter:', error)
+      toast.error(error.message || 'Error al imprimir prueba')
     } finally {
       setIsTesting(false)
     }
@@ -723,6 +761,25 @@ export default function Settings() {
       console.error('Error disabling printer:', error)
       toast.error('Error al deshabilitar impresora')
     }
+  }
+
+  const handleManualConnect = async () => {
+    if (!manualAddress.trim()) {
+      toast.error('Ingresa la dirección MAC de la impresora')
+      return
+    }
+
+    // Validar formato de dirección MAC (XX:XX:XX:XX:XX:XX)
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/
+    if (!macRegex.test(manualAddress.trim())) {
+      toast.error('Formato de dirección MAC inválido. Usa el formato XX:XX:XX:XX:XX:XX')
+      return
+    }
+
+    await handleConnectPrinter(manualAddress.trim(), manualName.trim() || 'Impresora Manual')
+    setShowManualConnect(false)
+    setManualAddress('')
+    setManualName('')
   }
 
   if (isLoading) {
@@ -1685,73 +1742,178 @@ export default function Settings() {
 
                 {/* Impresora configurada */}
                 {printerConfig.enabled && printerConfig.address && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="bg-green-100 p-2 rounded-full">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex flex-col space-y-3">
+                        <div className="flex items-start space-x-3">
+                          <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900">{printerConfig.name || 'Impresora Térmica'}</p>
+                            <p className="text-sm text-gray-600 break-all">Dirección: {printerConfig.address}</p>
+                            <p className="text-sm text-gray-600">Tipo: {printerConfig.type === 'bluetooth' ? 'Bluetooth' : 'WiFi'}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">{printerConfig.name || 'Impresora Térmica'}</p>
-                          <p className="text-sm text-gray-600">Dirección: {printerConfig.address}</p>
-                          <p className="text-sm text-gray-600">Tipo: {printerConfig.type === 'bluetooth' ? 'Bluetooth' : 'WiFi'}</p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTestPrinter}
+                            disabled={isTesting}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            {isTesting ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Imprimiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Printer className="w-4 h-4 mr-2" />
+                                Probar
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDisablePrinter}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Deshabilitar
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleTestPrinter}
-                          disabled={isTesting}
+                    </div>
+
+                    {/* Configuración de ancho de papel */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Ancho de Papel
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleChangePaperWidth(58)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            printerConfig.paperWidth === 58
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
                         >
-                          {isTesting ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Imprimiendo...
-                            </>
-                          ) : (
-                            <>
-                              <Printer className="w-4 h-4 mr-2" />
-                              Probar
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleDisablePrinter}
+                          <div className="font-semibold">58mm</div>
+                          <div className="text-xs mt-1">Impresoras pequeñas</div>
+                        </button>
+                        <button
+                          onClick={() => handleChangePaperWidth(80)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            printerConfig.paperWidth === 80
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
                         >
-                          <X className="w-4 h-4 mr-2" />
-                          Deshabilitar
-                        </Button>
+                          <div className="font-semibold">80mm</div>
+                          <div className="text-xs mt-1">Impresoras estándar</div>
+                        </button>
                       </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Selecciona el ancho de papel de tu impresora térmica. Esto ajustará automáticamente el formato de impresión.
+                      </p>
                     </div>
                   </div>
                 )}
 
                 {/* Escanear impresoras */}
                 {(!printerConfig.enabled || !printerConfig.address) && (
-                  <div>
-                    <Button
-                      onClick={handleScanPrinters}
-                      disabled={isScanning}
-                      className="w-full sm:w-auto"
-                    >
-                      {isScanning ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Escaneando...
-                        </>
-                      ) : (
-                        <>
-                          <Printer className="w-4 h-4 mr-2" />
-                          Buscar Impresoras Bluetooth
-                        </>
-                      )}
-                    </Button>
-                    <p className="text-sm text-gray-500 mt-2">
-                      Asegúrate de que tu impresora esté encendida y en modo de emparejamiento
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Button
+                        onClick={handleScanPrinters}
+                        disabled={isScanning}
+                        className="flex-1 sm:flex-initial"
+                      >
+                        {isScanning ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Escaneando...
+                          </>
+                        ) : (
+                          <>
+                            <Printer className="w-4 h-4 mr-2" />
+                            Buscar Impresoras Bluetooth
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowManualConnect(!showManualConnect)}
+                        className="flex-1 sm:flex-initial"
+                      >
+                        {showManualConnect ? 'Cancelar' : 'Conexión Manual'}
+                      </Button>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      {showManualConnect
+                        ? 'Ingresa la dirección MAC de tu impresora si ya está emparejada con tu celular'
+                        : 'Asegúrate de que tu impresora esté encendida y en modo de emparejamiento'
+                      }
                     </p>
+
+                    {/* Formulario de conexión manual */}
+                    {showManualConnect && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Dirección MAC de la impresora *
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="XX:XX:XX:XX:XX:XX"
+                            value={manualAddress}
+                            onChange={(e) => setManualAddress(e.target.value.toUpperCase())}
+                            className="font-mono"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Formato: 00:11:22:AA:BB:CC (puedes encontrarla en la configuración de Bluetooth de tu celular)
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre de la impresora (opcional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Mi impresora térmica"
+                            value={manualName}
+                            onChange={(e) => setManualName(e.target.value)}
+                          />
+                        </div>
+                        <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                          <p className="text-xs text-blue-800">
+                            <strong>Cómo encontrar la dirección MAC:</strong><br />
+                            1. Ve a Configuración → Bluetooth en tu celular<br />
+                            2. Busca tu impresora en la lista de dispositivos emparejados<br />
+                            3. Toca en el ícono de información (⚙️ o ℹ️)<br />
+                            4. Copia la dirección MAC que aparece
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleManualConnect}
+                          disabled={isConnecting || !manualAddress.trim()}
+                          className="w-full"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Conectando...
+                            </>
+                          ) : (
+                            'Conectar Impresora'
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 

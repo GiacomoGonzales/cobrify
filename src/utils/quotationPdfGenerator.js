@@ -3,6 +3,9 @@ import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { storage } from '@/lib/firebase'
 import { ref, getBlob } from 'firebase/storage'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 /**
  * Extrae el path de Firebase Storage desde una URL
@@ -483,7 +486,40 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   if (download) {
     const fileName = `Cotizacion_${quotation.number.replace(/\//g, '-')}.pdf`
-    doc.save(fileName)
+    const isNative = Capacitor.isNativePlatform()
+
+    if (isNative) {
+      // En app móvil, guardar usando Filesystem API
+      try {
+        // Convertir PDF a base64
+        const pdfBase64 = doc.output('datauristring').split(',')[1]
+
+        // Guardar en el directorio de documentos
+        const result = await Filesystem.writeFile({
+          path: fileName,
+          data: pdfBase64,
+          directory: Directory.Documents
+        })
+
+        console.log('PDF guardado en:', result.uri)
+
+        // Compartir el PDF usando el plugin Share
+        await Share.share({
+          title: fileName,
+          text: `Cotización ${quotation.number}`,
+          url: result.uri,
+          dialogTitle: 'Compartir cotización'
+        })
+
+      } catch (error) {
+        console.error('Error al guardar PDF en móvil:', error)
+        // Fallback: intentar guardar de todos modos
+        doc.save(fileName)
+      }
+    } else {
+      // En web, usar el método normal
+      doc.save(fileName)
+    }
   }
 
   return doc
