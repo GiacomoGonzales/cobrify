@@ -64,14 +64,19 @@ export function calculateInvoiceAmounts(items, igvRate = 18) {
 
   // Calcular el subtotal (sin IGV) a partir del total
   const subtotal = total / (1 + igvMultiplier)
+  const subtotalRounded = Number(subtotal.toFixed(2))
 
-  // El IGV es la diferencia entre el total y el subtotal
-  const igv = total - subtotal
+  // Calcular el IGV desde el subtotal redondeado para evitar pérdida de centavos
+  const igv = subtotalRounded * igvMultiplier
+  const igvRounded = Number(igv.toFixed(2))
+
+  // Recalcular el total para asegurar consistencia
+  const totalFinal = subtotalRounded + igvRounded
 
   return {
-    subtotal: Number(subtotal.toFixed(2)),
-    igv: Number(igv.toFixed(2)),
-    total: Number(total.toFixed(2)),
+    subtotal: subtotalRounded,
+    igv: igvRounded,
+    total: Number(totalFinal.toFixed(2)),
   }
 }
 
