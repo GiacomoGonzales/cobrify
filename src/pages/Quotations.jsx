@@ -238,7 +238,7 @@ export default function Quotations() {
       loadQuotations()
 
       // Navegar a la lista de facturas
-      navigate('/facturas')
+      navigate('/app/facturas')
     } catch (error) {
       console.error('Error al convertir cotización:', error)
       toast.error(error.message || 'Error al convertir la cotización a factura.')

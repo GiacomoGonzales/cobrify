@@ -1,59 +1,189 @@
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import QRCode from 'qrcode'
+import { storage } from '@/lib/firebase'
+import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 
 /**
- * Carga una imagen desde una URL y la convierte a base64
- * @param {string} url - URL de la imagen
- * @returns {Promise<string>} - Imagen en formato base64
+ * Convierte un número a texto en español (para montos)
  */
-const loadImageAsBase64 = (url) => {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.crossOrigin = 'Anonymous'
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(img, 0, 0)
-      try {
-        const dataURL = canvas.toDataURL('image/png')
-        resolve(dataURL)
-      } catch (error) {
-        reject(error)
+const numeroALetras = (num) => {
+  const unidades = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
+  const decenas = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA']
+  const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE']
+  const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS']
+
+  const convertirGrupo = (n) => {
+    if (n === 0) return ''
+    if (n === 100) return 'CIEN'
+
+    const c = Math.floor(n / 100)
+    const d = Math.floor((n % 100) / 10)
+    const u = n % 10
+
+    let resultado = ''
+
+    if (c > 0) resultado += centenas[c]
+
+    if (d === 1) {
+      resultado += (resultado ? ' ' : '') + especiales[u]
+    } else {
+      if (d > 0) resultado += (resultado ? ' ' : '') + decenas[d]
+      if (u > 0) {
+        if (d > 2) resultado += ' Y '
+        else if (resultado) resultado += ' '
+        resultado += unidades[u]
       }
     }
-    img.onerror = reject
-    img.src = url
-  })
+
+    return resultado
+  }
+
+  const entero = Math.floor(num)
+  const decimales = Math.round((num - entero) * 100)
+
+  if (entero === 0) return `CERO CON ${decimales.toString().padStart(2, '0')}/100`
+
+  const miles = Math.floor(entero / 1000)
+  const restoMiles = entero % 1000
+
+  let resultado = ''
+
+  if (miles > 0) {
+    if (miles === 1) {
+      resultado = 'MIL'
+    } else {
+      resultado = convertirGrupo(miles) + ' MIL'
+    }
+  }
+
+  if (restoMiles > 0) {
+    if (resultado) resultado += ' '
+    resultado += convertirGrupo(restoMiles)
+  }
+
+  return `${resultado} CON ${decimales.toString().padStart(2, '0')}/100`
+}
+
+/**
+ * Convierte URL de Firebase Storage a URL pública compatible con CORS
+ * Firebase Storage requiere ?alt=media para acceso público
+ */
+const getPublicFirebaseStorageUrl = (url) => {
+  try {
+    // Si ya tiene alt=media, está lista para usar
+    if (url.includes('?alt=media')) {
+      console.log('✅ URL ya tiene alt=media, usando directamente')
+      return url
+    }
+
+    // Si es una URL de firebasestorage.googleapis.com, asegurar que tenga alt=media
+    if (url.includes('firebasestorage.googleapis.com')) {
+      // Si ya tiene algún query param pero no alt=media
+      if (url.includes('?')) {
+        return `${url}&alt=media`
+      } else {
+        return `${url}?alt=media`
+      }
+    }
+
+    return url
+  } catch (error) {
+    console.error('Error converting URL:', error)
+    return url
+  }
+}
+
+/**
+ * Extrae el path de Firebase Storage desde una URL
+ */
+const getStoragePathFromUrl = (url) => {
+  try {
+    // Extraer path de URL de Firebase Storage
+    // Formato: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{encodedPath}?...
+    const match = url.match(/\/o\/(.+?)\?/)
+    if (match) {
+      const encodedPath = match[1]
+      return decodeURIComponent(encodedPath)
+    }
+    return null
+  } catch (error) {
+    console.error('Error extrayendo path:', error)
+    return null
+  }
+}
+
+/**
+ * Carga una imagen desde Firebase Storage y la convierte a base64
+ * Usa el SDK de Firebase para evitar problemas de CORS
+ */
+const loadImageAsBase64 = async (url) => {
+  try {
+    console.log('🔄 Cargando imagen desde Firebase Storage usando SDK')
+
+    // Extraer el path del storage desde la URL
+    const storagePath = getStoragePathFromUrl(url)
+
+    if (storagePath) {
+      console.log('📁 Path extraído:', storagePath)
+
+      // Usar Firebase SDK para obtener el blob
+      const storageRef = ref(storage, storagePath)
+      const blob = await getBlob(storageRef)
+
+      // Convertir blob a base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          console.log('✅ Imagen cargada correctamente usando Firebase SDK')
+          resolve(reader.result)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    }
+
+    // Fallback: intentar con fetch directo si no es una URL de Firebase Storage
+    console.log('🔄 Fallback: Intentando fetch directo')
+    const response = await fetch(url, {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'default'
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`)
+    }
+
+    const blob = await response.blob()
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        console.log('✅ Imagen cargada con fetch directo')
+        resolve(reader.result)
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+
+  } catch (error) {
+    console.error('❌ Error cargando imagen:', error)
+    throw error
+  }
 }
 
 /**
  * Genera el código QR para SUNAT
- * Formato: RUC|TipoDoc|Serie|Numero|IGV|Total|Fecha|TipoDocCliente|NumDocCliente|
- * @param {Object} invoice - Datos de la factura
- * @param {Object} companySettings - Configuración de la empresa
- * @returns {Promise<string>} - QR en formato base64
  */
 const generateSunatQR = async (invoice, companySettings) => {
   try {
-    // Tipo de documento SUNAT: 01=Factura, 03=Boleta, 07=Nota de Crédito, 08=Nota de Débito
-    const docTypeCode = invoice.documentType === 'factura' ? '01' :
-                       invoice.documentType === 'boleta' ? '03' : '00'
-
-    // Extraer serie y número del formato "F001-00000001"
+    const docTypeCode = invoice.documentType === 'factura' ? '01' : '03'
     const [serie = '', numero = ''] = (invoice.number || '').split('-')
-
-    // Tipo de documento del cliente: 6=RUC, 1=DNI, 0=Otros
     const clientDocType = invoice.customer?.documentType === 'RUC' ? '6' :
                          invoice.customer?.documentType === 'DNI' ? '1' : '0'
-
-    // Número de documento del cliente
     const clientDocNumber = invoice.customer?.documentNumber || '-'
 
-    // Fecha en formato DD/MM/YYYY
     let invoiceDate = new Date().toLocaleDateString('es-PE')
     if (invoice.createdAt) {
       if (invoice.createdAt.toDate) {
@@ -64,8 +194,6 @@ const generateSunatQR = async (invoice, companySettings) => {
       }
     }
 
-    // Formato del texto del QR según SUNAT
-    // RUC|TipoDoc|Serie|Numero|IGV|Total|Fecha|TipoDocCliente|NumDocCliente|
     const qrData = [
       companySettings?.ruc || '',
       docTypeCode,
@@ -79,9 +207,8 @@ const generateSunatQR = async (invoice, companySettings) => {
       ''
     ].join('|')
 
-    // Generar QR como data URL
     const qrDataUrl = await QRCode.toDataURL(qrData, {
-      width: 150,
+      width: 300,
       margin: 1,
       errorCorrectionLevel: 'M'
     })
@@ -94,314 +221,451 @@ const generateSunatQR = async (invoice, companySettings) => {
 }
 
 /**
- * Genera un PDF para una factura o boleta
- * @param {Object} invoice - Datos de la factura
- * @param {Object} companySettings - Configuración de la empresa
+ * Genera un PDF profesional para factura o boleta según formato SUNAT oficial
+ * Diseño moderno y limpio con mejor tipografía y espaciado
  */
 export const generateInvoicePDF = async (invoice, companySettings, download = true) => {
-  const doc = new jsPDF()
+  // Crear documento A4 en orientación vertical (portrait)
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'a4'
+  })
 
-  // Colores
-  const primaryColor = [59, 130, 246] // primary-600
-  const grayDark = [31, 41, 55] // gray-800
-  const grayMedium = [107, 114, 128] // gray-500
-  const grayLight = [243, 244, 246] // gray-100
+  // Paleta de colores moderna
+  const PRIMARY_COLOR = [41, 128, 185] // Azul profesional
+  const DARK_GRAY = [52, 73, 94]
+  const MEDIUM_GRAY = [127, 140, 141]
+  const LIGHT_GRAY = [236, 240, 241]
+  const SUCCESS_COLOR = [39, 174, 96]
+  const BLACK = [0, 0, 0]
 
-  let yPos = 15
+  // Márgenes y dimensiones - A4 portrait: 595pt x 842pt
+  const MARGIN_LEFT = 40
+  const MARGIN_RIGHT = 40
+  const MARGIN_TOP = 40
+  const PAGE_WIDTH = doc.internal.pageSize.getWidth()
+  const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
+  const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
-  // ========== ENCABEZADO - INFORMACIÓN DE EMPRESA (IZQUIERDA) ==========
+  // Coordenada Y actual
+  let currentY = MARGIN_TOP
 
-  // Logo de empresa (si existe)
-  let hasLogo = false
+  // ========== 1. ENCABEZADO PRINCIPAL ==========
+
+  // Barra superior con color de marca
+  doc.setFillColor(...PRIMARY_COLOR)
+  doc.rect(0, 0, PAGE_WIDTH, 8, 'F')
+
+  currentY += 10
+
+  const headerY = currentY
+  const headerHeight = 85
+
+  // Columna izquierda - Información de la empresa (65%)
+  const leftColumnWidth = CONTENT_WIDTH * 0.60
+  const leftColumnX = MARGIN_LEFT
+
+  // Logo de la empresa si existe
+  let logoWidth = 0
+  let textStartX = leftColumnX
+
   if (companySettings?.logoUrl) {
     try {
-      const imgData = await loadImageAsBase64(companySettings.logoUrl)
-      doc.addImage(imgData, 'PNG', 15, yPos, 25, 25)
-      hasLogo = true
+      console.log('📸 Intentando cargar logo desde:', companySettings.logoUrl)
+
+      // Agregar un timeout para no bloquear la generación del PDF
+      const imgData = await Promise.race([
+        loadImageAsBase64(companySettings.logoUrl),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout loading logo')), 5000)
+        )
+      ])
+
+      const logoHeight = 50
+      logoWidth = 50
+
+      // Determinar el formato de la imagen
+      let format = 'PNG'
+      if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
+          companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+        format = 'JPEG'
+      }
+
+      doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
+      textStartX = leftColumnX + logoWidth + 15
+      console.log('✅ Logo cargado correctamente')
     } catch (error) {
-      console.error('Error cargando logo:', error)
+      console.warn('⚠️ No se pudo cargar el logo, continuando sin él:', error.message)
+      textStartX = leftColumnX
+      // Continuar sin el logo - el PDF se generará de todas formas
     }
   }
 
-  // Información de empresa
-  const companyX = hasLogo ? 45 : 15
+  // Nombre de la empresa
   doc.setFontSize(14)
-  doc.setTextColor(...grayDark)
+  doc.setTextColor(...DARK_GRAY)
   doc.setFont('helvetica', 'bold')
-  doc.text(companySettings?.businessName || 'MI EMPRESA SAC', companyX, yPos + 5)
 
-  yPos += 10
-  doc.setFontSize(8)
-  doc.setTextColor(...grayMedium)
-  doc.setFont('helvetica', 'normal')
+  let textY = headerY + 5
+  const companyName = companySettings?.businessName || 'EMPRESA SAC'
+  doc.text(companyName, textStartX, textY)
+  textY += 16
 
-  if (companySettings?.ruc) {
-    doc.text(`RUC: ${companySettings.ruc}`, companyX, yPos)
-    yPos += 4
-  }
-
-  if (companySettings?.address) {
-    const addressLines = doc.splitTextToSize(companySettings.address, 80)
-    doc.text(addressLines, companyX, yPos)
-    yPos += 3.5 * addressLines.length
-  }
-
-  if (companySettings?.phone) {
-    doc.text(`Teléfono: ${companySettings.phone}`, companyX, yPos)
-    yPos += 4
-  }
-
-  if (companySettings?.email) {
-    doc.text(`Email: ${companySettings.email}`, companyX, yPos)
-  }
-
-  // ========== CUADRO DE COMPROBANTE (DERECHA) ==========
-
-  // Recuadro para el tipo de comprobante
-  const boxX = 130
-  const boxY = 15
-  const boxWidth = 65
-  const boxHeight = 35
-
-  // Borde del recuadro
-  doc.setDrawColor(...primaryColor)
-  doc.setLineWidth(0.8)
-  doc.rect(boxX, boxY, boxWidth, boxHeight)
-
-  // Línea divisoria horizontal en el medio
-  doc.setLineWidth(0.3)
-  doc.line(boxX, boxY + 18, boxX + boxWidth, boxY + 18)
-
-  // Tipo de documento (arriba del recuadro)
-  doc.setFontSize(12)
-  doc.setTextColor(...primaryColor)
-  doc.setFont('helvetica', 'bold')
-  const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' :
-                       invoice.documentType === 'boleta' ? 'BOLETA DE VENTA' : 'NOTA DE VENTA'
-  const titleX = boxX + (boxWidth / 2)
-  doc.text(documentTitle, titleX, boxY + 8, { align: 'center' })
-
-  // Serie y número (centro del recuadro)
+  // RUC de la empresa
   doc.setFontSize(9)
-  doc.setTextColor(...grayDark)
-  doc.text(invoice.number || 'N/A', titleX, boxY + 14, { align: 'center' })
-
-  // Fecha (abajo del recuadro)
-  doc.setFontSize(8)
-  doc.setTextColor(...grayMedium)
   doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  const ruc = companySettings?.ruc || ''
+  if (ruc) {
+    doc.text(`RUC: ${ruc}`, textStartX, textY)
+    textY += 12
+  }
+
+  // Dirección
+  doc.setFontSize(8)
+  if (companySettings?.address) {
+    const maxAddressWidth = leftColumnWidth - (textStartX - leftColumnX) - 10
+    const addressLines = doc.splitTextToSize(companySettings.address, maxAddressWidth)
+    doc.text(addressLines, textStartX, textY)
+    textY += 10 * Math.min(addressLines.length, 2)
+  }
+
+  // Contacto
+  const contactParts = []
+  if (companySettings?.phone) contactParts.push(companySettings.phone)
+  if (companySettings?.email) contactParts.push(companySettings.email)
+
+  if (contactParts.length > 0) {
+    doc.setFontSize(8)
+    doc.text(contactParts.join(' • '), textStartX, textY)
+  }
+
+  // Columna derecha - Recuadro del comprobante (35%)
+  const rightColumnWidth = CONTENT_WIDTH * 0.40
+  const rightColumnX = MARGIN_LEFT + leftColumnWidth
+
+  // Recuadro con borde de color
+  doc.setDrawColor(...PRIMARY_COLOR)
+  doc.setLineWidth(1.5)
+  doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+
+  // Contenido del recuadro
+  const boxCenterX = rightColumnX + (rightColumnWidth / 2)
+  let boxTextY = headerY + 18
+
+  // Tipo de documento
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...PRIMARY_COLOR)
+  const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'
+  const titleLines = doc.splitTextToSize(documentTitle, rightColumnWidth - 20)
+  titleLines.forEach(line => {
+    doc.text(line, boxCenterX, boxTextY, { align: 'center' })
+    boxTextY += 14
+  })
+
+  boxTextY += 4
+
+  // Número de comprobante
+  doc.setFontSize(14)
+  doc.setTextColor(...DARK_GRAY)
+  doc.setFont('helvetica', 'bold')
+  doc.text(invoice.number || 'N/A', boxCenterX, boxTextY, { align: 'center' })
+
+  currentY = headerY + headerHeight + 20
+
+  // Línea separadora
+  doc.setDrawColor(...LIGHT_GRAY)
+  doc.setLineWidth(1)
+  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+
+  currentY += 20
+
+  // ========== 2. INFORMACIÓN DEL CLIENTE Y FECHA ==========
+
+  const infoBoxY = currentY
+  const infoBoxHeight = 55
+
+  // Fondo suave para la sección
+  doc.setFillColor(...LIGHT_GRAY)
+  doc.roundedRect(MARGIN_LEFT, infoBoxY, CONTENT_WIDTH, infoBoxHeight, 3, 3, 'F')
+
+  // Cliente - Columna izquierda (65%)
+  let clientX = MARGIN_LEFT + 12
+  let clientY = infoBoxY + 12
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  doc.text('CLIENTE', clientX, clientY)
+  clientY += 11
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+
+  const customerName = invoice.customer?.name || 'CLIENTE GENERAL'
+  doc.text(customerName, clientX, clientY)
+  clientY += 11
+
+  const docType = invoice.customer?.documentType === 'RUC' ? 'RUC' :
+                  invoice.customer?.documentType === 'DNI' ? 'DNI' : 'DOC'
+  const docNumber = invoice.customer?.documentNumber || '00000000'
+
+  doc.setFontSize(8)
+  doc.setTextColor(...MEDIUM_GRAY)
+  doc.text(`${docType}: ${docNumber}`, clientX, clientY)
+
+  // Fecha y moneda - Columna derecha (35%)
+  const dateX = MARGIN_LEFT + leftColumnWidth + 12
+  let dateY = infoBoxY + 12
+
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  doc.setFontSize(8)
+  doc.text('FECHA DE EMISIÓN', dateX, dateY)
+  dateY += 11
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
 
   let invoiceDate = new Date().toLocaleDateString('es-PE')
   if (invoice.createdAt) {
     if (invoice.createdAt.toDate) {
-      invoiceDate = formatDate(invoice.createdAt.toDate())
+      const date = invoice.createdAt.toDate()
+      invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
     } else if (invoice.createdAt instanceof Date) {
-      invoiceDate = formatDate(invoice.createdAt)
-    } else {
-      invoiceDate = formatDate(new Date(invoice.createdAt))
+      const date = invoice.createdAt
+      invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
     }
   }
 
-  doc.text(`Fecha: ${invoiceDate}`, titleX, boxY + 26, { align: 'center' })
+  doc.text(invoiceDate, dateX, dateY)
+  dateY += 11
 
-  // Resetear yPos después del header
-  yPos = boxY + boxHeight + 8
+  doc.setFontSize(8)
+  doc.setTextColor(...MEDIUM_GRAY)
+  doc.text('Moneda: Soles (PEN)', dateX, dateY)
 
-  // Línea separadora
-  doc.setDrawColor(...grayLight)
-  doc.setLineWidth(0.5)
-  doc.line(15, yPos, 195, yPos)
+  currentY = infoBoxY + infoBoxHeight + 20
 
-  yPos += 8
+  // ========== 3. TABLA DE PRODUCTOS ==========
 
-  // ========== DATOS DEL CLIENTE ==========
+  const tableY = currentY
+  const rowHeight = 18 // Más espacio entre filas
 
-  doc.setFontSize(11)
-  doc.setTextColor(...grayDark)
+  // Definir anchos de columnas (simplificado)
+  const colWidths = {
+    cant: CONTENT_WIDTH * 0.07,
+    cod: CONTENT_WIDTH * 0.11,
+    desc: CONTENT_WIDTH * 0.52,
+    pu: CONTENT_WIDTH * 0.13,
+    importe: CONTENT_WIDTH * 0.17
+  }
+
+  // Posiciones X de columnas
+  let colX = MARGIN_LEFT
+  const cols = {
+    cant: colX,
+    cod: colX += colWidths.cant,
+    desc: colX += colWidths.cod,
+    pu: colX += colWidths.desc,
+    importe: colX += colWidths.pu
+  }
+
+  // Encabezado de tabla con fondo de color
+  doc.setFillColor(...PRIMARY_COLOR)
+  doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, rowHeight, 'F')
+
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.text('DATOS DEL CLIENTE', 20, yPos)
+  doc.setTextColor(255, 255, 255) // Blanco
 
-  yPos += 6
+  const headerRowY = tableY + 11
 
-  doc.setFontSize(9)
+  doc.text('CANT.', cols.cant + colWidths.cant / 2, headerRowY, { align: 'center' })
+  doc.text('CÓDIGO', cols.cod + colWidths.cod / 2, headerRowY, { align: 'center' })
+  doc.text('DESCRIPCIÓN', cols.desc + 8, headerRowY)
+  doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerRowY, { align: 'center' })
+  doc.text('IMPORTE', cols.importe + colWidths.importe / 2, headerRowY, { align: 'center' })
+
+  // Calcular valores
+  const igvRate = companySettings?.taxConfig?.igvRate || 18
+  const igvMultiplier = igvRate / 100
+
+  // Filas de datos
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...grayMedium)
+  doc.setFontSize(9)
+  doc.setTextColor(...DARK_GRAY)
 
-  // Nombre/Razón Social
-  const customerName = invoice.customer?.name || 'Cliente General'
-  doc.text(`${invoice.documentType === 'factura' ? 'Razón Social' : 'Nombre'}: ${customerName}`, 20, yPos)
-  yPos += 5
+  let dataRowY = tableY + rowHeight + 12
 
-  // Documento
-  const docType = invoice.customer?.documentType === 'RUC' ? 'RUC' :
-                  invoice.customer?.documentType === 'DNI' ? 'DNI' :
-                  invoice.customer?.documentType || 'Documento'
-  const docNumber = invoice.customer?.documentNumber || '-'
-  doc.text(`${docType}: ${docNumber}`, 20, yPos)
-  yPos += 5
+  const items = invoice.items || []
+  const minRows = 6
+  const totalRows = Math.max(items.length, minRows)
 
-  // Dirección (si existe)
-  if (invoice.customer?.address) {
-    const addressLines = doc.splitTextToSize(`Dirección: ${invoice.customer.address}`, 170)
-    doc.text(addressLines, 20, yPos)
-    yPos += 5 * addressLines.length
-  }
-
-  // Email y Teléfono en la misma línea si existen
-  const contactInfo = []
-  if (invoice.customer?.email) contactInfo.push(`Email: ${invoice.customer.email}`)
-  if (invoice.customer?.phone) contactInfo.push(`Tel: ${invoice.customer.phone}`)
-
-  if (contactInfo.length > 0) {
-    doc.text(contactInfo.join(' | '), 20, yPos)
-    yPos += 5
-  }
-
-  yPos += 5
-
-  // ========== TABLA DE ITEMS ==========
-
-  const tableData = invoice.items?.map((item, index) => [
-    (index + 1).toString(),
-    item.name,
-    item.quantity.toString(),
-    item.unit || 'UNIDAD',
-    formatCurrency(item.unitPrice),
-    formatCurrency(item.subtotal || (item.quantity * item.unitPrice))
-  ]) || []
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [['#', 'Descripción', 'Cant.', 'Unidad', 'P. Unit.', 'Subtotal']],
-    body: tableData,
-    theme: 'striped',
-    headStyles: {
-      fillColor: primaryColor,
-      textColor: [255, 255, 255],
-      fontSize: 9,
-      fontStyle: 'bold',
-      halign: 'left'
-    },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: grayDark
-    },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 10 },
-      1: { halign: 'left', cellWidth: 'auto' },
-      2: { halign: 'center', cellWidth: 20 },
-      3: { halign: 'center', cellWidth: 25 },
-      4: { halign: 'right', cellWidth: 30 },
-      5: { halign: 'right', cellWidth: 30 }
-    },
-    margin: { left: 20, right: 20 },
-    didDrawPage: (data) => {
-      yPos = data.cursor.y
+  for (let i = 0; i < totalRows; i++) {
+    // Fondo alternado
+    if (i % 2 === 0) {
+      doc.setFillColor(250, 250, 250)
+      doc.rect(MARGIN_LEFT, dataRowY - 9, CONTENT_WIDTH, rowHeight, 'F')
     }
-  })
 
-  yPos += 10
+    if (i < items.length) {
+      const item = items[i]
+      const precioConIGV = item.unitPrice
+      const valorUnitario = precioConIGV / (1 + igvMultiplier)
+      const importe = item.quantity * valorUnitario
 
-  // ========== TOTALES ==========
+      doc.setTextColor(...DARK_GRAY)
+      doc.setFont('helvetica', 'bold')
+      doc.text(item.quantity.toFixed(0), cols.cant + colWidths.cant / 2, dataRowY, { align: 'center' })
 
-  const totalsX = 140
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...grayMedium)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(...MEDIUM_GRAY)
+      doc.text(item.code || '-', cols.cod + colWidths.cod / 2, dataRowY, { align: 'center' })
+
+      doc.setFontSize(9)
+      doc.setTextColor(...DARK_GRAY)
+      const descLines = doc.splitTextToSize(item.name, colWidths.desc - 16)
+      doc.text(descLines[0], cols.desc + 8, dataRowY)
+
+      doc.text(`S/ ${precioConIGV.toFixed(2)}`, cols.pu + colWidths.pu / 2, dataRowY, { align: 'center' })
+
+      doc.setFont('helvetica', 'bold')
+      doc.text(`S/ ${importe.toFixed(2)}`, cols.importe + colWidths.importe / 2, dataRowY, { align: 'center' })
+    }
+
+    dataRowY += rowHeight
+  }
+
+  // Línea final de la tabla
+  doc.setDrawColor(...LIGHT_GRAY)
+  doc.setLineWidth(0.5)
+  doc.line(MARGIN_LEFT, dataRowY - 9, MARGIN_LEFT + CONTENT_WIDTH, dataRowY - 9)
+
+  currentY = dataRowY
+
+  // ========== 4. TOTALES ==========
+
+  currentY += 10
+
+  const totalsBoxWidth = 200
+  const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsBoxWidth
+  let totalsY = currentY
+
+  const igvExempt = companySettings?.taxConfig?.igvExempt || false
+  const labelGravada = igvExempt ? 'EXONERADA' : 'GRAVADA'
 
   // Subtotal
-  doc.text('Subtotal:', totalsX, yPos)
-  doc.text(formatCurrency(invoice.subtotal || 0), 190, yPos, { align: 'right' })
-  yPos += 5
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...DARK_GRAY)
+  doc.text(`OP. ${labelGravada}:`, totalsX, totalsY)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`S/ ${(invoice.subtotal || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
+  totalsY += 14
 
   // IGV
-  doc.text('IGV (18%):', totalsX, yPos)
-  doc.text(formatCurrency(invoice.igv || 0), 190, yPos, { align: 'right' })
-  yPos += 7
+  doc.setFont('helvetica', 'normal')
+  doc.text(`IGV (${igvRate.toFixed(0)}%):`, totalsX, totalsY)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`S/ ${(invoice.igv || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
+  totalsY += 18
 
-  // Total
+  // Total - destacado con fondo
+  const totalBoxY = totalsY - 10
+  doc.setFillColor(...SUCCESS_COLOR)
+  doc.roundedRect(totalsX - 10, totalBoxY, totalsBoxWidth + 10, 22, 3, 3, 'F')
+
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...grayDark)
-  doc.text('TOTAL:', totalsX, yPos)
-  doc.setTextColor(...primaryColor)
-  doc.text(formatCurrency(invoice.total || 0), 190, yPos, { align: 'right' })
+  doc.setTextColor(255, 255, 255)
+  doc.text('TOTAL:', totalsX, totalsY)
+  doc.setFontSize(13)
+  doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
 
-  yPos += 10
+  currentY = totalsY + 20
 
-  // ========== INFORMACIÓN ADICIONAL ==========
+  // ========== 5. IMPORTE EN LETRAS ==========
 
-  // Método de pago
-  if (invoice.paymentMethod) {
-    doc.setFontSize(8)
-    doc.setTextColor(...grayMedium)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Método de pago: ${invoice.paymentMethod}`, 20, yPos)
-    yPos += 5
-  }
+  doc.setFillColor(...LIGHT_GRAY)
+  doc.roundedRect(MARGIN_LEFT, currentY, CONTENT_WIDTH, 20, 3, 3, 'F')
 
-  // Estado
-  const statusText = invoice.status === 'paid' ? 'PAGADA' :
-                     invoice.status === 'pending' ? 'PENDIENTE' :
-                     invoice.status === 'overdue' ? 'VENCIDA' :
-                     invoice.status?.toUpperCase()
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
 
-  doc.text(`Estado: ${statusText}`, 20, yPos)
-  yPos += 5
+  const totalEnLetras = numeroALetras(invoice.total || 0)
+  doc.text('SON:', MARGIN_LEFT + 10, currentY + 12)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`${totalEnLetras} SOLES`, MARGIN_LEFT + 30, currentY + 12)
 
-  // Observaciones
-  if (invoice.notes) {
-    yPos += 5
+  currentY += 30
+
+  // ========== 6. PIE DE PÁGINA Y QR ==========
+
+  const footerY = currentY
+  const qrSize = 70
+  const qrBoxWidth = qrSize + 20
+  const textBoxWidth = CONTENT_WIDTH - qrBoxWidth - 10
+
+  // Sección de texto legal
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+
+  let footerTextY = footerY + 8
+
+  const docTypeText = invoice.documentType === 'factura' ? 'FACTURA' : 'BOLETA DE VENTA'
+  doc.text(`Representación impresa de la ${docTypeText} ELECTRÓNICA`, MARGIN_LEFT, footerTextY)
+  footerTextY += 10
+
+  doc.setFontSize(6)
+  doc.text('Autorizado mediante Resolución de Intendencia No 034-005-0005315', MARGIN_LEFT, footerTextY)
+  footerTextY += 8
+
+  if (invoice.sunatHash) {
     doc.setFont('helvetica', 'bold')
-    doc.text('Observaciones:', 20, yPos)
-    yPos += 4
+    doc.text('Hash: ', MARGIN_LEFT, footerTextY)
     doc.setFont('helvetica', 'normal')
-    const notesLines = doc.splitTextToSize(invoice.notes, 170)
-    doc.text(notesLines, 20, yPos)
-    yPos += 4 * notesLines.length
+    const hashText = doc.splitTextToSize(invoice.sunatHash, textBoxWidth - 20)
+    doc.text(hashText[0], MARGIN_LEFT + 18, footerTextY)
   }
 
-  // ========== CÓDIGO QR SUNAT ==========
-
-  // Generar y agregar el código QR
+  // Código QR con borde
   try {
     const qrImage = await generateSunatQR(invoice, companySettings)
     if (qrImage) {
-      // Posicionar QR en la parte inferior derecha
-      const qrSize = 35
-      const qrX = 160
-      const qrY = 245
+      const qrX = MARGIN_LEFT + textBoxWidth + 10
+      const qrY = footerY
+
+      // Borde del QR
+      doc.setDrawColor(...LIGHT_GRAY)
+      doc.setLineWidth(1)
+      doc.roundedRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 3, 3)
 
       doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
 
-      // Texto explicativo bajo el QR
+      // Etiqueta del QR
       doc.setFontSize(6)
-      doc.setTextColor(...grayMedium)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Código QR SUNAT', qrX + (qrSize / 2), qrY + qrSize + 4, { align: 'center' })
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...MEDIUM_GRAY)
+      doc.text('Código QR', qrX + qrSize / 2, qrY + qrSize + 12, { align: 'center' })
     }
   } catch (error) {
     console.error('Error agregando QR al PDF:', error)
   }
 
-  // ========== FOOTER ==========
-
-  // Línea separadora
-  const footerY = 270
-  doc.setDrawColor(...grayMedium)
-  doc.setLineWidth(0.3)
-  doc.line(20, footerY, 190, footerY)
-
-  // Texto del footer
-  doc.setFontSize(7)
-  doc.setTextColor(...grayMedium)
-  doc.setFont('helvetica', 'italic')
-  const footerText = `Documento generado por Cobrify | ${companySettings?.website || 'www.cobrify.com'}`
-  doc.text(footerText, 105, footerY + 5, { align: 'center' })
-
-  // Representación impresa
-  doc.setFont('helvetica', 'normal')
-  doc.text('Representación impresa de comprobante electrónico', 105, footerY + 10, { align: 'center' })
+  // Guía de remisión si aplica
+  if (invoice.dispatchGuideNumber) {
+    currentY = footerY + qrSize + 20
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text(`Guía de Remisión: ${invoice.dispatchGuideNumber}`, MARGIN_LEFT, currentY)
+  }
 
   // ========== GENERAR PDF ==========
 
@@ -415,7 +679,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
 /**
  * Genera un PDF simple para vista previa
- * @param {Object} invoice - Datos de la factura
  */
 export const generateSimpleInvoicePDF = async (invoice) => {
   const companySettings = {
@@ -431,9 +694,6 @@ export const generateSimpleInvoicePDF = async (invoice) => {
 
 /**
  * Exporta el PDF como blob para enviar por WhatsApp u otros usos
- * @param {Object} invoice - Datos de la factura
- * @param {Object} companySettings - Configuración de la empresa
- * @returns {Promise<Blob>} - PDF en formato blob
  */
 export const getInvoicePDFBlob = async (invoice, companySettings) => {
   const doc = await generateInvoicePDF(invoice, companySettings, false)

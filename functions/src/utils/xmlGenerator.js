@@ -196,18 +196,25 @@ export function generateInvoiceXML(invoiceData, businessData) {
     .txt(invoiceData.igv.toFixed(2))
 
   const taxCategory = taxSubtotal.ele('cac:TaxCategory')
+  // Tax Category ID según si es exonerado o no:
+  // S = Standard rate (Gravado con IGV)
+  // E = Exempt from tax (Exonerado de IGV)
+  const taxCategoryIdGlobal = igvExempt ? 'E' : 'S'
   taxCategory.ele('cbc:ID', {
     'schemeID': 'UN/ECE 5305',
     'schemeName': 'Tax Category Identifier',
     'schemeAgencyName': 'United Nations Economic Commission for Europe'
-  }).txt('S') // S = Standard rate
+  }).txt(taxCategoryIdGlobal)
 
   const taxScheme = taxCategory.ele('cac:TaxScheme')
+  // Para operaciones exoneradas usar código 9997 (EXO), para gravadas usar 1000 (IGV)
+  const taxSchemeCode = igvExempt ? '9997' : '1000'
+  const taxSchemeName = igvExempt ? 'EXO' : 'IGV'
   taxScheme.ele('cbc:ID', {
     'schemeID': 'UN/ECE 5153',
     'schemeAgencyID': '6'
-  }).txt('1000') // 1000 = IGV
-  taxScheme.ele('cbc:Name').txt('IGV')
+  }).txt(taxSchemeCode)
+  taxScheme.ele('cbc:Name').txt(taxSchemeName)
   taxScheme.ele('cbc:TaxTypeCode').txt('VAT')
 
   // === TOTALES ===
@@ -315,9 +322,12 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'schemeAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(taxCategoryId)
 
-    // Solo incluir porcentaje para items gravados
+    // Incluir porcentaje: tasa de IGV para gravados, 0 para exonerados/inafectos
     if (isGravado) {
       lineTaxCategory.ele('cbc:Percent').txt(igvRate.toFixed(2))
+    } else {
+      // Para exonerados e inafectos, SUNAT requiere explícitamente Percent = 0
+      lineTaxCategory.ele('cbc:Percent').txt('0')
     }
 
     lineTaxCategory.ele('cbc:TaxExemptionReasonCode', {
@@ -327,12 +337,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt(taxAffectation) // 10=Gravado, 20=Exonerado, 30=Inafecto
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
+    // Para items exonerados usar código 9997 (EXO), para gravados usar 1000 (IGV)
+    const lineItemTaxSchemeCode = isExonerado ? '9997' : '1000'
+    const lineItemTaxSchemeName = isExonerado ? 'EXO' : 'IGV'
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
       'schemeName': 'Codigo de tributos',
       'schemeAgencyName': 'PE:SUNAT'
-    }).txt('1000')
-    lineItemTaxScheme.ele('cbc:Name').txt('IGV')
+    }).txt(lineItemTaxSchemeCode)
+    lineItemTaxScheme.ele('cbc:Name').txt(lineItemTaxSchemeName)
     lineItemTaxScheme.ele('cbc:TaxTypeCode').txt('VAT')
 
     // Descripción del item
@@ -529,18 +542,25 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     .txt(creditNoteData.igv.toFixed(2))
 
   const taxCategory = taxSubtotal.ele('cac:TaxCategory')
+  // Tax Category ID según si es exonerado o no:
+  // S = Standard rate (Gravado con IGV)
+  // E = Exempt from tax (Exonerado de IGV)
+  const taxCategoryIdGlobalCN = igvExempt ? 'E' : 'S'
   taxCategory.ele('cbc:ID', {
     'schemeID': 'UN/ECE 5305',
     'schemeName': 'Tax Category Identifier',
     'schemeAgencyName': 'United Nations Economic Commission for Europe'
-  }).txt('S')
+  }).txt(taxCategoryIdGlobalCN)
 
   const taxScheme = taxCategory.ele('cac:TaxScheme')
+  // Para operaciones exoneradas usar código 9997 (EXO), para gravadas usar 1000 (IGV)
+  const taxSchemeCodeCN = igvExempt ? '9997' : '1000'
+  const taxSchemeNameCN = igvExempt ? 'EXO' : 'IGV'
   taxScheme.ele('cbc:ID', {
     'schemeID': 'UN/ECE 5153',
     'schemeAgencyID': '6'
-  }).txt('1000')
-  taxScheme.ele('cbc:Name').txt('IGV')
+  }).txt(taxSchemeCodeCN)
+  taxScheme.ele('cbc:Name').txt(taxSchemeNameCN)
   taxScheme.ele('cbc:TaxTypeCode').txt('VAT')
 
   // === TOTALES ===
@@ -629,8 +649,12 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       'schemeAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(taxCategoryId)
 
+    // Incluir porcentaje: tasa de IGV para gravados, 0 para exonerados/inafectos
     if (isGravado) {
       lineTaxCategory.ele('cbc:Percent').txt(igvRate.toFixed(2))
+    } else {
+      // Para exonerados e inafectos, SUNAT requiere explícitamente Percent = 0
+      lineTaxCategory.ele('cbc:Percent').txt('0')
     }
 
     lineTaxCategory.ele('cbc:TaxExemptionReasonCode', {
@@ -640,12 +664,15 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     }).txt(taxAffectation)
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
+    // Para items exonerados usar código 9997 (EXO), para gravados usar 1000 (IGV)
+    const lineItemTaxSchemeCode = isExonerado ? '9997' : '1000'
+    const lineItemTaxSchemeName = isExonerado ? 'EXO' : 'IGV'
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
       'schemeName': 'Codigo de tributos',
       'schemeAgencyName': 'PE:SUNAT'
-    }).txt('1000')
-    lineItemTaxScheme.ele('cbc:Name').txt('IGV')
+    }).txt(lineItemTaxSchemeCode)
+    lineItemTaxScheme.ele('cbc:Name').txt(lineItemTaxSchemeName)
     lineItemTaxScheme.ele('cbc:TaxTypeCode').txt('VAT')
 
     // Descripción del item
@@ -837,18 +864,25 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     .txt(debitNoteData.igv.toFixed(2))
 
   const taxCategory = taxSubtotal.ele('cac:TaxCategory')
+  // Tax Category ID según si es exonerado o no:
+  // S = Standard rate (Gravado con IGV)
+  // E = Exempt from tax (Exonerado de IGV)
+  const taxCategoryIdGlobalDN = igvExempt ? 'E' : 'S'
   taxCategory.ele('cbc:ID', {
     'schemeID': 'UN/ECE 5305',
     'schemeName': 'Tax Category Identifier',
     'schemeAgencyName': 'United Nations Economic Commission for Europe'
-  }).txt('S')
+  }).txt(taxCategoryIdGlobalDN)
 
   const taxScheme = taxCategory.ele('cac:TaxScheme')
+  // Para operaciones exoneradas usar código 9997 (EXO), para gravadas usar 1000 (IGV)
+  const taxSchemeCodeDN = igvExempt ? '9997' : '1000'
+  const taxSchemeNameDN = igvExempt ? 'EXO' : 'IGV'
   taxScheme.ele('cbc:ID', {
     'schemeID': 'UN/ECE 5153',
     'schemeAgencyID': '6'
-  }).txt('1000')
-  taxScheme.ele('cbc:Name').txt('IGV')
+  }).txt(taxSchemeCodeDN)
+  taxScheme.ele('cbc:Name').txt(taxSchemeNameDN)
   taxScheme.ele('cbc:TaxTypeCode').txt('VAT')
 
   // === TOTALES ===
@@ -937,8 +971,12 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
       'schemeAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(taxCategoryId)
 
+    // Incluir porcentaje: tasa de IGV para gravados, 0 para exonerados/inafectos
     if (isGravado) {
       lineTaxCategory.ele('cbc:Percent').txt(igvRate.toFixed(2))
+    } else {
+      // Para exonerados e inafectos, SUNAT requiere explícitamente Percent = 0
+      lineTaxCategory.ele('cbc:Percent').txt('0')
     }
 
     lineTaxCategory.ele('cbc:TaxExemptionReasonCode', {
@@ -948,12 +986,15 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     }).txt(taxAffectation)
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
+    // Para items exonerados usar código 9997 (EXO), para gravados usar 1000 (IGV)
+    const lineItemTaxSchemeCode = isExonerado ? '9997' : '1000'
+    const lineItemTaxSchemeName = isExonerado ? 'EXO' : 'IGV'
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
       'schemeName': 'Codigo de tributos',
       'schemeAgencyName': 'PE:SUNAT'
-    }).txt('1000')
-    lineItemTaxScheme.ele('cbc:Name').txt('IGV')
+    }).txt(lineItemTaxSchemeCode)
+    lineItemTaxScheme.ele('cbc:Name').txt(lineItemTaxSchemeName)
     lineItemTaxScheme.ele('cbc:TaxTypeCode').txt('VAT')
 
     // Descripción del item

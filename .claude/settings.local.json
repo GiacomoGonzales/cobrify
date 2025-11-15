@@ -73,7 +73,12 @@
       "Bash(npm run lint)",
       "Bash(npm run)",
       "Bash(npm run deploy:*)",
-      "Bash(./gradlew.bat:*)"
+      "Bash(./gradlew.bat:*)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(firebase projects:list:*)",
+      "Bash(gsutil cors set:*)",
+      "Bash(firebase hosting:channel:deploy:*)"
     ],
     "deny": [],
     "ask": []

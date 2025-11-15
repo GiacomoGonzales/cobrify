@@ -349,7 +349,7 @@ export default function CreateQuotation() {
       toast.success(`Cotización ${numberResult.number} creada exitosamente`)
 
       setTimeout(() => {
-        navigate('/cotizaciones')
+        navigate('/app/cotizaciones')
       }, 1500)
     } catch (error) {
       console.error('Error al crear cotización:', error)
@@ -377,7 +377,7 @@ export default function CreateQuotation() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <button
-              onClick={() => navigate('/cotizaciones')}
+              onClick={() => navigate('/app/cotizaciones')}
               className="text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-5 h-5" />
