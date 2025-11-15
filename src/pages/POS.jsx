@@ -1655,9 +1655,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {/* Campos para BOLETA */}
                 {documentType === 'boleta' && (
                   <>
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    {/* Primera fila: Tipo de Doc y Documento con botón de búsqueda */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4">
                       {/* Selector de tipo de documento */}
-                      <div>
+                      <div className="xl:col-span-3">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Tipo de Doc.
                         </label>
@@ -1677,8 +1678,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </select>
                       </div>
 
-                      {/* Campo de documento */}
-                      <div>
+                      {/* Campo de documento con botón de búsqueda */}
+                      <div className="xl:col-span-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {customerData.documentType === ID_TYPES.RUC ? 'RUC' : 'DNI'}
                         </label>
@@ -1691,7 +1692,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               ...customerData,
                               documentNumber: e.target.value.replace(/\D/g, '')
                             })}
-                            placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789 (opcional)' : '12345678 (opcional)'}
+                            placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789' : '12345678'}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
                           <Button
@@ -1713,7 +1714,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       </div>
 
                       {/* Campo de nombre / razón social */}
-                      <div>
+                      <div className="xl:col-span-5">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
                         </label>
