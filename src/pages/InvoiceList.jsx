@@ -615,7 +615,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                 : 'Comienza creando tu primer comprobante desde el Punto de Venta'}
             </p>
             {!searchTerm && filterStatus === 'all' && filterType === 'all' && (
-              <Link to="/pos">
+              <Link to="/app/pos">
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   Ir al Punto de Venta
