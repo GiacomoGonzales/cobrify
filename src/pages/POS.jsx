@@ -2156,50 +2156,48 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
                 {/* Discount Field */}
                 {cart.length > 0 && (
-                  <div className="border-t border-b py-2 space-y-2">
+                  <div className="border-t border-b py-3 space-y-2">
+                    <p className="text-sm text-gray-600 font-medium">Descuento:</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600 flex-shrink-0">Descuento:</span>
-                      <div className="flex items-center gap-2 flex-1">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={discountAmount}
-                            onChange={(e) => handleDiscountAmountChange(e.target.value)}
-                            placeholder="0.00"
-                            min="0"
-                            max={amounts.subtotal}
-                            step="0.01"
-                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            disabled={lastInvoiceData !== null}
-                          />
-                          <span className="text-sm text-gray-600">S/</span>
-                        </div>
-                        <span className="text-sm text-gray-500">o</span>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={discountPercentage}
-                            onChange={(e) => handleDiscountPercentageChange(e.target.value)}
-                            placeholder="0"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            disabled={lastInvoiceData !== null}
-                          />
-                          <span className="text-sm text-gray-600">%</span>
-                        </div>
-                        {(discountAmount || discountPercentage) && (
-                          <button
-                            onClick={handleClearDiscount}
-                            className="ml-1 text-red-600 hover:text-red-800"
-                            title="Limpiar descuento"
-                            disabled={lastInvoiceData !== null}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="number"
+                          value={discountAmount}
+                          onChange={(e) => handleDiscountAmountChange(e.target.value)}
+                          placeholder="0.00"
+                          min="0"
+                          max={amounts.subtotal}
+                          step="0.01"
+                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          disabled={lastInvoiceData !== null}
+                        />
+                        <span className="text-sm text-gray-600 font-medium flex-shrink-0">S/</span>
                       </div>
+                      <span className="text-sm text-gray-500 font-medium flex-shrink-0">o</span>
+                      <div className="flex items-center gap-1 flex-1">
+                        <input
+                          type="number"
+                          value={discountPercentage}
+                          onChange={(e) => handleDiscountPercentageChange(e.target.value)}
+                          placeholder="0"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          disabled={lastInvoiceData !== null}
+                        />
+                        <span className="text-sm text-gray-600 font-medium flex-shrink-0">%</span>
+                      </div>
+                      {(discountAmount || discountPercentage) && (
+                        <button
+                          onClick={handleClearDiscount}
+                          className="flex-shrink-0 p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                          title="Limpiar descuento"
+                          disabled={lastInvoiceData !== null}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                     {/* Show discount amount if applied */}
                     {amounts.discount > 0 && (
