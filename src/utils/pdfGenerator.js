@@ -357,7 +357,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'
+  let documentTitle = 'BOLETA DE VENTA ELECTRÓNICA'
+  if (invoice.documentType === 'factura') {
+    documentTitle = 'FACTURA ELECTRÓNICA'
+  } else if (invoice.documentType === 'nota_venta') {
+    documentTitle = 'NOTA DE VENTA'
+  }
   const titleLines = doc.splitTextToSize(documentTitle, rightColumnWidth - 20)
   titleLines.forEach(line => {
     doc.text(line, boxCenterX, boxTextY, { align: 'center' })
@@ -623,8 +628,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   let footerTextY = footerY + 8
 
-  const docTypeText = invoice.documentType === 'factura' ? 'FACTURA' : 'BOLETA DE VENTA'
-  doc.text(`Representación impresa de la ${docTypeText} ELECTRÓNICA`, MARGIN_LEFT, footerTextY)
+  let docTypeText = 'BOLETA DE VENTA'
+  if (invoice.documentType === 'factura') {
+    docTypeText = 'FACTURA'
+  } else if (invoice.documentType === 'nota_venta') {
+    docTypeText = 'NOTA DE VENTA'
+  }
+
+  // Para nota de venta no es electrónica
+  const electronicText = invoice.documentType === 'nota_venta' ? '' : ' ELECTRÓNICA'
+  doc.text(`Representación impresa de la ${docTypeText}${electronicText}`, MARGIN_LEFT, footerTextY)
   footerTextY += 10
 
   doc.setFontSize(6)
