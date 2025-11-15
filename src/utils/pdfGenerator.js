@@ -692,7 +692,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ========== GENERAR PDF ==========
 
   if (download) {
-    const fileName = `${invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}_${invoice.number.replace(/\//g, '-')}.pdf`
+    let docTypeName = 'Boleta'
+    if (invoice.documentType === 'factura') {
+      docTypeName = 'Factura'
+    } else if (invoice.documentType === 'nota_venta') {
+      docTypeName = 'Nota_de_Venta'
+    }
+    const fileName = `${docTypeName}_${invoice.number.replace(/\//g, '-')}.pdf`
     doc.save(fileName)
   }
 
