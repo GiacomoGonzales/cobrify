@@ -8,8 +8,6 @@ import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
 
 export default function OrderItemsModal({
   isOpen,
@@ -35,14 +33,6 @@ export default function OrderItemsModal({
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [cart, setCart] = useState([])
-  const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
-
-  // Cargar configuración de impuestos
-  useEffect(() => {
-    if (isOpen && !isDemoMode) {
-      loadTaxConfig()
-    }
-  }, [isOpen, isDemoMode])
 
   // Cargar productos
   useEffect(() => {
@@ -64,25 +54,6 @@ export default function OrderItemsModal({
       setFilteredProducts(filtered)
     }
   }, [searchTerm, products])
-
-  const loadTaxConfig = async () => {
-    try {
-      const businessId = getBusinessId()
-      const businessRef = doc(db, 'businesses', businessId)
-      const businessSnap = await getDoc(businessRef)
-
-      if (businessSnap.exists()) {
-        const businessData = businessSnap.data()
-        if (businessData.taxConfig) {
-          setTaxConfig(businessData.taxConfig)
-          console.log('📋 TaxConfig cargado:', businessData.taxConfig)
-        }
-      }
-    } catch (error) {
-      console.error('Error al cargar taxConfig:', error)
-      // Mantener valores por defecto
-    }
-  }
 
   const loadProducts = async () => {
     setIsLoading(true)
@@ -186,32 +157,6 @@ export default function OrderItemsModal({
           : item
       )
     )
-  }
-
-  const calculateTotals = () => {
-    // El precio del producto YA incluye IGV (o no, si es exonerado)
-    const total = cart.reduce((sum, item) => sum + item.total, 0)
-
-    // Si está exonerado del IGV, no hay IGV
-    if (taxConfig.igvExempt) {
-      return {
-        subtotal: total,
-        igv: 0,
-        total: total
-      }
-    }
-
-    // Si no está exonerado, calcular IGV
-    const igvRate = taxConfig.igvRate || 18
-    const igvMultiplier = 1 + (igvRate / 100) // 1.18 para 18%
-    const subtotal = total / igvMultiplier // Precio sin IGV
-    const igv = total - subtotal // IGV = Total - Subtotal
-
-    return {
-      subtotal: subtotal,
-      igv: igv,
-      total: total
-    }
   }
 
   const handleSave = async () => {
@@ -414,31 +359,17 @@ export default function OrderItemsModal({
                   ))}
                 </div>
 
-                {/* Total */}
-                <div className="border-t pt-3 space-y-2">
-                  {!taxConfig.igvExempt && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">S/ {calculateTotals().subtotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {!taxConfig.igvExempt && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">IGV ({taxConfig.igvRate || 18}%):</span>
-                      <span className="font-medium">S/ {calculateTotals().igv.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-lg font-bold border-t pt-2">
+                {/* Total simple (sin desglose de IGV) */}
+                <div className="border-t pt-3">
+                  <div className="flex justify-between text-lg font-bold">
                     <span>Total:</span>
                     <span className="text-primary-600">
-                      S/ {calculateTotals().total.toFixed(2)}
+                      S/ {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
                     </span>
                   </div>
-                  {taxConfig.igvExempt && (
-                    <div className="text-xs text-gray-500 text-center">
-                      Exonerado del IGV
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-500 text-center mt-2">
+                    Los montos detallados aparecerán en la precuenta
+                  </div>
                 </div>
               </>
             )}
