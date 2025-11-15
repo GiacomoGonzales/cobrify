@@ -165,6 +165,24 @@ export function generateInvoiceXML(invoiceData, businessData) {
     invoiceData.customer.businessName || invoiceData.customer.name
   )
 
+  // === DESCUENTO GLOBAL ===
+  // Si hay descuento aplicado, agregarlo como AllowanceCharge
+  const discount = invoiceData.discount || 0
+  if (discount > 0) {
+    // subtotalBeforeDiscount: subtotal ANTES del descuento (suma de items)
+    // discount: monto del descuento
+    // subtotal: subtotal DESPUÉS del descuento (base imponible para IGV)
+    const subtotalBeforeDiscount = invoiceData.subtotalBeforeDiscount || (invoiceData.subtotal + discount)
+
+    const allowanceCharge = root.ele('cac:AllowanceCharge')
+    allowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento, true = cargo
+    allowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // 00 = Descuento global
+    allowanceCharge.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(discount.toFixed(2))
+    allowanceCharge.ele('cbc:BaseAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(subtotalBeforeDiscount.toFixed(2))
+  }
+
   // === IMPUESTOS (IGV) ===
   // IMPORTANTE: TaxTotal DEBE ir ANTES de LegalMonetaryTotal según UBL 2.1
   const taxTotal = root.ele('cac:TaxTotal')
@@ -195,8 +213,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // === TOTALES ===
   // IMPORTANTE: LegalMonetaryTotal DEBE ir DESPUÉS de TaxTotal y ANTES de InvoiceLine
 
-  // Total valor de venta (sin IGV)
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
+
+  // Si hay descuento, incluir el monto total de descuentos
+  if (discount > 0) {
+    legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(discount.toFixed(2))
+  }
+
+  // Total valor de venta (sin IGV) - este es el subtotal DESPUÉS del descuento
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(invoiceData.subtotal.toFixed(2))
 
@@ -472,6 +497,20 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     creditNoteData.customer.businessName || creditNoteData.customer.name
   )
 
+  // === DESCUENTO GLOBAL ===
+  const creditDiscount = creditNoteData.discount || 0
+  if (creditDiscount > 0) {
+    const subtotalBeforeDiscount = creditNoteData.subtotalBeforeDiscount || (creditNoteData.subtotal + creditDiscount)
+
+    const allowanceCharge = root.ele('cac:AllowanceCharge')
+    allowanceCharge.ele('cbc:ChargeIndicator').txt('false')
+    allowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00')
+    allowanceCharge.ele('cbc:Amount', { 'currencyID': creditNoteData.currency || 'PEN' })
+      .txt(creditDiscount.toFixed(2))
+    allowanceCharge.ele('cbc:BaseAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
+      .txt(subtotalBeforeDiscount.toFixed(2))
+  }
+
   // === IMPUESTOS (IGV) ===
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
@@ -500,6 +539,12 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   // === TOTALES ===
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
+
+  if (creditDiscount > 0) {
+    legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
+      .txt(creditDiscount.toFixed(2))
+  }
+
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
     .txt(creditNoteData.total.toFixed(2))
 
@@ -747,6 +792,20 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     debitNoteData.customer.businessName || debitNoteData.customer.name
   )
 
+  // === DESCUENTO GLOBAL ===
+  const debitDiscount = debitNoteData.discount || 0
+  if (debitDiscount > 0) {
+    const subtotalBeforeDiscount = debitNoteData.subtotalBeforeDiscount || (debitNoteData.subtotal + debitDiscount)
+
+    const allowanceCharge = root.ele('cac:AllowanceCharge')
+    allowanceCharge.ele('cbc:ChargeIndicator').txt('false')
+    allowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00')
+    allowanceCharge.ele('cbc:Amount', { 'currencyID': debitNoteData.currency || 'PEN' })
+      .txt(debitDiscount.toFixed(2))
+    allowanceCharge.ele('cbc:BaseAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
+      .txt(subtotalBeforeDiscount.toFixed(2))
+  }
+
   // === IMPUESTOS (IGV) ===
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
@@ -775,6 +834,12 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
   // === TOTALES ===
   const legalMonetaryTotal = root.ele('cac:RequestedMonetaryTotal')
+
+  if (debitDiscount > 0) {
+    legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
+      .txt(debitDiscount.toFixed(2))
+  }
+
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
     .txt(debitNoteData.total.toFixed(2))
 

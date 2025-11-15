@@ -864,7 +864,8 @@ export default function POS() {
                 address: '',
               },
           items: items,
-          subtotal: amounts.subtotal,
+          subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
+          subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
           discount: amounts.discount || 0,
           discountPercentage: parseFloat(discountPercentage) || 0,
           igv: amounts.igv,
@@ -954,7 +955,8 @@ export default function POS() {
               address: '',
             },
         items: items,
-        subtotal: amounts.subtotal,
+        subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
+        subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
         discount: amounts.discount || 0,
         discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
