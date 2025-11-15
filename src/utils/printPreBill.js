@@ -271,6 +271,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
       </table>
 
       <div class="totals">
+        ${!taxConfig.igvExempt ? `
         <div class="row">
           <span>Subtotal:</span>
           <span>S/ ${(order.subtotal || 0).toFixed(2)}</span>
@@ -279,6 +280,11 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           <span>IGV (${taxConfig.igvRate}%):</span>
           <span>S/ ${(order.tax || 0).toFixed(2)}</span>
         </div>
+        ` : `
+        <div class="row" style="background-color: #fef3c7; color: #92400e; padding: 8px; border-radius: 4px; font-size: 11px;">
+          <span>⚠️ Empresa exonerada de IGV</span>
+        </div>
+        `}
         <div class="row total">
           <span>TOTAL:</span>
           <span>S/ ${(order.total || 0).toFixed(2)}</span>

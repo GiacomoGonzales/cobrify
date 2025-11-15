@@ -86,14 +86,23 @@ export default function CloseTableModal({
             </span>
           </div>
           <div className="text-sm text-gray-600 space-y-1">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>S/ {(order.subtotal || 0).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>IGV ({taxConfig.igvRate}%):</span>
-              <span>S/ {(order.tax || 0).toFixed(2)}</span>
-            </div>
+            {!taxConfig.igvExempt && (
+              <>
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span>S/ {(order.subtotal || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>IGV ({taxConfig.igvRate}%):</span>
+                  <span>S/ {(order.tax || 0).toFixed(2)}</span>
+                </div>
+              </>
+            )}
+            {taxConfig.igvExempt && (
+              <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md">
+                <span className="font-medium">⚠️ Empresa exonerada de IGV</span>
+              </div>
+            )}
           </div>
         </div>
 

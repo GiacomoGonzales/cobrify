@@ -584,6 +584,15 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       }
     }
 
+    // Construir texto de totales según si está exonerado o no
+    let totalsText = '';
+    if (!taxConfig.igvExempt) {
+      totalsText = `Subtotal: S/ ${(order.subtotal || 0).toFixed(2)}\n` +
+                   `IGV (${taxConfig.igvRate}%): S/ ${(order.tax || 0).toFixed(2)}\n`;
+    } else {
+      totalsText = '*** Empresa exonerada de IGV ***\n';
+    }
+
     // Construir comando en cadena
     await CapacitorThermalPrinter.begin()
       // Encabezado
@@ -610,8 +619,7 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .text(format.halfSeparator + '\n')
       // Totales
       .align('right')
-      .text(`Subtotal: S/ ${(order.subtotal || 0).toFixed(2)}\n`)
-      .text(`IGV (${taxConfig.igvRate}%): S/ ${(order.tax || 0).toFixed(2)}\n`)
+      .text(totalsText)
       .bold()
       .doubleWidth()
       .text(`TOTAL: S/ ${(order.total || 0).toFixed(2)}\n`)
