@@ -434,6 +434,11 @@ export default function Tables() {
         logoUrl: ''
       }
 
+      let taxConfig = {
+        igvRate: 18,
+        igvExempt: false
+      }
+
       if (businessSnap.exists()) {
         const businessData = businessSnap.data()
         businessInfo = {
@@ -442,7 +447,17 @@ export default function Tables() {
           phone: businessData.phone || '',
           logoUrl: businessData.logoUrl || ''
         }
+
+        // Obtener configuración de impuestos
+        if (businessData.taxConfig) {
+          taxConfig = {
+            igvRate: businessData.taxConfig.igvRate || 18,
+            igvExempt: businessData.taxConfig.igvExempt || false
+          }
+        }
+
         console.log('📄 Datos del negocio para precuenta:', businessInfo)
+        console.log('💰 Configuración de impuestos:', taxConfig)
       }
 
       const isNative = Capacitor.isNativePlatform()
@@ -475,7 +490,7 @@ export default function Tables() {
       }
 
       // Fallback: impresión estándar (web o si falla la térmica)
-      printPreBill(selectedTable, selectedOrder, businessInfo)
+      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)

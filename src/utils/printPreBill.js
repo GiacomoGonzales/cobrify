@@ -2,7 +2,7 @@
  * Utility para imprimir precuenta de restaurante
  */
 
-export const printPreBill = (table, order, businessInfo = {}) => {
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }) => {
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
 
@@ -276,7 +276,7 @@ export const printPreBill = (table, order, businessInfo = {}) => {
           <span>S/ ${(order.subtotal || 0).toFixed(2)}</span>
         </div>
         <div class="row">
-          <span>IGV (18%):</span>
+          <span>IGV (${taxConfig.igvRate}%):</span>
           <span>S/ ${(order.tax || 0).toFixed(2)}</span>
         </div>
         <div class="row total">
