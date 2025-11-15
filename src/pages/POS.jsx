@@ -1655,12 +1655,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {/* Campos para BOLETA */}
                 {documentType === 'boleta' && (
                   <>
-                    {/* Primera fila: Tipo de Doc y Documento con botón de búsqueda */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-4">
+                    {/* Primera fila: Tipo de Doc y Documento con botón */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Selector de tipo de documento */}
-                      <div className="xl:col-span-3">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tipo de Doc.
+                          Tipo de Documento
                         </label>
                         <select
                           value={customerData.documentType}
@@ -1679,7 +1679,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       </div>
 
                       {/* Campo de documento con botón de búsqueda */}
-                      <div className="xl:col-span-4">
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           {customerData.documentType === ID_TYPES.RUC ? 'RUC' : 'DNI'}
                         </label>
@@ -1712,26 +1712,26 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </Button>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Campo de nombre / razón social */}
-                      <div className="xl:col-span-5">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
-                        </label>
-                        <input
-                          type="text"
-                          value={customerData.documentType === ID_TYPES.RUC ? customerData.businessName : customerData.name}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            ...(customerData.documentType === ID_TYPES.RUC
-                              ? { businessName: e.target.value }
-                              : { name: e.target.value }
-                            )
-                          })}
-                          placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social (opcional)' : 'Nombre (opcional)'}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
+                    {/* Segunda fila: Nombre / Razón Social */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
+                      </label>
+                      <input
+                        type="text"
+                        value={customerData.documentType === ID_TYPES.RUC ? customerData.businessName : customerData.name}
+                        onChange={e => setCustomerData({
+                          ...customerData,
+                          ...(customerData.documentType === ID_TYPES.RUC
+                            ? { businessName: e.target.value }
+                            : { name: e.target.value }
+                          )
+                        })}
+                        placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social (opcional)' : 'Nombre (opcional)'}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
