@@ -232,13 +232,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     format: 'a4'
   })
 
-  // Paleta de colores moderna
-  const PRIMARY_COLOR = [41, 128, 185] // Azul profesional
-  const DARK_GRAY = [52, 73, 94]
-  const MEDIUM_GRAY = [127, 140, 141]
-  const LIGHT_GRAY = [236, 240, 241]
-  const SUCCESS_COLOR = [39, 174, 96]
+  // Paleta de colores neutros - solo negros y grises
   const BLACK = [0, 0, 0]
+  const DARK_GRAY = [51, 51, 51]      // Gris muy oscuro para títulos
+  const MEDIUM_GRAY = [102, 102, 102] // Gris medio para texto secundario
+  const LIGHT_GRAY = [224, 224, 224]  // Gris claro para fondos
+  const BORDER_GRAY = [189, 189, 189] // Gris para bordes
 
   // Márgenes y dimensiones - A4 portrait: 595pt x 842pt
   const MARGIN_LEFT = 40
@@ -253,11 +252,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ========== 1. ENCABEZADO PRINCIPAL ==========
 
-  // Barra superior con color de marca
-  doc.setFillColor(...PRIMARY_COLOR)
-  doc.rect(0, 0, PAGE_WIDTH, 8, 'F')
+  // Barra superior negra elegante
+  doc.setFillColor(...BLACK)
+  doc.rect(0, 0, PAGE_WIDTH, 5, 'F')
 
-  currentY += 10
+  currentY += 8
 
   const headerY = currentY
   const headerHeight = 85
@@ -345,31 +344,31 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const rightColumnWidth = CONTENT_WIDTH * 0.40
   const rightColumnX = MARGIN_LEFT + leftColumnWidth
 
-  // Recuadro con borde de color
-  doc.setDrawColor(...PRIMARY_COLOR)
-  doc.setLineWidth(1.5)
+  // Recuadro con borde negro
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(2)
   doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
 
-  // Contenido del recuadro
+  // Contenido del recuadro - bien centrado
   const boxCenterX = rightColumnX + (rightColumnWidth / 2)
-  let boxTextY = headerY + 18
+  let boxTextY = headerY + 22
 
-  // Tipo de documento
-  doc.setFontSize(13)
+  // Tipo de documento en negro
+  doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...PRIMARY_COLOR)
+  doc.setTextColor(...BLACK)
   const documentTitle = invoice.documentType === 'factura' ? 'FACTURA ELECTRÓNICA' : 'BOLETA DE VENTA ELECTRÓNICA'
   const titleLines = doc.splitTextToSize(documentTitle, rightColumnWidth - 20)
   titleLines.forEach(line => {
     doc.text(line, boxCenterX, boxTextY, { align: 'center' })
-    boxTextY += 14
+    boxTextY += 13
   })
 
-  boxTextY += 4
+  boxTextY += 6
 
-  // Número de comprobante
-  doc.setFontSize(14)
-  doc.setTextColor(...DARK_GRAY)
+  // Número de comprobante centrado
+  doc.setFontSize(15)
+  doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'bold')
   doc.text(invoice.number || 'N/A', boxCenterX, boxTextY, { align: 'center' })
 
@@ -392,17 +391,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.roundedRect(MARGIN_LEFT, infoBoxY, CONTENT_WIDTH, infoBoxHeight, 3, 3, 'F')
 
   // Cliente - Columna izquierda (65%)
-  let clientX = MARGIN_LEFT + 12
-  let clientY = infoBoxY + 12
+  let clientX = MARGIN_LEFT + 15
+  let clientY = infoBoxY + 14
 
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...DARK_GRAY)
+  doc.setTextColor(...BLACK)
   doc.text('CLIENTE', clientX, clientY)
-  clientY += 11
+  clientY += 12
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
+  doc.setTextColor(...DARK_GRAY)
 
   const customerName = invoice.customer?.name || 'CLIENTE GENERAL'
   doc.text(customerName, clientX, clientY)
@@ -417,17 +417,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(`${docType}: ${docNumber}`, clientX, clientY)
 
   // Fecha y moneda - Columna derecha (35%)
-  const dateX = MARGIN_LEFT + leftColumnWidth + 12
-  let dateY = infoBoxY + 12
+  const dateX = MARGIN_LEFT + leftColumnWidth + 15
+  let dateY = infoBoxY + 14
 
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...DARK_GRAY)
+  doc.setTextColor(...BLACK)
   doc.setFontSize(8)
   doc.text('FECHA DE EMISIÓN', dateX, dateY)
-  dateY += 11
+  dateY += 12
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
+  doc.setTextColor(...DARK_GRAY)
 
   let invoiceDate = new Date().toLocaleDateString('es-PE')
   if (invoice.createdAt) {
@@ -473,13 +474,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     importe: colX += colWidths.pu
   }
 
-  // Encabezado de tabla con fondo de color
-  doc.setFillColor(...PRIMARY_COLOR)
+  // Encabezado de tabla con fondo negro
+  doc.setFillColor(...BLACK)
   doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, rowHeight, 'F')
 
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255) // Blanco
+  doc.setTextColor(255, 255, 255) // Blanco para contraste sobre negro
 
   const headerRowY = tableY + 11
 
@@ -574,16 +575,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(`S/ ${(invoice.igv || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
   totalsY += 18
 
-  // Total - destacado con fondo
+  // Total - destacado con fondo negro
   const totalBoxY = totalsY - 10
-  doc.setFillColor(...SUCCESS_COLOR)
-  doc.roundedRect(totalsX - 10, totalBoxY, totalsBoxWidth + 10, 22, 3, 3, 'F')
+  doc.setFillColor(...BLACK)
+  doc.roundedRect(totalsX - 10, totalBoxY, totalsBoxWidth + 10, 24, 3, 3, 'F')
 
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
+  doc.setTextColor(255, 255, 255) // Blanco sobre negro
   doc.text('TOTAL:', totalsX, totalsY)
-  doc.setFontSize(13)
+  doc.setFontSize(14)
   doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
 
   currentY = totalsY + 20
@@ -634,25 +635,29 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text(hashText[0], MARGIN_LEFT + 18, footerTextY)
   }
 
-  // Código QR con borde
+  // Código QR con borde - centrado
   try {
     const qrImage = await generateSunatQR(invoice, companySettings)
     if (qrImage) {
       const qrX = MARGIN_LEFT + textBoxWidth + 10
       const qrY = footerY
+      const qrBoxWidth = qrSize + 10
+      const qrBoxHeight = qrSize + 10
 
-      // Borde del QR
-      doc.setDrawColor(...LIGHT_GRAY)
+      // Borde del QR en gris
+      doc.setDrawColor(...BORDER_GRAY)
       doc.setLineWidth(1)
-      doc.roundedRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 3, 3)
+      doc.roundedRect(qrX - 5, qrY - 5, qrBoxWidth, qrBoxHeight, 3, 3)
 
+      // QR centrado en el recuadro
       doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
 
-      // Etiqueta del QR
-      doc.setFontSize(6)
+      // Etiqueta del QR centrada
+      doc.setFontSize(7)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...MEDIUM_GRAY)
-      doc.text('Código QR', qrX + qrSize / 2, qrY + qrSize + 12, { align: 'center' })
+      const qrCenterX = qrX + qrSize / 2
+      doc.text('Código QR SUNAT', qrCenterX, qrY + qrSize + 14, { align: 'center' })
     }
   } catch (error) {
     console.error('Error agregando QR al PDF:', error)
