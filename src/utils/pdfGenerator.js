@@ -575,17 +575,21 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(`S/ ${(invoice.igv || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
   totalsY += 18
 
-  // Total - destacado con fondo negro
-  const totalBoxY = totalsY - 10
+  // Total - destacado con fondo negro - bien centrado verticalmente
+  const totalBoxHeight = 24
+  const totalBoxY = totalsY - 12
   doc.setFillColor(...BLACK)
-  doc.roundedRect(totalsX - 10, totalBoxY, totalsBoxWidth + 10, 24, 3, 3, 'F')
+  doc.roundedRect(totalsX - 10, totalBoxY, totalsBoxWidth + 10, totalBoxHeight, 3, 3, 'F')
+
+  // Centrar verticalmente el texto dentro del recuadro
+  const totalTextY = totalBoxY + (totalBoxHeight / 2) + 3.5 // Centrado vertical perfecto
 
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(255, 255, 255) // Blanco sobre negro
-  doc.text('TOTAL:', totalsX, totalsY)
+  doc.text('TOTAL:', totalsX, totalTextY)
   doc.setFontSize(14)
-  doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
+  doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalTextY, { align: 'right' })
 
   currentY = totalsY + 20
 

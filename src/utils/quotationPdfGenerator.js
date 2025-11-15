@@ -1,32 +1,83 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { storage } from '@/lib/firebase'
+import { ref, getBlob } from 'firebase/storage'
 
 /**
- * Carga una imagen desde una URL y la convierte a base64
- * @param {string} url - URL de la imagen
- * @returns {Promise<string>} - Imagen en formato base64
+ * Extrae el path de Firebase Storage desde una URL
  */
-const loadImageAsBase64 = (url) => {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.crossOrigin = 'Anonymous'
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(img, 0, 0)
-      try {
-        const dataURL = canvas.toDataURL('image/png')
-        resolve(dataURL)
-      } catch (error) {
-        reject(error)
-      }
+const getStoragePathFromUrl = (url) => {
+  try {
+    // Extraer path de URL de Firebase Storage
+    // Formato: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{encodedPath}?...
+    const match = url.match(/\/o\/(.+?)\?/)
+    if (match) {
+      const encodedPath = match[1]
+      return decodeURIComponent(encodedPath)
     }
-    img.onerror = reject
-    img.src = url
-  })
+    return null
+  } catch (error) {
+    console.error('Error extrayendo path:', error)
+    return null
+  }
+}
+
+/**
+ * Carga una imagen desde Firebase Storage y la convierte a base64
+ * Usa el SDK de Firebase para evitar problemas de CORS
+ */
+const loadImageAsBase64 = async (url) => {
+  try {
+    console.log('🔄 Cargando logo para cotización desde Firebase Storage')
+
+    // Extraer el path del storage desde la URL
+    const storagePath = getStoragePathFromUrl(url)
+
+    if (storagePath) {
+      console.log('📁 Path extraído:', storagePath)
+
+      // Usar Firebase SDK para obtener el blob
+      const storageRef = ref(storage, storagePath)
+      const blob = await getBlob(storageRef)
+
+      // Convertir blob a base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          console.log('✅ Logo cargado correctamente para cotización')
+          resolve(reader.result)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    }
+
+    // Fallback: intentar con fetch directo
+    console.log('🔄 Fallback: Intentando fetch directo')
+    const response = await fetch(url, {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'default'
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`)
+    }
+
+    const blob = await response.blob()
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+
+  } catch (error) {
+    console.error('❌ Error cargando logo para cotización:', error)
+    throw error
+  }
 }
 
 /**

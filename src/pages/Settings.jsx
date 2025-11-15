@@ -33,6 +33,7 @@ export default function Settings() {
     factura: { serie: 'F001', lastNumber: 0 },
     boleta: { serie: 'B001', lastNumber: 0 },
     nota_venta: { serie: 'N001', lastNumber: 0 },
+    cotizacion: { serie: 'C001', lastNumber: 0 },
     nota_credito: { serie: 'FC01', lastNumber: 0 },
     nota_debito: { serie: 'FD01', lastNumber: 0 },
     guia_remision: { serie: 'T001', lastNumber: 0 },
@@ -187,6 +188,7 @@ export default function Settings() {
           setSeries({
             factura: businessData.series.factura || { serie: 'F001', lastNumber: 0 },
             boleta: businessData.series.boleta || { serie: 'B001', lastNumber: 0 },
+            cotizacion: businessData.series.cotizacion || { serie: 'C001', lastNumber: 0 },
             nota_venta: businessData.series.nota_venta || { serie: 'N001', lastNumber: 0 },
             nota_credito: businessData.series.nota_credito || { serie: 'FC01', lastNumber: 0 },
             nota_debito: businessData.series.nota_debito || { serie: 'FD01', lastNumber: 0 },
@@ -1455,6 +1457,48 @@ export default function Settings() {
                   </label>
                   <Input
                     value={getNextNumber(series.nota_venta.serie, series.nota_venta.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Cotizaciones */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Cotizaciones</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.cotizacion.serie}
+                    onChange={e => handleSeriesChange('cotizacion', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.cotizacion.lastNumber}
+                    onChange={e => handleSeriesChange('cotizacion', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.cotizacion.serie, series.cotizacion.lastNumber)}
                     disabled
                     className="bg-gray-100 font-mono"
                   />
