@@ -1034,12 +1034,14 @@ export default function POS() {
 
       // 4. Actualizar stock de productos por almacén
       const stockUpdates = cart
-        .filter(item => !item.isCustom && item.trackStock !== false) // Excluir productos personalizados y productos SIN CONTROL de stock
+        .filter(item => !item.isCustom) // Excluir solo productos personalizados
         .map(async item => {
           const productData = products.find(p => p.id === item.id)
           if (!productData) return
 
-          // Solo actualizar si el producto maneja stock
+          // Solo actualizar si el producto maneja stock (trackStock !== false)
+          // Si trackStock es undefined o true, sí actualizar
+          // Si trackStock es false, NO actualizar
           if (productData.trackStock === false) return
 
           // Actualizar stock usando el helper de almacén
