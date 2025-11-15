@@ -519,9 +519,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     if (i < items.length) {
       const item = items[i]
+      // Todo con IGV incluido para que sea más claro para el cliente
       const precioConIGV = item.unitPrice
-      const valorUnitario = precioConIGV / (1 + igvMultiplier)
-      const importe = item.quantity * valorUnitario
+      const importeConIGV = item.quantity * precioConIGV
 
       doc.setTextColor(...DARK_GRAY)
       doc.setFont('helvetica', 'bold')
@@ -540,7 +540,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(`S/ ${precioConIGV.toFixed(2)}`, cols.pu + colWidths.pu / 2, dataRowY, { align: 'center' })
 
       doc.setFont('helvetica', 'bold')
-      doc.text(`S/ ${importe.toFixed(2)}`, cols.importe + colWidths.importe / 2, dataRowY, { align: 'center' })
+      doc.text(`S/ ${importeConIGV.toFixed(2)}`, cols.importe + colWidths.importe / 2, dataRowY, { align: 'center' })
     }
 
     dataRowY += rowHeight
