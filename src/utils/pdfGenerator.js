@@ -564,7 +564,27 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const igvExempt = companySettings?.taxConfig?.igvExempt || false
   const labelGravada = igvExempt ? 'EXONERADA' : 'GRAVADA'
 
-  // Subtotal
+  // Subtotal antes de descuento (si hay descuento)
+  if (invoice.discount && invoice.discount > 0) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text(`SUBTOTAL:`, totalsX, totalsY)
+    doc.setFont('helvetica', 'bold')
+    const subtotalBeforeDiscount = (invoice.subtotalBeforeDiscount || invoice.subtotal || 0)
+    doc.text(`S/ ${subtotalBeforeDiscount.toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
+    totalsY += 14
+
+    // Descuento
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text(`DESCUENTO:`, totalsX, totalsY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`- S/ ${(invoice.discount || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
+    totalsY += 14
+  }
+
+  // Subtotal (después de descuento = base imponible)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...DARK_GRAY)
