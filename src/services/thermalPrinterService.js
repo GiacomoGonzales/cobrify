@@ -26,13 +26,13 @@ export const scanPrinters = async () => {
 
   try {
     // Limpiar listeners anteriores
-    await CapacitorCapacitorThermalPrinter.removeAllListeners();
+    await CapacitorThermalPrinter.removeAllListeners();
 
     // Array para almacenar dispositivos encontrados
     const devices = [];
 
     // Escuchar dispositivos descubiertos
-    await CapacitorCapacitorThermalPrinter.addListener('discoverDevices', (device) => {
+    await CapacitorThermalPrinter.addListener('discoverDevices', (device) => {
       console.log('Printer discovered:', device);
       // Evitar duplicados
       if (!devices.find(d => d.address === device.address)) {
@@ -41,14 +41,14 @@ export const scanPrinters = async () => {
     });
 
     // Iniciar escaneo
-    await CapacitorCapacitorThermalPrinter.startScan();
+    await CapacitorThermalPrinter.startScan();
     console.log('✅ Scanning for thermal printers...');
 
     // Esperar 10 segundos para el escaneo
     await new Promise(resolve => setTimeout(resolve, 10000));
 
     // Detener escaneo (si hay un método para eso)
-    await CapacitorCapacitorThermalPrinter.removeAllListeners();
+    await CapacitorThermalPrinter.removeAllListeners();
 
     return { success: true, devices };
   } catch (error) {
