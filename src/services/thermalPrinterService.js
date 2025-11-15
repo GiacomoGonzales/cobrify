@@ -25,6 +25,42 @@ export const scanPrinters = async () => {
   }
 
   try {
+    // Solicitar permisos de Bluetooth antes de escanear
+    console.log('📱 Solicitando permisos de Bluetooth...');
+    try {
+      const permissionResult = await CapacitorThermalPrinter.requestPermissions();
+      console.log('Permisos de Bluetooth:', permissionResult);
+
+      if (permissionResult && permissionResult.granted === false) {
+        return {
+          success: false,
+          error: 'Permisos de Bluetooth denegados. Ve a Configuración y habilita los permisos de Bluetooth y Ubicación.',
+          devices: []
+        };
+      }
+    } catch (permError) {
+      console.warn('No se pudieron solicitar permisos (puede que no sea necesario en esta versión):', permError);
+      // Continuar de todos modos, algunos dispositivos no necesitan solicitar permisos explícitamente
+    }
+
+    // Verificar que el Bluetooth esté activado
+    console.log('📡 Verificando estado del Bluetooth...');
+    try {
+      const bluetoothState = await CapacitorThermalPrinter.isEnabled();
+      console.log('Estado del Bluetooth:', bluetoothState);
+
+      if (bluetoothState && bluetoothState.enabled === false) {
+        return {
+          success: false,
+          error: 'El Bluetooth está desactivado. Por favor, activa el Bluetooth en tu dispositivo.',
+          devices: []
+        };
+      }
+    } catch (stateError) {
+      console.warn('No se pudo verificar el estado del Bluetooth:', stateError);
+      // Continuar de todos modos
+    }
+
     // Limpiar listeners anteriores
     await CapacitorThermalPrinter.removeAllListeners();
 
@@ -58,14 +94,35 @@ export const scanPrinters = async () => {
     });
 
     // Iniciar escaneo
+    console.log('🔍 Iniciando escaneo de impresoras Bluetooth...');
     await CapacitorThermalPrinter.startScan();
-    console.log('✅ Scanning for thermal printers...');
+    console.log('✅ Escaneo iniciado. Esperando dispositivos...');
 
-    // Esperar 10 segundos para el escaneo
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    // Esperar 15 segundos para el escaneo (aumentado de 10 a 15)
+    await new Promise(resolve => setTimeout(resolve, 15000));
 
-    // Detener escaneo (si hay un método para eso)
+    // Detener escaneo
+    try {
+      await CapacitorThermalPrinter.stopScan();
+      console.log('⏹️ Escaneo detenido');
+    } catch (stopError) {
+      console.warn('No se pudo detener el escaneo:', stopError);
+    }
+
+    // Limpiar listeners
     await CapacitorThermalPrinter.removeAllListeners();
+
+    console.log(`📊 Total de dispositivos encontrados: ${devices.length}`);
+    if (devices.length > 0) {
+      console.log('Dispositivos:', devices);
+    } else {
+      console.warn('⚠️ No se encontraron impresoras Bluetooth.');
+      console.warn('Asegúrate de que:');
+      console.warn('1. La impresora está encendida');
+      console.warn('2. El Bluetooth está activado');
+      console.warn('3. La impresora está en modo de emparejamiento');
+      console.warn('4. Los permisos de Bluetooth y Ubicación están otorgados');
+    }
 
     return { success: true, devices };
   } catch (error) {
