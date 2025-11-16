@@ -147,9 +147,6 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         )
       ])
 
-      logoHeight = 50
-      const logoWidth = 50
-
       // Determinar el formato de la imagen
       let format = 'PNG'
       if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
@@ -157,10 +154,48 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         format = 'JPEG'
       }
 
+      // Crear una imagen temporal para obtener dimensiones originales
+      const img = new Image()
+      img.src = imgData
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+      })
+
+      // Calcular dimensiones manteniendo la proporción
+      const originalWidth = img.width
+      const originalHeight = img.height
+      const aspectRatio = originalWidth / originalHeight
+
+      // Altura máxima del logo
+      const maxLogoHeight = 50
+      const maxLogoWidth = 120 // Ancho máximo para logos horizontales
+
+      let logoWidth, calculatedLogoHeight
+
+      if (aspectRatio > 1) {
+        // Logo horizontal (más ancho que alto)
+        logoWidth = Math.min(maxLogoWidth, leftColumnWidth - 10)
+        calculatedLogoHeight = logoWidth / aspectRatio
+
+        // Si la altura calculada excede el máximo, ajustar
+        if (calculatedLogoHeight > maxLogoHeight) {
+          calculatedLogoHeight = maxLogoHeight
+          logoWidth = calculatedLogoHeight * aspectRatio
+        }
+      } else {
+        // Logo vertical o cuadrado (más alto que ancho o igual)
+        calculatedLogoHeight = maxLogoHeight
+        logoWidth = calculatedLogoHeight * aspectRatio
+      }
+
+      logoHeight = calculatedLogoHeight
+
       // Logo en la esquina superior izquierda
       doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
       textY = headerY + logoHeight + 10 // Texto debajo del logo
-      console.log('✅ Logo cargado correctamente en cotización')
+      console.log('✅ Logo cargado correctamente en cotización (dimensiones:', logoWidth, 'x', logoHeight, ')')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo en cotización, continuando sin él:', error.message)
       textY = headerY + 5
