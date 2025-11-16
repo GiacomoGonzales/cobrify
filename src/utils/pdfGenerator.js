@@ -665,14 +665,25 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     docTypeText = 'NOTA DE VENTA'
   }
 
-  // Para nota de venta no es electrónica
-  const electronicText = invoice.documentType === 'nota_venta' ? '' : ' ELECTRÓNICA'
-  doc.text(`Representación impresa de la ${docTypeText}${electronicText}`, MARGIN_LEFT, footerTextY)
-  footerTextY += 10
+  // Texto específico según el tipo de documento
+  if (invoice.documentType === 'nota_venta') {
+    // Para NOTA DE VENTA: no es un comprobante válido
+    doc.text(docTypeText, MARGIN_LEFT, footerTextY)
+    footerTextY += 10
 
-  doc.setFontSize(6)
-  doc.text('Autorizado mediante Resolución de Intendencia No 034-005-0005315', MARGIN_LEFT, footerTextY)
-  footerTextY += 8
+    doc.setFontSize(6)
+    doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT, footerTextY)
+    footerTextY += 8
+  } else {
+    // Para FACTURA y BOLETA: comprobantes electrónicos válidos
+    const electronicText = ' ELECTRÓNICA'
+    doc.text(`Representación impresa de la ${docTypeText}${electronicText}`, MARGIN_LEFT, footerTextY)
+    footerTextY += 10
+
+    doc.setFontSize(6)
+    doc.text('Autorizado mediante Resolución de Intendencia No 034-005-0005315', MARGIN_LEFT, footerTextY)
+    footerTextY += 8
+  }
 
   if (invoice.sunatHash) {
     doc.setFont('helvetica', 'bold')
