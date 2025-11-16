@@ -418,8 +418,14 @@ export default function Customers() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
-                        {getDocumentBadge(customer.documentType)}
-                        <span className="text-sm">{customer.documentNumber}</span>
+                        {customer.documentType && customer.documentNumber ? (
+                          <>
+                            {getDocumentBadge(customer.documentType)}
+                            <span className="text-sm">{customer.documentNumber}</span>
+                          </>
+                        ) : (
+                          <span className="text-sm text-gray-400">Sin documento</span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -481,11 +487,11 @@ export default function Customers() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
-              label="Tipo de Documento"
-              required
+              label="Tipo de Documento (opcional)"
               error={errors.documentType?.message}
               {...register('documentType')}
             >
+              <option value="">Seleccionar...</option>
               <option value={ID_TYPES.DNI}>DNI</option>
               <option value={ID_TYPES.RUC}>RUC</option>
               <option value={ID_TYPES.CE}>Carnet de Extranjería</option>
@@ -493,9 +499,8 @@ export default function Customers() {
             </Select>
 
             <Input
-              label="Número de Documento"
-              required
-              placeholder={documentType === ID_TYPES.RUC ? '20123456789' : '12345678'}
+              label="Número de Documento (opcional)"
+              placeholder={documentType === ID_TYPES.RUC ? '20123456789' : documentType === ID_TYPES.DNI ? '12345678' : 'Número de documento'}
               error={errors.documentNumber?.message}
               {...register('documentNumber')}
             />

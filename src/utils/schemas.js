@@ -28,28 +28,31 @@ export const registerSchema = z
 export const customerSchema = z.object({
   documentType: z.enum([ID_TYPES.DNI, ID_TYPES.RUC, ID_TYPES.CE, ID_TYPES.PASSPORT], {
     required_error: 'Tipo de documento es requerido',
-  }),
-  documentNumber: z.string().min(1, 'Número de documento es requerido'),
+  }).optional(),
+  documentNumber: z.string().optional().or(z.literal('')),
   businessName: z.string().optional().or(z.literal('')),
   name: z.string().min(1, 'Nombre es requerido'),
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
-  // Validar número de documento según el tipo
-  if (data.documentType === ID_TYPES.RUC && !validateRUC(data.documentNumber)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'RUC inválido (debe tener 11 dígitos)',
-      path: ['documentNumber'],
-    })
-  }
-  if (data.documentType === ID_TYPES.DNI && !validateDNI(data.documentNumber)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'DNI inválido (debe tener 8 dígitos)',
-      path: ['documentNumber'],
-    })
+  // Solo validar si hay número de documento
+  if (data.documentNumber && data.documentNumber.trim() !== '') {
+    // Validar número de documento según el tipo
+    if (data.documentType === ID_TYPES.RUC && !validateRUC(data.documentNumber)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'RUC inválido (debe tener 11 dígitos)',
+        path: ['documentNumber'],
+      })
+    }
+    if (data.documentType === ID_TYPES.DNI && !validateDNI(data.documentNumber)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'DNI inválido (debe tener 8 dígitos)',
+        path: ['documentNumber'],
+      })
+    }
   }
 })
 
