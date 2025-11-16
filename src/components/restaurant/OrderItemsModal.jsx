@@ -8,6 +8,8 @@ import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 export default function OrderItemsModal({
   isOpen,
@@ -31,36 +33,82 @@ export default function OrderItemsModal({
   const [filteredProducts, setFilteredProducts] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
-  const [categories, setCategories] = useState(['Todos'])
+  const [categories, setCategories] = useState([{ id: 'Todos', name: 'Todos' }])
+  const [categoryMap, setCategoryMap] = useState({}) // Mapeo de ID a nombre
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [cart, setCart] = useState([])
   const [isCartExpanded, setIsCartExpanded] = useState(false)
 
-  // Cargar productos
+  // Cargar productos y categorías
   useEffect(() => {
     if (isOpen) {
       loadProducts()
+      loadCategories()
     }
   }, [isOpen])
 
-  // Extraer categorías únicas de los productos
-  useEffect(() => {
-    if (products.length > 0) {
-      const productCategories = products
-        .map(p => p.category)
-        .filter(cat => cat && cat.trim() !== '') // Filtrar vacíos y null
-      const uniqueCategories = ['Todos', ...new Set(productCategories)]
-      setCategories(uniqueCategories)
-      console.log('📦 Categorías encontradas:', uniqueCategories)
+  // Cargar categorías desde Firestore
+  const loadCategories = async () => {
+    try {
+      const businessId = getBusinessId()
+      const categoriesDoc = await getDoc(doc(db, 'businesses', businessId, 'settings', 'categories'))
+
+      if (categoriesDoc.exists()) {
+        const categoriesData = categoriesDoc.data().categories || []
+
+        // Crear mapeo de ID a nombre (incluyendo subcategorías)
+        const map = {}
+        const flatCategories = []
+
+        const flattenCategories = (cats, parentName = '') => {
+          cats.forEach(cat => {
+            const fullName = parentName ? `${parentName} > ${cat.name}` : cat.name
+            map[cat.id] = fullName
+            flatCategories.push({ id: cat.id, name: fullName })
+
+            if (cat.subcategories && cat.subcategories.length > 0) {
+              flattenCategories(cat.subcategories, fullName)
+            }
+          })
+        }
+
+        flattenCategories(categoriesData)
+        setCategoryMap(map)
+
+        // Extraer categorías únicas de productos
+        if (products.length > 0) {
+          const productCategoryIds = [...new Set(products.map(p => p.category).filter(Boolean))]
+          const usedCategories = productCategoryIds
+            .map(id => ({ id, name: map[id] || id }))
+            .filter(cat => cat.name)
+
+          setCategories([{ id: 'Todos', name: 'Todos' }, ...usedCategories])
+          console.log('📦 Categorías cargadas:', usedCategories)
+        }
+      }
+    } catch (error) {
+      console.error('Error al cargar categorías:', error)
     }
-  }, [products])
+  }
+
+  // Actualizar categorías cuando cambien los productos
+  useEffect(() => {
+    if (products.length > 0 && Object.keys(categoryMap).length > 0) {
+      const productCategoryIds = [...new Set(products.map(p => p.category).filter(Boolean))]
+      const usedCategories = productCategoryIds
+        .map(id => ({ id, name: categoryMap[id] || id }))
+        .filter(cat => cat.name)
+
+      setCategories([{ id: 'Todos', name: 'Todos' }, ...usedCategories])
+    }
+  }, [products, categoryMap])
 
   // Filtrar productos por búsqueda y categoría
   useEffect(() => {
     let filtered = products
 
-    // Filtrar por categoría
+    // Filtrar por categoría (ahora usando ID)
     if (selectedCategory !== 'Todos') {
       filtered = filtered.filter(p => p.category === selectedCategory)
     }
@@ -263,15 +311,15 @@ export default function OrderItemsModal({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
             {categories.map((category) => (
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                  selectedCategory === category
+                  selectedCategory === category.id
                     ? 'bg-primary-600 text-white border-primary-600'
                     : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                 }`}
               >
-                {category || 'Sin categoría'}
+                {category.name || 'Sin categoría'}
               </button>
             ))}
           </div>
@@ -295,7 +343,7 @@ export default function OrderItemsModal({
           {/* Lista de productos */}
           <div className="flex-1 overflow-y-auto border rounded-lg p-3 min-h-0">
             <h3 className="font-semibold text-sm text-gray-900 mb-2">
-              Productos {selectedCategory !== 'Todos' && `- ${selectedCategory}`} ({filteredProducts.length})
+              Productos {selectedCategory !== 'Todos' && `- ${categories.find(c => c.id === selectedCategory)?.name}`} ({filteredProducts.length})
             </h3>
 
             {isLoading ? (
