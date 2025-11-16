@@ -411,8 +411,8 @@ export default function POS() {
     if (exactMatches.length === 1) {
       const product = exactMatches[0]
 
-      // Verificar que el producto tenga stock disponible
-      if (product.stock > 0 || !product.trackStock) {
+      // Verificar que el producto tenga stock disponible (solo si allowNegativeStock es false)
+      if (product.stock > 0 || !product.trackStock || companySettings?.allowNegativeStock) {
         addToCart(product)
         // Limpiar el campo de búsqueda después de agregar
         setSearchTerm('')
@@ -423,7 +423,7 @@ export default function POS() {
         setSearchTerm('')
       }
     }
-  }, [searchTerm, products])
+  }, [searchTerm, products, companySettings])
 
   const addToCart = product => {
     // If product has variants, show variant selection modal
@@ -433,9 +433,9 @@ export default function POS() {
       return
     }
 
-    // Verificar stock del almacén seleccionado
+    // Verificar stock del almacén seleccionado solo si allowNegativeStock es false
     const warehouseStock = getCurrentWarehouseStock(product)
-    if (product.stock !== null && warehouseStock <= 0) {
+    if (product.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
       toast.error(`Producto sin stock en ${selectedWarehouse?.name || 'este almacén'}`)
       return
     }
@@ -443,8 +443,8 @@ export default function POS() {
     const existingItem = cart.find(item => item.id === product.id)
 
     if (existingItem) {
-      // Verificar si hay suficiente stock en el almacén
-      if (product.stock !== null && existingItem.quantity >= warehouseStock) {
+      // Verificar si hay suficiente stock en el almacén solo si allowNegativeStock es false
+      if (product.stock !== null && existingItem.quantity >= warehouseStock && !companySettings?.allowNegativeStock) {
         toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
         return
       }
@@ -460,8 +460,8 @@ export default function POS() {
   }
 
   const addVariantToCart = (product, variant) => {
-    // Check stock for variant
-    if (variant.stock !== null && variant.stock <= 0) {
+    // Check stock for variant solo si allowNegativeStock es false
+    if (variant.stock !== null && variant.stock <= 0 && !companySettings?.allowNegativeStock) {
       toast.error('Variante sin stock disponible')
       return
     }
@@ -473,8 +473,8 @@ export default function POS() {
     const existingItem = cart.find(item => item.cartId === variantCartId)
 
     if (existingItem) {
-      // Check stock
-      if (variant.stock !== null && existingItem.quantity >= variant.stock) {
+      // Check stock solo si allowNegativeStock es false
+      if (variant.stock !== null && existingItem.quantity >= variant.stock && !companySettings?.allowNegativeStock) {
         toast.error('No hay suficiente stock disponible para esta variante')
         return
       }
