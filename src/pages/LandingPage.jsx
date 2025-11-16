@@ -67,13 +67,13 @@ export default function LandingPage() {
                 </Button>
               </Link>
               <a
-                href="https://wa.me/51900434988?text=Hola%2C%20quiero%20aprovechar%20la%20promoci%C3%B3n%20del%2050%25%20de%20descuento%20en%20Cobrify"
+                href="https://wa.me/51900434988?text=Hola%2C%20quiero%20información%20sobre%20Cobrify"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <Button className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-200/50 font-semibold text-white relative overflow-hidden group">
                   <span className="relative z-10 flex items-center gap-2">
-                    <span className="hidden sm:inline">Obtén</span> 50% de Dscto.
+                    CONTÁCTANOS AHORA
                   </span>
                   <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 to-orange-400 opacity-0 group-hover:opacity-20 transition-opacity"></div>
                 </Button>
