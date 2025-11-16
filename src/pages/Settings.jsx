@@ -75,6 +75,7 @@ export default function Settings() {
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
+  const [allowPriceEdit, setAllowPriceEdit] = useState(false)
 
   // Estados para configuración de SUNAT
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
@@ -234,6 +235,7 @@ export default function Settings() {
         // Cargar configuración de inventario
         setAllowNegativeStock(businessData.allowNegativeStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
+        setAllowPriceEdit(businessData.allowPriceEdit || false)
 
         // Cargar configuración de SUNAT
         setAutoSendToSunat(businessData.autoSendToSunat || false)
@@ -1202,6 +1204,25 @@ export default function Settings() {
                       </p>
                     </div>
                   </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowPriceEdit}
+                      onChange={(e) => setAllowPriceEdit(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir modificar precio de productos en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowPriceEdit
+                          ? '✓ Habilitado: Podrás editar el precio de venta de cualquier producto directamente desde el carrito del punto de venta. Útil para aplicar descuentos personalizados, promociones especiales o ajustar precios según el cliente.'
+                          : '✗ Deshabilitado: Los productos se venderán siempre al precio registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener precios fijos y evitar errores de digitación.'}
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -1307,6 +1328,7 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
+                      allowPriceEdit: allowPriceEdit,
                       autoSendToSunat: autoSendToSunat,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       updatedAt: serverTimestamp(),
