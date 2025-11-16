@@ -143,7 +143,7 @@ export default function Waiters() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Users className="w-7 h-7" />
@@ -151,7 +151,7 @@ export default function Waiters() {
           </h1>
           <p className="text-gray-600 mt-1">Administra el personal de atención al cliente</p>
         </div>
-        <Button onClick={handleCreate} className="flex items-center gap-2">
+        <Button onClick={handleCreate} className="flex items-center gap-2 w-full md:w-auto">
           <Plus className="w-4 h-4" />
           Nuevo Mozo
         </Button>
