@@ -165,6 +165,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
     invoiceData.customer.businessName || invoiceData.customer.name
   )
 
+  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
+  // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
+  // Según ejemplos de Greenter y especificación SUNAT
+  const paymentTerms = root.ele('cac:PaymentTerms')
+  paymentTerms.ele('cbc:ID').txt('FormaPago')
+  paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
+
   // === DESCUENTO GLOBAL ===
   // Si hay descuento aplicado, agregarlo como AllowanceCharge
   const discount = invoiceData.discount || 0
@@ -241,16 +248,6 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // 4. Total a pagar
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(invoiceData.total.toFixed(2))
-
-  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
-  // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de LegalMonetaryTotal y ANTES de InvoiceLine
-  // SUNAT requiere PaymentTerms con el tipo de operación
-  // Catálogo 54 - Forma de Pago:
-  // FormaPago.Tipo = "Contado" o "Credito" (en PaymentMeansID)
-  // ID debe contener: "FormaPago" (no el tipo de pago)
-  const paymentTerms = root.ele('cac:PaymentTerms')
-  paymentTerms.ele('cbc:ID').txt('FormaPago')
-  paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === ITEMS ===
   invoiceData.items.forEach((item, index) => {
@@ -526,6 +523,12 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     creditNoteData.customer.businessName || creditNoteData.customer.name
   )
 
+  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
+  // PaymentTerms debe ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
+  const paymentTermsCredit = root.ele('cac:PaymentTerms')
+  paymentTermsCredit.ele('cbc:ID').txt('FormaPago')
+  paymentTermsCredit.ele('cbc:PaymentMeansID').txt('Contado')
+
   // === DESCUENTO GLOBAL ===
   const creditDiscount = creditNoteData.discount || 0
   if (creditDiscount > 0) {
@@ -590,12 +593,6 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
     .txt(creditNoteData.total.toFixed(2))
-
-  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
-  // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de LegalMonetaryTotal y ANTES de CreditNoteLine
-  const paymentTermsCredit = root.ele('cac:PaymentTerms')
-  paymentTermsCredit.ele('cbc:ID').txt('FormaPago')
-  paymentTermsCredit.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === ITEMS (CreditNoteLine en lugar de InvoiceLine) ===
   creditNoteData.items.forEach((item, index) => {
@@ -854,6 +851,12 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     debitNoteData.customer.businessName || debitNoteData.customer.name
   )
 
+  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
+  // PaymentTerms debe ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
+  const paymentTermsDebit = root.ele('cac:PaymentTerms')
+  paymentTermsDebit.ele('cbc:ID').txt('FormaPago')
+  paymentTermsDebit.ele('cbc:PaymentMeansID').txt('Contado')
+
   // === DESCUENTO GLOBAL ===
   const debitDiscount = debitNoteData.discount || 0
   if (debitDiscount > 0) {
@@ -918,12 +921,6 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
     .txt(debitNoteData.total.toFixed(2))
-
-  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
-  // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de RequestedMonetaryTotal y ANTES de DebitNoteLine
-  const paymentTermsDebit = root.ele('cac:PaymentTerms')
-  paymentTermsDebit.ele('cbc:ID').txt('FormaPago')
-  paymentTermsDebit.ele('cbc:PaymentMeansID').txt('Contado')
 
   // === ITEMS (DebitNoteLine en lugar de InvoiceLine) ===
   debitNoteData.items.forEach((item, index) => {

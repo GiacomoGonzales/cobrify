@@ -68,6 +68,10 @@ export default function Inventory() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [expandedProduct, setExpandedProduct] = useState(null)
 
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(50)
+
   // Warehouses y transferencias
   const [warehouses, setWarehouses] = useState([])
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -299,43 +303,81 @@ export default function Inventory() {
     }
   }
 
-  // Filtrar productos
-  const filteredProducts = products.filter(product => {
-    const matchesSearch =
-      product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filtrar productos (optimizado con useMemo)
+  const filteredProducts = React.useMemo(() => {
+    return products.filter(product => {
+      const matchesSearch =
+        product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.category?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    const matchesCategory =
-      filterCategory === 'all' || product.category === filterCategory
+      const matchesCategory =
+        filterCategory === 'all' || product.category === filterCategory
 
-    let matchesStatus = true
-    if (filterStatus === 'low') {
-      matchesStatus = product.stock !== null && product.stock < 10
-    } else if (filterStatus === 'out') {
-      matchesStatus = product.stock === 0
-    } else if (filterStatus === 'normal') {
-      matchesStatus = product.stock === null || product.stock >= 10
+      let matchesStatus = true
+      if (filterStatus === 'low') {
+        matchesStatus = product.stock !== null && product.stock < 10
+      } else if (filterStatus === 'out') {
+        matchesStatus = product.stock === 0
+      } else if (filterStatus === 'normal') {
+        matchesStatus = product.stock === null || product.stock >= 10
+      }
+
+      return matchesSearch && matchesCategory && matchesStatus
+    })
+  }, [products, searchTerm, filterCategory, filterStatus])
+
+  // Paginación de productos filtrados (optimizado con useMemo)
+  const paginationData = React.useMemo(() => {
+    const totalFilteredProducts = filteredProducts.length
+    const totalPages = Math.ceil(totalFilteredProducts / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedProducts = filteredProducts.slice(startIndex, endIndex)
+
+    return {
+      totalFilteredProducts,
+      totalPages,
+      startIndex,
+      endIndex,
+      paginatedProducts
     }
+  }, [filteredProducts, currentPage, itemsPerPage])
 
-    return matchesSearch && matchesCategory && matchesStatus
-  })
+  const { totalFilteredProducts, totalPages, startIndex, endIndex, paginatedProducts } = paginationData
 
-  // Obtener categorías únicas con sus IDs
-  const uniqueCategoryIds = [...new Set(products.map(p => p.category).filter(Boolean))]
-  const categories = uniqueCategoryIds.map(catId => {
-    const category = productCategories.find(c => c.id === catId)
-    return category ? { id: catId, name: category.name } : { id: catId, name: catId }
-  })
+  // Resetear a página 1 cuando cambian los filtros
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterCategory, filterStatus])
 
-  // Productos con stock controlado
-  const productsWithStock = products.filter(p => p.stock !== null)
+  // Obtener categorías únicas con sus IDs (optimizado con useMemo)
+  const categories = React.useMemo(() => {
+    const uniqueCategoryIds = [...new Set(products.map(p => p.category).filter(Boolean))]
+    return uniqueCategoryIds.map(catId => {
+      const category = productCategories.find(c => c.id === catId)
+      return category ? { id: catId, name: category.name } : { id: catId, name: catId }
+    })
+  }, [products, productCategories])
 
-  // Calcular estadísticas
-  const lowStockItems = productsWithStock.filter(p => p.stock < 10)
-  const outOfStockItems = productsWithStock.filter(p => p.stock === 0)
-  const totalValue = productsWithStock.reduce((sum, p) => sum + (p.stock * p.price), 0)
-  const totalUnits = productsWithStock.reduce((sum, p) => sum + p.stock, 0)
+  // Calcular estadísticas (optimizado con useMemo)
+  const statistics = React.useMemo(() => {
+    const productsWithStock = products.filter(p => p.stock !== null)
+    const lowStockItems = productsWithStock.filter(p => p.stock < 10)
+    const outOfStockItems = productsWithStock.filter(p => p.stock === 0)
+    const totalValue = productsWithStock.reduce((sum, p) => sum + (p.stock * p.price), 0)
+    const totalUnits = productsWithStock.reduce((sum, p) => sum + p.stock, 0)
+
+    return {
+      productsWithStock,
+      lowStockItems,
+      outOfStockItems,
+      totalValue,
+      totalUnits
+    }
+  }, [products])
+
+  const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
 
   const getStockStatus = product => {
     if (product.stock === null) {
@@ -555,7 +597,7 @@ export default function Inventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProducts.map(product => {
+                  {paginatedProducts.map(product => {
                     const stockStatus = getStockStatus(product)
                     const isExpanded = expandedProduct === product.id
                     const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
@@ -709,6 +751,101 @@ export default function Inventory() {
                   })}
                 </TableBody>
               </Table>
+
+              {/* Controles de paginación */}
+              {totalFilteredProducts > 0 && (
+                <div className="px-6 py-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    {/* Info de productos mostrados */}
+                    <div className="text-sm text-gray-600">
+                      Mostrando <span className="font-medium">{startIndex + 1}</span> a{' '}
+                      <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span> de{' '}
+                      <span className="font-medium">{totalFilteredProducts}</span> productos
+                    </div>
+
+                    {/* Controles de paginación */}
+                    <div className="flex items-center gap-2">
+                      {/* Selector de items por página */}
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                          setItemsPerPage(Number(e.target.value))
+                          setCurrentPage(1)
+                        }}
+                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={250}>250</option>
+                      </select>
+
+                      {/* Botones de navegación */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setCurrentPage(1)}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Primera
+                        </button>
+                        <button
+                          onClick={() => setCurrentPage(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Anterior
+                        </button>
+
+                        {/* Números de página */}
+                        <div className="flex items-center gap-1 px-2">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum
+                            if (totalPages <= 5) {
+                              pageNum = i + 1
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i
+                            } else {
+                              pageNum = currentPage - 2 + i
+                            }
+
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCurrentPage(pageNum)}
+                                className={`w-8 h-8 text-sm rounded-lg ${
+                                  currentPage === pageNum
+                                    ? 'bg-primary-600 text-white'
+                                    : 'border border-gray-300 hover:bg-gray-50'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => setCurrentPage(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Siguiente
+                        </button>
+                        <button
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Última
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

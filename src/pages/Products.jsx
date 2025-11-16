@@ -125,6 +125,10 @@ export default function Products() {
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [selectedWarehouse, setSelectedWarehouse] = useState('') // Almacén para stock inicial
 
+  // Paginación en cliente
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(50)
+
   // Variant management state
   const [hasVariants, setHasVariants] = useState(false)
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
@@ -506,16 +510,67 @@ export default function Products() {
     let successCount = 0
 
     try {
-      // Obtener o crear almacén predeterminado para asignar stock
+      // Obtener almacenes existentes
+      const warehousesResult = await getWarehouses(getBusinessId())
+      let existingWarehouses = warehousesResult.success ? warehousesResult.data : []
+
+      // Crear un mapa de almacenes por nombre para búsqueda rápida
+      const warehouseMap = new Map()
+      existingWarehouses.forEach(wh => {
+        warehouseMap.set(wh.name.toLowerCase().trim(), wh)
+      })
+
+      // Identificar almacenes únicos que necesitan ser creados
+      const uniqueWarehouseNames = new Set()
+      for (const product of productsToImport) {
+        if (product.warehouse && product.warehouse.trim() !== '') {
+          const warehouseName = product.warehouse.trim()
+          const warehouseKey = warehouseName.toLowerCase()
+
+          // Si no existe en el mapa, agregarlo al set de nuevos
+          if (!warehouseMap.has(warehouseKey)) {
+            uniqueWarehouseNames.add(warehouseName)
+          }
+        }
+      }
+
+      // Crear almacenes nuevos
+      if (uniqueWarehouseNames.size > 0) {
+        for (const warehouseName of uniqueWarehouseNames) {
+          const newWarehouse = {
+            name: warehouseName,
+            location: warehouseName,
+            description: `Almacén creado automáticamente durante importación de productos`,
+            isDefault: existingWarehouses.length === 0, // Solo el primero es default si no hay almacenes
+            isActive: true
+          }
+
+          const createResult = await createWarehouse(getBusinessId(), newWarehouse)
+
+          if (createResult.success) {
+            const createdWarehouse = createResult.data
+            existingWarehouses.push(createdWarehouse)
+            warehouseMap.set(warehouseName.toLowerCase().trim(), createdWarehouse)
+            console.log('✅ Almacén creado:', createdWarehouse)
+          } else {
+            console.error('❌ Error al crear almacén:', createResult.error)
+          }
+        }
+
+        if (uniqueWarehouseNames.size > 0) {
+          toast.info(`${uniqueWarehouseNames.size} almacén(es) creado(s) automáticamente`)
+        }
+      }
+
+      // Obtener almacén predeterminado como fallback
       let defaultWarehouse = null
       const defaultWarehouseResult = await getDefaultWarehouse(getBusinessId())
 
       if (defaultWarehouseResult.success && defaultWarehouseResult.data) {
-        // Ya existe un almacén
         defaultWarehouse = defaultWarehouseResult.data
-      } else {
-        // NO HAY ALMACENES - Crear uno automáticamente
-        console.log('No se encontró almacén predeterminado, creando uno automáticamente...')
+      } else if (existingWarehouses.length === 0) {
+        // NO HAY ALMACENES - Crear uno automáticamente como fallback
+        console.log('No se encontró ningún almacén, creando almacén principal...')
 
         const newWarehouse = {
           name: 'Almacén Principal',
@@ -529,6 +584,8 @@ export default function Products() {
 
         if (createResult.success) {
           defaultWarehouse = createResult.data
+          existingWarehouses.push(defaultWarehouse)
+          warehouseMap.set('almacén principal', defaultWarehouse)
           toast.info('Almacén principal creado automáticamente')
           console.log('✅ Almacén creado:', defaultWarehouse)
         } else {
@@ -587,13 +644,31 @@ export default function Products() {
             }
           }
 
-          // Asignar stock al almacén predeterminado si hay stock y trackStock es true
-          if (product.stock && product.stock > 0 && product.trackStock && defaultWarehouse) {
-            product.warehouseStocks = [{
-              warehouseId: defaultWarehouse.id,
-              stock: product.stock,
-              minStock: 0
-            }]
+          // Asignar stock al almacén específico o al predeterminado
+          if (product.stock && product.stock > 0 && product.trackStock) {
+            let targetWarehouse = null
+
+            // Intentar encontrar el almacén específico mencionado en el producto
+            if (product.warehouse && product.warehouse.trim() !== '') {
+              const warehouseKey = product.warehouse.trim().toLowerCase()
+              targetWarehouse = warehouseMap.get(warehouseKey)
+            }
+
+            // Si no se encontró almacén específico, usar el predeterminado
+            if (!targetWarehouse && defaultWarehouse) {
+              targetWarehouse = defaultWarehouse
+            }
+
+            // Asignar stock al almacén encontrado
+            if (targetWarehouse) {
+              product.warehouseStocks = [{
+                warehouseId: targetWarehouse.id,
+                stock: product.stock,
+                minStock: 0
+              }]
+            } else {
+              product.warehouseStocks = []
+            }
           } else if (!product.trackStock) {
             // Si no controla stock, asegurar que warehouseStocks esté vacío
             product.warehouseStocks = []
@@ -991,67 +1066,98 @@ export default function Products() {
     })
   }
 
-  // Filtrar productos por búsqueda y categoría
-  const filteredProducts = products.filter(product => {
-    const search = searchTerm.toLowerCase()
+  // Filtrar productos por búsqueda y categoría (optimizado con useMemo)
+  const filteredProducts = React.useMemo(() => {
+    return products.filter(product => {
+      const search = searchTerm.toLowerCase()
 
-    // Get category name for search (backward compatible)
-    const categoryName = product.category
-      ? (getCategoryById(categories, product.category)?.name || product.category)
-      : ''
+      // Get category name for search (backward compatible)
+      const categoryName = product.category
+        ? (getCategoryById(categories, product.category)?.name || product.category)
+        : ''
 
-    const matchesSearch =
-      product.code?.toLowerCase().includes(search) ||
-      product.name?.toLowerCase().includes(search) ||
-      categoryName.toLowerCase().includes(search) ||
-      product.description?.toLowerCase().includes(search)
+      const matchesSearch =
+        product.code?.toLowerCase().includes(search) ||
+        product.name?.toLowerCase().includes(search) ||
+        categoryName.toLowerCase().includes(search) ||
+        product.description?.toLowerCase().includes(search)
 
-    // Check category filter (backward compatible with old string-based categories)
-    let matchesCategory = false
+      // Check category filter (backward compatible with old string-based categories)
+      let matchesCategory = false
 
-    if (selectedCategoryFilter === 'all') {
-      matchesCategory = true
-    } else if (selectedCategoryFilter === 'sin-categoria') {
-      matchesCategory = !product.category
-    } else {
-      // Check if product is in selected category OR any of its descendant categories
-      const descendantIds = getAllDescendantCategoryIds(categories, selectedCategoryFilter)
-      matchesCategory =
-        product.category === selectedCategoryFilter ||
-        descendantIds.includes(product.category)
-    }
-
-    // Check expiration filter
-    let matchesExpiration = true
-    if (showExpiringOnly) {
-      if (!product.trackExpiration || !product.expirationDate) {
-        matchesExpiration = false
+      if (selectedCategoryFilter === 'all') {
+        matchesCategory = true
+      } else if (selectedCategoryFilter === 'sin-categoria') {
+        matchesCategory = !product.category
       } else {
-        const expStatus = getExpirationStatus(product.expirationDate)
-        // Mostrar solo productos vencidos o próximos a vencer (≤7 días)
-        matchesExpiration = expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
+        // Check if product is in selected category OR any of its descendant categories
+        const descendantIds = getAllDescendantCategoryIds(categories, selectedCategoryFilter)
+        matchesCategory =
+          product.category === selectedCategoryFilter ||
+          descendantIds.includes(product.category)
       }
+
+      // Check expiration filter
+      let matchesExpiration = true
+      if (showExpiringOnly) {
+        if (!product.trackExpiration || !product.expirationDate) {
+          matchesExpiration = false
+        } else {
+          const expStatus = getExpirationStatus(product.expirationDate)
+          // Mostrar solo productos vencidos o próximos a vencer (≤7 días)
+          matchesExpiration = expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
+        }
+      }
+
+      return matchesSearch && matchesCategory && matchesExpiration
+    })
+  }, [products, searchTerm, selectedCategoryFilter, showExpiringOnly, categories])
+
+  // Paginación de productos filtrados (optimizado con useMemo)
+  const paginationData = React.useMemo(() => {
+    const totalFilteredProducts = filteredProducts.length
+    const totalPages = Math.ceil(totalFilteredProducts / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedProducts = filteredProducts.slice(startIndex, endIndex)
+
+    return {
+      totalFilteredProducts,
+      totalPages,
+      startIndex,
+      endIndex,
+      paginatedProducts
     }
+  }, [filteredProducts, currentPage, itemsPerPage])
 
-    return matchesSearch && matchesCategory && matchesExpiration
-  })
+  const { totalFilteredProducts, totalPages, startIndex, endIndex, paginatedProducts } = paginationData
 
-  // Calcular estadísticas
-  const totalValue = products.reduce((sum, product) => {
-    if (product.stock && product.price) {
-      return sum + product.stock * product.price
-    }
-    return sum
-  }, 0)
+  // Resetear a página 1 cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedCategoryFilter, showExpiringOnly])
 
-  const lowStockCount = products.filter(product => product.stock !== null && product.stock < 10).length
+  // Calcular estadísticas (optimizado con useMemo)
+  const statistics = React.useMemo(() => {
+    const totalValue = products.reduce((sum, product) => {
+      if (product.stock && product.price) {
+        return sum + product.stock * product.price
+      }
+      return sum
+    }, 0)
 
-  // Contar productos próximos a vencer o vencidos
-  const expiringProductsCount = products.filter(product => {
-    if (!product.trackExpiration || !product.expirationDate) return false
-    const expStatus = getExpirationStatus(product.expirationDate)
-    return expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
-  }).length
+    const lowStockCount = products.filter(product => product.stock !== null && product.stock < 10).length
+
+    const expiringProductsCount = products.filter(product => {
+      if (!product.trackExpiration || !product.expirationDate) return false
+      const expStatus = getExpirationStatus(product.expirationDate)
+      return expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
+    }).length
+
+    return { totalValue, lowStockCount, expiringProductsCount }
+  }, [products])
+
+  const { totalValue, lowStockCount, expiringProductsCount } = statistics
 
   if (isLoading) {
     return (
@@ -1321,8 +1427,9 @@ export default function Products() {
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
+          <>
+            <div className="overflow-x-auto">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">
@@ -1350,7 +1457,7 @@ export default function Products() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.map(product => {
+                {paginatedProducts.map(product => {
                   const isExpanded = expandedProduct === product.id
                   const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
 
@@ -1562,8 +1669,104 @@ export default function Products() {
                   )
                 })}
               </TableBody>
-            </Table>
-          </div>
+              </Table>
+            </div>
+
+            {/* Controles de paginación */}
+            {totalFilteredProducts > 0 && (
+            <div className="px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                {/* Info de productos mostrados */}
+                <div className="text-sm text-gray-600">
+                  Mostrando <span className="font-medium">{startIndex + 1}</span> a{' '}
+                  <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span> de{' '}
+                  <span className="font-medium">{totalFilteredProducts}</span> productos
+                </div>
+
+                {/* Controles de paginación */}
+                <div className="flex items-center gap-2">
+                  {/* Selector de items por página */}
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={250}>250</option>
+                  </select>
+
+                  {/* Botones de navegación */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Primera
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Anterior
+                    </button>
+
+                    {/* Números de página */}
+                    <div className="flex items-center gap-1 px-2">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum
+                        if (totalPages <= 5) {
+                          pageNum = i + 1
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i
+                        } else {
+                          pageNum = currentPage - 2 + i
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`w-8 h-8 text-sm rounded-lg ${
+                              currentPage === pageNum
+                                ? 'bg-primary-600 text-white'
+                                : 'border border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Siguiente
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Última
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            )}
+          </>
         )}
       </Card>
 

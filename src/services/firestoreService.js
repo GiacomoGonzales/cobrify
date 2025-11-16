@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   serverTimestamp,
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
@@ -233,15 +234,51 @@ export const createProduct = async (userId, productData) => {
 /**
  * Obtener productos de un usuario
  */
-export const getProducts = async userId => {
+export const getProducts = async (userId, options = {}) => {
   try {
-    // Usar subcolección - ya no necesita filtro por userId
-    const querySnapshot = await getDocs(collection(db, 'businesses', userId, 'products'))
+    const {
+      limit: limitCount = null,
+      lastDoc = null,
+      searchTerm = null,
+      category = null
+    } = options
+
+    // Usar subcolección
+    let q = collection(db, 'businesses', userId, 'products')
+
+    // Si hay límite, crear query con paginación
+    if (limitCount) {
+      const constraints = []
+
+      // Ordenar por nombre para paginación consistente
+      constraints.push(orderBy('name', 'asc'))
+
+      // Si hay un último documento, continuar desde ahí
+      if (lastDoc) {
+        constraints.push(startAfter(lastDoc))
+      }
+
+      // Aplicar límite
+      constraints.push(limit(limitCount))
+
+      q = query(q, ...constraints)
+    }
+
+    const querySnapshot = await getDocs(q)
     const products = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
     }))
-    return { success: true, data: products }
+
+    // Devolver también el último documento para la siguiente página
+    const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1]
+
+    return {
+      success: true,
+      data: products,
+      lastDoc: lastVisible,
+      hasMore: querySnapshot.docs.length === limitCount
+    }
   } catch (error) {
     console.error('Error al obtener productos:', error)
     return { success: false, error: error.message }

@@ -111,14 +111,28 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         code: String(row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim(),
         name: String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || '').trim(),
         description: String(row.descripcion || row.Descripcion || row.DESCRIPCION || row.description || row.Description || row.DESCRIPTION || '').trim(),
-        price: parseFloat(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE || 0),
+        cost: row.costo || row.Costo || row.COSTO || row.cost || row.Cost || row.COST || row.valor_unitario || row.valor_Unitario || row.VALOR_UNITARIO || row.precio_unitario || row.Precio_Unitario || row.PRECIO_UNITARIO || null,
+        price: parseFloat(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE || row.precio_compra || row.Precio_Compra || row.PRECIO_COMPRA || 0),
         stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
+        warehouse: String(row.almacen || row.Almacen || row.ALMACEN || row.warehouse || row.Warehouse || row.WAREHOUSE || row.bodega || row.Bodega || row.BODEGA || '').trim(),
         trackStock: trackStock,
         hasVariants: false,
         variantAttributes: [],
         variants: []
+      }
+
+      // Validar y convertir costo si existe
+      if (product.cost !== null && product.cost !== '' && product.cost !== undefined) {
+        const costNum = parseFloat(product.cost)
+        if (isNaN(costNum) || costNum < 0) {
+          errors.push(`Fila ${rowNum}: Costo inválido (${product.cost})`)
+          return
+        }
+        product.cost = costNum
+      } else {
+        product.cost = null
       }
 
       // Validar precio
@@ -196,31 +210,37 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         codigo: 'PROD001',
         nombre: 'Producto con Stock',
         descripcion: 'Descripción del producto',
+        costo: 8.50,
         precio: 10.50,
         stock: 100,
         trackStock: 'SI',
         unidad: 'UNIDAD',
-        categoria: 'Categoría Ejemplo'
+        categoria: 'Categoría Ejemplo',
+        almacen: 'Almacén Principal'
       },
       {
         codigo: 'PROD002',
         nombre: 'Servicio (Sin Stock)',
         descripcion: 'No controla inventario',
+        costo: 20.00,
         precio: 25.00,
         stock: '',
         trackStock: 'NO',
         unidad: 'SERVICIO',
-        categoria: 'Servicios'
+        categoria: 'Servicios',
+        almacen: ''
       },
       {
         codigo: 'PROD003',
         nombre: 'Producto Normal',
         descripcion: '',
+        costo: 12.00,
         precio: 15.00,
         stock: 50,
         trackStock: 'SI',
         unidad: 'UNIDAD',
-        categoria: ''
+        categoria: '',
+        almacen: 'Almacén Sucursal 2'
       }
     ]
 
@@ -233,11 +253,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       { wch: 12 }, // codigo
       { wch: 30 }, // nombre
       { wch: 40 }, // descripcion
+      { wch: 10 }, // costo
       { wch: 10 }, // precio
       { wch: 10 }, // stock
       { wch: 15 }, // trackStock
       { wch: 15 }, // unidad
-      { wch: 20 }  // categoria
+      { wch: 20 }, // categoria
+      { wch: 25 }  // almacen
     ]
 
     XLSX.writeFile(wb, 'plantilla_productos.xlsx')
@@ -272,7 +294,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: codigo, nombre, descripcion, precio, stock, trackStock (SI/NO), unidad, categoria
+            Columnas: codigo, nombre, descripcion, costo, precio, stock, trackStock (SI/NO), unidad, categoria, almacen
           </p>
         </div>
 

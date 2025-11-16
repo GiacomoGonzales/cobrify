@@ -351,33 +351,38 @@ export default function POS() {
     }
   }
 
-  const filteredProducts = products.filter(p => {
-    const matchesSearch =
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.code?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Optimizar filtrado de productos con useMemo
+  const filteredProducts = React.useMemo(() => {
+    return products.filter(p => {
+      const matchesSearch =
+        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.code?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
-    let matchesCategory = false
+      // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
+      let matchesCategory = false
 
-    if (selectedCategoryFilter === 'all') {
-      matchesCategory = true
-    } else if (selectedCategoryFilter === 'sin-categoria') {
-      matchesCategory = !p.category
-    } else {
-      // Verifica si el producto está en la categoría seleccionada O en alguna de sus subcategorías
-      const subcategoryIds = getAllSubcategoryIds(categories, selectedCategoryFilter)
-      matchesCategory =
-        p.category === selectedCategoryFilter ||
-        subcategoryIds.includes(p.category)
-    }
+      if (selectedCategoryFilter === 'all') {
+        matchesCategory = true
+      } else if (selectedCategoryFilter === 'sin-categoria') {
+        matchesCategory = !p.category
+      } else {
+        // Verifica si el producto está en la categoría seleccionada O en alguna de sus subcategorías
+        const subcategoryIds = getAllSubcategoryIds(categories, selectedCategoryFilter)
+        matchesCategory =
+          p.category === selectedCategoryFilter ||
+          subcategoryIds.includes(p.category)
+      }
 
-    return matchesSearch && matchesCategory
-  })
+      return matchesSearch && matchesCategory
+    })
+  }, [products, searchTerm, selectedCategoryFilter, categories])
 
-  // Apply pagination only when there's no search term
-  const displayedProducts = searchTerm || selectedCategoryFilter !== 'all'
-    ? filteredProducts
-    : filteredProducts.slice(0, visibleProductsCount)
+  // Apply pagination only when there's no search term (optimizado con useMemo)
+  const displayedProducts = React.useMemo(() => {
+    return searchTerm || selectedCategoryFilter !== 'all'
+      ? filteredProducts
+      : filteredProducts.slice(0, visibleProductsCount)
+  }, [filteredProducts, searchTerm, selectedCategoryFilter, visibleProductsCount])
 
   const hasMoreProducts = filteredProducts.length > visibleProductsCount && !searchTerm && selectedCategoryFilter === 'all'
 
@@ -702,38 +707,66 @@ export default function POS() {
     setDiscountPercentage('')
   }
 
-  // Calcular montos sin descuento
-  const baseAmounts = calculateInvoiceAmounts(
-    cart.map(item => ({
-      price: item.price,
-      quantity: item.quantity,
-    })),
-    taxConfig.igvRate
-  )
+  // Calcular montos sin descuento (optimizado con useMemo)
+  const amounts = React.useMemo(() => {
+    const baseAmounts = calculateInvoiceAmounts(
+      cart.map(item => ({
+        price: item.price,
+        quantity: item.quantity,
+      })),
+      taxConfig.igvRate
+    )
 
-  // Aplicar descuento al TOTAL (no al subtotal) para que sea más intuitivo
-  const discount = parseFloat(discountAmount) || 0
+    // Aplicar descuento al TOTAL (no al subtotal) para que sea más intuitivo
+    const discount = parseFloat(discountAmount) || 0
 
-  // El descuento se aplica al total (con IGV incluido)
-  const totalAfterDiscount = Math.max(0, baseAmounts.total - discount)
+    // El descuento se aplica al total (con IGV incluido)
+    const totalAfterDiscount = Math.max(0, baseAmounts.total - discount)
 
-  // Recalcular subtotal e IGV desde el nuevo total
-  const subtotalAfterDiscount = taxConfig.igvRate > 0
-    ? totalAfterDiscount / (1 + taxConfig.igvRate / 100)
-    : totalAfterDiscount
-  const igvAfterDiscount = totalAfterDiscount - subtotalAfterDiscount
+    // Recalcular subtotal e IGV desde el nuevo total
+    const subtotalAfterDiscount = taxConfig.igvRate > 0
+      ? totalAfterDiscount / (1 + taxConfig.igvRate / 100)
+      : totalAfterDiscount
+    const igvAfterDiscount = totalAfterDiscount - subtotalAfterDiscount
 
-  const amounts = {
-    subtotal: Number(baseAmounts.subtotal.toFixed(2)),
-    discount: Number(discount.toFixed(2)),
-    subtotalAfterDiscount: Number(subtotalAfterDiscount.toFixed(2)),
-    igv: Number(igvAfterDiscount.toFixed(2)),
-    total: Number(totalAfterDiscount.toFixed(2)),
-  }
+    return {
+      subtotal: Number(baseAmounts.subtotal.toFixed(2)),
+      discount: Number(discount.toFixed(2)),
+      subtotalAfterDiscount: Number(subtotalAfterDiscount.toFixed(2)),
+      igv: Number(igvAfterDiscount.toFixed(2)),
+      total: Number(totalAfterDiscount.toFixed(2)),
+    }
+  }, [cart, taxConfig.igvRate, discountAmount])
 
-  // Calcular totales de pago
-  const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
-  const remaining = amounts.total - totalPaid
+  // Calcular totales de pago (optimizado con useMemo)
+  const paymentTotals = React.useMemo(() => {
+    const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+    const remaining = amounts.total - totalPaid
+    return { totalPaid, remaining }
+  }, [payments, amounts.total])
+
+  const { totalPaid, remaining } = paymentTotals
+
+  // Filtrar clientes (optimizado con useMemo)
+  const filteredCustomers = React.useMemo(() => {
+    if (!customerSearchTerm) return []
+
+    return customers.filter(c => {
+      // Filtrar según tipo de documento
+      const matchesDocType = documentType === 'factura'
+        ? c.documentNumber?.length === 11
+        : true
+
+      // Filtrar según búsqueda
+      const searchLower = customerSearchTerm.toLowerCase()
+      const matchesSearch =
+        c.name?.toLowerCase().includes(searchLower) ||
+        c.businessName?.toLowerCase().includes(searchLower) ||
+        c.documentNumber?.includes(customerSearchTerm)
+
+      return matchesDocType && matchesSearch
+    })
+  }, [customers, customerSearchTerm, documentType])
 
   // Actualizar método de pago
   const handlePaymentMethodChange = (index, method) => {
@@ -1579,32 +1612,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {/* Dropdown de resultados */}
                       {showCustomerDropdown && customerSearchTerm && (
                         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {(() => {
-                            const filteredCustomers = customers.filter(c => {
-                              // Filtrar según tipo de documento
-                              const matchesDocType = documentType === 'factura'
-                                ? c.documentNumber?.length === 11
-                                : true
-
-                              // Filtrar según búsqueda
-                              const searchLower = customerSearchTerm.toLowerCase()
-                              const matchesSearch =
-                                c.name?.toLowerCase().includes(searchLower) ||
-                                c.businessName?.toLowerCase().includes(searchLower) ||
-                                c.documentNumber?.includes(customerSearchTerm)
-
-                              return matchesDocType && matchesSearch
-                            })
-
-                            if (filteredCustomers.length === 0) {
-                              return (
-                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                  No se encontraron clientes
-                                </div>
-                              )
-                            }
-
-                            return filteredCustomers.map(customer => (
+                          {filteredCustomers.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                              No se encontraron clientes
+                            </div>
+                          ) : (
+                            filteredCustomers.map(customer => (
                               <button
                                 key={customer.id}
                                 type="button"
@@ -1633,7 +1646,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 </div>
                               </button>
                             ))
-                          })()}
+                          )}
                         </div>
                       )}
                     </div>
