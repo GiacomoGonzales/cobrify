@@ -764,7 +764,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   >
                     <div className="flex-1">
                       <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-gray-500">
+                      {item.description && (
+                        <p className="text-xs text-gray-600 mt-1 italic">
+                          {item.description}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
                         {item.quantity} x {formatCurrency(item.unitPrice)}
                       </p>
                     </div>

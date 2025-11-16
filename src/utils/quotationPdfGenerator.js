@@ -318,14 +318,22 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // ========== 4. TABLA DE PRODUCTOS/SERVICIOS ==========
 
-  const tableData = quotation.items?.map((item, index) => [
-    (index + 1).toString(),
-    item.name,
-    item.quantity.toString(),
-    item.unit || 'UNIDAD',
-    formatCurrency(item.unitPrice),
-    formatCurrency(item.subtotal || (item.quantity * item.unitPrice))
-  ]) || []
+  const tableData = quotation.items?.map((item, index) => {
+    // Construir el texto de descripción: nombre + descripción (si existe)
+    let descriptionText = item.name
+    if (item.description) {
+      descriptionText += '\n' + item.description
+    }
+
+    return [
+      (index + 1).toString(),
+      descriptionText,
+      item.quantity.toString(),
+      item.unit || 'UNIDAD',
+      formatCurrency(item.unitPrice),
+      formatCurrency(item.subtotal || (item.quantity * item.unitPrice))
+    ]
+  }) || []
 
   autoTable(doc, {
     startY: currentY,
@@ -343,7 +351,21 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     bodyStyles: {
       fontSize: 8,
       textColor: DARK_GRAY,
-      cellPadding: 5
+      cellPadding: 5,
+      cellPadding: { top: 5, right: 5, bottom: 5, left: 5 },
+      lineColor: BORDER_GRAY,
+      lineWidth: 0.1
+    },
+    didParseCell: function(data) {
+      // Aplicar estilo especial a la descripción del producto (columna 1)
+      if (data.column.index === 1 && data.section === 'body') {
+        const cellText = data.cell.text
+        if (cellText.length > 1) {
+          // Si hay más de una línea (nombre + descripción)
+          data.cell.styles.fontSize = 8
+          data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 }
+        }
+      }
     },
     columnStyles: {
       0: { halign: 'center', cellWidth: 25 },
