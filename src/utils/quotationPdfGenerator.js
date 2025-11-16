@@ -131,9 +131,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const leftColumnWidth = CONTENT_WIDTH * 0.60
   const leftColumnX = MARGIN_LEFT
 
-  // Logo de la empresa si existe
-  let logoWidth = 0
-  let textStartX = leftColumnX
+  // Logo de la empresa si existe - ARRIBA A LA IZQUIERDA
+  let logoHeight = 0
+  let textY = headerY
 
   if (companySettings?.logoUrl) {
     try {
@@ -147,8 +147,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         )
       ])
 
-      const logoHeight = 50
-      logoWidth = 50
+      logoHeight = 50
+      const logoWidth = 50
 
       // Determinar el formato de la imagen
       let format = 'PNG'
@@ -157,24 +157,27 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         format = 'JPEG'
       }
 
+      // Logo en la esquina superior izquierda
       doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textStartX = leftColumnX + logoWidth + 15
+      textY = headerY + logoHeight + 10 // Texto debajo del logo
       console.log('✅ Logo cargado correctamente en cotización')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo en cotización, continuando sin él:', error.message)
-      textStartX = leftColumnX
+      textY = headerY + 5
     }
+  } else {
+    textY = headerY + 5
   }
 
+  // Información de la empresa DEBAJO del logo
   // Nombre de la empresa
   doc.setFontSize(14)
   doc.setTextColor(...DARK_GRAY)
   doc.setFont('helvetica', 'bold')
 
-  let textY = headerY + 5
   const companyName = companySettings?.businessName || 'EMPRESA SAC'
-  doc.text(companyName, textStartX, textY)
-  textY += 16
+  doc.text(companyName, leftColumnX, textY)
+  textY += 14
 
   // RUC de la empresa
   doc.setFontSize(9)
@@ -182,27 +185,29 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setTextColor(...MEDIUM_GRAY)
   const ruc = companySettings?.ruc || ''
   if (ruc) {
-    doc.text(`RUC: ${ruc}`, textStartX, textY)
-    textY += 12
+    doc.text(`RUC: ${ruc}`, leftColumnX, textY)
+    textY += 11
   }
 
   // Dirección
   doc.setFontSize(8)
   if (companySettings?.address) {
-    const maxAddressWidth = leftColumnWidth - (textStartX - leftColumnX) - 10
-    const addressLines = doc.splitTextToSize(companySettings.address, maxAddressWidth)
-    doc.text(addressLines, textStartX, textY)
+    const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
+    doc.text(addressLines, leftColumnX, textY)
     textY += 10 * Math.min(addressLines.length, 2)
   }
 
-  // Contacto
-  const contactParts = []
-  if (companySettings?.phone) contactParts.push(companySettings.phone)
-  if (companySettings?.email) contactParts.push(companySettings.email)
-
-  if (contactParts.length > 0) {
+  // Teléfono
+  if (companySettings?.phone) {
     doc.setFontSize(8)
-    doc.text(contactParts.join(' • '), textStartX, textY)
+    doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
+    textY += 10
+  }
+
+  // Email
+  if (companySettings?.email) {
+    doc.setFontSize(8)
+    doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
   }
 
   // Columna derecha - Recuadro del comprobante (40%)
