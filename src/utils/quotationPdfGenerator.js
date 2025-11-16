@@ -419,10 +419,12 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     totalsY += 12
   }
 
-  // IGV
-  doc.text('IGV (18%):', labelX, totalsY)
-  doc.text(formatCurrency(quotation.igv || 0), valueX, totalsY, { align: 'right' })
-  totalsY += 15
+  // IGV (solo si no está oculto)
+  if (!quotation.hideIgv) {
+    doc.text('IGV (18%):', labelX, totalsY)
+    doc.text(formatCurrency(quotation.igv || 0), valueX, totalsY, { align: 'right' })
+    totalsY += 15
+  }
 
   // Total en caja negra
   const totalBoxHeight = 24

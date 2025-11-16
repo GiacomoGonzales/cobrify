@@ -803,10 +803,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </span>
                 </div>
               )}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">IGV (18%):</span>
-                <span className="font-medium">{formatCurrency(viewingQuotation.igv)}</span>
-              </div>
+              {!viewingQuotation.hideIgv && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">IGV (18%):</span>
+                  <span className="font-medium">{formatCurrency(viewingQuotation.igv)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xl font-bold border-t pt-2">
                 <span>Total:</span>
                 <span className="text-primary-600">{formatCurrency(viewingQuotation.total)}</span>

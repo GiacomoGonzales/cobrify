@@ -51,6 +51,7 @@ export default function CreateQuotation() {
   const [discountType, setDiscountType] = useState('fixed')
   const [terms, setTerms] = useState('')
   const [notes, setNotes] = useState('')
+  const [hideIgv, setHideIgv] = useState(false) // Nuevo: ocultar IGV
   const [quotationItems, setQuotationItems] = useState([
     { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
   ])
@@ -334,6 +335,7 @@ export default function CreateQuotation() {
         discountedSubtotal: discountedSubtotal,
         igv: finalIgv,
         total: finalTotal,
+        hideIgv: hideIgv, // Agregar opción de ocultar IGV
         validityDays: parseInt(validityDays),
         expiryDate: expiryDate,
         status: 'draft',
@@ -761,6 +763,19 @@ export default function CreateQuotation() {
                   />
                 </div>
 
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="hideIgv"
+                    checked={hideIgv}
+                    onChange={e => setHideIgv(e.target.checked)}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <label htmlFor="hideIgv" className="ml-2 text-sm font-medium text-gray-700">
+                    Ocultar IGV (mostrar solo total)
+                  </label>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Términos y Condiciones
@@ -820,10 +835,12 @@ export default function CreateQuotation() {
                     </>
                   )}
 
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">IGV (18%):</span>
-                    <span className="font-medium">{formatCurrency(finalIgv)}</span>
-                  </div>
+                  {!hideIgv && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">IGV (18%):</span>
+                      <span className="font-medium">{formatCurrency(finalIgv)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t">
