@@ -203,51 +203,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     textY = headerY + 5
   }
 
-  // Información de la empresa DEBAJO del logo
-  // Nombre de la empresa
-  doc.setFontSize(13)
-  doc.setTextColor(...DARK_GRAY)
-  doc.setFont('helvetica', 'bold')
-
-  const companyName = companySettings?.businessName || 'EMPRESA SAC'
-  doc.text(companyName, leftColumnX, textY)
-  textY += 12
-
-  // RUC de la empresa
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...MEDIUM_GRAY)
-  const ruc = companySettings?.ruc || ''
-  if (ruc) {
-    doc.text(`RUC: ${ruc}`, leftColumnX, textY)
-    textY += 10
-  }
-
-  // Dirección
-  doc.setFontSize(8)
-  if (companySettings?.address) {
-    const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
-    doc.text(addressLines, leftColumnX, textY)
-    textY += 9 * Math.min(addressLines.length, 2)
-  }
-
-  // Teléfono
-  if (companySettings?.phone) {
-    doc.setFontSize(7)
-    doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
-    textY += 9
-  }
-
-  // Email
-  if (companySettings?.email) {
-    doc.setFontSize(7)
-    doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
-    textY += 9
-  }
-
-  // Calcular altura dinámica del header basada en el contenido
-  const contentHeight = textY - headerY
-  const headerHeight = Math.max(85, contentHeight + 5) // Mínimo 85, o lo que necesite el contenido + margen
+  // Primero calcular altura del header (fija en 85pt)
+  const headerHeight = 85
 
   // Columna derecha - Recuadro del comprobante (40%)
   const rightColumnWidth = CONTENT_WIDTH * 0.40
@@ -257,6 +214,64 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(2)
   doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+
+  // Información de la empresa DEBAJO del logo - alineada con la parte inferior del recuadro
+  // Calcular la posición Y final donde debe terminar el texto (parte inferior del recuadro)
+  const bottomY = headerY + headerHeight - 5 // 5pt de margen inferior
+
+  // Contar cuántas líneas de información tenemos
+  let lineCount = 1 // Nombre de empresa (siempre)
+  if (companySettings?.ruc) lineCount++
+  if (companySettings?.address) lineCount++ // Asumiendo 1 línea
+  if (companySettings?.phone) lineCount++
+  if (companySettings?.email) lineCount++
+
+  // Calcular espaciado entre líneas
+  const lineHeight = 11
+  const totalTextHeight = lineCount * lineHeight
+
+  // Posicionar el texto para que termine en bottomY
+  textY = bottomY - totalTextHeight + lineHeight
+
+  // Nombre de la empresa
+  doc.setFontSize(14)
+  doc.setTextColor(...DARK_GRAY)
+  doc.setFont('helvetica', 'bold')
+
+  const companyName = companySettings?.businessName || 'EMPRESA SAC'
+  doc.text(companyName, leftColumnX, textY)
+  textY += lineHeight
+
+  // RUC de la empresa
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  const ruc = companySettings?.ruc || ''
+  if (ruc) {
+    doc.text(`RUC: ${ruc}`, leftColumnX, textY)
+    textY += lineHeight
+  }
+
+  // Dirección
+  doc.setFontSize(9)
+  if (companySettings?.address) {
+    const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
+    doc.text(addressLines[0], leftColumnX, textY) // Solo primera línea
+    textY += lineHeight
+  }
+
+  // Teléfono
+  if (companySettings?.phone) {
+    doc.setFontSize(9)
+    doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
+    textY += lineHeight
+  }
+
+  // Email
+  if (companySettings?.email) {
+    doc.setFontSize(9)
+    doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
+  }
 
   // Contenido del recuadro - bien centrado
   const boxCenterX = rightColumnX + (rightColumnWidth / 2)
