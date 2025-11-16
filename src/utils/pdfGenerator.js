@@ -327,7 +327,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
       // Logo en la esquina superior izquierda
       doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textY = headerY + logoHeight + 8 // Texto debajo del logo
+      textY = headerY + logoHeight + 12 // Texto debajo del logo con más separación
       console.log('✅ Logo cargado correctamente (dimensiones:', logoWidth, 'x', logoHeight, ')')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo, continuando sin él:', error.message)
