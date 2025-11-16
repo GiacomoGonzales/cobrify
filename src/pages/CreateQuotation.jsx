@@ -90,7 +90,7 @@ export default function CreateQuotation() {
   const addItem = () => {
     setQuotationItems([
       ...quotationItems,
-      { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
+      { productId: '', name: '', description: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
     ])
   }
 
@@ -110,6 +110,7 @@ export default function CreateQuotation() {
     const newItems = [...quotationItems]
     newItems[index].productId = product.id
     newItems[index].name = product.name
+    newItems[index].description = product.description || ''
     newItems[index].unitPrice = product.price
     newItems[index].unit = product.unit || 'UNIDAD'
     newItems[index].searchTerm = product.name
@@ -308,6 +309,7 @@ export default function CreateQuotation() {
         productId: item.productId || '',
         code: products.find(p => p.id === item.productId)?.code || '',
         name: item.name,
+        description: item.description || '',
         quantity: parseFloat(item.quantity),
         unitPrice: parseFloat(item.unitPrice),
         unit: item.unit,
@@ -660,10 +662,19 @@ export default function CreateQuotation() {
 
                       <div className="sm:col-span-2">
                         <Input
-                          label="Descripción *"
+                          label="Nombre del Producto/Servicio *"
                           value={item.name}
                           onChange={e => updateItem(index, 'name', e.target.value)}
                           placeholder="Nombre del producto o servicio"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <Input
+                          label="Descripción (opcional)"
+                          value={item.description || ''}
+                          onChange={e => updateItem(index, 'description', e.target.value)}
+                          placeholder="Descripción detallada del producto o servicio"
                         />
                       </div>
 
