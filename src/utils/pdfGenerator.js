@@ -365,8 +365,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const lineHeight = 11
   const totalTextHeight = lineCount * lineHeight
 
-  // Posicionar el texto para que termine en bottomY
-  textY = bottomY - totalTextHeight + lineHeight
+  // Calcular posición inicial del texto
+  let calculatedTextY = bottomY - totalTextHeight + lineHeight
+
+  // Asegurarse de que el texto no se superponga con el logo
+  // textY ya contiene la posición después del logo + separación
+  const minTextY = textY // Esta es la posición mínima (después del logo)
+
+  // Usar la mayor de las dos posiciones para evitar superposición
+  textY = Math.max(minTextY, calculatedTextY)
 
   // Nombre de la empresa
   doc.setFontSize(14)
