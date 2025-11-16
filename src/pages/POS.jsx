@@ -16,6 +16,9 @@ import {
   Folder,
   Tag,
   Share2,
+  Edit2,
+  X,
+  Check,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -162,6 +165,10 @@ export default function POS() {
     price: '',
     quantity: 1
   })
+
+  // Price editing
+  const [editingPriceItemId, setEditingPriceItemId] = useState(null)
+  const [editingPrice, setEditingPrice] = useState('')
 
   // Datos del cliente para captura inline
   const [customerData, setCustomerData] = useState({
@@ -574,6 +581,37 @@ export default function POS() {
 
   const removeFromCart = itemId => {
     setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
+  }
+
+  const startEditingPrice = (itemId, currentPrice) => {
+    setEditingPriceItemId(itemId)
+    setEditingPrice(currentPrice.toString())
+  }
+
+  const cancelEditingPrice = () => {
+    setEditingPriceItemId(null)
+    setEditingPrice('')
+  }
+
+  const saveEditedPrice = (itemId) => {
+    const newPrice = parseFloat(editingPrice)
+
+    if (isNaN(newPrice) || newPrice <= 0) {
+      toast.error('El precio debe ser mayor a 0')
+      return
+    }
+
+    setCart(cart.map(item => {
+      const currentItemId = item.cartId || item.id
+      if (currentItemId === itemId) {
+        return { ...item, price: newPrice }
+      }
+      return item
+    }))
+
+    setEditingPriceItemId(null)
+    setEditingPrice('')
+    toast.success('Precio actualizado')
   }
 
   const clearCart = () => {
@@ -2218,7 +2256,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 ))}
                               </p>
                             )}
-                            <p className="text-xs text-gray-500">{formatCurrency(item.price)}</p>
                           </div>
                           <button
                             onClick={() => removeFromCart(itemId)}
@@ -2245,9 +2282,59 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
-                          <p className="font-bold text-gray-900 text-sm">
-                            {formatCurrency(item.price * item.quantity)}
-                          </p>
+
+                          {/* Precio unitario editable */}
+                          <div className="flex items-center gap-2">
+                            {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={editingPrice}
+                                  onChange={(e) => setEditingPrice(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      saveEditedPrice(itemId)
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditingPrice()
+                                    }
+                                  }}
+                                  className="w-16 px-2 py-1 text-sm font-bold text-right border border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                  autoFocus
+                                  step="0.01"
+                                  min="0.01"
+                                />
+                                <button
+                                  onClick={() => saveEditedPrice(itemId)}
+                                  className="text-green-600 hover:text-green-800 p-1"
+                                  title="Guardar"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={cancelEditingPrice}
+                                  className="text-gray-600 hover:text-gray-800 p-1"
+                                  title="Cancelar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <p className="font-bold text-gray-900 text-sm">
+                                  {formatCurrency(item.price * item.quantity)}
+                                </p>
+                                {companySettings?.allowPriceEdit && !item.isCustom && (
+                                  <button
+                                    onClick={() => startEditingPrice(itemId, item.price)}
+                                    className="text-primary-600 hover:text-primary-700 p-1"
+                                    title="Editar precio"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )

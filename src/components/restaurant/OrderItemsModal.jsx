@@ -101,8 +101,11 @@ export default function OrderItemsModal({
         setProducts(allProducts)
         setFilteredProducts(allProducts)
 
-        // Extraer categorías únicas con nombres reales
-        const uniqueCategoryNames = ['Todos', ...new Set(allProducts.map(p => getCategoryName(p.category)).filter(Boolean))]
+        // Extraer categorías únicas con nombres reales usando el mapa de categorías
+        const categoryNames = allProducts
+          .map(p => p.category ? (catMap[p.category] || p.category) : null)
+          .filter(Boolean)
+        const uniqueCategoryNames = ['Todos', ...new Set(categoryNames)]
         setCategories(uniqueCategoryNames)
       } else if (demoContext) {
         // Si está en el layout de demo pero no hay productos, mostrar productos de ejemplo
@@ -111,8 +114,11 @@ export default function OrderItemsModal({
           setProducts(demoProducts)
           setFilteredProducts(demoProducts)
 
-          // Extraer categorías únicas con nombres reales
-          const uniqueCategoryNames = ['Todos', ...new Set(demoProducts.map(p => getCategoryName(p.category)).filter(Boolean))]
+          // Extraer categorías únicas con nombres reales usando el mapa de categorías
+          const categoryNames = demoProducts
+            .map(p => p.category ? (catMap[p.category] || p.category) : null)
+            .filter(Boolean)
+          const uniqueCategoryNames = ['Todos', ...new Set(categoryNames)]
           setCategories(uniqueCategoryNames)
         } else {
           // Fallback: productos hardcodeados para demo
@@ -139,8 +145,11 @@ export default function OrderItemsModal({
           setProducts(allProducts)
           setFilteredProducts(allProducts)
 
-          // Extraer categorías únicas con nombres reales
-          const uniqueCategoryNames = ['Todos', ...new Set(allProducts.map(p => getCategoryName(p.category)).filter(Boolean))]
+          // Extraer categorías únicas con nombres reales usando el mapa de categorías
+          const categoryNames = allProducts
+            .map(p => p.category ? (catMap[p.category] || p.category) : null)
+            .filter(Boolean)
+          const uniqueCategoryNames = ['Todos', ...new Set(categoryNames)]
           setCategories(uniqueCategoryNames)
         } else {
           console.error('Error al cargar productos:', result.error)
