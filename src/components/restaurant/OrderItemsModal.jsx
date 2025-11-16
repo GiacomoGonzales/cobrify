@@ -3,7 +3,7 @@ import { ShoppingCart, Plus, Minus, Search, Loader2, X } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { getProducts } from '@/services/firestoreService'
+import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -30,6 +30,9 @@ export default function OrderItemsModal({
   const [products, setProducts] = useState([])
   const [filteredProducts, setFilteredProducts] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('Todos')
+  const [categories, setCategories] = useState(['Todos'])
+  const [categoryMap, setCategoryMap] = useState({}) // Mapeo de ID a nombre de categoría
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [cart, setCart] = useState([])
@@ -41,34 +44,76 @@ export default function OrderItemsModal({
     }
   }, [isOpen])
 
-  // Filtrar productos por búsqueda
+  // Helper para obtener el nombre de la categoría
+  const getCategoryName = (categoryId) => {
+    if (!categoryId) return 'Sin categoría'
+    return categoryMap[categoryId] || categoryId
+  }
+
+  // Filtrar productos por búsqueda y categoría
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredProducts(products)
-    } else {
-      const filtered = products.filter(
+    let filtered = products
+
+    // Filtrar por categoría
+    if (selectedCategory !== 'Todos') {
+      filtered = filtered.filter((p) => {
+        const categoryName = getCategoryName(p.category)
+        return categoryName === selectedCategory
+      })
+    }
+
+    // Filtrar por búsqueda
+    if (searchTerm.trim() !== '') {
+      filtered = filtered.filter(
         (p) =>
           p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           p.code?.toLowerCase().includes(searchTerm.toLowerCase())
       )
-      setFilteredProducts(filtered)
     }
-  }, [searchTerm, products])
+
+    setFilteredProducts(filtered)
+  }, [searchTerm, selectedCategory, products, categoryMap])
 
   const loadProducts = async () => {
     setIsLoading(true)
     try {
+      const businessId = getBusinessId()
+
+      // Cargar categorías primero (en modo normal)
+      let categoriesData = []
+      let catMap = {}
+
+      if (!isDemoMode && !demoContext) {
+        const categoriesResult = await getProductCategories(businessId)
+        if (categoriesResult.success) {
+          categoriesData = categoriesResult.data || []
+          // Crear mapeo de ID a nombre
+          categoriesData.forEach(cat => {
+            catMap[cat.id] = cat.name
+          })
+          setCategoryMap(catMap)
+        }
+      }
+
       // En modo demo, usar productos del contexto de demo
       if (isDemoMode && demoData?.products) {
         const allProducts = demoData.products || []
         setProducts(allProducts)
         setFilteredProducts(allProducts)
+
+        // Extraer categorías únicas con nombres reales
+        const uniqueCategoryNames = ['Todos', ...new Set(allProducts.map(p => getCategoryName(p.category)).filter(Boolean))]
+        setCategories(uniqueCategoryNames)
       } else if (demoContext) {
         // Si está en el layout de demo pero no hay productos, mostrar productos de ejemplo
         const demoProducts = demoContext.demoData?.products || []
         if (demoProducts.length > 0) {
           setProducts(demoProducts)
           setFilteredProducts(demoProducts)
+
+          // Extraer categorías únicas con nombres reales
+          const uniqueCategoryNames = ['Todos', ...new Set(demoProducts.map(p => getCategoryName(p.category)).filter(Boolean))]
+          setCategories(uniqueCategoryNames)
         } else {
           // Fallback: productos hardcodeados para demo
           const fallbackProducts = [
@@ -81,14 +126,22 @@ export default function OrderItemsModal({
           ]
           setProducts(fallbackProducts)
           setFilteredProducts(fallbackProducts)
+
+          // Extraer categorías únicas
+          const uniqueCategories = ['Todos', 'Entradas', 'Platos de Fondo', 'Bebidas']
+          setCategories(uniqueCategories)
         }
       } else {
         // En modo normal, cargar desde Firebase
-        const result = await getProducts(getBusinessId())
+        const result = await getProducts(businessId)
         if (result.success) {
           const allProducts = result.data || []
           setProducts(allProducts)
           setFilteredProducts(allProducts)
+
+          // Extraer categorías únicas con nombres reales
+          const uniqueCategoryNames = ['Todos', ...new Set(allProducts.map(p => getCategoryName(p.category)).filter(Boolean))]
+          setCategories(uniqueCategoryNames)
         } else {
           console.error('Error al cargar productos:', result.error)
           toast.error('Error al cargar productos: ' + result.error)
@@ -201,6 +254,7 @@ export default function OrderItemsModal({
   const handleClose = () => {
     setCart([])
     setSearchTerm('')
+    setSelectedCategory('Todos')
     onClose()
   }
 
@@ -229,80 +283,102 @@ export default function OrderItemsModal({
         </div>
       }
       size="xl"
+      fullScreenMobile={true}
     >
-      <div className="flex flex-col h-[600px] lg:h-[600px]">
-        {/* Buscador */}
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <Input
-              type="text"
-              placeholder="Buscar productos..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+      <div className="flex flex-col h-full lg:h-[600px]">
+        {/* Contenedor con scroll único */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* Buscador */}
+          <div className="mb-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Input
+                type="text"
+                placeholder="Buscar productos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
-          {/* Lista de productos */}
-          <div className="flex-1 overflow-y-auto border rounded-lg p-4 max-h-[250px] lg:max-h-none">
-            <h3 className="font-semibold text-gray-900 mb-3">Productos Disponibles</h3>
+          {/* Filtros de categorías */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                    selectedCategory === category
+                      ? 'bg-primary-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-              </div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                {searchTerm ? 'No se encontraron productos' : 'No hay productos disponibles'}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-2">
-                {filteredProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {product.code && <span className="mr-2">Código: {product.code}</span>}
-                        <span className="font-semibold text-primary-600">
-                          S/ {(product.price || 0).toFixed(2)}
-                        </span>
-                      </div>
-                      {product.stock !== undefined && (
-                        <div className="text-xs text-gray-500">Stock: {product.stock}</div>
-                      )}
-                    </div>
-                    <Button
-                      onClick={() => addToCart(product)}
-                      size="sm"
-                      className="ml-3"
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Lista de productos */}
+            <div className="flex-1 border rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3">Productos Disponibles</h3>
+
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  {searchTerm ? 'No se encontraron productos' : 'No hay productos disponibles'}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {filteredProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
                     >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{product.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {product.code && <span className="mr-2">Código: {product.code}</span>}
+                          <span className="font-semibold text-primary-600">
+                            S/ {(product.price || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        {product.stock !== undefined && (
+                          <div className="text-xs text-gray-500">Stock: {product.stock}</div>
+                        )}
+                      </div>
+                      <Button
+                        onClick={() => addToCart(product)}
+                        size="sm"
+                        className="ml-3"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* Carrito */}
-          <div className="w-full lg:w-80 border rounded-lg p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-900 mb-3">
-              Carrito ({cart.length} items)
-            </h3>
+            {/* Carrito */}
+            <div className="w-full lg:w-80 border rounded-lg p-4 flex flex-col">
+              <h3 className="font-semibold text-gray-900 mb-3">
+                Carrito ({cart.length} items)
+              </h3>
 
-            {cart.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-                Agrega productos al carrito
-              </div>
-            ) : (
-              <>
-                <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+              {cart.length === 0 ? (
+                <div className="flex items-center justify-center text-gray-500 text-sm py-8">
+                  Agrega productos al carrito
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2 mb-4">
                   {cart.map((item) => (
                     <div key={item.productId} className="border rounded-lg p-3 bg-white">
                       <div className="flex items-start justify-between mb-2">
@@ -359,25 +435,26 @@ export default function OrderItemsModal({
                   ))}
                 </div>
 
-                {/* Total simple (sin desglose de IGV) */}
-                <div className="border-t pt-3">
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total:</span>
-                    <span className="text-primary-600">
-                      S/ {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
-                    </span>
+                  {/* Total simple (sin desglose de IGV) */}
+                  <div className="border-t pt-3">
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>Total:</span>
+                      <span className="text-primary-600">
+                        S/ {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 text-center mt-2">
+                      Los montos detallados aparecerán en la precuenta
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 text-center mt-2">
-                    Los montos detallados aparecerán en la precuenta
-                  </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Botones */}
-        <div className="flex gap-3 mt-4 pt-4 border-t">
+        <div className="flex gap-3 pt-4 border-t flex-shrink-0 sticky bottom-0 bg-white -mx-6 px-6 -mb-6 pb-6">
           <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
             Cancelar
           </Button>

@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth }) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth, fullScreenMobile = false }) {
   if (!isOpen) return null
 
   const sizes = {
@@ -24,23 +24,33 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        className={cn(
+          "fixed inset-0 bg-black bg-opacity-50 transition-opacity",
+          fullScreenMobile && "lg:block hidden"
+        )}
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
+      <div className={cn(
+        "flex min-h-full items-center justify-center",
+        fullScreenMobile ? "p-0 lg:p-4" : "p-4"
+      )}>
         <div
           className={cn(
-            'relative bg-white rounded-lg shadow-xl w-full',
-            maxWidthClass,
+            'relative bg-white shadow-xl w-full',
+            fullScreenMobile ? 'h-full lg:h-auto lg:rounded-lg' : 'rounded-lg',
+            fullScreenMobile ? 'lg:max-w-4xl' : maxWidthClass,
             'animate-fade-in'
           )}
           onClick={e => e.stopPropagation()}
         >
           {/* Header - solo si hay título */}
           {title && (
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className={cn(
+              "flex items-center justify-between p-6 border-b border-gray-200 bg-white z-10",
+              fullScreenMobile && "sticky top-0"
+            )}>
               <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
               <button
                 onClick={onClose}
