@@ -261,13 +261,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const headerY = currentY
   const headerHeight = 85
 
-  // Columna izquierda - Información de la empresa (65%)
+  // Columna izquierda - Información de la empresa (60%)
   const leftColumnWidth = CONTENT_WIDTH * 0.60
   const leftColumnX = MARGIN_LEFT
 
-  // Logo de la empresa si existe
-  let logoWidth = 0
-  let textStartX = leftColumnX
+  // Logo de la empresa si existe - ARRIBA A LA IZQUIERDA
+  let logoHeight = 0
+  let textY = headerY
 
   if (companySettings?.logoUrl) {
     try {
@@ -281,9 +281,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         )
       ])
 
-      const logoHeight = 50
-      logoWidth = 50
-
       // Determinar el formato de la imagen
       let format = 'PNG'
       if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
@@ -291,25 +288,66 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         format = 'JPEG'
       }
 
+      // Crear una imagen temporal para obtener dimensiones originales
+      const img = new Image()
+      img.src = imgData
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+      })
+
+      // Calcular dimensiones manteniendo la proporción
+      const originalWidth = img.width
+      const originalHeight = img.height
+      const aspectRatio = originalWidth / originalHeight
+
+      // Altura máxima del logo
+      const maxLogoHeight = 50
+      const maxLogoWidth = 120 // Ancho máximo para logos horizontales
+
+      let logoWidth, calculatedLogoHeight
+
+      if (aspectRatio > 1) {
+        // Logo horizontal (más ancho que alto)
+        logoWidth = Math.min(maxLogoWidth, leftColumnWidth - 10)
+        calculatedLogoHeight = logoWidth / aspectRatio
+
+        // Si la altura calculada excede el máximo, ajustar
+        if (calculatedLogoHeight > maxLogoHeight) {
+          calculatedLogoHeight = maxLogoHeight
+          logoWidth = calculatedLogoHeight * aspectRatio
+        }
+      } else {
+        // Logo vertical o cuadrado (más alto que ancho o igual)
+        calculatedLogoHeight = maxLogoHeight
+        logoWidth = calculatedLogoHeight * aspectRatio
+      }
+
+      logoHeight = calculatedLogoHeight
+
+      // Logo en la esquina superior izquierda
       doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textStartX = leftColumnX + logoWidth + 15
-      console.log('✅ Logo cargado correctamente')
+      textY = headerY + logoHeight + 10 // Texto debajo del logo
+      console.log('✅ Logo cargado correctamente (dimensiones:', logoWidth, 'x', logoHeight, ')')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo, continuando sin él:', error.message)
-      textStartX = leftColumnX
+      textY = headerY + 5
       // Continuar sin el logo - el PDF se generará de todas formas
     }
+  } else {
+    textY = headerY + 5
   }
 
+  // Información de la empresa DEBAJO del logo
   // Nombre de la empresa
   doc.setFontSize(14)
   doc.setTextColor(...DARK_GRAY)
   doc.setFont('helvetica', 'bold')
 
-  let textY = headerY + 5
   const companyName = companySettings?.businessName || 'EMPRESA SAC'
-  doc.text(companyName, textStartX, textY)
-  textY += 16
+  doc.text(companyName, leftColumnX, textY)
+  textY += 14
 
   // RUC de la empresa
   doc.setFontSize(9)
@@ -317,27 +355,29 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setTextColor(...MEDIUM_GRAY)
   const ruc = companySettings?.ruc || ''
   if (ruc) {
-    doc.text(`RUC: ${ruc}`, textStartX, textY)
-    textY += 12
+    doc.text(`RUC: ${ruc}`, leftColumnX, textY)
+    textY += 11
   }
 
   // Dirección
   doc.setFontSize(8)
   if (companySettings?.address) {
-    const maxAddressWidth = leftColumnWidth - (textStartX - leftColumnX) - 10
-    const addressLines = doc.splitTextToSize(companySettings.address, maxAddressWidth)
-    doc.text(addressLines, textStartX, textY)
+    const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
+    doc.text(addressLines, leftColumnX, textY)
     textY += 10 * Math.min(addressLines.length, 2)
   }
 
-  // Contacto
-  const contactParts = []
-  if (companySettings?.phone) contactParts.push(companySettings.phone)
-  if (companySettings?.email) contactParts.push(companySettings.email)
-
-  if (contactParts.length > 0) {
+  // Teléfono
+  if (companySettings?.phone) {
     doc.setFontSize(8)
-    doc.text(contactParts.join(' • '), textStartX, textY)
+    doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
+    textY += 10
+  }
+
+  // Email
+  if (companySettings?.email) {
+    doc.setFontSize(8)
+    doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
   }
 
   // Columna derecha - Recuadro del comprobante (35%)
