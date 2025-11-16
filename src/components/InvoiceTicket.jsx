@@ -619,6 +619,20 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
         {invoice.documentType !== 'nota_venta' && (
           <>
+            {/* Hash SUNAT */}
+            {invoice.sunatHash && (
+              <div style={{
+                fontSize: '7px',
+                marginTop: '8px',
+                textAlign: 'left',
+                wordBreak: 'break-all',
+                padding: '0 4px'
+              }}>
+                <span style={{ fontWeight: '700' }}>Hash: </span>
+                <span style={{ fontWeight: '500' }}>{invoice.sunatHash}</span>
+              </div>
+            )}
+
             <div className="qr-container">
               <QRCodeSVG
                 value={generateQRData()}

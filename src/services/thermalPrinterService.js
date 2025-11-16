@@ -448,6 +448,24 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .text(convertSpanishText(`REPRESENTACION IMPRESA DE\n${tipoComprobante} ELECTRONICA\n`))
         .text(convertSpanishText('Consulte en www.sunat.gob.pe\n'));
 
+      // Hash SUNAT (si existe)
+      if (invoice.sunatHash) {
+        // Truncar hash para que quepa (mostrar primeros 40-45 caracteres)
+        const hashToShow = paperWidth === 80
+          ? invoice.sunatHash.substring(0, 45)
+          : invoice.sunatHash.substring(0, 30);
+        const hashSuffix = invoice.sunatHash.length > hashToShow.length ? '...' : '';
+
+        printer = printer
+          .align('left')
+          .text('\n')
+          .bold()
+          .text('Hash: ')
+          .clearFormatting()
+          .text(convertSpanishText(hashToShow + hashSuffix) + '\n')
+          .align('center');
+      }
+
       // QR Code (obligatorio según SUNAT desde 2020) - después del texto SUNAT
       if (qrData) {
         printer = printer.text('\n').qr(qrData).text('\n');
