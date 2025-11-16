@@ -716,15 +716,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   const footerY = currentY
   const qrSize = 70
-  const qrBoxWidth = qrSize + 20
-  const textBoxWidth = CONTENT_WIDTH - qrBoxWidth - 10
-
-  // Sección de texto legal
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...MEDIUM_GRAY)
-
-  let footerTextY = footerY + 8
+  const qrBoxSize = qrSize + 20
+  const textBoxWidth = CONTENT_WIDTH - qrBoxSize - 10
+  const boxHeight = qrBoxSize // Altura uniforme para ambos recuadros
 
   let docTypeText = 'BOLETA DE VENTA'
   if (invoice.documentType === 'factura') {
@@ -733,59 +727,71 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     docTypeText = 'NOTA DE VENTA'
   }
 
+  // RECUADRO IZQUIERDO - Texto legal
+  doc.setDrawColor(...BORDER_GRAY)
+  doc.setLineWidth(1)
+  doc.roundedRect(MARGIN_LEFT, footerY, textBoxWidth, boxHeight, 3, 3)
+
+  // Contenido del recuadro de texto
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+
+  let footerTextY = footerY + 10
+
   // Texto específico según el tipo de documento
   if (invoice.documentType === 'nota_venta') {
     // Para NOTA DE VENTA: no es un comprobante válido
-    doc.text(docTypeText, MARGIN_LEFT, footerTextY)
+    doc.text(docTypeText, MARGIN_LEFT + 8, footerTextY)
     footerTextY += 10
 
     doc.setFontSize(6)
-    doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT, footerTextY)
-    footerTextY += 8
+    doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT + 8, footerTextY)
+    footerTextY += 10
   } else {
     // Para FACTURA y BOLETA: comprobantes electrónicos válidos
     const electronicText = ' ELECTRÓNICA'
-    doc.text(`Representación impresa de la ${docTypeText}${electronicText}`, MARGIN_LEFT, footerTextY)
+    doc.text(`Representación impresa de la ${docTypeText}${electronicText}`, MARGIN_LEFT + 8, footerTextY)
     footerTextY += 10
 
     doc.setFontSize(6)
-    doc.text('Autorizado mediante Resolución de Intendencia No 034-005-0005315', MARGIN_LEFT, footerTextY)
-    footerTextY += 8
+    doc.text('Autorizado mediante Resolución de Intendencia No 034-005-0005315', MARGIN_LEFT + 8, footerTextY)
+    footerTextY += 10
   }
 
-  // Hash y QR solo para facturas y boletas (no para notas de venta)
-  if (invoice.documentType !== 'nota_venta') {
-    if (invoice.sunatHash) {
-      doc.setFont('helvetica', 'bold')
-      doc.text('Hash: ', MARGIN_LEFT, footerTextY)
-      doc.setFont('helvetica', 'normal')
-      const hashText = doc.splitTextToSize(invoice.sunatHash, textBoxWidth - 20)
-      doc.text(hashText[0], MARGIN_LEFT + 18, footerTextY)
-    }
+  // Hash (dentro del mismo recuadro)
+  if (invoice.documentType !== 'nota_venta' && invoice.sunatHash) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(6)
+    doc.text('Hash: ', MARGIN_LEFT + 8, footerTextY)
+    doc.setFont('helvetica', 'normal')
+    const hashText = doc.splitTextToSize(invoice.sunatHash, textBoxWidth - 20)
+    doc.text(hashText[0], MARGIN_LEFT + 23, footerTextY)
+  }
 
-    // Código QR con borde - centrado
+  // RECUADRO DERECHO - Código QR (solo para facturas y boletas)
+  if (invoice.documentType !== 'nota_venta') {
     try {
       const qrImage = await generateSunatQR(invoice, companySettings)
       if (qrImage) {
-        const qrX = MARGIN_LEFT + textBoxWidth + 10
-        const qrY = footerY
-        const qrBoxWidth = qrSize + 10
-        const qrBoxHeight = qrSize + 10
+        const qrBoxX = MARGIN_LEFT + textBoxWidth + 10
 
-        // Borde del QR en gris
+        // Recuadro del QR
         doc.setDrawColor(...BORDER_GRAY)
         doc.setLineWidth(1)
-        doc.roundedRect(qrX - 5, qrY - 5, qrBoxWidth, qrBoxHeight, 3, 3)
+        doc.roundedRect(qrBoxX, footerY, qrBoxSize, boxHeight, 3, 3)
 
         // QR centrado en el recuadro
+        const qrX = qrBoxX + (qrBoxSize - qrSize) / 2
+        const qrY = footerY + 10
         doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
 
         // Etiqueta del QR centrada
-        doc.setFontSize(7)
+        doc.setFontSize(6)
         doc.setFont('helvetica', 'bold')
         doc.setTextColor(...MEDIUM_GRAY)
-        const qrCenterX = qrX + qrSize / 2
-        doc.text('Código QR SUNAT', qrCenterX, qrY + qrSize + 14, { align: 'center' })
+        const qrCenterX = qrBoxX + qrBoxSize / 2
+        doc.text('Código QR', qrCenterX, qrY + qrSize + 6, { align: 'center' })
       }
     } catch (error) {
       console.error('Error agregando QR al PDF:', error)
