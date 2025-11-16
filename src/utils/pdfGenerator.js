@@ -685,40 +685,43 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerTextY += 8
   }
 
-  if (invoice.sunatHash) {
-    doc.setFont('helvetica', 'bold')
-    doc.text('Hash: ', MARGIN_LEFT, footerTextY)
-    doc.setFont('helvetica', 'normal')
-    const hashText = doc.splitTextToSize(invoice.sunatHash, textBoxWidth - 20)
-    doc.text(hashText[0], MARGIN_LEFT + 18, footerTextY)
-  }
-
-  // Código QR con borde - centrado
-  try {
-    const qrImage = await generateSunatQR(invoice, companySettings)
-    if (qrImage) {
-      const qrX = MARGIN_LEFT + textBoxWidth + 10
-      const qrY = footerY
-      const qrBoxWidth = qrSize + 10
-      const qrBoxHeight = qrSize + 10
-
-      // Borde del QR en gris
-      doc.setDrawColor(...BORDER_GRAY)
-      doc.setLineWidth(1)
-      doc.roundedRect(qrX - 5, qrY - 5, qrBoxWidth, qrBoxHeight, 3, 3)
-
-      // QR centrado en el recuadro
-      doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
-
-      // Etiqueta del QR centrada
-      doc.setFontSize(7)
+  // Hash y QR solo para facturas y boletas (no para notas de venta)
+  if (invoice.documentType !== 'nota_venta') {
+    if (invoice.sunatHash) {
       doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...MEDIUM_GRAY)
-      const qrCenterX = qrX + qrSize / 2
-      doc.text('Código QR SUNAT', qrCenterX, qrY + qrSize + 14, { align: 'center' })
+      doc.text('Hash: ', MARGIN_LEFT, footerTextY)
+      doc.setFont('helvetica', 'normal')
+      const hashText = doc.splitTextToSize(invoice.sunatHash, textBoxWidth - 20)
+      doc.text(hashText[0], MARGIN_LEFT + 18, footerTextY)
     }
-  } catch (error) {
-    console.error('Error agregando QR al PDF:', error)
+
+    // Código QR con borde - centrado
+    try {
+      const qrImage = await generateSunatQR(invoice, companySettings)
+      if (qrImage) {
+        const qrX = MARGIN_LEFT + textBoxWidth + 10
+        const qrY = footerY
+        const qrBoxWidth = qrSize + 10
+        const qrBoxHeight = qrSize + 10
+
+        // Borde del QR en gris
+        doc.setDrawColor(...BORDER_GRAY)
+        doc.setLineWidth(1)
+        doc.roundedRect(qrX - 5, qrY - 5, qrBoxWidth, qrBoxHeight, 3, 3)
+
+        // QR centrado en el recuadro
+        doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
+
+        // Etiqueta del QR centrada
+        doc.setFontSize(7)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...MEDIUM_GRAY)
+        const qrCenterX = qrX + qrSize / 2
+        doc.text('Código QR SUNAT', qrCenterX, qrY + qrSize + 14, { align: 'center' })
+      }
+    } catch (error) {
+      console.error('Error agregando QR al PDF:', error)
+    }
   }
 
   // Guía de remisión si aplica
