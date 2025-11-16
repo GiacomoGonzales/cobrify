@@ -865,13 +865,13 @@ export default function POS() {
           series: documentType === 'factura' ? 'F001' : documentType === 'boleta' ? 'B001' : 'NV01',
           correlativeNumber: 99,
           documentType: documentType,
-          customer: customerData.documentNumber
+          customer: customerData.documentNumber || customerData.name || customerData.businessName
             ? {
-                documentType: customerData.documentType,
-                documentNumber: customerData.documentNumber,
+                documentType: customerData.documentType || ID_TYPES.DNI,
+                documentNumber: customerData.documentNumber || '00000000',
                 name: documentType === 'factura'
-                  ? (customerData.businessName || customerData.name)
-                  : (customerData.name || 'Cliente'),
+                  ? (customerData.businessName || customerData.name || 'Cliente')
+                  : (customerData.name || customerData.businessName || 'Cliente'),
                 businessName: customerData.businessName || '',
                 email: customerData.email || '',
                 phone: customerData.phone || '',
@@ -956,13 +956,13 @@ export default function POS() {
         series: numberResult.series,
         correlativeNumber: numberResult.correlativeNumber,
         documentType: documentType,
-        customer: customerData.documentNumber
+        customer: customerData.documentNumber || customerData.name || customerData.businessName
           ? {
-              documentType: customerData.documentType,
-              documentNumber: customerData.documentNumber,
+              documentType: customerData.documentType || ID_TYPES.DNI,
+              documentNumber: customerData.documentNumber || '00000000',
               name: documentType === 'factura'
-                ? (customerData.businessName || customerData.name)
-                : (customerData.name || 'Cliente'),
+                ? (customerData.businessName || customerData.name || 'Cliente')
+                : (customerData.name || customerData.businessName || 'Cliente'),
               businessName: customerData.businessName || '',
               email: customerData.email || '',
               phone: customerData.phone || '',
