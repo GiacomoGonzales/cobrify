@@ -33,6 +33,7 @@ export default function OrderItemsModal({
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [cart, setCart] = useState([])
+  const [isCartExpanded, setIsCartExpanded] = useState(false)
 
   // Cargar productos
   useEffect(() => {
@@ -207,6 +208,10 @@ export default function OrderItemsModal({
   // Solo validar si NO es una nueva orden
   if (!isNewOrder && (!table || !order)) return null
 
+  // Calcular total del carrito
+  const cartTotal = cart.reduce((sum, item) => sum + item.total, 0)
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+
   return (
     <Modal
       isOpen={isOpen}
@@ -229,58 +234,59 @@ export default function OrderItemsModal({
         </div>
       }
       size="xl"
+      fullscreenOnMobile={true}
     >
-      <div className="flex flex-col h-[600px] lg:h-[600px]">
+      <div className="flex flex-col h-full">
         {/* Buscador */}
-        <div className="mb-4">
+        <div className="mb-3 flex-shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
               type="text"
               placeholder="Buscar productos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-9 py-2 text-sm"
             />
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden min-h-0">
           {/* Lista de productos */}
-          <div className="flex-1 overflow-y-auto border rounded-lg p-4 max-h-[250px] lg:max-h-none">
-            <h3 className="font-semibold text-gray-900 mb-3">Productos Disponibles</h3>
+          <div className="flex-1 overflow-y-auto border rounded-lg p-3 min-h-0">
+            <h3 className="font-semibold text-sm text-gray-900 mb-2">Productos Disponibles</h3>
 
             {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
               </div>
             ) : filteredProducts.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-8 text-gray-500 text-sm">
                 {searchTerm ? 'No se encontraron productos' : 'No hay productos disponibles'}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-1 gap-1.5">
                 {filteredProducts.map((product) => (
                   <div
                     key={product.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-500">
-                        {product.code && <span className="mr-2">Código: {product.code}</span>}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-gray-900 truncate">{product.name}</div>
+                      <div className="text-xs text-gray-500 flex items-center gap-2">
+                        {product.code && <span className="truncate">#{product.code}</span>}
                         <span className="font-semibold text-primary-600">
                           S/ {(product.price || 0).toFixed(2)}
                         </span>
+                        {product.stock !== undefined && (
+                          <span className="text-gray-400">Stock: {product.stock}</span>
+                        )}
                       </div>
-                      {product.stock !== undefined && (
-                        <div className="text-xs text-gray-500">Stock: {product.stock}</div>
-                      )}
                     </div>
                     <Button
                       onClick={() => addToCart(product)}
                       size="sm"
-                      className="ml-3"
+                      className="ml-2 h-8 w-8 p-0 flex-shrink-0"
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
@@ -290,85 +296,110 @@ export default function OrderItemsModal({
             )}
           </div>
 
-          {/* Carrito */}
-          <div className="w-full lg:w-80 border rounded-lg p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-900 mb-3">
-              Carrito ({cart.length} items)
-            </h3>
+          {/* Carrito - Hidden en móvil si está vacío, visible en desktop */}
+          <div className={`w-full lg:w-80 border rounded-lg flex flex-col ${cart.length === 0 ? 'hidden lg:flex p-4' : 'p-2 lg:p-3'}`}>
+            <div className="flex items-center justify-between mb-2 flex-shrink-0">
+              <h3 className="font-semibold text-sm text-gray-900">
+                Carrito ({cartCount})
+              </h3>
+              {cart.length > 0 && (
+                <button
+                  onClick={() => setIsCartExpanded(!isCartExpanded)}
+                  className="lg:hidden text-xs text-primary-600 font-medium"
+                >
+                  {isCartExpanded ? 'Ocultar' : 'Ver todo'}
+                </button>
+              )}
+            </div>
 
             {cart.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-                Agrega productos al carrito
+              <div className="flex-1 flex items-center justify-center text-gray-500 text-xs py-8">
+                Agrega productos
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+                {/* Vista compacta en móvil / expandida */}
+                <div className={`flex-1 overflow-y-auto space-y-1.5 mb-2 min-h-0 ${isCartExpanded ? '' : 'hidden lg:block'}`}>
                   {cart.map((item) => (
-                    <div key={item.productId} className="border rounded-lg p-3 bg-white">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm text-gray-900">{item.name}</div>
+                    <div key={item.productId} className="border rounded p-2 bg-white">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-xs text-gray-900 truncate">{item.name}</div>
                           <div className="text-xs text-gray-500">
                             S/ {item.price.toFixed(2)} c/u
                           </div>
                         </div>
                         <button
                           onClick={() => removeFromCart(item.productId)}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700 flex-shrink-0"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-3 h-3" />
                         </button>
                       </div>
 
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-1">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                            className="w-8 h-8 p-0"
+                            className="w-6 h-6 p-0"
                           >
                             <Minus className="w-3 h-3" />
                           </Button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <span className="w-6 text-center text-xs font-medium">{item.quantity}</span>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                            className="w-8 h-8 p-0"
+                            className="w-6 h-6 p-0"
                           >
                             <Plus className="w-3 h-3" />
                           </Button>
                         </div>
-                        <div className="font-bold text-gray-900">
+                        <div className="font-bold text-xs text-gray-900">
                           S/ {item.total.toFixed(2)}
                         </div>
                       </div>
 
-                      {/* Campo de notas/especificaciones */}
-                      <div className="mt-2">
+                      {/* Campo de notas - colapsable */}
+                      <div className="mt-1">
                         <textarea
                           value={item.notes || ''}
                           onChange={(e) => updateNotes(item.productId, e.target.value)}
-                          placeholder="Especificaciones: sin lechuga, extra crema, etc..."
-                          className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 resize-none"
-                          rows={2}
+                          placeholder="Especificaciones..."
+                          className="w-full text-xs px-1.5 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                          rows={1}
                         />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Total simple (sin desglose de IGV) */}
-                <div className="border-t pt-3">
-                  <div className="flex justify-between text-lg font-bold">
+                {/* Resumen compacto - visible cuando está colapsado en móvil */}
+                {!isCartExpanded && (
+                  <div className="lg:hidden space-y-1 mb-2">
+                    {cart.slice(0, 2).map((item) => (
+                      <div key={item.productId} className="flex items-center justify-between text-xs py-1 border-b">
+                        <span className="truncate flex-1">{item.quantity}x {item.name}</span>
+                        <span className="font-medium ml-2">S/ {item.total.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    {cart.length > 2 && (
+                      <div className="text-xs text-gray-500 text-center py-1">
+                        +{cart.length - 2} más...
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Total */}
+                <div className="border-t pt-2 flex-shrink-0">
+                  <div className="flex justify-between text-sm font-bold">
                     <span>Total:</span>
                     <span className="text-primary-600">
-                      S/ {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
+                      S/ {cartTotal.toFixed(2)}
                     </span>
-                  </div>
-                  <div className="text-xs text-gray-500 text-center mt-2">
-                    Los montos detallados aparecerán en la precuenta
                   </div>
                 </div>
               </>
@@ -376,19 +407,19 @@ export default function OrderItemsModal({
           </div>
         </div>
 
-        {/* Botones */}
-        <div className="flex gap-3 mt-4 pt-4 border-t">
-          <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
+        {/* Botones - Sticky footer en móvil */}
+        <div className="flex gap-2 mt-3 pt-3 border-t flex-shrink-0 sticky bottom-0 bg-white -mx-6 px-6 pb-3 md:static md:mx-0 md:px-0 md:pb-0">
+          <Button type="button" variant="outline" onClick={handleClose} className="flex-1 text-sm py-2">
             Cancelar
           </Button>
           <Button
             onClick={handleSave}
             disabled={isSaving || cart.length === 0}
-            className="flex-1 bg-primary-600 hover:bg-primary-700"
+            className="flex-1 bg-primary-600 hover:bg-primary-700 text-sm py-2"
           >
             {isSaving ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
                 Guardando...
               </>
             ) : (

@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth }) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth, fullscreenOnMobile = false }) {
   if (!isOpen) return null
 
   const sizes = {
@@ -29,18 +29,28 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
       />
 
       {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
+      <div className={cn(
+        "flex min-h-full items-center justify-center",
+        fullscreenOnMobile ? "" : "p-4"
+      )}>
         <div
           className={cn(
-            'relative bg-white rounded-lg shadow-xl w-full',
-            maxWidthClass,
-            'animate-fade-in'
+            'relative bg-white shadow-xl w-full',
+            fullscreenOnMobile
+              ? 'h-full md:h-auto md:rounded-lg md:max-h-[90vh]'
+              : 'rounded-lg',
+            fullscreenOnMobile ? `md:${maxWidthClass}` : maxWidthClass,
+            'animate-fade-in',
+            fullscreenOnMobile && 'flex flex-col'
           )}
           onClick={e => e.stopPropagation()}
         >
           {/* Header - solo si hay título */}
           {title && (
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className={cn(
+              "flex items-center justify-between p-6 border-b border-gray-200",
+              fullscreenOnMobile && "flex-shrink-0"
+            )}>
               <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
               <button
                 onClick={onClose}
@@ -52,7 +62,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
           )}
 
           {/* Content */}
-          <div className={title ? "p-6" : ""}>{children}</div>
+          <div className={cn(
+            title ? "p-6" : "",
+            fullscreenOnMobile && "flex-1 overflow-y-auto"
+          )}>{children}</div>
         </div>
       </div>
     </div>

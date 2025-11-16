@@ -623,6 +623,7 @@ export default function TableActionModal({
       onClose={handleClose}
       title={action ? '' : `Mesa ${table?.number || ''}`}
       size="md"
+      fullscreenOnMobile={true}
     >
       <div className={action ? 'p-6' : ''}>
         {renderContent()}
