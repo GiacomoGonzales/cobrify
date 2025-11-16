@@ -47,8 +47,12 @@ export default function OrderItemsModal({
   // Extraer categorías únicas de los productos
   useEffect(() => {
     if (products.length > 0) {
-      const uniqueCategories = ['Todos', ...new Set(products.map(p => p.category).filter(Boolean))]
+      const productCategories = products
+        .map(p => p.category)
+        .filter(cat => cat && cat.trim() !== '') // Filtrar vacíos y null
+      const uniqueCategories = ['Todos', ...new Set(productCategories)]
       setCategories(uniqueCategories)
+      console.log('📦 Categorías encontradas:', uniqueCategories)
     }
   }, [products])
 
@@ -253,21 +257,21 @@ export default function OrderItemsModal({
       size="xl"
       fullscreenOnMobile={true}
     >
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full max-h-[85vh]">
         {/* Filtros de Categoría */}
-        <div className="mb-2 flex-shrink-0">
-          <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        <div className="mb-3 flex-shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
             {categories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
                   selectedCategory === category
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                 }`}
               >
-                {category}
+                {category || 'Sin categoría'}
               </button>
             ))}
           </div>
