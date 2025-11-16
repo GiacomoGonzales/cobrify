@@ -23,7 +23,7 @@ import {
 } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
-import { getWarehouses, updateWarehouseStock, getDefaultWarehouse } from '@/services/warehouseService'
+import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse } from '@/services/warehouseService'
 
 // Unidades de medida
 const UNITS = [
@@ -506,9 +506,36 @@ export default function Products() {
     let successCount = 0
 
     try {
-      // Obtener almacén predeterminado para asignar stock
+      // Obtener o crear almacén predeterminado para asignar stock
+      let defaultWarehouse = null
       const defaultWarehouseResult = await getDefaultWarehouse(getBusinessId())
-      const defaultWarehouse = defaultWarehouseResult.success ? defaultWarehouseResult.data : null
+
+      if (defaultWarehouseResult.success && defaultWarehouseResult.data) {
+        // Ya existe un almacén
+        defaultWarehouse = defaultWarehouseResult.data
+      } else {
+        // NO HAY ALMACENES - Crear uno automáticamente
+        console.log('No se encontró almacén predeterminado, creando uno automáticamente...')
+
+        const newWarehouse = {
+          name: 'Almacén Principal',
+          location: 'Principal',
+          description: 'Almacén creado automáticamente durante importación de productos',
+          isDefault: true,
+          isActive: true
+        }
+
+        const createResult = await createWarehouse(getBusinessId(), newWarehouse)
+
+        if (createResult.success) {
+          defaultWarehouse = createResult.data
+          toast.info('Almacén principal creado automáticamente')
+          console.log('✅ Almacén creado:', defaultWarehouse)
+        } else {
+          console.error('❌ Error al crear almacén:', createResult.error)
+          toast.warning('No se pudo crear almacén automático. Los productos se importarán sin stock asignado.')
+        }
+      }
 
       // Crear un mapa de categorías nuevas que se necesitan crear
       const newCategoriesNeeded = new Set()
