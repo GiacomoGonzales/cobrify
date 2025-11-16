@@ -415,7 +415,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   const docType = invoice.customer?.documentType === 'RUC' ? 'RUC' :
                   invoice.customer?.documentType === 'DNI' ? 'DNI' : 'DOC'
-  const docNumber = invoice.customer?.documentNumber || '00000000'
+  const docNumber = invoice.customer?.documentNumber && invoice.customer.documentNumber !== '00000000'
+                    ? invoice.customer.documentNumber
+                    : 'No especificado'
 
   doc.setFontSize(8)
   doc.setTextColor(...MEDIUM_GRAY)
