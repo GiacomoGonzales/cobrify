@@ -781,33 +781,35 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
             {/* Totals */}
             <div className="border-t pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium">{formatCurrency(viewingQuotation.subtotal)}</span>
-              </div>
-              {viewingQuotation.discount && viewingQuotation.discount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">
-                    Descuento
-                    {viewingQuotation.discountType === 'percentage'
-                      ? ` (${viewingQuotation.discount}%)`
-                      : ''}
-                    :
-                  </span>
-                  <span className="font-medium text-red-600">
-                    - {formatCurrency(
-                      viewingQuotation.discountType === 'percentage'
-                        ? (viewingQuotation.subtotal * viewingQuotation.discount) / 100
-                        : viewingQuotation.discount
-                    )}
-                  </span>
-                </div>
-              )}
               {!viewingQuotation.hideIgv && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IGV (18%):</span>
-                  <span className="font-medium">{formatCurrency(viewingQuotation.igv)}</span>
-                </div>
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal:</span>
+                    <span className="font-medium">{formatCurrency(viewingQuotation.subtotal)}</span>
+                  </div>
+                  {viewingQuotation.discount && viewingQuotation.discount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">
+                        Descuento
+                        {viewingQuotation.discountType === 'percentage'
+                          ? ` (${viewingQuotation.discount}%)`
+                          : ''}
+                        :
+                      </span>
+                      <span className="font-medium text-red-600">
+                        - {formatCurrency(
+                          viewingQuotation.discountType === 'percentage'
+                            ? (viewingQuotation.subtotal * viewingQuotation.discount) / 100
+                            : viewingQuotation.discount
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">IGV (18%):</span>
+                    <span className="font-medium">{formatCurrency(viewingQuotation.igv)}</span>
+                  </div>
+                </>
               )}
               <div className="flex justify-between text-xl font-bold border-t pt-2">
                 <span>Total:</span>

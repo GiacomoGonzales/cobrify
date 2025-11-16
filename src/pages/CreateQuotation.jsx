@@ -815,31 +815,33 @@ export default function CreateQuotation() {
             <CardContent>
               <div className="space-y-4">
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Subtotal:</span>
-                    <span className="font-medium">{formatCurrency(baseAmounts.subtotal)}</span>
-                  </div>
-
-                  {discount > 0 && (
+                  {!hideIgv && (
                     <>
-                      <div className="flex justify-between text-red-600">
-                        <span>
-                          Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
-                        </span>
-                        <span className="font-medium">- {formatCurrency(discountAmount)}</span>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">{formatCurrency(baseAmounts.subtotal)}</span>
                       </div>
-                      <div className="flex justify-between pt-2 border-t">
-                        <span className="text-gray-600">Subtotal con descuento:</span>
-                        <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
+
+                      {discount > 0 && (
+                        <>
+                          <div className="flex justify-between text-red-600">
+                            <span>
+                              Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
+                            </span>
+                            <span className="font-medium">- {formatCurrency(discountAmount)}</span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t">
+                            <span className="text-gray-600">Subtotal con descuento:</span>
+                            <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">IGV (18%):</span>
+                        <span className="font-medium">{formatCurrency(finalIgv)}</span>
                       </div>
                     </>
-                  )}
-
-                  {!hideIgv && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">IGV (18%):</span>
-                      <span className="font-medium">{formatCurrency(finalIgv)}</span>
-                    </div>
                   )}
                 </div>
 

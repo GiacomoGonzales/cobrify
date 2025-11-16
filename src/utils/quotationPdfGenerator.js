@@ -396,31 +396,32 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...DARK_GRAY)
 
-  // Subtotal
   const labelX = totalsBoxX + 10
   const valueX = PAGE_WIDTH - MARGIN_RIGHT - 10
 
-  doc.text('Subtotal:', labelX, totalsY)
-  doc.text(formatCurrency(quotation.subtotal || 0), valueX, totalsY, { align: 'right' })
-  totalsY += 12
-
-  // Descuento (si existe)
-  if (quotation.discount && quotation.discount > 0) {
-    const discountLabel = quotation.discountType === 'percentage'
-      ? `Descuento (${quotation.discount}%):`
-      : 'Descuento:'
-
-    doc.text(discountLabel, labelX, totalsY)
-    const discountAmount = quotation.discountType === 'percentage'
-      ? (quotation.subtotal * quotation.discount / 100)
-      : quotation.discount
-
-    doc.text(`- ${formatCurrency(discountAmount)}`, valueX, totalsY, { align: 'right' })
-    totalsY += 12
-  }
-
-  // IGV (solo si no está oculto)
+  // Solo mostrar desglose si no está oculto el IGV
   if (!quotation.hideIgv) {
+    // Subtotal
+    doc.text('Subtotal:', labelX, totalsY)
+    doc.text(formatCurrency(quotation.subtotal || 0), valueX, totalsY, { align: 'right' })
+    totalsY += 12
+
+    // Descuento (si existe)
+    if (quotation.discount && quotation.discount > 0) {
+      const discountLabel = quotation.discountType === 'percentage'
+        ? `Descuento (${quotation.discount}%):`
+        : 'Descuento:'
+
+      doc.text(discountLabel, labelX, totalsY)
+      const discountAmount = quotation.discountType === 'percentage'
+        ? (quotation.subtotal * quotation.discount / 100)
+        : quotation.discount
+
+      doc.text(`- ${formatCurrency(discountAmount)}`, valueX, totalsY, { align: 'right' })
+      totalsY += 12
+    }
+
+    // IGV
     doc.text('IGV (18%):', labelX, totalsY)
     doc.text(formatCurrency(quotation.igv || 0), valueX, totalsY, { align: 'right' })
     totalsY += 15
