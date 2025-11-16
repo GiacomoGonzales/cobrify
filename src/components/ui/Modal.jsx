@@ -1,14 +1,14 @@
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth, fullscreenOnMobile = false }) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth }) {
   if (!isOpen) return null
 
   const sizes = {
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
-    xl: 'max-w-6xl',
+    xl: 'max-w-4xl',
     '2xl': 'max-w-2xl',
     '3xl': 'max-w-3xl',
     '4xl': 'max-w-4xl',
@@ -29,28 +29,18 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
       />
 
       {/* Modal */}
-      <div className={cn(
-        "flex min-h-full items-center justify-center",
-        fullscreenOnMobile ? "" : "p-4"
-      )}>
+      <div className="flex min-h-full items-center justify-center p-4">
         <div
           className={cn(
-            'relative bg-white shadow-xl w-full',
-            fullscreenOnMobile
-              ? 'h-full md:h-auto md:rounded-lg md:max-h-[90vh]'
-              : 'rounded-lg',
-            fullscreenOnMobile ? `md:${maxWidthClass}` : maxWidthClass,
-            'animate-fade-in',
-            fullscreenOnMobile && 'flex flex-col'
+            'relative bg-white rounded-lg shadow-xl w-full',
+            maxWidthClass,
+            'animate-fade-in'
           )}
           onClick={e => e.stopPropagation()}
         >
           {/* Header - solo si hay título */}
           {title && (
-            <div className={cn(
-              "flex items-center justify-between p-6 border-b border-gray-200",
-              fullscreenOnMobile && "flex-shrink-0"
-            )}>
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h3 className="text-xl font-semibold text-gray-900">{title}</h3>
               <button
                 onClick={onClose}
@@ -62,10 +52,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
           )}
 
           {/* Content */}
-          <div className={cn(
-            title ? "p-6" : "",
-            fullscreenOnMobile && "flex-1 overflow-y-auto"
-          )}>{children}</div>
+          <div className={title ? "p-6" : ""}>{children}</div>
         </div>
       </div>
     </div>
