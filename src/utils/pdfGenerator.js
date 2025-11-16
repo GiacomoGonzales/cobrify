@@ -259,7 +259,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   currentY += 8
 
   const headerY = currentY
-  const headerHeight = 85
 
   // Columna izquierda - Información de la empresa (60%)
   const leftColumnWidth = CONTENT_WIDTH * 0.60
@@ -303,7 +302,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       const aspectRatio = originalWidth / originalHeight
 
       // Altura máxima del logo
-      const maxLogoHeight = 50
+      const maxLogoHeight = 45
       const maxLogoWidth = 120 // Ancho máximo para logos horizontales
 
       let logoWidth, calculatedLogoHeight
@@ -328,7 +327,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
       // Logo en la esquina superior izquierda
       doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textY = headerY + logoHeight + 10 // Texto debajo del logo
+      textY = headerY + logoHeight + 8 // Texto debajo del logo
       console.log('✅ Logo cargado correctamente (dimensiones:', logoWidth, 'x', logoHeight, ')')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo, continuando sin él:', error.message)
@@ -341,22 +340,22 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Información de la empresa DEBAJO del logo
   // Nombre de la empresa
-  doc.setFontSize(14)
+  doc.setFontSize(13)
   doc.setTextColor(...DARK_GRAY)
   doc.setFont('helvetica', 'bold')
 
   const companyName = companySettings?.businessName || 'EMPRESA SAC'
   doc.text(companyName, leftColumnX, textY)
-  textY += 14
+  textY += 12
 
   // RUC de la empresa
-  doc.setFontSize(9)
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...MEDIUM_GRAY)
   const ruc = companySettings?.ruc || ''
   if (ruc) {
     doc.text(`RUC: ${ruc}`, leftColumnX, textY)
-    textY += 11
+    textY += 10
   }
 
   // Dirección
@@ -364,21 +363,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   if (companySettings?.address) {
     const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
     doc.text(addressLines, leftColumnX, textY)
-    textY += 10 * Math.min(addressLines.length, 2)
+    textY += 9 * Math.min(addressLines.length, 2)
   }
 
   // Teléfono
   if (companySettings?.phone) {
-    doc.setFontSize(8)
+    doc.setFontSize(7)
     doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
-    textY += 10
+    textY += 9
   }
 
   // Email
   if (companySettings?.email) {
-    doc.setFontSize(8)
+    doc.setFontSize(7)
     doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
+    textY += 9
   }
+
+  // Calcular altura dinámica del header basada en el contenido
+  const contentHeight = textY - headerY
+  const headerHeight = Math.max(85, contentHeight + 5) // Mínimo 85, o lo que necesite el contenido + margen
 
   // Columna derecha - Recuadro del comprobante (35%)
   const rightColumnWidth = CONTENT_WIDTH * 0.40
