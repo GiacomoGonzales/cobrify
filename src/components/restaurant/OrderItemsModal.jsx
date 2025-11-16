@@ -30,6 +30,8 @@ export default function OrderItemsModal({
   const [products, setProducts] = useState([])
   const [filteredProducts, setFilteredProducts] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('Todos')
+  const [categories, setCategories] = useState(['Todos'])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [cart, setCart] = useState([])
@@ -42,19 +44,34 @@ export default function OrderItemsModal({
     }
   }, [isOpen])
 
-  // Filtrar productos por búsqueda
+  // Extraer categorías únicas de los productos
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredProducts(products)
-    } else {
-      const filtered = products.filter(
+    if (products.length > 0) {
+      const uniqueCategories = ['Todos', ...new Set(products.map(p => p.category).filter(Boolean))]
+      setCategories(uniqueCategories)
+    }
+  }, [products])
+
+  // Filtrar productos por búsqueda y categoría
+  useEffect(() => {
+    let filtered = products
+
+    // Filtrar por categoría
+    if (selectedCategory !== 'Todos') {
+      filtered = filtered.filter(p => p.category === selectedCategory)
+    }
+
+    // Filtrar por búsqueda
+    if (searchTerm.trim() !== '') {
+      filtered = filtered.filter(
         (p) =>
           p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           p.code?.toLowerCase().includes(searchTerm.toLowerCase())
       )
-      setFilteredProducts(filtered)
     }
-  }, [searchTerm, products])
+
+    setFilteredProducts(filtered)
+  }, [searchTerm, selectedCategory, products])
 
   const loadProducts = async () => {
     setIsLoading(true)
@@ -237,6 +254,25 @@ export default function OrderItemsModal({
       fullscreenOnMobile={true}
     >
       <div className="flex flex-col h-full">
+        {/* Filtros de Categoría */}
+        <div className="mb-2 flex-shrink-0">
+          <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                  selectedCategory === category
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Buscador */}
         <div className="mb-3 flex-shrink-0">
           <div className="relative">
@@ -254,7 +290,9 @@ export default function OrderItemsModal({
         <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden min-h-0">
           {/* Lista de productos */}
           <div className="flex-1 overflow-y-auto border rounded-lg p-3 min-h-0">
-            <h3 className="font-semibold text-sm text-gray-900 mb-2">Productos Disponibles</h3>
+            <h3 className="font-semibold text-sm text-gray-900 mb-2">
+              Productos {selectedCategory !== 'Todos' && `- ${selectedCategory}`} ({filteredProducts.length})
+            </h3>
 
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
