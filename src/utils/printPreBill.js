@@ -22,6 +22,28 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
     minute: '2-digit'
   })
 
+  // Recalcular totales según taxConfig actual
+  // Esto asegura que si la empresa cambió su estado de exoneración,
+  // la precuenta muestre los valores correctos
+  console.log('🔍 printPreBill - taxConfig recibido:', taxConfig)
+  console.log('🔍 printPreBill - igvExempt:', taxConfig.igvExempt)
+  console.log('🔍 printPreBill - igvRate:', taxConfig.igvRate)
+
+  let subtotal, tax, total
+  total = order.total || 0
+
+  if (taxConfig.igvExempt) {
+    // Si está exonerado, el total es igual al subtotal y no hay IGV
+    subtotal = total
+    tax = 0
+  } else {
+    // Si no está exonerado, calcular IGV dinámicamente
+    const igvRate = taxConfig.igvRate || 18
+    const igvMultiplier = 1 + (igvRate / 100) // Ej: 1.18 para 18%
+    subtotal = total / igvMultiplier // Precio sin IGV
+    tax = total - subtotal // IGV = Total - Subtotal
+  }
+
   // Generar HTML para imprimir
   const html = `
     <!DOCTYPE html>
@@ -274,11 +296,11 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         ${!taxConfig.igvExempt ? `
         <div class="row">
           <span>Subtotal:</span>
-          <span>S/ ${(order.subtotal || 0).toFixed(2)}</span>
+          <span>S/ ${subtotal.toFixed(2)}</span>
         </div>
         <div class="row">
           <span>IGV (${taxConfig.igvRate}%):</span>
-          <span>S/ ${(order.tax || 0).toFixed(2)}</span>
+          <span>S/ ${tax.toFixed(2)}</span>
         </div>
         ` : `
         <div class="row" style="background-color: #fef3c7; color: #92400e; padding: 8px; border-radius: 4px; font-size: 11px;">
@@ -287,7 +309,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         `}
         <div class="row total">
           <span>TOTAL:</span>
-          <span>S/ ${(order.total || 0).toFixed(2)}</span>
+          <span>S/ ${total.toFixed(2)}</span>
         </div>
       </div>
 

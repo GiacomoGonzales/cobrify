@@ -85,10 +85,11 @@ export default function Tables() {
 
         if (businessSnap.exists()) {
           const businessData = businessSnap.data()
-          if (businessData.taxConfig) {
+          // El taxConfig está dentro de emissionConfig
+          if (businessData.emissionConfig?.taxConfig) {
             setTaxConfig({
-              igvRate: businessData.taxConfig.igvRate || 18,
-              igvExempt: businessData.taxConfig.igvExempt || false
+              igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
+              igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false
             })
           }
         }
@@ -479,10 +480,11 @@ export default function Tables() {
         }
 
         // Obtener configuración de impuestos
-        if (businessData.taxConfig) {
+        // El taxConfig está dentro de emissionConfig
+        if (businessData.emissionConfig?.taxConfig) {
           taxConfig = {
-            igvRate: businessData.taxConfig.igvRate || 18,
-            igvExempt: businessData.taxConfig.igvExempt || false
+            igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
+            igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false
           }
         }
 

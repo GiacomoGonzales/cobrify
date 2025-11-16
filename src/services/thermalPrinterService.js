@@ -566,6 +566,28 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
   try {
     const format = getFormat(paperWidth);
 
+    // Recalcular totales según taxConfig actual
+    // Esto asegura que si la empresa cambió su estado de exoneración,
+    // la precuenta muestre los valores correctos
+    console.log('🔍 printPreBillThermal - taxConfig recibido:', taxConfig);
+    console.log('🔍 printPreBillThermal - igvExempt:', taxConfig.igvExempt);
+    console.log('🔍 printPreBillThermal - igvRate:', taxConfig.igvRate);
+
+    let subtotal, tax, total;
+    total = order.total || 0;
+
+    if (taxConfig.igvExempt) {
+      // Si está exonerado, el total es igual al subtotal y no hay IGV
+      subtotal = total;
+      tax = 0;
+    } else {
+      // Si no está exonerado, calcular IGV dinámicamente
+      const igvRate = taxConfig.igvRate || 18;
+      const igvMultiplier = 1 + (igvRate / 100); // Ej: 1.18 para 18%
+      subtotal = total / igvMultiplier; // Precio sin IGV
+      tax = total - subtotal; // IGV = Total - Subtotal
+    }
+
     // Items - ajustar columnas según ancho
     const descWidth = paperWidth === 80 ? 26 : 14;
     const headerLine = paperWidth === 80
@@ -587,8 +609,8 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     // Construir texto de totales según si está exonerado o no
     let totalsText = '';
     if (!taxConfig.igvExempt) {
-      totalsText = `Subtotal: S/ ${(order.subtotal || 0).toFixed(2)}\n` +
-                   `IGV (${taxConfig.igvRate}%): S/ ${(order.tax || 0).toFixed(2)}\n`;
+      totalsText = `Subtotal: S/ ${subtotal.toFixed(2)}\n` +
+                   `IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}\n`;
     } else {
       totalsText = '*** Empresa exonerada de IGV ***\n';
     }
@@ -622,7 +644,7 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .text(totalsText)
       .bold()
       .doubleWidth()
-      .text(`TOTAL: S/ ${(order.total || 0).toFixed(2)}\n`)
+      .text(`TOTAL: S/ ${total.toFixed(2)}\n`)
       .clearFormatting()
       // Pie de página
       .align('center')
