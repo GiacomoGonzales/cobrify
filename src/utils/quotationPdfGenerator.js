@@ -193,7 +193,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
       // Logo en la esquina superior izquierda
       doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textY = headerY + logoHeight + 12 // Texto debajo del logo con más separación
+      textY = headerY + logoHeight + 15 // Texto debajo del logo con más separación
       console.log('✅ Logo cargado correctamente en cotización (dimensiones:', logoWidth, 'x', logoHeight, ')')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo en cotización, continuando sin él:', error.message)

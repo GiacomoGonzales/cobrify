@@ -332,63 +332,82 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Items text - columnas fijas para alinear precios correctamente
     const lineWidth = paperWidth === 80 ? 48 : 32; // Ancho total de línea
     const cantWidth = 6; // Columna cantidad
-    const descWidth = paperWidth === 80 ? 26 : 16; // Columna descripción
+    const descWidth = paperWidth === 80 ? 26 : 14; // Columna descripción (58mm: 14 chars para dar espacio al precio)
     const priceWidth = paperWidth === 80 ? 10 : 10; // Columna precio
 
     // Header más compacto
     let itemsText = '';
     itemsText += 'DETALLE\n';
 
-    const headerLine = paperWidth === 80
-      ? 'CANT  DESCRIPCION                  PRECIO'
-      : 'CANT  DESCRIPCION     PRECIO';
+    // Solo mostrar header de columnas para 58mm
+    if (paperWidth !== 80) {
+      const headerLine = 'CANT  DESCRIPCION   PRECIO';
+      itemsText += headerLine + '\n';
+    }
 
-    itemsText += headerLine + '\n' + format.halfSeparator + '\n';
+    itemsText += format.halfSeparator + '\n';
     for (const item of invoice.items) {
-      const cant = String(item.quantity || 0).padEnd(6);
       // Soportar tanto 'description' (facturas) como 'name' (POS)
       const itemName = convertSpanishText(item.description || item.name || '');
 
-      // Calcular el precio total del item (cantidad * precio unitario)
-      // Soportar diferentes estructuras de datos
+      // Calcular el precio total del item y precio unitario
       let itemTotal = 0;
+      let unitPrice = 0;
+
       if (item.total) {
         itemTotal = item.total;
+        unitPrice = item.unitPrice || item.price || (itemTotal / (item.quantity || 1));
       } else if (item.subtotal) {
         itemTotal = item.subtotal;
+        unitPrice = item.unitPrice || item.price || (itemTotal / (item.quantity || 1));
       } else if (item.unitPrice && item.quantity) {
+        unitPrice = item.unitPrice;
         itemTotal = item.unitPrice * item.quantity;
       } else if (item.price && item.quantity) {
+        unitPrice = item.price;
         itemTotal = item.price * item.quantity;
       }
 
-      // Formatear precio con S/
-      const priceStr = `S/${itemTotal.toFixed(2)}`;
+      if (paperWidth === 80) {
+        // FORMATO 80MM - Igual al de la web
+        // Línea 1: Nombre del producto completo
+        itemsText += `${itemName}\n`;
 
-      // Truncar el nombre para que quepa en la columna DESCRIPCION
-      // Las columnas ya están definidas arriba (cantWidth, descWidth, priceWidth)
-      const displayName = itemName.length > descWidth
-        ? itemName.substring(0, descWidth)
-        : itemName.padEnd(descWidth);
+        // Línea 2: "cantidad x precio unitario" (izq) y "total" (der)
+        const qtyAndPrice = `${item.quantity} x S/${unitPrice.toFixed(2)}`;
+        const totalStr = `S/${itemTotal.toFixed(2)}`;
+        const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
+        itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
 
-      // Primera línea: cant(6) + descripcion(16) + precio(10) = 32 caracteres
-      // El precio se alinea a la izquierda bajo "PRECIO" (posición 22)
-      itemsText += `${cant}${displayName}${priceStr}\n`;
-
-      // Si el nombre era más largo, mostrar el resto en líneas adicionales
-      // con indentación (empezando en posición 6 para alinear con la descripción)
-      if (itemName.length > descWidth) {
-        let remainingName = itemName.substring(descWidth);
-        while (remainingName.length > 0) {
-          const chunk = remainingName.substring(0, descWidth);
-          itemsText += `      ${chunk}\n`; // 6 espacios + texto
-          remainingName = remainingName.substring(descWidth);
+        // Código si existe
+        if (item.code) {
+          itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
-      }
+      } else {
+        // FORMATO 58MM - Mantener formato actual con columnas fijas
+        const cant = String(item.quantity || 0).padEnd(6);
+        const priceStr = `S/${itemTotal.toFixed(2)}`;
 
-      // Agregar código del producto si existe
-      if (item.code) {
-        itemsText += `      Codigo: ${convertSpanishText(item.code)}\n`;
+        const displayName = itemName.length > descWidth
+          ? itemName.substring(0, descWidth)
+          : itemName.padEnd(descWidth);
+
+        itemsText += `${cant}${displayName}${priceStr}\n`;
+
+        // Si el nombre era más largo, mostrar el resto en líneas adicionales
+        if (itemName.length > descWidth) {
+          let remainingName = itemName.substring(descWidth);
+          while (remainingName.length > 0) {
+            const chunk = remainingName.substring(0, descWidth);
+            itemsText += `      ${chunk}\n`;
+            remainingName = remainingName.substring(descWidth);
+          }
+        }
+
+        // Código del producto
+        if (item.code) {
+          itemsText += `      Codigo: ${convertSpanishText(item.code)}\n`;
+        }
       }
     }
 
@@ -399,10 +418,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Logo optimizado (si existe URL de logo del negocio)
     if (business.logoUrl) {
       // Tamaño reducido según ancho de papel
-      const logoWidth = paperWidth === 80 ? 200 : 150;
+      const logoWidth = paperWidth === 80 ? 200 : 120;
       printer = printer
-        .image(business.logoUrl, logoWidth)
-        .text('\n');  // Solo 1 línea de separación (más junto)
+        .image(business.logoUrl, logoWidth);  // Sin salto de línea (más pegado)
     }
 
     // Nombre del negocio - solo usar doubleWidth si el nombre es corto
