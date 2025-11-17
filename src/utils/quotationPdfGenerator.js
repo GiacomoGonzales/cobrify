@@ -263,7 +263,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setFontSize(9)
   if (companySettings?.address) {
     const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
-    doc.text(addressLines[0], leftColumnX, textY) // Solo primera línea
+    doc.text(`Dirección: ${addressLines[0]}`, leftColumnX, textY) // Con label
     textY += lineHeight
   }
 
@@ -278,6 +278,14 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   if (companySettings?.email) {
     doc.setFontSize(9)
     doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
+    textY += lineHeight
+  }
+
+  // Página web
+  if (companySettings?.website) {
+    doc.setFontSize(9)
+    doc.text(`Página web: ${companySettings.website}`, leftColumnX, textY)
+    textY += lineHeight
   }
 
   // Contenido del recuadro - bien centrado

@@ -18,13 +18,13 @@ let connectedPrinterAddress = null;
 const PAPER_FORMATS = {
   58: {
     charsPerLine: 32,
-    separator: '================================',
-    halfSeparator: '----------------'
+    separator: '----------------------------',
+    halfSeparator: '----------------------------'
   },
   80: {
     charsPerLine: 48,
-    separator: '================================================',
-    halfSeparator: '------------------------'
+    separator: '--------------------------------------------',
+    halfSeparator: '--------------------------------------------'
   }
 };
 
@@ -329,18 +329,19 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA' : 'BOLETA DE VENTA');
     const tipoComprobanteCompleto = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
 
-    // Items text - optimizado para 58mm con wrapping de nombres largos
-    const descWidth = paperWidth === 80 ? 30 : 12; // Más angosto para 58mm
-    const priceWidth = paperWidth === 80 ? 10 : 8;
+    // Items text - columnas fijas para alinear precios correctamente
+    const lineWidth = paperWidth === 80 ? 48 : 32; // Ancho total de línea
+    const cantWidth = 6; // Columna cantidad
+    const descWidth = paperWidth === 80 ? 26 : 16; // Columna descripción
+    const priceWidth = paperWidth === 80 ? 10 : 10; // Columna precio
 
-    // Header más destacado
+    // Header más compacto
     let itemsText = '';
     itemsText += 'DETALLE\n';
-    itemsText += format.halfSeparator + '\n';
 
     const headerLine = paperWidth === 80
-      ? 'CANT  DESCRIPCION                 IMPORTE'
-      : 'CANT  DESCRIPCION IMPORTE';
+      ? 'CANT  DESCRIPCION                  PRECIO'
+      : 'CANT  DESCRIPCION     PRECIO';
 
     itemsText += headerLine + '\n' + format.halfSeparator + '\n';
     for (const item of invoice.items) {
@@ -361,25 +362,28 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         itemTotal = item.price * item.quantity;
       }
 
-      const price = `S/${itemTotal.toFixed(2)}`.padStart(priceWidth);
+      // Formatear precio con S/
+      const priceStr = `S/${itemTotal.toFixed(2)}`;
 
-      // Si el nombre es muy largo, dividirlo en múltiples líneas
+      // Truncar el nombre para que quepa en la columna DESCRIPCION
+      // Las columnas ya están definidas arriba (cantWidth, descWidth, priceWidth)
+      const displayName = itemName.length > descWidth
+        ? itemName.substring(0, descWidth)
+        : itemName.padEnd(descWidth);
+
+      // Primera línea: cant(6) + descripcion(16) + precio(10) = 32 caracteres
+      // El precio se alinea a la izquierda bajo "PRECIO" (posición 22)
+      itemsText += `${cant}${displayName}${priceStr}\n`;
+
+      // Si el nombre era más largo, mostrar el resto en líneas adicionales
+      // con indentación (empezando en posición 6 para alinear con la descripción)
       if (itemName.length > descWidth) {
-        // Primera línea con cantidad, nombre truncado y precio
-        const firstLine = itemName.substring(0, descWidth).padEnd(descWidth);
-        itemsText += `${cant}${firstLine}${price}\n`;
-
-        // Líneas adicionales solo con el resto del nombre (sin cantidad ni precio)
         let remainingName = itemName.substring(descWidth);
         while (remainingName.length > 0) {
-          const chunk = remainingName.substring(0, descWidth + 6 + priceWidth); // Usar todo el ancho disponible
-          itemsText += `      ${chunk}\n`; // 6 espacios para alinear con descripción
-          remainingName = remainingName.substring(descWidth + 6 + priceWidth);
+          const chunk = remainingName.substring(0, descWidth);
+          itemsText += `      ${chunk}\n`; // 6 espacios + texto
+          remainingName = remainingName.substring(descWidth);
         }
-      } else {
-        // Nombre corto, cabe en una línea
-        const desc = itemName.padEnd(descWidth);
-        itemsText += `${cant}${desc}${price}\n`;
       }
 
       // Agregar código del producto si existe
@@ -392,9 +396,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     let printer = CapacitorThermalPrinter.begin()
       .align('center');
 
-    // Logo (si existe URL de logo del negocio)
+    // Logo optimizado (si existe URL de logo del negocio)
     if (business.logoUrl) {
-      printer = printer.image(business.logoUrl);
+      // Tamaño reducido según ancho de papel
+      const logoWidth = paperWidth === 80 ? 200 : 150;
+      printer = printer
+        .image(business.logoUrl, logoWidth)
+        .text('\n');  // Solo 1 línea de separación (más junto)
     }
 
     // Nombre del negocio - solo usar doubleWidth si el nombre es corto
@@ -414,19 +422,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .text(convertSpanishText((business.address || '') + '\n'))
       .text(convertSpanishText((business.phone || '') + '\n'))
       .text(format.separator + '\n')
-      // Tipo de comprobante - solo título en grande
+      // Tipo de comprobante - centrado y en negrita
+      .align('center')
       .bold()
       .text(tipoComprobanteCompleto + '\n')
-      .clearFormatting()
-      .bold()
       .text(`${invoice.series || 'B001'}-${invoice.correlativeNumber || invoice.number || '000'}\n`)
       .clearFormatting()
-      .text(format.separator + '\n')
-      // Fecha y hora
+      // Fecha y hora - alineado a izquierda, más compacto
       .align('left')
       .text(convertSpanishText(`Fecha: ${new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleDateString('es-PE')}\n`))
-      .text(convertSpanishText(`Hora: ${new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}\n`))
-      .text(format.halfSeparator + '\n');
+      .text(`Hora: ${new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true }).replace('a.\u00a0m.', 'AM').replace('p.\u00a0m.', 'PM').replace('a. m.', 'AM').replace('p. m.', 'PM')}\n`);
 
     // Datos del cliente - solo si hay cliente
     const hasCustomer = (invoice.customer?.name || invoice.customerName) &&
@@ -439,15 +444,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .text('DATOS DEL CLIENTE\n')
         .clearFormatting()
         .text(convertSpanishText(`${isInvoice ? 'RUC' : 'DNI'}: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '-'}\n`))
-        .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`))
-        .text(format.halfSeparator + '\n');
+        .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`));
     }
 
     printer = printer
       // Items
+      .align('left')
       .text(itemsText)
-      .text(format.halfSeparator + '\n')
-      // Totales - formato optimizado para 58mm
+      // Totales - alineados a la derecha
       .align('right');
 
     // Mostrar subtotal e IGV solo si NO es nota de venta O si está configurado para mostrarlo
@@ -455,6 +459,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       printer = printer
         .text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}\n`)
         .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
+    }
+
+    // Mostrar descuento si existe
+    if (invoice.discount && invoice.discount > 0) {
+      printer = printer.text(`Descuento: -S/ ${invoice.discount.toFixed(2)}\n`);
     }
 
     printer = printer
@@ -513,7 +522,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Forma de pago (si existe)
     if (invoice.paymentMethod || invoice.payments) {
       printer = printer
-        .text(format.separator + '\n')
         .bold()
         .text('FORMA DE PAGO\n')
         .clearFormatting();
