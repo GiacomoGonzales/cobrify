@@ -274,7 +274,7 @@ export const companySettingsSchema = z.object({
   district: z.string().min(1, 'Distrito es requerido'),
   ubigeo: z.string().length(6, 'Ubigeo debe tener 6 dígitos').regex(/^\d{6}$/, 'Ubigeo debe ser numérico').optional(),
   phone: z.string().optional(),
-  email: z.string().email('Correo electrónico inválido'),
+  email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   website: z.string().url('URL inválida').optional().or(z.literal('')),
   socialMedia: z.string().optional(), // Redes sociales (Facebook, Instagram, etc.)
   logo: z.string().optional(),

@@ -180,10 +180,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
             position: absolute;
             left: 0;
             top: 0;
-            width: ${is58mm ? '56mm' : '72mm'} !important;
-            max-width: ${is58mm ? '56mm' : '72mm'} !important;
+            width: ${paperWidth}mm !important;
+            max-width: ${paperWidth}mm !important;
             margin: 0 auto !important;
-            padding: ${is58mm ? '1mm 2mm' : '1mm 3mm'} !important;
+            padding: ${is58mm ? '1.5mm 6mm' : '2mm 6mm'} !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
             font-size: ${is58mm ? '7pt' : '8pt'};

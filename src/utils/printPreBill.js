@@ -2,7 +2,7 @@
  * Utility para imprimir precuenta de restaurante
  */
 
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }) => {
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80) => {
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
 
@@ -19,8 +19,13 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
   })
   const timeStr = currentDate.toLocaleTimeString('es-PE', {
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
   })
+
+  // Determinar si es papel de 58mm o 80mm
+  const is58mm = paperWidth === 58
 
   // Recalcular totales según taxConfig actual
   // Esto asegura que si la empresa cambió su estado de exoneración,
@@ -53,7 +58,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
       <title>Precuenta - Mesa ${table.number}</title>
       <style>
         @page {
-          size: 80mm auto;
+          size: ${paperWidth}mm auto;
           margin: 0;
         }
 
@@ -64,24 +69,26 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         }
 
         body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-          font-size: 11px;
-          font-weight: 500;
-          line-height: 1.25;
-          padding: 8px;
-          width: 70mm;
+          font-family: Arial, sans-serif;
+          font-size: ${is58mm ? '8pt' : '9pt'};
+          font-weight: normal;
+          line-height: 1.2;
+          padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'};
+          width: ${paperWidth}mm;
           background: white;
           color: #000;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
+          text-transform: uppercase;
+          margin: 0 auto;
         }
 
         @media print {
           body {
-            width: 70mm !important;
-            max-width: 70mm !important;
+            width: ${paperWidth}mm !important;
+            max-width: ${paperWidth}mm !important;
             margin: 0 auto !important;
-            padding: 2mm 1.5mm !important;
+            padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'} !important;
             box-sizing: border-box;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -91,211 +98,240 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 
         .header {
           text-align: center;
-          margin-bottom: 12px;
-          border-bottom: 3px double #000;
-          padding-bottom: 10px;
+          margin-bottom: ${is58mm ? '2mm' : '3mm'};
+          padding-bottom: ${is58mm ? '1.5mm' : '2mm'};
         }
 
         .header .logo {
-          max-width: 240px;
-          max-height: 240px;
+          max-width: ${is58mm ? '140px' : '200px'};
+          max-height: ${is58mm ? '140px' : '200px'};
           width: auto;
           height: auto;
-          margin: 0 auto 4px;
+          margin: 0 auto ${is58mm ? '1mm' : '1.5mm'};
           object-fit: contain;
           display: block;
         }
 
+        .header .logo.square-logo {
+          max-width: ${is58mm ? '70px' : '100px'};
+          max-height: ${is58mm ? '70px' : '100px'};
+        }
+
         .header h1 {
-          font-size: 18pt;
-          font-weight: 700;
-          margin-bottom: 6px;
-          letter-spacing: 1px;
+          font-size: ${is58mm ? '11pt' : '12pt'};
+          font-weight: bold;
+          margin: ${is58mm ? '1mm' : '1.5mm'} 0;
+          letter-spacing: 0.5px;
         }
 
         .header .business-name {
-          font-size: 13pt;
-          font-weight: 700;
-          margin-bottom: 4px;
+          font-size: ${is58mm ? '10pt' : '11pt'};
+          font-weight: bold;
+          margin-bottom: ${is58mm ? '0.5mm' : '1mm'};
         }
 
         .header .info {
-          font-size: 9pt;
-          font-weight: 500;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: normal;
           color: #000;
-          margin: 2px 0;
+          margin: ${is58mm ? '0.3mm' : '0.5mm'} 0;
+        }
+
+        .separator {
+          border-top: 1px dashed #000;
+          margin: ${is58mm ? '2mm' : '3mm'} 0;
         }
 
         .section {
-          margin-bottom: 12px;
-        }
-
-        .section-title {
-          font-weight: 700;
-          font-size: 10pt;
-          margin-bottom: 5px;
-          text-transform: uppercase;
-          letter-spacing: 0.3px;
+          margin-bottom: ${is58mm ? '2mm' : '3mm'};
         }
 
         .info-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 3px;
-          font-size: 9pt;
-          font-weight: 500;
-          padding-right: 6mm;
+          margin-bottom: ${is58mm ? '0.5mm' : '1mm'};
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: normal;
         }
 
         .info-row strong {
-          font-weight: 700;
-          font-size: 10pt;
+          font-weight: bold;
         }
 
-        .items-table {
-          width: calc(100% - 6mm);
-          margin: 12px 0 12px 0;
-          border-collapse: collapse;
-        }
-
-        .items-table th {
-          text-align: left;
+        .items-header {
+          border-top: 1px dashed #000;
           border-bottom: 1px solid #000;
-          padding: 5px 0;
-          font-weight: 700;
-          font-size: 9pt;
+          padding: ${is58mm ? '1mm' : '1.5mm'} 0;
+          font-weight: bold;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          margin: ${is58mm ? '2mm' : '3mm'} 0 ${is58mm ? '1mm' : '1.5mm'} 0;
+          display: flex;
+          justify-content: space-between;
         }
 
-        .items-table th:last-child {
-          padding-right: 6mm;
-        }
-
-        .items-table td {
-          padding: 5px 0;
-          border-bottom: 1px dotted #ccc;
-          font-size: 9pt;
-          font-weight: 500;
-        }
-
-        .items-table .qty {
-          width: 35px;
+        .items-header .qty {
+          width: ${is58mm ? '25px' : '35px'};
           text-align: center;
-          font-weight: 600;
-          font-size: 9pt;
         }
 
-        .items-table .item {
-          width: auto;
-          font-weight: 600;
+        .items-header .desc {
+          flex: 1;
+          text-align: left;
         }
 
-        .items-table .price {
-          width: 70px;
+        .items-header .price {
+          width: ${is58mm ? '50px' : '60px'};
           text-align: right;
-          font-weight: 600;
-          font-size: 9pt;
-          padding-right: 6mm;
+        }
+
+        .item-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: ${is58mm ? '1mm' : '1.5mm'};
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: normal;
+          padding-bottom: ${is58mm ? '0.5mm' : '1mm'};
+          border-bottom: 1px dotted #ccc;
+        }
+
+        .item-row .qty {
+          width: ${is58mm ? '25px' : '35px'};
+          text-align: center;
+          font-weight: bold;
+        }
+
+        .item-row .desc {
+          flex: 1;
+          text-align: left;
+          padding: 0 ${is58mm ? '1mm' : '2mm'};
+          word-wrap: break-word;
+          white-space: normal;
+        }
+
+        .item-row .price {
+          width: ${is58mm ? '50px' : '60px'};
+          text-align: right;
+          font-weight: bold;
+        }
+
+        .item-notes {
+          font-size: ${is58mm ? '6pt' : '7pt'};
+          font-style: italic;
+          margin-left: ${is58mm ? '25px' : '35px'};
+          margin-top: ${is58mm ? '0.5mm' : '1mm'};
+          margin-bottom: ${is58mm ? '1mm' : '1.5mm'};
+          color: #666;
         }
 
         .totals {
-          margin-top: 15px;
-          border-top: 3px double #000;
-          padding-top: 12px;
+          margin-top: ${is58mm ? '2mm' : '3mm'};
+          border-top: 1px dashed #000;
+          padding-top: ${is58mm ? '2mm' : '3mm'};
         }
 
         .totals .row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 4px;
-          font-size: 10pt;
-          font-weight: 600;
-          padding-right: 6mm;
+          margin-bottom: ${is58mm ? '0.5mm' : '1mm'};
+          font-size: ${is58mm ? '8pt' : '9pt'};
+          font-weight: normal;
         }
 
         .totals .total {
-          font-size: 12pt;
-          font-weight: 700;
-          border-top: 2px solid #000;
-          padding-top: 8px;
-          margin-top: 6px;
+          font-size: ${is58mm ? '10pt' : '11pt'};
+          font-weight: bold;
+          border-top: 1px solid #000;
+          padding-top: ${is58mm ? '1.5mm' : '2mm'};
+          margin-top: ${is58mm ? '1mm' : '1.5mm'};
         }
 
         .footer {
           text-align: center;
-          margin-top: 20px;
-          padding-top: 12px;
-          border-top: 3px double #000;
-          font-size: 9pt;
-          font-weight: 500;
+          margin-top: ${is58mm ? '3mm' : '4mm'};
+          padding-top: ${is58mm ? '2mm' : '3mm'};
+          border-top: 1px dashed #000;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: normal;
         }
 
         .footer .precuenta {
-          font-size: 14pt;
-          font-weight: 700;
-          margin-bottom: 12px;
+          font-size: ${is58mm ? '11pt' : '12pt'};
+          font-weight: bold;
+          margin-bottom: ${is58mm ? '2mm' : '3mm'};
           letter-spacing: 0.5px;
+        }
+
+        .exempt-notice {
+          background-color: #fef3c7;
+          color: #92400e;
+          padding: ${is58mm ? '1.5mm' : '2mm'};
+          border-radius: 2px;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          margin-bottom: ${is58mm ? '1mm' : '1.5mm'};
+          text-transform: none;
         }
       </style>
     </head>
     <body>
       <div class="header">
-        ${businessInfo.logoUrl ? `<img src="${businessInfo.logoUrl}" alt="Logo" class="logo" />` : ''}
-        <div class="business-name">${businessInfo.tradeName || 'RESTAURANTE'}</div>
-        <div class="info">${businessInfo.address || ''}</div>
-        <div class="info">${businessInfo.phone || ''}</div>
+        ${businessInfo.logoUrl ? `<img src="${businessInfo.logoUrl}" alt="Logo" class="logo" onload="
+          const img = this;
+          const aspectRatio = img.naturalWidth / img.naturalHeight;
+          if (aspectRatio >= 0.8 && aspectRatio <= 1.2) {
+            img.classList.add('square-logo');
+          }
+        " />` : ''}
+        <div class="business-name">${(businessInfo.tradeName || 'RESTAURANTE').toUpperCase()}</div>
+        ${businessInfo.address ? `<div class="info">${businessInfo.address.toUpperCase()}</div>` : ''}
+        ${businessInfo.phone ? `<div class="info">${businessInfo.phone}</div>` : ''}
         <h1>PRECUENTA</h1>
       </div>
 
+      <div class="separator"></div>
+
       <div class="section">
         <div class="info-row">
-          <span>Fecha:</span>
-          <span>${dateStr} ${timeStr}</span>
+          <span>FECHA:</span>
+          <span>${dateStr}</span>
         </div>
         <div class="info-row">
-          <span>Mesa:</span>
+          <span>HORA:</span>
+          <span>${timeStr}</span>
+        </div>
+        <div class="info-row">
+          <span>MESA:</span>
           <span><strong>${table.number}</strong></span>
         </div>
         <div class="info-row">
-          <span>Mozo:</span>
-          <span>${table.waiter || 'N/A'}</span>
+          <span>MOZO:</span>
+          <span>${(table.waiter || 'N/A').toUpperCase()}</span>
         </div>
         <div class="info-row">
-          <span>Orden:</span>
+          <span>ORDEN:</span>
           <span>${order.orderNumber || '#' + order.id.slice(-6)}</span>
         </div>
       </div>
 
-      <table class="items-table">
-        <thead>
-          <tr>
-            <th class="qty">Cant</th>
-            <th class="item">Descripción</th>
-            <th class="price">Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${(order.items || []).map(item => `
-            <tr>
-              <td class="qty">${item.quantity}</td>
-              <td class="item">${item.name}</td>
-              <td class="price">S/ ${item.total.toFixed(2)}</td>
-            </tr>
-            ${item.notes ? `
-              <tr>
-                <td></td>
-                <td colspan="2" style="font-size: 12px; font-weight: 700; font-style: italic; padding: 2px 0 6px 0; color: #000;">
-                  ⚠ ${item.notes}
-                </td>
-              </tr>
-            ` : ''}
-          `).join('')}
-        </tbody>
-      </table>
+      <div class="items-header">
+        <div class="qty">CANT</div>
+        <div class="desc">DESCRIPCION</div>
+        <div class="price">IMPORTE</div>
+      </div>
+
+      ${(order.items || []).map(item => `
+        <div class="item-row">
+          <div class="qty">${item.quantity}</div>
+          <div class="desc">${(item.name || '').toUpperCase()}</div>
+          <div class="price">S/ ${item.total.toFixed(2)}</div>
+        </div>
+        ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
+      `).join('')}
 
       <div class="totals">
         ${!taxConfig.igvExempt ? `
         <div class="row">
-          <span>Subtotal:</span>
+          <span>SUBTOTAL:</span>
           <span>S/ ${subtotal.toFixed(2)}</span>
         </div>
         <div class="row">
@@ -303,8 +339,8 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           <span>S/ ${tax.toFixed(2)}</span>
         </div>
         ` : `
-        <div class="row" style="background-color: #fef3c7; color: #92400e; padding: 8px; border-radius: 4px; font-size: 11px;">
-          <span>⚠️ Empresa exonerada de IGV</span>
+        <div class="exempt-notice">
+          <span>⚠ EMPRESA EXONERADA DE IGV</span>
         </div>
         `}
         <div class="row total">
@@ -315,9 +351,9 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 
       <div class="footer">
         <div class="precuenta">*** PRECUENTA ***</div>
-        <p>Este documento no tiene valor tributario</p>
-        <p>Solicite su comprobante de pago</p>
-        <p style="margin-top: 10px;">¡Gracias por su preferencia!</p>
+        <p>ESTE DOCUMENTO NO TIENE VALOR TRIBUTARIO</p>
+        <p>SOLICITE SU COMPROBANTE DE PAGO</p>
+        <p style="margin-top: ${is58mm ? '1.5mm' : '2mm'};">¡GRACIAS POR SU PREFERENCIA!</p>
       </div>
 
       <script>

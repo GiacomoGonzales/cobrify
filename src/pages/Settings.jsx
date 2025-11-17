@@ -991,7 +991,6 @@ export default function Settings() {
               <Input
                 label="Correo Electrónico"
                 type="email"
-                required
                 placeholder="contacto@miempresa.com"
                 error={errors.email?.message}
                 {...register('email')}
