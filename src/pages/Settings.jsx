@@ -77,6 +77,9 @@ export default function Settings() {
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
 
+  // Estados para configuración de notas de venta
+  const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
+
   // Estados para configuración de SUNAT
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
 
@@ -236,6 +239,9 @@ export default function Settings() {
         setAllowNegativeStock(businessData.allowNegativeStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
+
+        // Cargar configuración de notas de venta
+        setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
 
         // Cargar configuración de SUNAT
         setAutoSendToSunat(businessData.autoSendToSunat || false)
@@ -1223,6 +1229,25 @@ export default function Settings() {
                       </p>
                     </div>
                   </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={hideRucIgvInNotaVenta}
+                      onChange={(e) => setHideRucIgvInNotaVenta(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Ocultar RUC e IGV en Notas de Venta
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {hideRucIgvInNotaVenta
+                          ? '✓ Habilitado: Las notas de venta no mostrarán el RUC de la empresa ni el desglose del IGV en la impresión. Solo se mostrará el total final.'
+                          : '✗ Deshabilitado: Las notas de venta mostrarán el RUC de la empresa y el desglose de subtotal e IGV (18%) como es usual.'}
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -1329,6 +1354,7 @@ export default function Settings() {
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
+                      hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       autoSendToSunat: autoSendToSunat,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       updatedAt: serverTimestamp(),

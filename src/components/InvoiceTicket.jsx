@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 
 /**
@@ -13,7 +14,21 @@ import { QRCodeSVG } from 'qrcode.react'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 }, ref) => {
+  // Estado para detectar si el logo es cuadrado
+  const [isSquareLogo, setIsSquareLogo] = React.useState(false)
+
+  // Determinar si es papel de 58mm o 80mm
+  const is58mm = paperWidth === 58
+
+  // Función para detectar si la imagen es cuadrada
+  const handleLogoLoad = (e) => {
+    const img = e.target
+    const aspectRatio = img.naturalWidth / img.naturalHeight
+    // Consideramos cuadrado si el ratio está entre 0.8 y 1.2
+    setIsSquareLogo(aspectRatio >= 0.8 && aspectRatio <= 1.2)
+  }
+
   // Determinar el tipo de comprobante
   const getDocumentTypeName = () => {
     if (invoice.documentType === 'factura') return 'FACTURA ELECTRÓNICA'
@@ -27,6 +42,28 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
     if (invoice.documentType === 'boleta') return '03'
     return 'NV'
   }
+
+  // Helper para obtener datos del cliente (soporta ambas estructuras)
+  const getCustomerData = () => {
+    // Si existe invoice.customer (estructura del POS), usar esos datos
+    if (invoice.customer) {
+      return {
+        documentNumber: invoice.customer.documentNumber || invoice.customerDocumentNumber || '-',
+        name: invoice.customer.name || invoice.customerName || 'VARIOS',
+        businessName: invoice.customer.businessName || invoice.customerBusinessName || '-',
+        address: invoice.customer.address || invoice.customerAddress || ''
+      }
+    }
+    // Si no, usar la estructura plana
+    return {
+      documentNumber: invoice.customerDocumentNumber || '-',
+      name: invoice.customerName || 'VARIOS',
+      businessName: invoice.customerBusinessName || '-',
+      address: invoice.customerAddress || ''
+    }
+  }
+
+  const customerData = getCustomerData()
 
   // Formatear el número de documento con serie
   const getFormattedDocumentNumber = () => {
@@ -72,13 +109,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
     // Tipo de documento del cliente (6=RUC, 1=DNI, 4=Carnet Extranjería, 7=Pasaporte, -=Sin documento)
     const getClientDocType = () => {
-      const docNumber = invoice.customerDocumentNumber || ''
+      const docNumber = customerData.documentNumber || ''
       if (docNumber.length === 11) return '6' // RUC
       if (docNumber.length === 8) return '1' // DNI
       return '-' // Sin documento
     }
     const tipoDocCliente = getClientDocType()
-    const numDocCliente = invoice.customerDocumentNumber || '-'
+    const numDocCliente = customerData.documentNumber || '-'
 
     // Construir el string del QR
     return `${ruc}|${tipoDoc}|${serie}|${numero}|${igv}|${total}|${fecha}|${tipoDocCliente}|${numDocCliente}|`
@@ -116,7 +153,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
       <style>{`
         @media print {
           @page {
-            size: 80mm auto;
+            size: ${paperWidth}mm auto;
             margin: 0;
           }
 
@@ -127,7 +164,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           body {
             margin: 0;
             padding: 0;
-            width: 80mm;
+            width: ${paperWidth}mm;
           }
 
           body * {
@@ -143,15 +180,15 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             position: absolute;
             left: 0;
             top: 0;
-            width: 70mm !important;
-            max-width: 70mm !important;
+            width: ${is58mm ? '56mm' : '72mm'} !important;
+            max-width: ${is58mm ? '56mm' : '72mm'} !important;
             margin: 0 auto !important;
-            padding: 2mm 1.5mm !important;
+            padding: ${is58mm ? '1mm 2mm' : '1mm 3mm'} !important;
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-            font-size: 8.5pt;
-            font-weight: 500;
-            line-height: 1.25;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: ${is58mm ? '7pt' : '8pt'};
+            font-weight: 400;
+            line-height: 1.2;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: hidden;
@@ -159,26 +196,30 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
           .info-row {
             gap: 4px;
-            overflow: hidden;
           }
 
           .info-row span:last-child {
             text-align: right;
             flex-shrink: 0;
-            max-width: 50%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            max-width: 65%;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+            white-space: normal;
           }
 
           .item-details {
             gap: 4px;
-            overflow: hidden;
           }
 
           .item-details span {
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+            white-space: normal;
+          }
+
+          .item-details span:last-child {
             white-space: nowrap;
           }
 
@@ -199,71 +240,81 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .ticket-container {
-          max-width: 80mm;
+          max-width: ${paperWidth}mm;
           margin: 0 auto;
-          padding: 8px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-          font-size: 11px;
-          font-weight: 500;
-          line-height: 1.4;
+          padding: ${is58mm ? '1.5mm' : '2mm'};
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: ${is58mm ? '8pt' : '9pt'};
+          font-weight: 400;
+          line-height: 1.2;
           background: white;
           color: #000;
           box-sizing: border-box;
+          text-transform: uppercase;
         }
 
         .ticket-header {
           text-align: center;
-          margin-bottom: 10px;
-          border-bottom: 2px solid #000;
-          padding-bottom: 8px;
+          margin-bottom: 3px;
+          border-bottom: 1px solid #000;
+          padding-bottom: 3px;
         }
 
         .company-logo {
-          max-width: 240px;
-          max-height: 240px;
+          max-width: ${is58mm ? '150px' : '200px'};
+          max-height: ${is58mm ? '80px' : '100px'};
           width: auto;
           height: auto;
           object-fit: contain;
-          margin: 0 auto 4px auto;
+          margin: 0 auto 2px auto;
           display: block;
         }
 
+        /* Logos cuadrados más pequeños */
+        .company-logo.square-logo {
+          max-width: ${is58mm ? '70px' : '100px'};
+          max-height: ${is58mm ? '70px' : '100px'};
+        }
+
         .company-name {
-          font-size: 13pt;
+          font-size: ${is58mm ? '9pt' : '11pt'};
           font-weight: 700;
-          margin-bottom: 4px;
+          margin-bottom: 1px;
           color: #000;
-        }
-
-        .company-info {
-          font-size: 9pt;
-          font-weight: 500;
-          margin: 2px 0;
-          color: #000;
-        }
-
-        .document-type {
-          font-size: 11pt;
-          font-weight: 700;
-          margin: 8px 0 6px 0;
-          padding: 6px;
-          background: #000;
-          color: #fff;
-          text-transform: uppercase;
           letter-spacing: 0.3px;
         }
 
-        .document-number {
-          font-size: 12pt;
-          font-weight: 700;
-          margin-bottom: 6px;
+        .company-info {
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: 400;
+          margin: 0.5px 0;
           color: #000;
+          line-height: 1.2;
+        }
+
+        .document-type {
+          font-size: ${is58mm ? '8pt' : '9pt'};
+          font-weight: 700;
+          margin: 3px 0 2px 0;
+          padding: 2px 4px;
+          background: #000;
+          color: #fff;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .document-number {
+          font-size: ${is58mm ? '9pt' : '10pt'};
+          font-weight: 700;
+          margin: 2px 0;
+          color: #000;
+          letter-spacing: 0.5px;
         }
 
         .ticket-section {
-          margin: 8px 0;
-          border-bottom: 1px dashed #000;
-          padding-bottom: 8px;
+          margin: 2px 0;
+          border-bottom: 1px dashed #ccc;
+          padding-bottom: 2px;
         }
 
         .ticket-section:last-child {
@@ -272,10 +323,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
         .section-title {
           font-weight: 700;
-          font-size: 10pt;
-          margin-bottom: 5px;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          margin-bottom: 1px;
           text-transform: uppercase;
-          letter-spacing: 0.3px;
+          letter-spacing: 0.5px;
           color: #000;
         }
 
@@ -283,11 +334,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          gap: 8px;
-          margin: 3px 0;
-          font-size: 9pt;
-          font-weight: 500;
+          gap: ${is58mm ? '2px' : '4px'};
+          margin: 1px 0;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: 400;
           overflow: hidden;
+          line-height: 1.2;
         }
 
         .info-label {
@@ -300,49 +352,58 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           text-align: right;
           overflow-wrap: break-word;
           word-wrap: break-word;
+          word-break: break-word;
           hyphens: auto;
+          white-space: normal;
         }
 
         .items-table {
           width: 100%;
-          margin: 8px 0;
-          font-size: 9pt;
+          margin: 2px 0;
+          font-size: ${is58mm ? '7pt' : '8pt'};
         }
 
         .items-header {
           border-bottom: 1px solid #000;
-          padding-bottom: 5px;
-          margin-bottom: 5px;
+          padding-bottom: 1px;
+          margin-bottom: 1px;
           font-weight: 700;
         }
 
         .item-row {
-          margin: 6px 0;
-          padding: 5px 0;
-          border-bottom: 1px dotted #ccc;
+          margin: 1px 0;
+          padding: 1px 0;
+          border-bottom: 1px dotted #ddd;
         }
 
         .item-desc {
           font-weight: 600;
-          font-size: 10pt;
-          margin-bottom: 3px;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          margin-bottom: 1px;
           color: #000;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+          word-break: break-word;
+          white-space: normal;
         }
 
         .item-details {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          gap: 8px;
-          font-size: 9pt;
-          font-weight: 500;
-          overflow: hidden;
+          gap: ${is58mm ? '2px' : '4px'};
+          font-size: ${is58mm ? '6.5pt' : '7.5pt'};
+          font-weight: 400;
+          line-height: 1.2;
         }
 
         .item-details span:first-child {
           flex: 1;
           min-width: 0;
           overflow-wrap: break-word;
+          word-wrap: break-word;
+          word-break: break-word;
+          white-space: normal;
         }
 
         .item-details span:last-child {
@@ -352,16 +413,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .item-code {
-          font-size: 8.5pt;
-          color: #000;
-          font-weight: 500;
-          margin-top: 2px;
+          font-size: ${is58mm ? '6pt' : '7pt'};
+          color: #666;
+          font-weight: 400;
+          margin-top: 1px;
         }
 
         .totals-section {
-          margin-top: 8px;
-          padding: 8px 6px;
-          background: #f5f5f5;
+          margin-top: 3px;
+          padding: 2px 0;
+          background: transparent;
+          border-top: 1px solid #000;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
         }
@@ -370,11 +432,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 8px;
-          margin: 4px 0;
-          font-size: 10pt;
+          gap: ${is58mm ? '2px' : '4px'};
+          margin: 1px 0;
+          font-size: ${is58mm ? '7pt' : '8pt'};
           font-weight: 600;
           overflow: hidden;
+          line-height: 1.2;
         }
 
         .total-row span:first-child {
@@ -389,10 +452,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .total-row.final {
-          font-size: 12pt;
+          font-size: ${is58mm ? '9pt' : '10pt'};
           font-weight: 700;
-          margin-top: 6px;
-          padding: 8px 6px;
+          margin-top: 2px;
+          padding: 4px 2px;
           background: #000;
           color: #fff;
           -webkit-print-color-adjust: exact;
@@ -400,27 +463,29 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .ticket-footer {
-          margin-top: 10px;
-          padding-top: 8px;
-          border-top: 2px solid #000;
+          margin-top: 4px;
+          padding-top: 3px;
+          border-top: 1px solid #000;
           text-align: center;
-          font-size: 8pt;
-          font-weight: 500;
+          font-size: ${is58mm ? '6pt' : '7pt'};
+          font-weight: 400;
         }
 
         .footer-text {
-          margin: 3px 0;
-          font-weight: 500;
+          margin: 1px 0;
+          font-weight: 400;
+          line-height: 1.2;
         }
 
         .representation-text {
-          font-size: 8pt;
-          margin-top: 8px;
+          font-size: ${is58mm ? '6pt' : '7pt'};
+          margin-top: 3px;
           font-weight: 700;
+          line-height: 1.2;
         }
 
         .qr-container {
-          margin: 8px auto;
+          margin: 3px auto;
           text-align: center;
           display: flex;
           flex-direction: column;
@@ -430,8 +495,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         }
 
         .qr-code {
-          margin: 5px 0;
-          max-width: 70px;
+          margin: 2px 0;
+          max-width: ${is58mm ? '60px' : '80px'};
           height: auto;
         }
       `}</style>
@@ -443,13 +508,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
           <img
             src={companySettings.logoUrl}
             alt="Logo"
-            className="company-logo"
+            className={`company-logo ${isSquareLogo ? 'square-logo' : ''}`}
+            onLoad={handleLogoLoad}
             onError={(e) => { e.target.style.display = 'none' }}
           />
         )}
 
         <div className="company-name">{companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
-        <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
+        {!(invoice.documentType === 'nota_venta' && companySettings?.hideRucIgvInNotaVenta) && (
+          <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
+        )}
         {companySettings?.businessName && (
           <div className="company-info">{companySettings.businessName}</div>
         )}
@@ -491,11 +559,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             <>
               <div className="info-row">
                 <span className="info-label">DNI:</span>
-                <span>{invoice.customerDocumentNumber || '-'}</span>
+                <span>{customerData.documentNumber}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">Nombre:</span>
-                <span>{invoice.customerName || 'VARIOS'}</span>
+                <span>{customerData.name}</span>
               </div>
             </>
           )}
@@ -504,22 +572,22 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             <>
               <div className="info-row">
                 <span className="info-label">RUC:</span>
-                <span>{invoice.customerDocumentNumber || '-'}</span>
+                <span>{customerData.documentNumber}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">Razón Social:</span>
-                <span>{invoice.customerBusinessName || '-'}</span>
+                <span>{customerData.businessName}</span>
               </div>
-              {invoice.customerName && (
+              {customerData.name && customerData.name !== 'VARIOS' && (
                 <div className="info-row">
                   <span className="info-label">Nombre Comercial:</span>
-                  <span>{invoice.customerName}</span>
+                  <span>{customerData.name}</span>
                 </div>
               )}
-              {invoice.customerAddress && (
+              {customerData.address && (
                 <div className="info-row">
                   <span className="info-label">Dirección:</span>
-                  <span>{invoice.customerAddress}</span>
+                  <span>{customerData.address}</span>
                 </div>
               )}
             </>
@@ -535,8 +603,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
             <div key={index} className="item-row">
               <div className="item-desc">{item.description || item.name}</div>
               <div className="item-details">
-                <span>{item.quantity} x {formatCurrency(item.price || item.unitPrice)}</span>
-                <span>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
+                <span style={{ whiteSpace: 'normal' }}>{item.quantity} x {formatCurrency(item.price || item.unitPrice)}</span>
+                <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
               </div>
               {item.code && (
                 <div className="item-code">Código: {item.code}</div>
@@ -548,8 +616,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
 
       {/* Totales */}
       <div className="totals-section">
+
         {/* Si hay descuento, mostrar subtotal antes del descuento */}
-        {invoice.discount && invoice.discount > 0 && (
+        {invoice.discount > 0 && (
           <div className="total-row">
             <span>Subtotal:</span>
             <span>{formatCurrency(invoice.subtotalBeforeDiscount || invoice.subtotal || 0)}</span>
@@ -557,21 +626,25 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings }, ref) => {
         )}
 
         {/* Descuento (si existe) */}
-        {invoice.discount && invoice.discount > 0 && (
+        {invoice.discount > 0 && (
           <div className="total-row">
             <span>Descuento:</span>
             <span>- {formatCurrency(invoice.discount)}</span>
           </div>
         )}
 
-        <div className="total-row">
-          <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
-          <span>{formatCurrency(invoice.subtotal || 0)}</span>
-        </div>
-        <div className="total-row">
-          <span>IGV (18%):</span>
-          <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
-        </div>
+        {!(invoice.documentType === 'nota_venta' && companySettings?.hideRucIgvInNotaVenta) && (
+          <>
+            <div className="total-row">
+              <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
+              <span>{formatCurrency(invoice.subtotal || 0)}</span>
+            </div>
+            <div className="total-row">
+              <span>IGV (18%):</span>
+              <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
+            </div>
+          </>
+        )}
         <div className="total-row final">
           <span>TOTAL A PAGAR:</span>
           <span>{formatCurrency(invoice.total || 0)}</span>

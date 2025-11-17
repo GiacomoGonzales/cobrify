@@ -2807,6 +2807,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               createdAt: new Date(),
             }}
             companySettings={companySettings}
+            paperWidth={80}
           />
         </div>
       )}

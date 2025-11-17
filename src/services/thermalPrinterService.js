@@ -332,11 +332,17 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Items text - optimizado para 58mm con wrapping de nombres largos
     const descWidth = paperWidth === 80 ? 30 : 12; // Más angosto para 58mm
     const priceWidth = paperWidth === 80 ? 10 : 8;
+
+    // Header más destacado
+    let itemsText = '';
+    itemsText += 'DETALLE\n';
+    itemsText += format.halfSeparator + '\n';
+
     const headerLine = paperWidth === 80
       ? 'CANT  DESCRIPCION                 IMPORTE'
       : 'CANT  DESCRIPCION IMPORTE';
 
-    let itemsText = headerLine + '\n' + format.halfSeparator + '\n';
+    itemsText += headerLine + '\n' + format.halfSeparator + '\n';
     for (const item of invoice.items) {
       const cant = String(item.quantity || 0).padEnd(6);
       // Soportar tanto 'description' (facturas) como 'name' (POS)
@@ -375,6 +381,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         const desc = itemName.padEnd(descWidth);
         itemsText += `${cant}${desc}${price}\n`;
       }
+
+      // Agregar código del producto si existe
+      if (item.code) {
+        itemsText += `      Codigo: ${convertSpanishText(item.code)}\n`;
+      }
     }
 
     // Construir comando en cadena
@@ -394,8 +405,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       printer = printer.bold().text(businessName + '\n').clearFormatting();
     }
 
+    // Mostrar RUC solo si NO es nota de venta O si está configurado para mostrarlo
+    if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
+      printer = printer.text(convertSpanishText(`RUC: ${business.ruc || ''}\n`));
+    }
+
     printer = printer
-      .text(convertSpanishText(`RUC: ${business.ruc || ''}\n`))
       .text(convertSpanishText((business.address || '') + '\n'))
       .text(convertSpanishText((business.phone || '') + '\n'))
       .text(format.separator + '\n')
@@ -407,19 +422,42 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .text(`${invoice.series || 'B001'}-${invoice.correlativeNumber || invoice.number || '000'}\n`)
       .clearFormatting()
       .text(format.separator + '\n')
-      // Datos del cliente
+      // Fecha y hora
       .align('left')
       .text(convertSpanishText(`Fecha: ${new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleDateString('es-PE')}\n`))
-      .text(convertSpanishText(`Cliente: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`))
-      .text(convertSpanishText(`${isInvoice ? 'RUC' : 'DNI'}: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '-'}\n`))
-      .text(format.halfSeparator + '\n')
+      .text(convertSpanishText(`Hora: ${new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}\n`))
+      .text(format.halfSeparator + '\n');
+
+    // Datos del cliente - solo si hay cliente
+    const hasCustomer = (invoice.customer?.name || invoice.customerName) &&
+                        (invoice.customer?.name || invoice.customerName) !== 'VARIOS' &&
+                        (invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni);
+
+    if (hasCustomer) {
+      printer = printer
+        .bold()
+        .text('DATOS DEL CLIENTE\n')
+        .clearFormatting()
+        .text(convertSpanishText(`${isInvoice ? 'RUC' : 'DNI'}: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '-'}\n`))
+        .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`))
+        .text(format.halfSeparator + '\n');
+    }
+
+    printer = printer
       // Items
       .text(itemsText)
       .text(format.halfSeparator + '\n')
       // Totales - formato optimizado para 58mm
-      .align('right')
-      .text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}\n`)
-      .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`)
+      .align('right');
+
+    // Mostrar subtotal e IGV solo si NO es nota de venta O si está configurado para mostrarlo
+    if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
+      printer = printer
+        .text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}\n`)
+        .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
+    }
+
+    printer = printer
       .bold()
       .text(`TOTAL: S/ ${(invoice.total || 0).toFixed(2)}\n`)
       .clearFormatting()
@@ -472,10 +510,27 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
     }
 
+    // Forma de pago (si existe)
+    if (invoice.paymentMethod || invoice.payments) {
+      printer = printer
+        .text(format.separator + '\n')
+        .bold()
+        .text('FORMA DE PAGO\n')
+        .clearFormatting();
+
+      if (invoice.payments && invoice.payments.length > 0) {
+        invoice.payments.forEach(payment => {
+          printer = printer.text(convertSpanishText(`${payment.method}: S/ ${payment.amount.toFixed(2)}\n`));
+        });
+      } else if (invoice.paymentMethod) {
+        printer = printer.text(convertSpanishText(`${invoice.paymentMethod}: S/ ${(invoice.total || 0).toFixed(2)}\n`));
+      }
+    }
+
     // Pie de página
     printer = printer
       .text(format.separator + '\n')
-      .text(convertSpanishText('Gracias por su preferencia\n'))
+      .text(convertSpanishText('GRACIAS POR SU PREFERENCIA\n'))
       .text('\n');
 
     // Finalizar y enviar
