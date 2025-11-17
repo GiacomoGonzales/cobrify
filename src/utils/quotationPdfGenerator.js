@@ -288,7 +288,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     textY += lineHeight
   }
 
-  // Contenido del recuadro - bien centrado
+  // Calcular altura del contenido de la empresa para ajustar el recuadro
+  const companyContentHeight = textY - headerY
+  const boxMinHeight = 70 // Altura mínima del recuadro
+
+  // Contenido del recuadro - bien centrado y ajustado dinámicamente
   const boxCenterX = rightColumnX + (rightColumnWidth / 2)
   let boxTextY = headerY + 25
 
@@ -306,7 +310,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text(quotation.number || 'N/A', boxCenterX, boxTextY, { align: 'center' })
 
-  currentY = headerY + headerHeight + 20
+  // Calcular la altura del recuadro
+  const boxEndY = boxTextY + 5 // Posición final del contenido del recuadro
+
+  // Usar la mayor altura entre el contenido de la empresa y el recuadro
+  currentY = Math.max(textY, boxEndY, headerY + headerHeight) + 15
 
   // Línea separadora
   doc.setDrawColor(...LIGHT_GRAY)
