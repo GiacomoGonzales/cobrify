@@ -41,6 +41,7 @@ import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
+import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 
 export default function InvoiceList() {
@@ -128,7 +129,7 @@ export default function InvoiceList() {
     window.print()
   }
 
-  const handleSendWhatsApp = (invoice) => {
+  const handleSendWhatsApp = async (invoice) => {
     if (!invoice) return
 
     // Verificar si hay teléfono del cliente
@@ -160,11 +161,40 @@ ${companySettings?.businessName || 'Tu Empresa'}
 ${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
 ${companySettings?.website ? companySettings.website : ''}`
 
-    // Abrir WhatsApp Web
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-    window.open(url, '_blank')
+    const isNative = Capacitor.isNativePlatform()
 
-    toast.success('Abriendo WhatsApp...')
+    // Si es móvil, usar Capacitor Share con PDF
+    if (isNative) {
+      try {
+        // Generar PDF
+        toast.info('Generando PDF...')
+        const pdfResult = await generateInvoicePDF(invoice, companySettings)
+
+        if (pdfResult?.uri) {
+          // Compartir con PDF adjunto
+          await Share.share({
+            title: `${docTypeName} ${invoice.number}`,
+            text: message,
+            url: pdfResult.uri,
+            dialogTitle: 'Compartir comprobante por WhatsApp'
+          })
+          toast.success('Abriendo WhatsApp...')
+        } else {
+          // Si falla la generación del PDF, enviar solo texto
+          const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+          window.open(url, '_blank')
+          toast.success('Abriendo WhatsApp...')
+        }
+      } catch (error) {
+        console.error('Error al compartir:', error)
+        toast.error('Error al compartir el PDF')
+      }
+    } else {
+      // En web, usar WhatsApp Web (solo texto)
+      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+      window.open(url, '_blank')
+      toast.success('Abriendo WhatsApp...')
+    }
   }
 
   useEffect(() => {
@@ -855,9 +885,18 @@ ${companySettings?.website ? companySettings.website : ''}`
 
                   {/* Descargar PDF */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setOpenMenuId(null)
-                      generateInvoicePDF(invoice, companySettings)
+                      try {
+                        const result = await generateInvoicePDF(invoice, companySettings)
+                        if (result?.fileName) {
+                          toast.success(`PDF guardado: ${result.fileName}`)
+                        } else {
+                          toast.success('PDF descargado exitosamente')
+                        }
+                      } catch (error) {
+                        toast.error('Error al generar el PDF')
+                      }
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                   >
@@ -1088,7 +1127,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                 Imprimir
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
                     toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
@@ -1096,8 +1135,15 @@ ${companySettings?.website ? companySettings.website : ''}`
                   }
 
                   try {
-                    generateInvoicePDF(viewingInvoice, companySettings)
-                    toast.success('PDF generado exitosamente')
+                    const result = await generateInvoicePDF(viewingInvoice, companySettings)
+
+                    if (result?.fileName) {
+                      // En móvil, mostrar nombre del archivo guardado
+                      toast.success(`PDF guardado: ${result.fileName}`)
+                    } else {
+                      // En web, descarga normal
+                      toast.success('PDF descargado exitosamente')
+                    }
                   } catch (error) {
                     console.error('Error al generar PDF:', error)
                     toast.error('Error al generar el PDF')
