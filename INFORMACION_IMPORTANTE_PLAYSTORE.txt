@@ -122,11 +122,21 @@ Cada vez que actualices la app:
    (android/app/build/outputs/bundle/release/app-release.aab)
 
 ===============================================
-8. CONTACTO DE SOPORTE
+8. POLÍTICA DE PRIVACIDAD
+===============================================
+
+✓ Política de privacidad creada: public/privacy-policy.html
+✓ URL para Play Store: https://cobrifyperu.com/privacy-policy.html
+
+IMPORTANTE: Después de desplegar tu sitio web, verifica que
+la política sea accesible en esa URL antes de enviar a Play Store.
+
+===============================================
+9. CONTACTO DE SOPORTE
 ===============================================
 
 Asegúrate de tener configurado:
-- Email de contacto para usuarios
+- Email de contacto para usuarios: soporte@cobrifyperu.com
 - Página de soporte (puede ser tu sitio web)
 
 ===============================================
