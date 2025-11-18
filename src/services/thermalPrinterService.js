@@ -602,9 +602,25 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
     // Construir items text
     let itemsText = '\n';
     for (const item of order.items || []) {
-      itemsText += `${item.quantity}x ${item.name}\n`;
+      itemsText += `${item.quantity}x ${convertSpanishText(item.name)}\n`;
+
+      // Mostrar modificadores si existen (DESTACADO)
+      if (item.modifiers && item.modifiers.length > 0) {
+        itemsText += '  *** MODIFICADORES ***\n';
+        for (const modifier of item.modifiers) {
+          itemsText += `  * ${convertSpanishText(modifier.modifierName)}:\n`;
+          for (const option of modifier.options) {
+            itemsText += `    -> ${convertSpanishText(option.optionName)}`;
+            if (option.priceAdjustment > 0) {
+              itemsText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+            }
+            itemsText += '\n';
+          }
+        }
+      }
+
       if (item.notes) {
-        itemsText += `  Nota: ${item.notes}\n`;
+        itemsText += `  Nota: ${convertSpanishText(item.notes)}\n`;
       }
       itemsText += '\n';
     }
@@ -696,12 +712,27 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     let itemsText = headerLine + '\n' + format.halfSeparator + '\n';
     for (const item of order.items || []) {
       const cant = String(item.quantity).padEnd(6);
-      const desc = item.name.substring(0, descWidth).padEnd(descWidth);
+      const desc = convertSpanishText(item.name).substring(0, descWidth).padEnd(descWidth);
       const price = `S/${item.total.toFixed(2)}`.padStart(paperWidth === 80 ? 10 : 8);
       itemsText += `${cant}${desc}${price}\n`;
 
+      // Mostrar modificadores si existen
+      if (item.modifiers && item.modifiers.length > 0) {
+        itemsText += '  ** MODIFICADORES **\n';
+        for (const modifier of item.modifiers) {
+          itemsText += `  * ${convertSpanishText(modifier.modifierName)}:\n`;
+          for (const option of modifier.options) {
+            itemsText += `    -> ${convertSpanishText(option.optionName)}`;
+            if (option.priceAdjustment > 0) {
+              itemsText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+            }
+            itemsText += '\n';
+          }
+        }
+      }
+
       if (item.notes) {
-        itemsText += `  * ${item.notes}\n`;
+        itemsText += `  * ${convertSpanishText(item.notes)}\n`;
       }
     }
 

@@ -8,6 +8,7 @@ import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
+import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 
 export default function OrderItemsModal({
   isOpen,
@@ -36,6 +37,10 @@ export default function OrderItemsModal({
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [cart, setCart] = useState([])
+
+  // Modifier selector state
+  const [isModifierModalOpen, setIsModifierModalOpen] = useState(false)
+  const [productForModifiers, setProductForModifiers] = useState(null)
 
   // Cargar productos
   useEffect(() => {
@@ -165,13 +170,21 @@ export default function OrderItemsModal({
   }
 
   const addToCart = (product) => {
-    const existingItem = cart.find((item) => item.productId === product.id)
+    // Si el producto tiene modificadores, abrir modal de selección
+    if (product.modifiers && product.modifiers.length > 0) {
+      setProductForModifiers(product)
+      setIsModifierModalOpen(true)
+      return
+    }
+
+    // Si no tiene modificadores, agregar directamente al carrito
+    const existingItem = cart.find((item) => item.productId === product.id && !item.modifiers)
 
     if (existingItem) {
       // Incrementar cantidad
       setCart(
         cart.map((item) =>
-          item.productId === product.id
+          item.productId === product.id && !item.modifiers
             ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
             : item
         )
@@ -193,31 +206,92 @@ export default function OrderItemsModal({
     }
   }
 
-  const removeFromCart = (productId) => {
-    setCart(cart.filter((item) => item.productId !== productId))
-  }
+  // Agregar al carrito con modificadores seleccionados
+  const addToCartWithModifiers = (data) => {
+    const { selectedModifiers, totalPrice } = data
 
-  const updateQuantity = (productId, newQuantity) => {
-    if (newQuantity <= 0) {
-      removeFromCart(productId)
-    } else {
+    // Crear un identificador único basado en los modificadores seleccionados
+    const modifierKey = selectedModifiers
+      .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
+      .join('|')
+
+    // Buscar si ya existe un item idéntico (mismo producto + mismos modificadores)
+    const existingItem = cart.find(
+      item =>
+        item.productId === productForModifiers.id &&
+        item.modifierKey === modifierKey
+    )
+
+    if (existingItem) {
+      // Incrementar cantidad del item existente
       setCart(
         cart.map((item) =>
-          item.productId === productId
-            ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
+          item.productId === productForModifiers.id && item.modifierKey === modifierKey
+            ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * totalPrice }
             : item
         )
+      )
+    } else {
+      // Agregar nuevo item con modificadores
+      setCart([
+        ...cart,
+        {
+          productId: productForModifiers.id,
+          name: productForModifiers.name,
+          code: productForModifiers.code,
+          price: totalPrice, // Precio con modificadores incluidos
+          basePrice: productForModifiers.price, // Precio base sin modificadores
+          quantity: 1,
+          total: totalPrice,
+          notes: '',
+          modifiers: selectedModifiers, // Guardar modificadores seleccionados
+          modifierKey: modifierKey, // Para identificar items únicos
+        },
+      ])
+    }
+
+    // Cerrar modal y limpiar
+    setIsModifierModalOpen(false)
+    setProductForModifiers(null)
+    toast.success('Producto agregado con personalizaciones')
+  }
+
+  const removeFromCart = (productId, modifierKey = null) => {
+    setCart(cart.filter((item) => {
+      if (modifierKey) {
+        return !(item.productId === productId && item.modifierKey === modifierKey)
+      }
+      return !(item.productId === productId && !item.modifierKey)
+    }))
+  }
+
+  const updateQuantity = (productId, newQuantity, modifierKey = null) => {
+    if (newQuantity <= 0) {
+      removeFromCart(productId, modifierKey)
+    } else {
+      setCart(
+        cart.map((item) => {
+          const matches = modifierKey
+            ? item.productId === productId && item.modifierKey === modifierKey
+            : item.productId === productId && !item.modifierKey
+
+          return matches
+            ? { ...item, quantity: newQuantity, total: newQuantity * item.price }
+            : item
+        })
       )
     }
   }
 
-  const updateNotes = (productId, notes) => {
+  const updateNotes = (productId, notes, modifierKey = null) => {
     setCart(
-      cart.map((item) =>
-        item.productId === productId
-          ? { ...item, notes: notes }
-          : item
-      )
+      cart.map((item) => {
+        const matches = modifierKey
+          ? item.productId === productId && item.modifierKey === modifierKey
+          : item.productId === productId && !item.modifierKey
+
+        return matches ? { ...item, notes: notes } : item
+      })
     )
   }
 
@@ -389,16 +463,38 @@ export default function OrderItemsModal({
                 <>
                   <div className="space-y-2 mb-4">
                   {cart.map((item) => (
-                    <div key={item.productId} className="border rounded-lg p-3 bg-white">
+                    <div key={`${item.productId}-${item.modifierKey || 'no-mod'}`} className="border rounded-lg p-3 bg-white">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="font-medium text-sm text-gray-900">{item.name}</div>
                           <div className="text-xs text-gray-500">
                             S/ {item.price.toFixed(2)} c/u
                           </div>
+
+                          {/* Mostrar modificadores si existen */}
+                          {item.modifiers && item.modifiers.length > 0 && (
+                            <div className="mt-1 space-y-1">
+                              {item.modifiers.map((modifier) => (
+                                <div key={modifier.modifierId} className="bg-primary-50 border border-primary-200 rounded px-2 py-1">
+                                  <div className="text-xs font-semibold text-primary-900">
+                                    {modifier.modifierName}:
+                                  </div>
+                                  <div className="text-xs text-primary-700">
+                                    {modifier.options.map((opt, idx) => (
+                                      <span key={opt.optionId}>
+                                        {opt.optionName}
+                                        {opt.priceAdjustment > 0 && ` (+S/ ${opt.priceAdjustment.toFixed(2)})`}
+                                        {idx < modifier.options.length - 1 && ', '}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <button
-                          onClick={() => removeFromCart(item.productId)}
+                          onClick={() => removeFromCart(item.productId, item.modifierKey)}
                           className="text-red-500 hover:text-red-700"
                         >
                           <X className="w-4 h-4" />
@@ -410,7 +506,7 @@ export default function OrderItemsModal({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                            onClick={() => updateQuantity(item.productId, item.quantity - 1, item.modifierKey)}
                             className="w-8 h-8 p-0"
                           >
                             <Minus className="w-3 h-3" />
@@ -419,7 +515,7 @@ export default function OrderItemsModal({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                            onClick={() => updateQuantity(item.productId, item.quantity + 1, item.modifierKey)}
                             className="w-8 h-8 p-0"
                           >
                             <Plus className="w-3 h-3" />
@@ -434,7 +530,7 @@ export default function OrderItemsModal({
                       <div className="mt-2">
                         <textarea
                           value={item.notes || ''}
-                          onChange={(e) => updateNotes(item.productId, e.target.value)}
+                          onChange={(e) => updateNotes(item.productId, e.target.value, item.modifierKey)}
                           placeholder="Especificaciones: sin lechuga, extra crema, etc..."
                           className="w-full text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 resize-none"
                           rows={2}
@@ -483,6 +579,17 @@ export default function OrderItemsModal({
           </Button>
         </div>
       </div>
+
+      {/* Modal de selección de modificadores */}
+      <ModifierSelectorModal
+        isOpen={isModifierModalOpen}
+        onClose={() => {
+          setIsModifierModalOpen(false)
+          setProductForModifiers(null)
+        }}
+        product={productForModifiers}
+        onConfirm={addToCartWithModifiers}
+      />
     </Modal>
   )
 }

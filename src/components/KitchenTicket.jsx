@@ -209,6 +209,43 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
           color: #000;
         }
 
+        .item-modifiers {
+          margin-top: 6px;
+          padding: 6px;
+          background: #000;
+          color: #fff;
+          border: 3px solid #000;
+          font-size: 10pt;
+          font-weight: 900;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .modifier-label {
+          font-weight: 900;
+          color: #fff;
+          margin-bottom: 3px;
+          text-decoration: underline;
+          text-transform: uppercase;
+        }
+
+        .modifier-group {
+          margin: 4px 0;
+          padding: 3px 0;
+        }
+
+        .modifier-name {
+          font-weight: 900;
+          color: #fff;
+          text-transform: uppercase;
+        }
+
+        .modifier-options {
+          margin-left: 8px;
+          margin-top: 2px;
+          color: #fff;
+        }
+
         .item-notes {
           margin-top: 6px;
           padding: 6px;
@@ -316,6 +353,26 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
               <span className="item-qty">{item.quantity}x</span>
               <span className="item-name">{item.name}</span>
             </div>
+
+            {/* Mostrar modificadores con fondo negro (DESTACADO) */}
+            {item.modifiers && item.modifiers.length > 0 && (
+              <div className="item-modifiers">
+                <div className="modifier-label">★ MODIFICADORES ★</div>
+                {item.modifiers.map((modifier, modIdx) => (
+                  <div key={modIdx} className="modifier-group">
+                    <div className="modifier-name">• {modifier.modifierName}:</div>
+                    <div className="modifier-options">
+                      {modifier.options.map((opt, optIdx) => (
+                        <div key={optIdx}>
+                          → {opt.optionName}
+                          {opt.priceAdjustment > 0 && ` (+S/ ${opt.priceAdjustment.toFixed(2)})`}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {item.notes && (
               <div className="item-notes">

@@ -24,6 +24,7 @@ import {
 import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse } from '@/services/warehouseService'
+import ProductModifiersSection from '@/components/ProductModifiersSection'
 
 // Unidades de medida
 const UNITS = [
@@ -109,7 +110,7 @@ const getExpirationStatus = (expirationDate) => {
 }
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -153,6 +154,9 @@ export default function Products() {
   const [bulkAction, setBulkAction] = useState(null) // 'delete', 'changeCategory', 'toggleActive'
   const [bulkCategoryChange, setBulkCategoryChange] = useState('')
   const [isProcessingBulk, setIsProcessingBulk] = useState(false)
+
+  // Modifiers state (for restaurant mode)
+  const [modifiers, setModifiers] = useState([])
 
   const {
     register,
@@ -277,6 +281,7 @@ export default function Products() {
       trackExpiration: false,
       expirationDate: '',
     })
+    setModifiers([]) // Limpiar modificadores
     setIsModalOpen(true)
   }
 
@@ -300,6 +305,9 @@ export default function Products() {
     setVariants(product.variants || [])
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+
+    // Load modifiers if product has them (restaurant mode)
+    setModifiers(product.modifiers || [])
 
     // Format expiration date if exists (from Firestore Timestamp to YYYY-MM-DD)
     let formattedExpirationDate = ''
@@ -329,6 +337,7 @@ export default function Products() {
     setIsModalOpen(false)
     setEditingProduct(null)
     setSelectedWarehouse('')
+    setModifiers([]) // Limpiar modificadores
     reset()
   }
 
@@ -360,6 +369,8 @@ export default function Products() {
         hasVariants: hasVariants,
         trackExpiration: trackExpiration,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
+        // Add modifiers if in restaurant mode
+        modifiers: businessMode === 'restaurant' ? modifiers : undefined,
       }
 
       if (hasVariants) {
@@ -2206,6 +2217,14 @@ export default function Products() {
               </div>
             )}
           </div>
+
+          {/* Modifiers Section - Only in Restaurant Mode */}
+          {businessMode === 'restaurant' && (
+            <ProductModifiersSection
+              modifiers={modifiers}
+              onChange={setModifiers}
+            />
+          )}
 
           <div className="flex justify-end space-x-3 pt-4">
             <Button type="button" variant="outline" onClick={closeModal} disabled={isSaving}>

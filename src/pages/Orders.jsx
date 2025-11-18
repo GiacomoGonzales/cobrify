@@ -562,6 +562,30 @@ export default function Orders() {
                             S/ {(item.total || 0).toFixed(2)}
                           </span>
                         </div>
+
+                        {/* Mostrar modificadores si existen */}
+                        {item.modifiers && item.modifiers.length > 0 && (
+                          <div className="ml-6 bg-primary-50 border border-primary-200 rounded px-2 py-1.5 space-y-1">
+                            <div className="text-xs font-semibold text-primary-900 uppercase">
+                              Modificadores:
+                            </div>
+                            {item.modifiers.map((modifier, modIdx) => (
+                              <div key={modIdx} className="text-xs text-primary-800">
+                                <span className="font-medium">• {modifier.modifierName}:</span>
+                                <span className="ml-1">
+                                  {modifier.options.map((opt, optIdx) => (
+                                    <span key={optIdx}>
+                                      {opt.optionName}
+                                      {opt.priceAdjustment > 0 && ` (+S/ ${opt.priceAdjustment.toFixed(2)})`}
+                                      {optIdx < modifier.options.length - 1 && ', '}
+                                    </span>
+                                  ))}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {item.notes && (
                           <div className="flex items-start gap-1 text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded ml-6">
                             <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />

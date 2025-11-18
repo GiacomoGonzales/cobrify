@@ -191,15 +191,41 @@ export default function Kitchen() {
           {/* Items */}
           <div className="space-y-2">
             {(order.items || []).map((item, idx) => (
-              <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-1">
+              <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-2">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-gray-900 text-lg">{item.quantity}x</span>
                       <span className="font-semibold text-gray-900">{item.name}</span>
                     </div>
+
+                    {/* Mostrar modificadores si existen - DESTACADO */}
+                    {item.modifiers && item.modifiers.length > 0 && (
+                      <div className="mt-2 bg-black text-white rounded-lg p-2 space-y-1">
+                        <div className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
+                          <Flame className="w-3 h-3" />
+                          Modificadores
+                        </div>
+                        {item.modifiers.map((modifier, modIdx) => (
+                          <div key={modIdx} className="text-sm">
+                            <span className="font-semibold">• {modifier.modifierName}:</span>
+                            <div className="ml-4 text-xs">
+                              {modifier.options.map((opt, optIdx) => (
+                                <div key={optIdx}>
+                                  → {opt.optionName}
+                                  {opt.priceAdjustment > 0 && (
+                                    <span className="text-yellow-300"> (+S/ {opt.priceAdjustment.toFixed(2)})</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {item.notes && (
-                      <div className="flex items-center gap-1 mt-1 text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded w-fit">
+                      <div className="flex items-center gap-1 mt-2 text-xs text-orange-700 bg-orange-50 px-2 py-1 rounded w-fit">
                         <AlertTriangle className="w-3 h-3" />
                         <span>{item.notes}</span>
                       </div>
