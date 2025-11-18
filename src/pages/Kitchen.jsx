@@ -390,19 +390,8 @@ export default function Kitchen() {
                   )}
                 </Button>
               )}
-              {order.status === 'ready' && (
-                <Button
-                  onClick={() => handleStatusChange(order.id, 'delivered')}
-                  disabled={isUpdating}
-                  className="flex-1 bg-gray-600 hover:bg-gray-700"
-                >
-                  {isUpdating ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Actualizando...</>
-                  ) : (
-                    <><CheckCircle className="w-4 h-4 mr-2" />Entregada</>
-                  )}
-                </Button>
-              )}
+              {/* El estado 'ready' es el final en cocina - no hay botón de Entregada aquí */}
+              {/* La orden se marca como entregada/servida desde Órdenes Activas o Mesas */}
             </div>
           )}
         </CardContent>

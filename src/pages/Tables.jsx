@@ -368,6 +368,8 @@ export default function Tables() {
   }
 
   const handleTableClick = async (table) => {
+    // Limpiar estado anterior primero
+    setSelectedOrder(null)
     setSelectedTable(table)
 
     // Si la mesa está ocupada, cargar la orden y abrir modal de acciones
@@ -380,7 +382,6 @@ export default function Tables() {
             setSelectedOrder(order)
           } else {
             console.warn('Orden no encontrada en datos de demo:', table.currentOrder)
-            setSelectedOrder(null)
           }
         } else if (!isDemoMode) {
           // En modo normal, cargar desde Firebase
@@ -389,15 +390,11 @@ export default function Tables() {
             setSelectedOrder(orderResult.data)
           } else {
             console.warn('Error al cargar orden:', orderResult.error)
-            setSelectedOrder(null)
           }
         }
       } catch (error) {
         console.error('Error al cargar orden:', error)
-        setSelectedOrder(null)
       }
-    } else {
-      setSelectedOrder(null)
     }
 
     // Abrir modal de acciones para todas las mesas
@@ -569,7 +566,8 @@ export default function Tables() {
         toast.success('Mesa cerrada exitosamente')
         // Recargar las mesas para actualizar el estado
         loadTables()
-        // Cerrar el modal de acciones y limpiar selección
+        // Cerrar todos los modales y limpiar selección
+        setIsCloseTableModalOpen(false)
         setIsActionModalOpen(false)
         setSelectedTable(null)
         setSelectedOrder(null)
