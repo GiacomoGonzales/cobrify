@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button'
 import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { getCompanySettings } from '@/services/firestoreService'
 import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
@@ -26,6 +26,7 @@ export default function Orders() {
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
+  const [itemStatusTracking, setItemStatusTracking] = useState(false) // Config para modo de seguimiento
 
   // Modales para nueva orden
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
@@ -36,6 +37,28 @@ export default function Orders() {
   const [companySettings, setCompanySettings] = useState(null)
   const [orderToPrint, setOrderToPrint] = useState(null)
   const kitchenTicketRef = useRef()
+
+  // Listener para la configuración del negocio
+  useEffect(() => {
+    if (!user?.uid || isDemoMode) return
+
+    const businessRef = doc(db, 'businesses', getBusinessId())
+    const unsubscribe = onSnapshot(
+      businessRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const businessData = docSnap.data()
+          const config = businessData.restaurantConfig || {}
+          setItemStatusTracking(config.itemStatusTracking || false)
+        }
+      },
+      (error) => {
+        console.error('Error al cargar configuración del negocio:', error)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [user, isDemoMode, getBusinessId])
 
   // Cargar configuración de la empresa
   useEffect(() => {
@@ -552,16 +575,34 @@ export default function Orders() {
 
                   {/* Items */}
                   <div className="space-y-2">
-                    {(order.items || []).map((item, idx) => (
-                      <div key={idx} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-700">
-                            {item.quantity}x {item.name}
-                          </span>
-                          <span className="font-medium text-gray-900">
-                            S/ {(item.total || 0).toFixed(2)}
-                          </span>
-                        </div>
+                    {(order.items || []).map((item, idx) => {
+                      const itemStatus = item.status || 'pending'
+                      return (
+                        <div key={item.itemId || idx} className="space-y-1">
+                          <div className="flex justify-between text-sm items-start">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-gray-700">
+                                {item.quantity}x {item.name}
+                              </span>
+                              {/* Badge de estado del item - Solo si itemStatusTracking está habilitado */}
+                              {itemStatusTracking && (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-white ${
+                                  itemStatus === 'delivered' ? 'bg-gray-600' :
+                                  itemStatus === 'ready' ? 'bg-green-600' :
+                                  itemStatus === 'preparing' ? 'bg-blue-600' :
+                                  'bg-yellow-600'
+                                }`}>
+                                  {itemStatus === 'delivered' ? '✓ Entregado' :
+                                   itemStatus === 'ready' ? '● Listo' :
+                                   itemStatus === 'preparing' ? '⚡ Preparando' :
+                                   '○ Pendiente'}
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-medium text-gray-900">
+                              S/ {(item.total || 0).toFixed(2)}
+                            </span>
+                          </div>
 
                         {/* Mostrar modificadores si existen */}
                         {item.modifiers && item.modifiers.length > 0 && (
@@ -592,8 +633,9 @@ export default function Orders() {
                             <span>{item.notes}</span>
                           </div>
                         )}
-                      </div>
-                    ))}
+                        </div>
+                      )
+                    })}
                   </div>
 
                   {/* Total */}

@@ -93,6 +93,7 @@ export default function Settings() {
     waitersEnabled: true,
     kitchenEnabled: true,
     deliveryEnabled: false,
+    itemStatusTracking: false, // Seguimiento de estado por item (false = por orden completa)
   })
 
   // Estados para cambio de contraseña
@@ -1164,6 +1165,41 @@ export default function Settings() {
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
+
+              {/* Restaurant Operations Section - Only show in restaurant mode */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Operaciones de Restaurante</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configura cómo funciona el flujo de órdenes y cocina en tu restaurante
+                    </p>
+                    <div className="space-y-4">
+                      <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={restaurantConfig.itemStatusTracking}
+                          onChange={(e) => setRestaurantConfig({...restaurantConfig, itemStatusTracking: e.target.checked})}
+                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                            Seguimiento de estado por item individual
+                          </span>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                            {restaurantConfig.itemStatusTracking
+                              ? '✓ Habilitado: Cada plato/item de la orden se marca individualmente (Pendiente → Preparando → Listo → Entregado). Los platos pueden estar listos en diferentes momentos. Ideal para restaurantes con múltiples estaciones de cocina o menús extensos.'
+                              : '✗ Deshabilitado: La orden completa se marca como un todo (Pendiente → En preparación → Lista → Entregada). Más simple y rápido para operaciones pequeñas, cafeterías o negocios con preparación rápida.'}
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+                </>
+              )}
 
               {/* Inventory Settings Section */}
               <div>
