@@ -335,17 +335,15 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     const descWidth = paperWidth === 80 ? 26 : 14; // Columna descripción (58mm: 14 chars para dar espacio al precio)
     const priceWidth = paperWidth === 80 ? 10 : 10; // Columna precio
 
-    // Header más compacto
+    // Items text
     let itemsText = '';
-    itemsText += 'DETALLE\n';
 
-    // Solo mostrar header de columnas para 58mm
+    // Solo mostrar header de columnas para 58mm (no para 80mm)
     if (paperWidth !== 80) {
       const headerLine = 'CANT  DESCRIPCION   PRECIO';
       itemsText += headerLine + '\n';
+      itemsText += format.halfSeparator + '\n';
     }
-
-    itemsText += format.halfSeparator + '\n';
     for (const item of invoice.items) {
       // Soportar tanto 'description' (facturas) como 'name' (POS)
       const itemName = convertSpanishText(item.description || item.name || '');
@@ -415,60 +413,119 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     let printer = CapacitorThermalPrinter.begin()
       .align('center');
 
+    // ========== HEADER - Datos del Emisor ==========
+
     // Logo optimizado (si existe URL de logo del negocio)
     if (business.logoUrl) {
       // Tamaño reducido según ancho de papel
       const logoWidth = paperWidth === 80 ? 200 : 120;
-      printer = printer
-        .image(business.logoUrl, logoWidth);  // Sin salto de línea (más pegado)
+      printer = printer.image(business.logoUrl, logoWidth);
     }
 
-    // Nombre del negocio - solo usar doubleWidth si el nombre es corto
-    const businessName = convertSpanishText(business.tradeName || business.businessName || 'NEGOCIO');
+    // Nombre del negocio (company-name)
+    const businessName = convertSpanishText(business.tradeName || business.name || 'MI EMPRESA');
     if (businessName.length <= (paperWidth === 80 ? 24 : 16)) {
       printer = printer.doubleWidth().text(businessName + '\n').clearFormatting();
     } else {
       printer = printer.bold().text(businessName + '\n').clearFormatting();
     }
 
-    // Mostrar RUC solo si NO es nota de venta O si está configurado para mostrarlo
+    // RUC (company-info)
     if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
-      printer = printer.text(convertSpanishText(`RUC: ${business.ruc || ''}\n`));
+      printer = printer.text(convertSpanishText(`RUC: ${business.ruc || '00000000000'}\n`));
     }
 
+    // Razón Social (si existe y es diferente del nombre comercial)
+    if (business.businessName && business.businessName !== business.tradeName) {
+      printer = printer.text(convertSpanishText(business.businessName + '\n'));
+    }
+
+    // Dirección (company-info)
+    printer = printer.text(convertSpanishText((business.address || 'Direccion no configurada') + '\n'));
+
+    // Teléfono (company-info)
+    if (business.phone) {
+      printer = printer.text(convertSpanishText(`Tel: ${business.phone}\n`));
+    }
+
+    // Email (company-info) - NUEVO
+    if (business.email) {
+      printer = printer.text(convertSpanishText(`Email: ${business.email}\n`));
+    }
+
+    // Redes sociales (company-info) - NUEVO
+    if (business.socialMedia) {
+      printer = printer.text(convertSpanishText(business.socialMedia + '\n'));
+    }
+
+    // Tipo de documento (document-type) - con separador visual para destacar
     printer = printer
-      .text(convertSpanishText((business.address || '') + '\n'))
-      .text(convertSpanishText((business.phone || '') + '\n'))
-      .text(format.separator + '\n')
-      // Tipo de comprobante - centrado y en negrita
-      .align('center')
+      .text('\n')
       .bold()
       .text(tipoComprobanteCompleto + '\n')
-      .text(`${invoice.series || 'B001'}-${invoice.correlativeNumber || invoice.number || '000'}\n`)
+      .clearFormatting();
+
+    // Número de documento (document-number)
+    printer = printer
+      .bold()
+      .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
       .clearFormatting()
-      // Fecha y hora - alineado a izquierda, más compacto
+      .text(format.separator + '\n');
+
+    // ========== Fecha y Hora (ticket-section) ==========
+    printer = printer
       .align('left')
       .text(convertSpanishText(`Fecha: ${new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleDateString('es-PE')}\n`))
-      .text(`Hora: ${new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true }).replace('a.\u00a0m.', 'AM').replace('p.\u00a0m.', 'PM').replace('a. m.', 'AM').replace('p. m.', 'PM')}\n`);
+      .text(`Hora: ${new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}\n`)
+      .text(format.separator + '\n');
 
-    // Datos del cliente - solo si hay cliente
-    const hasCustomer = (invoice.customer?.name || invoice.customerName) &&
-                        (invoice.customer?.name || invoice.customerName) !== 'VARIOS' &&
-                        (invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni);
-
-    if (hasCustomer) {
+    // ========== Datos del Cliente (ticket-section) ==========
+    // Solo mostrar para facturas y boletas (NO para notas de venta)
+    if (isInvoice || invoice.documentType === 'boleta') {
       printer = printer
         .bold()
         .text('DATOS DEL CLIENTE\n')
-        .clearFormatting()
-        .text(convertSpanishText(`${isInvoice ? 'RUC' : 'DNI'}: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '-'}\n`))
-        .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`));
+        .clearFormatting();
+
+      if (invoice.documentType === 'boleta') {
+        // Para boletas - DNI y Nombre
+        printer = printer
+          .text(convertSpanishText(`DNI: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerDni || '-'}\n`))
+          .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`));
+      }
+
+      if (isInvoice) {
+        // Para facturas - RUC, Razón Social, Nombre Comercial (opcional), Dirección (opcional)
+        const customerName = invoice.customer?.name || invoice.customerName || '';
+        const customerBusinessName = invoice.customer?.businessName || invoice.customerBusinessName || '-';
+        const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
+
+        printer = printer
+          .text(convertSpanishText(`RUC: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || '-'}\n`))
+          .text(convertSpanishText(`Razon Social: ${customerBusinessName}\n`));
+
+        // Nombre Comercial (si existe y es diferente de VARIOS)
+        if (customerName && customerName !== 'VARIOS') {
+          printer = printer.text(convertSpanishText(`Nombre Comercial: ${customerName}\n`));
+        }
+
+        // Dirección (si existe)
+        if (customerAddress) {
+          printer = printer.text(convertSpanishText(`Direccion: ${customerAddress}\n`));
+        }
+      }
+
+      printer = printer.text(format.separator + '\n');
     }
 
+    // ========== Detalle de Productos/Servicios (ticket-section) ==========
     printer = printer
-      // Items
       .align('left')
+      .bold()
+      .text('DETALLE\n')
+      .clearFormatting()
       .text(itemsText)
+      .text(format.separator + '\n')
       // Totales - alineados a la derecha
       .align('right');
 
@@ -505,41 +562,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       qrData = `${business.ruc}|${tipoDoc}|${invoice.series}|${invoice.correlativeNumber || invoice.number}|${(invoice.tax || invoice.igv || 0).toFixed(2)}|${(invoice.total || 0).toFixed(2)}|${fecha}|${docCliente}|${numDocCliente}`;
     }
 
-    // Agregar QR y leyenda SUNAT solo para facturas y boletas electrónicas (NO para notas de venta)
-    if (!isNotaVenta) {
-      // Leyenda legal SUNAT (OBLIGATORIA)
-      printer = printer
-        .text(format.separator + '\n')
-        .text(convertSpanishText(`REPRESENTACION IMPRESA DE\n${tipoComprobante} ELECTRONICA\n`))
-        .text(convertSpanishText('Consulte en www.sunat.gob.pe\n'));
-
-      // Hash SUNAT (si existe)
-      if (invoice.sunatHash) {
-        // Truncar hash para que quepa (mostrar primeros 40-45 caracteres)
-        const hashToShow = paperWidth === 80
-          ? invoice.sunatHash.substring(0, 45)
-          : invoice.sunatHash.substring(0, 30);
-        const hashSuffix = invoice.sunatHash.length > hashToShow.length ? '...' : '';
-
-        printer = printer
-          .align('left')
-          .text('\n')
-          .bold()
-          .text('Hash: ')
-          .clearFormatting()
-          .text(convertSpanishText(hashToShow + hashSuffix) + '\n')
-          .align('center');
-      }
-
-      // QR Code (obligatorio según SUNAT desde 2020) - después del texto SUNAT
-      if (qrData) {
-        printer = printer.text('\n').qr(qrData).text('\n');
-      }
-    }
-
-    // Forma de pago (si existe)
+    // ========== Forma de Pago (ticket-section) ==========
     if (invoice.paymentMethod || invoice.payments) {
       printer = printer
+        .text(format.separator + '\n')
         .bold()
         .text('FORMA DE PAGO\n')
         .clearFormatting();
@@ -553,11 +579,76 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
     }
 
-    // Pie de página
+    // ========== Observaciones (ticket-section) ==========
+    if (invoice.notes) {
+      printer = printer
+        .text(format.separator + '\n')
+        .bold()
+        .text('OBSERVACIONES\n')
+        .clearFormatting()
+        .text(convertSpanishText(invoice.notes + '\n'));
+    }
+
+    // ========== FOOTER (ticket-footer) ==========
     printer = printer
       .text(format.separator + '\n')
-      .text(convertSpanishText('GRACIAS POR SU PREFERENCIA\n'))
-      .text('\n');
+      .align('center');
+
+    // Leyenda legal según tipo de documento
+    if (isNotaVenta) {
+      printer = printer
+        .bold()
+        .text('DOCUMENTO NO VALIDO PARA\n')
+        .text('FINES TRIBUTARIOS\n')
+        .clearFormatting();
+    } else {
+      // Para facturas y boletas electrónicas
+      printer = printer
+        .bold()
+        .text(convertSpanishText(`REPRESENTACION IMPRESA DE LA\n${tipoComprobante} ELECTRONICA\n`))
+        .clearFormatting();
+
+      // Hash SUNAT (si existe)
+      if (invoice.sunatHash) {
+        printer = printer
+          .text('\n')
+          .align('left')
+          .bold()
+          .text('Hash: ')
+          .clearFormatting()
+          .text(convertSpanishText(invoice.sunatHash.substring(0, paperWidth === 80 ? 45 : 30)) + '\n')
+          .align('center');
+      }
+
+      // QR Code con texto "Escanea para validar"
+      if (qrData) {
+        printer = printer
+          .text('\n')
+          .qr(qrData)
+          .text('\n')
+          .text('Escanea para validar\n');
+      }
+
+      // Consulte comprobante en SUNAT
+      printer = printer
+        .text('\n')
+        .text('Consulte su comprobante en:\n')
+        .text('www.sunat.gob.pe\n');
+    }
+
+    // Mensaje de agradecimiento
+    printer = printer
+      .text('\n')
+      .bold()
+      .text(convertSpanishText('!Gracias por su preferencia!\n'))
+      .clearFormatting();
+
+    // Website (si existe)
+    if (business.website) {
+      printer = printer.text(convertSpanishText(business.website + '\n'));
+    }
+
+    printer = printer.text('\n');
 
     // Finalizar y enviar
     await printer
