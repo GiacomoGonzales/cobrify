@@ -161,8 +161,15 @@ export const createOrder = async (businessId, orderData) => {
       // Fuente del pedido (Rappi, PedidosYa, etc.)
       ...(orderData.source && { source: orderData.source }),
 
-      // Items de la orden
-      items: orderData.items || [],
+      // Items de la orden - cada item tiene su propio estado
+      items: (orderData.items || []).map(item => ({
+        ...item,
+        itemId: item.itemId || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        status: item.status || 'pending', // Estado individual: pending, preparing, ready, delivered
+        firedAt: new Date(), // Timestamp cuando se envió a cocina
+        readyAt: null,
+        deliveredAt: null,
+      })),
 
       // Información del cliente (opcional)
       ...(orderData.customerName && { customerName: orderData.customerName }),
@@ -173,7 +180,9 @@ export const createOrder = async (businessId, orderData) => {
       tax: orderData.tax || 0,
       total: orderData.total || 0,
 
-      // Estado de la orden
+      // Estado general de la orden
+      overallStatus: 'active', // active, completed, cancelled
+      // Mantener 'status' por compatibilidad temporal
       status: orderData.status || 'pending', // pending, preparing, ready, delivered, cancelled
 
       // Notas especiales
@@ -247,7 +256,18 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
 
     const orderData = orderSnap.data()
     const currentItems = orderData.items || []
-    const updatedItems = [...currentItems, ...newItems]
+
+    // Agregar itemId y estado a los nuevos items
+    const itemsWithStatus = newItems.map(item => ({
+      ...item,
+      itemId: item.itemId || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      status: item.status || 'pending', // Nuevos items empiezan como pending
+      firedAt: new Date(), // No usar serverTimestamp() en arrays
+      readyAt: null,
+      deliveredAt: null,
+    }))
+
+    const updatedItems = [...currentItems, ...itemsWithStatus]
 
     // Obtener configuración fiscal del negocio
     const businessRef = doc(db, 'businesses', businessId)
@@ -260,12 +280,16 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
     const total = updatedItems.reduce((sum, item) => sum + item.total, 0)
     const { subtotal, tax } = calculateOrderTotals(total, taxConfig)
 
+    // Si se agregan nuevos items, la orden vuelve a estar activa
+    const overallStatus = 'active'
+
     // Actualizar la orden
     await updateDoc(orderRef, {
       items: updatedItems,
       subtotal,
       tax,
       total,
+      overallStatus,
       updatedAt: serverTimestamp(),
     })
 
@@ -281,6 +305,70 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
     return { success: true, data: { subtotal, tax, total } }
   } catch (error) {
     console.error('Error al agregar items a la orden:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar el estado de un item individual en una orden
+ * @param {string} businessId - ID del negocio
+ * @param {string} orderId - ID de la orden
+ * @param {string} itemId - ID del item a actualizar
+ * @param {string} newStatus - Nuevo estado: 'pending', 'preparing', 'ready', 'delivered'
+ */
+export const updateItemStatus = async (businessId, orderId, itemId, newStatus) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+    const orderSnap = await getDoc(orderRef)
+
+    if (!orderSnap.exists()) {
+      return { success: false, error: 'Orden no encontrada' }
+    }
+
+    const orderData = orderSnap.data()
+    const items = orderData.items || []
+
+    // Encontrar el item por itemId
+    const itemIndex = items.findIndex(item => item.itemId === itemId)
+    if (itemIndex === -1) {
+      return { success: false, error: 'Item no encontrado' }
+    }
+
+    // Actualizar el item con el nuevo estado y timestamps
+    const updatedItems = items.map((item, index) => {
+      if (index === itemIndex) {
+        const updates = {
+          ...item,
+          status: newStatus,
+        }
+
+        // Actualizar timestamps según el estado (no usar serverTimestamp en arrays)
+        if (newStatus === 'ready' && !item.readyAt) {
+          updates.readyAt = new Date()
+        }
+        if (newStatus === 'delivered' && !item.deliveredAt) {
+          updates.deliveredAt = new Date()
+        }
+
+        return updates
+      }
+      return item
+    })
+
+    // Calcular el overallStatus basado en los estados de todos los items
+    const allDelivered = updatedItems.every(item => item.status === 'delivered')
+    const overallStatus = allDelivered ? 'completed' : 'active'
+
+    // Actualizar la orden
+    await updateDoc(orderRef, {
+      items: updatedItems,
+      overallStatus,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true, overallStatus }
+  } catch (error) {
+    console.error('Error al actualizar estado del item:', error)
     return { success: false, error: error.message }
   }
 }

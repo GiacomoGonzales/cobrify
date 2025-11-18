@@ -651,6 +651,35 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         </div>
       </div>
 
+      {/* Estado de Pago (para notas de venta con pagos parciales o completados) */}
+      {invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0 && (
+        <div className="ticket-section" style={{ borderTop: '2px dashed #000', paddingTop: '8px', marginTop: '8px' }}>
+          <div className="section-title">
+            {invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS'}
+          </div>
+          {invoice.paymentStatus === 'partial' && (
+            <>
+              <div className="info-row" style={{ marginBottom: '4px' }}>
+                <span className="info-label">Monto Pagado:</span>
+                <span style={{ fontWeight: 'bold' }}>{formatCurrency(invoice.amountPaid || 0)}</span>
+              </div>
+              <div className="info-row" style={{ marginBottom: '4px' }}>
+                <span className="info-label">Saldo Pendiente:</span>
+                <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(invoice.balance || 0)}</span>
+              </div>
+            </>
+          )}
+          <div style={{ marginTop: '8px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '4px' }}>HISTORIAL DE PAGOS:</div>
+            {invoice.paymentHistory.map((payment, index) => (
+              <div key={index} style={{ fontSize: '8px', marginBottom: '2px', paddingLeft: '4px' }}>
+                • {new Date(payment.date?.toDate ? payment.date.toDate() : payment.date).toLocaleDateString('es-PE')} - {formatCurrency(payment.amount)} ({payment.method})
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Métodos de Pago */}
       <div className="ticket-section">
         <div className="section-title">FORMA DE PAGO</div>

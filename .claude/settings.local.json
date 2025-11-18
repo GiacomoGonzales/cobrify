@@ -79,7 +79,9 @@
       "Bash(firebase projects:list:*)",
       "Bash(gsutil cors set:*)",
       "Bash(firebase hosting:channel:deploy:*)",
-      "Bash(./gradlew assembleRelease:*)"
+      "Bash(./gradlew assembleRelease:*)",
+      "Bash(npm start)",
+      "Bash(./android/gradlew.bat:*)"
     ],
     "deny": [],
     "ask": []

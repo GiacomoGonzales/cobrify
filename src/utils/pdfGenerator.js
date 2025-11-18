@@ -3,6 +3,8 @@ import { formatDate } from '@/lib/utils'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
 
 /**
  * Convierte un número a texto en español (para montos)
@@ -696,6 +698,68 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   currentY = totalsY + 20
 
+  // ========== 4.5. ESTADO DE PAGO (para notas de venta con pagos parciales o completados) ==========
+
+  if (invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
+    // Recuadro con borde discontinuo para la información de pago
+    const isPartial = invoice.paymentStatus === 'partial'
+    doc.setDrawColor(255, 153, 0) // Color naranja para el borde
+    doc.setLineWidth(0.5)
+    doc.setLineDash([2, 2]) // Línea discontinua
+    doc.roundedRect(totalsX - 10, currentY, totalsBoxWidth + 10, isPartial ? 45 : 30, 3, 3)
+    doc.setLineDash([]) // Restaurar línea continua
+
+    currentY += 8
+
+    // Título
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 102, 0) // Naranja
+    doc.text(isPartial ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS', totalsX, currentY)
+    currentY += 8
+
+    // Solo mostrar monto pagado y saldo si es pago parcial
+    if (isPartial) {
+      // Monto pagado
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Monto Pagado:', totalsX, currentY)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 150, 0) // Verde
+      doc.text(`S/ ${(invoice.amountPaid || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
+      currentY += 7
+
+      // Saldo pendiente
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Saldo Pendiente:', totalsX, currentY)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(255, 102, 0) // Naranja
+      doc.text(`S/ ${(invoice.balance || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
+      currentY += 15
+    }
+
+    // Historial de pagos
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('Historial de Pagos:', MARGIN_LEFT + 10, currentY)
+    currentY += 5
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    invoice.paymentHistory.forEach((payment) => {
+      const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date)
+      const dateStr = paymentDate.toLocaleDateString('es-PE')
+      const paymentText = `• ${dateStr} - S/ ${payment.amount.toFixed(2)} (${payment.method})`
+      doc.text(paymentText, MARGIN_LEFT + 15, currentY)
+      currentY += 4
+    })
+
+    currentY += 15
+  }
+
   // ========== 5. IMPORTE EN LETRAS ==========
 
   doc.setFillColor(...LIGHT_GRAY)
@@ -817,7 +881,46 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       docTypeName = 'Nota_de_Venta'
     }
     const fileName = `${docTypeName}_${invoice.number.replace(/\//g, '-')}.pdf`
-    doc.save(fileName)
+
+    // Detectar si estamos en una app móvil
+    const isNativePlatform = Capacitor.isNativePlatform()
+
+    if (isNativePlatform) {
+      try {
+        // Guardar en móvil usando Filesystem
+        const pdfOutput = doc.output('datauristring')
+        const base64Data = pdfOutput.split(',')[1]
+
+        // Crear directorio PDFs si no existe
+        const pdfDir = 'PDFs'
+        try {
+          await Filesystem.mkdir({
+            path: pdfDir,
+            directory: Directory.Documents,
+            recursive: true
+          })
+        } catch (mkdirError) {
+          // Ignorar error si el directorio ya existe
+          console.log('Directorio ya existe o no se pudo crear:', mkdirError)
+        }
+
+        const result = await Filesystem.writeFile({
+          path: `${pdfDir}/${fileName}`,
+          data: base64Data,
+          directory: Directory.Documents,
+          recursive: true
+        })
+
+        console.log('PDF guardado en:', result.uri)
+        return { success: true, uri: result.uri, fileName, doc }
+      } catch (error) {
+        console.error('Error al guardar PDF en móvil:', error)
+        throw error
+      }
+    } else {
+      // Guardar en web (descarga normal)
+      doc.save(fileName)
+    }
   }
 
   return doc

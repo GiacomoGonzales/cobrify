@@ -87,6 +87,17 @@ export default function InvoiceList() {
   const [showDispatchGuideModal, setShowDispatchGuideModal] = useState(false)
   const [selectedInvoiceForGuide, setSelectedInvoiceForGuide] = useState(null)
 
+  // Estados para anulación de notas de venta
+  const [voidingInvoice, setVoidingInvoice] = useState(null)
+  const [isVoiding, setIsVoiding] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+
+  // Estados para registro de pagos
+  const [paymentInvoice, setPaymentInvoice] = useState(null)
+  const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
+  const [newPaymentAmount, setNewPaymentAmount] = useState('')
+  const [newPaymentMethod, setNewPaymentMethod] = useState('Efectivo')
+
   // Función para imprimir ticket
   const handlePrintTicket = async () => {
     if (!viewingInvoice || !companySettings) return
@@ -258,6 +269,124 @@ ${companySettings?.website ? companySettings.website : ''}`
       toast.error('Error al eliminar la factura. Inténtalo nuevamente.')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  const handleVoidInvoice = async () => {
+    if (!voidingInvoice || !user?.uid) return
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    const businessId = getBusinessId()
+    setIsVoiding(true)
+    try {
+      // Actualizar el estado de la nota de venta a 'cancelled'
+      const voidData = {
+        status: 'cancelled',
+        voidedAt: new Date(),
+        voidReason: voidReason.trim() || 'Sin motivo especificado',
+        voidedBy: user.email || user.uid
+      }
+
+      const result = await updateInvoice(businessId, voidingInvoice.id, voidData)
+
+      if (result.success) {
+        // Devolver el stock de los productos
+        if (voidingInvoice.items && voidingInvoice.items.length > 0) {
+          // Importar función de manejo de stock
+          const { updateProductStock } = await import('@/services/firestoreService')
+
+          for (const item of voidingInvoice.items) {
+            if (item.productId) {
+              try {
+                await updateProductStock(businessId, item.productId, item.quantity, 'add')
+              } catch (stockError) {
+                console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
+              }
+            }
+          }
+        }
+
+        toast.success('Nota de venta anulada exitosamente')
+        setVoidingInvoice(null)
+        setVoidReason('')
+        loadInvoices()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al anular nota de venta:', error)
+      toast.error('Error al anular la nota de venta. Inténtalo nuevamente.')
+    } finally {
+      setIsVoiding(false)
+    }
+  }
+
+  const handleRegisterPayment = async () => {
+    if (!paymentInvoice || !user?.uid) return
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    const paymentAmount = parseFloat(newPaymentAmount)
+
+    // Validaciones
+    if (!paymentAmount || paymentAmount <= 0) {
+      toast.error('El monto debe ser mayor que cero')
+      return
+    }
+
+    if (paymentAmount > paymentInvoice.balance) {
+      toast.error('El monto no puede ser mayor que el saldo pendiente')
+      return
+    }
+
+    const businessId = getBusinessId()
+    setIsRegisteringPayment(true)
+
+    try {
+      // Calcular nuevos valores
+      const newAmountPaid = (paymentInvoice.amountPaid || 0) + paymentAmount
+      const newBalance = paymentInvoice.total - newAmountPaid
+      const newPaymentStatus = newBalance <= 0.01 ? 'completed' : 'partial' // 0.01 para manejar decimales
+
+      // Crear nuevo registro de pago
+      const newPaymentRecord = {
+        amount: paymentAmount,
+        date: new Date(),
+        method: newPaymentMethod,
+        recordedBy: user.email || user.uid,
+        recordedByName: user.displayName || user.email || 'Usuario'
+      }
+
+      // Actualizar el historial de pagos
+      const updatedPaymentHistory = [...(paymentInvoice.paymentHistory || []), newPaymentRecord]
+
+      // Actualizar la nota de venta
+      const result = await updateInvoice(businessId, paymentInvoice.id, {
+        amountPaid: newAmountPaid,
+        balance: newBalance,
+        paymentStatus: newPaymentStatus,
+        paymentHistory: updatedPaymentHistory
+      })
+
+      if (result.success) {
+        toast.success(`Pago de ${formatCurrency(paymentAmount)} registrado exitosamente`)
+        setPaymentInvoice(null)
+        setNewPaymentAmount('')
+        setNewPaymentMethod('Efectivo')
+        loadInvoices()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al registrar pago:', error)
+      toast.error('Error al registrar el pago. Inténtalo nuevamente.')
+    } finally {
+      setIsRegisteringPayment(false)
     }
   }
 
@@ -701,10 +830,27 @@ ${companySettings?.website ? companySettings.website : ''}`
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
-                      <span className="font-semibold text-sm whitespace-nowrap">{formatCurrency(invoice.total)}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold text-sm whitespace-nowrap">{formatCurrency(invoice.total)}</span>
+                        {/* Mostrar info de pago parcial si aplica */}
+                        {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'partial' && (
+                          <div className="text-xs space-y-0.5">
+                            <div className="text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</div>
+                            <div className="text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</div>
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
-                      <div className="scale-90 origin-left">{getStatusBadge(invoice.status)}</div>
+                      <div className="flex flex-col gap-1">
+                        <div className="scale-90 origin-left">{getStatusBadge(invoice.status)}</div>
+                        {/* Badge de estado de pago solo para notas de venta con pago parcial pendiente */}
+                        {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'partial' && (
+                          <Badge className="text-xs bg-orange-100 text-orange-800">
+                            Pago Pendiente
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="py-2.5 px-1 w-20">
                       <div className="scale-75 origin-left">{getSunatStatusBadge(invoice.sunatStatus || 'pending')}</div>
@@ -904,18 +1050,69 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <span>Descargar PDF</span>
                   </button>
 
-                  {/* Eliminar */}
-                  <div className="border-t border-gray-100 my-1" />
-                  <button
-                    onClick={() => {
-                      setOpenMenuId(null)
-                      setDeletingInvoice(invoice)
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Eliminar</span>
-                  </button>
+                  {/* Registrar Pago - Solo para notas de venta con saldo pendiente */}
+                  {invoice.documentType === 'nota_venta' &&
+                   invoice.status !== 'cancelled' &&
+                   invoice.paymentStatus === 'partial' &&
+                   invoice.balance > 0 && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          setPaymentInvoice(invoice)
+                          setNewPaymentAmount('')
+                          setNewPaymentMethod('Efectivo')
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-green-50 flex items-center gap-3 text-green-600"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Registrar Pago</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Anular - Solo para notas de venta no anuladas */}
+                  {invoice.documentType === 'nota_venta' && invoice.status !== 'cancelled' && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          setVoidingInvoice(invoice)
+                          setVoidReason('')
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                      >
+                        <Ban className="w-4 h-4" />
+                        <span>Anular Nota de Venta</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Eliminar - Solo si está habilitado en Configuración Y NO fue enviado a SUNAT */}
+                  {/* Los comprobantes enviados a SUNAT tienen validez fiscal y no se pueden eliminar */}
+                  {/* Solo se pueden anular mediante Nota de Crédito */}
+                  {businessSettings?.allowDeleteInvoices && (
+                    // Notas de venta (sin validez fiscal) se pueden eliminar si está habilitado
+                    invoice.documentType === 'nota_venta' ||
+                    // Facturas/Boletas solo si NO fueron enviadas a SUNAT
+                    (invoice.documentType !== 'nota_venta' && invoice.sunatStatus !== 'accepted' && invoice.sunatStatus !== 'pending')
+                  ) && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          setDeletingInvoice(invoice)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Eliminar</span>
+                      </button>
+                    </>
+                  )}
                 </>
               )
             })()}
@@ -1200,6 +1397,207 @@ ${companySettings?.website ? companySettings.website : ''}`
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Void Sales Note Modal */}
+      <Modal
+        isOpen={!!voidingInvoice}
+        onClose={() => !isVoiding && setVoidingInvoice(null)}
+        title="Anular Nota de Venta"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <Ban className="w-6 h-6 text-orange-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-700">
+                ¿Estás seguro de que deseas anular la nota de venta{' '}
+                <strong>{voidingInvoice?.number}</strong>?
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                Esta acción marcará la nota como anulada y devolverá el stock de los productos.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Motivo de anulación (opcional)
+            </label>
+            <textarea
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder="Ej: Error en el documento, cliente canceló la compra..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              rows={3}
+              disabled={isVoiding}
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setVoidingInvoice(null)
+                setVoidReason('')
+              }}
+              disabled={isVoiding}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="warning"
+              onClick={handleVoidInvoice}
+              disabled={isVoiding}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isVoiding ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Anulando...
+                </>
+              ) : (
+                <>
+                  <Ban className="w-4 h-4 mr-2" />
+                  Anular Nota de Venta
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Register Payment Modal */}
+      <Modal
+        isOpen={!!paymentInvoice}
+        onClose={() => !isRegisteringPayment && setPaymentInvoice(null)}
+        title="Registrar Pago"
+        size="sm"
+      >
+        {paymentInvoice && (
+          <div className="space-y-4">
+            {/* Current Payment Status */}
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <h4 className="font-semibold text-gray-900 text-sm">Estado de Pago Actual</h4>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <p className="text-gray-600">Total</p>
+                  <p className="font-semibold text-gray-900">{formatCurrency(paymentInvoice.total)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Pagado</p>
+                  <p className="font-semibold text-green-600">{formatCurrency(paymentInvoice.amountPaid || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Saldo</p>
+                  <p className="font-semibold text-orange-600">{formatCurrency(paymentInvoice.balance || 0)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Amount Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Monto del Pago <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max={paymentInvoice.balance}
+                value={newPaymentAmount}
+                onChange={(e) => setNewPaymentAmount(e.target.value)}
+                placeholder="0.00"
+                disabled={isRegisteringPayment}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Máximo: {formatCurrency(paymentInvoice.balance || 0)}
+              </p>
+            </div>
+
+            {/* Payment Method Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Método de Pago
+              </label>
+              <Select
+                value={newPaymentMethod}
+                onChange={(e) => setNewPaymentMethod(e.target.value)}
+                disabled={isRegisteringPayment}
+              >
+                <option value="Efectivo">Efectivo</option>
+                <option value="Tarjeta">Tarjeta</option>
+                <option value="Transferencia">Transferencia</option>
+                <option value="Yape">Yape</option>
+                <option value="Plin">Plin</option>
+              </Select>
+            </div>
+
+            {/* Payment Preview */}
+            {newPaymentAmount && parseFloat(newPaymentAmount) > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-blue-900 mb-2">Vista Previa</p>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Nuevo pago:</span>
+                    <span className="font-semibold text-blue-600">
+                      {formatCurrency(parseFloat(newPaymentAmount))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Total pagado:</span>
+                    <span className="font-semibold text-green-600">
+                      {formatCurrency((paymentInvoice.amountPaid || 0) + parseFloat(newPaymentAmount))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-blue-300 pt-1">
+                    <span className="text-gray-700">Nuevo saldo:</span>
+                    <span className="font-semibold text-orange-600">
+                      {formatCurrency(paymentInvoice.balance - parseFloat(newPaymentAmount))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setPaymentInvoice(null)
+                  setNewPaymentAmount('')
+                  setNewPaymentMethod('Efectivo')
+                }}
+                disabled={isRegisteringPayment}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleRegisterPayment}
+                disabled={isRegisteringPayment || !newPaymentAmount || parseFloat(newPaymentAmount) <= 0}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {isRegisteringPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Registrar Pago
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Export Modal */}

@@ -104,7 +104,7 @@ const getAllSubcategoryIds = (categories, parentId) => {
 }
 
 export default function POS() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings } = useAppContext()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -180,6 +180,10 @@ export default function POS() {
     email: '',
     phone: ''
   })
+
+  // Estados para pagos parciales (solo notas de venta)
+  const [enablePartialPayment, setEnablePartialPayment] = useState(false)
+  const [partialPaymentAmount, setPartialPaymentAmount] = useState('')
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -779,11 +783,15 @@ export default function POS() {
   // Calcular totales de pago (optimizado con useMemo)
   const paymentTotals = React.useMemo(() => {
     const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
-    const remaining = amounts.total - totalPaid
-    return { totalPaid, remaining }
-  }, [payments, amounts.total])
+    // Si hay pago parcial, el "total a pagar ahora" es el monto parcial, no el total de la venta
+    const amountToPay = enablePartialPayment && parseFloat(partialPaymentAmount) > 0
+      ? parseFloat(partialPaymentAmount)
+      : amounts.total
+    const remaining = amountToPay - totalPaid
+    return { totalPaid, remaining, amountToPay }
+  }, [payments, amounts.total, enablePartialPayment, partialPaymentAmount])
 
-  const { totalPaid, remaining } = paymentTotals
+  const { totalPaid, remaining, amountToPay } = paymentTotals
 
   // Filtrar clientes (optimizado con useMemo)
   const filteredCustomers = React.useMemo(() => {
@@ -888,8 +896,8 @@ export default function POS() {
       }
     }
 
-    // Validar que se haya cubierto el total
-    if (totalPaid < amounts.total) {
+    // Validar que se haya cubierto el monto a pagar (total o parcial)
+    if (totalPaid < amountToPay) {
       toast.error(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
@@ -1022,6 +1030,12 @@ export default function POS() {
       }))
 
       // 3. Crear factura
+      // Calcular datos de pago parcial
+      const isPartialPayment = enablePartialPayment && parseFloat(partialPaymentAmount) > 0 && documentType === 'nota_venta'
+      const amountPaid = isPartialPayment ? parseFloat(partialPaymentAmount) : amounts.total
+      const balance = isPartialPayment ? amounts.total - amountPaid : 0
+      const paymentStatus = isPartialPayment ? (balance > 0 ? 'partial' : 'completed') : 'completed'
+
       const invoiceData = {
         number: numberResult.number,
         series: numberResult.series,
@@ -1062,6 +1076,19 @@ export default function POS() {
         // Guardar el primer método como principal para compatibilidad
         paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
         status: 'paid',
+        // Datos de pago parcial (solo para notas de venta)
+        ...(documentType === 'nota_venta' && {
+          paymentStatus: paymentStatus,
+          amountPaid: amountPaid,
+          balance: balance,
+          paymentHistory: isPartialPayment ? [{
+            amount: amountPaid,
+            date: new Date(),
+            method: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
+            recordedBy: user.email || user.uid,
+            recordedByName: user.displayName || user.email || 'Usuario'
+          }] : []
+        }),
         notes: '',
         // Estado de SUNAT - solo facturas y boletas pueden enviarse a SUNAT
         sunatStatus: (documentType === 'factura' || documentType === 'boleta') ? 'pending' : 'not_applicable',
@@ -1545,7 +1572,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </label>
                   <Select
                     value={documentType}
-                    onChange={e => setDocumentType(e.target.value)}
+                    onChange={e => {
+                      setDocumentType(e.target.value)
+                      // Resetear pago parcial si cambia de nota de venta a otro tipo
+                      if (e.target.value !== 'nota_venta') {
+                        setEnablePartialPayment(false)
+                        setPartialPaymentAmount('')
+                      }
+                    }}
                   >
                     <option value="boleta">Boleta de Venta</option>
                     <option value="factura">Factura Electrónica</option>
@@ -2422,6 +2456,76 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="text-primary-600">{formatCurrency(amounts.total)}</span>
                 </div>
               </div>
+
+              {/* Opción de Pago Parcial - Solo para Notas de Venta */}
+              {cart.length > 0 && businessSettings?.allowPartialPayments && documentType === 'nota_venta' && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="space-y-3">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enablePartialPayment}
+                        onChange={e => {
+                          setEnablePartialPayment(e.target.checked)
+                          if (!e.target.checked) {
+                            setPartialPaymentAmount('')
+                          }
+                        }}
+                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        disabled={lastInvoiceData !== null}
+                      />
+                      <span className="text-sm text-gray-700">
+                        Pago parcial (adelanto)
+                      </span>
+                    </label>
+
+                    {enablePartialPayment && (
+                      <div className="space-y-2 pl-6">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">
+                            Monto a pagar ahora:
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
+                              S/
+                            </span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max={amounts.total}
+                              value={partialPaymentAmount}
+                              onChange={e => setPartialPaymentAmount(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              disabled={lastInvoiceData !== null}
+                            />
+                          </div>
+                        </div>
+
+                        {partialPaymentAmount && parseFloat(partialPaymentAmount) > 0 && parseFloat(partialPaymentAmount) <= amounts.total && (
+                          <div className="text-xs space-y-1 pt-1">
+                            <div className="flex justify-between text-gray-600">
+                              <span>Pagando ahora:</span>
+                              <span className="font-semibold">{formatCurrency(parseFloat(partialPaymentAmount))}</span>
+                            </div>
+                            <div className="flex justify-between text-orange-600">
+                              <span>Saldo pendiente:</span>
+                              <span className="font-semibold">{formatCurrency(amounts.total - parseFloat(partialPaymentAmount))}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {partialPaymentAmount && parseFloat(partialPaymentAmount) > amounts.total && (
+                          <p className="text-xs text-red-600">
+                            El monto no puede ser mayor que el total
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Payment Methods Section */}
               {cart.length > 0 && (

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -14,6 +14,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
+import { consultarRUC } from '@/services/documentLookupService'
 import {
   scanPrinters,
   connectPrinter,
@@ -79,6 +80,10 @@ export default function Settings() {
 
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
+  const [allowPartialPayments, setAllowPartialPayments] = useState(false)
+
+  // Estados para configuración de comprobantes
+  const [allowDeleteInvoices, setAllowDeleteInvoices] = useState(false)
 
   // Estados para configuración de SUNAT
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
@@ -118,6 +123,9 @@ export default function Settings() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [showManualConnect, setShowManualConnect] = useState(false)
+
+  // Estado para búsqueda de RUC
+  const [isLookingUpRuc, setIsLookingUpRuc] = useState(false)
   const [manualAddress, setManualAddress] = useState('')
   const [manualName, setManualName] = useState('')
 
@@ -126,6 +134,8 @@ export default function Settings() {
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    watch,
   } = useForm({
     resolver: zodResolver(companySettingsSchema),
   })
@@ -243,6 +253,10 @@ export default function Settings() {
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
+        setAllowPartialPayments(businessData.allowPartialPayments || false)
+
+        // Cargar configuración de comprobantes
+        setAllowDeleteInvoices(businessData.allowDeleteInvoices || false)
 
         // Cargar configuración de SUNAT
         setAutoSendToSunat(businessData.autoSendToSunat || false)
@@ -323,6 +337,43 @@ export default function Settings() {
     } catch (error) {
       console.error('Error al eliminar logo:', error)
       toast.error('Error al eliminar el logo')
+    }
+  }
+
+  // Buscar datos de RUC automáticamente
+  const handleLookupRuc = async () => {
+    const rucNumber = watch('ruc')
+
+    if (!rucNumber) {
+      toast.error('Ingrese un número de RUC para buscar')
+      return
+    }
+
+    if (rucNumber.length !== 11) {
+      toast.error('El RUC debe tener 11 dígitos')
+      return
+    }
+
+    setIsLookingUpRuc(true)
+
+    try {
+      const result = await consultarRUC(rucNumber)
+
+      if (result.success) {
+        // Autocompletar datos
+        setValue('businessName', result.data.razonSocial || '')
+        setValue('tradeName', result.data.nombreComercial || '')
+        setValue('address', result.data.direccion || '')
+
+        toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC', 5000)
+      }
+    } catch (error) {
+      console.error('Error al buscar RUC:', error)
+      toast.error('Error al consultar el RUC. Verifique su conexión.', 5000)
+    } finally {
+      setIsLookingUpRuc(false)
     }
   }
 
@@ -958,13 +1009,41 @@ export default function Settings() {
 
               {/* Company Info Fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="RUC"
-                  required
-                  placeholder="20123456789"
-                  error={errors.ruc?.message}
-                  {...register('ruc')}
-                />
+                {/* Campo RUC con botón de búsqueda */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    RUC <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="20123456789"
+                      {...register('ruc')}
+                      className={`flex-1 px-3 py-2 border ${
+                        errors.ruc ? 'border-red-500' : 'border-gray-300'
+                      } rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLookupRuc}
+                      disabled={isLookingUpRuc}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                      title="Buscar datos del RUC"
+                    >
+                      {isLookingUpRuc ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  {errors.ruc && (
+                    <p className="text-red-500 text-sm mt-1">{errors.ruc.message}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ingrese el RUC y haga clic en el botón de búsqueda para autocompletar los datos
+                  </p>
+                </div>
 
               <Input
                 label="Razón Social"
@@ -1283,6 +1362,33 @@ export default function Settings() {
                       </p>
                     </div>
                   </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowPartialPayments}
+                      onChange={(e) => setAllowPartialPayments(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir pagos parciales en Notas de Venta
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowPartialPayments
+                          ? '✓ Habilitado: Podrás registrar pagos parciales en las notas de venta. El sistema mostrará el monto pagado y el saldo pendiente. Útil para adelantos o pagos en cuotas.'
+                          : '✗ Deshabilitado: Las notas de venta solo se pueden emitir con pago completo. No se mostrarán opciones de pago parcial en el punto de venta.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                        <Info className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs text-amber-700 font-medium">
+                          {allowPartialPayments
+                            ? 'Los clientes pueden adelantar o pagar en cuotas'
+                            : 'Solo pagos completos'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -1317,6 +1423,46 @@ export default function Settings() {
                           {autoSendToSunat
                             ? 'Los comprobantes se enviarán automáticamente'
                             : 'Los comprobantes requerirán envío manual'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Configuración de Comprobantes */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Gestión de Comprobantes</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura las opciones de seguridad para la gestión de comprobantes
+                </p>
+
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowDeleteInvoices}
+                      onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir eliminar comprobantes
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowDeleteInvoices
+                          ? '✓ Habilitado: Se mostrará el botón "Eliminar" para notas de venta y comprobantes no enviados a SUNAT. Útil para corregir errores de captura, pero menos seguro desde el punto de vista contable.'
+                          : '✗ Deshabilitado: Solo se podrán ANULAR las notas de venta (se mantiene el registro y se devuelve el stock). Las facturas y boletas aceptadas por SUNAT solo se pueden anular mediante Nota de Crédito. Recomendado para mayor control y seguridad contable.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        <span className="text-xs text-amber-700 font-medium">
+                          {allowDeleteInvoices
+                            ? 'Mayor flexibilidad, menor control'
+                            : 'Mayor control y trazabilidad'}
                         </span>
                       </div>
                     </div>
@@ -1390,6 +1536,8 @@ export default function Settings() {
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
+                      allowPartialPayments: allowPartialPayments,
+                      allowDeleteInvoices: allowDeleteInvoices,
                       autoSendToSunat: autoSendToSunat,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       updatedAt: serverTimestamp(),

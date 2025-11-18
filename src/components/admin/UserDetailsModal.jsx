@@ -176,8 +176,22 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
     setIsSavingConfig(true);
     try {
       const businessRef = doc(db, 'businesses', user.userId);
+
+      // Actualizar el campo "enabled" según el método seleccionado
+      const configToSave = {
+        ...emissionConfig,
+        qpse: {
+          ...emissionConfig.qpse,
+          enabled: emissionConfig.method === 'qpse'
+        },
+        sunat: {
+          ...emissionConfig.sunat,
+          enabled: emissionConfig.method === 'sunat_direct'
+        }
+      };
+
       await setDoc(businessRef, {
-        emissionConfig: emissionConfig,
+        emissionConfig: configToSave,
         updatedAt: new Date()
       }, { merge: true });
 

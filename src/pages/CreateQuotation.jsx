@@ -12,6 +12,7 @@ import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { formatCurrency } from '@/lib/utils'
 import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
 import { createQuotation, getNextQuotationNumber } from '@/services/quotationService'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 const UNITS = [
   { value: 'UNIDAD', label: 'Unidad' },
@@ -44,6 +45,7 @@ export default function CreateQuotation() {
   })
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false)
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
+  const [isLookingUpDocument, setIsLookingUpDocument] = useState(false)
 
   // Cotización
   const [validityDays, setValidityDays] = useState(30)
@@ -166,6 +168,59 @@ export default function CreateQuotation() {
   const handleCustomerChange = customerId => {
     const customer = customers.find(c => c.id === customerId)
     setSelectedCustomer(customer || null)
+  }
+
+  // Buscar datos de DNI o RUC automáticamente
+  const handleLookupDocument = async () => {
+    const docNumber = manualCustomer.documentNumber
+
+    if (!docNumber) {
+      toast.error('Ingrese un número de documento para buscar')
+      return
+    }
+
+    setIsLookingUpDocument(true)
+
+    try {
+      let result
+
+      // Determinar si es DNI o RUC según la longitud
+      if (docNumber.length === 8) {
+        result = await consultarDNI(docNumber)
+      } else if (docNumber.length === 11) {
+        result = await consultarRUC(docNumber)
+      } else {
+        toast.error('El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)')
+        return
+      }
+
+      if (result.success) {
+        // Autocompletar datos
+        if (docNumber.length === 8) {
+          // Datos de DNI
+          setManualCustomer(prev => ({
+            ...prev,
+            name: result.data.nombreCompleto || '',
+          }))
+          toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
+        } else {
+          // Datos de RUC
+          setManualCustomer(prev => ({
+            ...prev,
+            name: result.data.razonSocial || '',
+            address: result.data.direccion || '',
+          }))
+          toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+        }
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este documento', 5000)
+      }
+    } catch (error) {
+      console.error('Error al buscar documento:', error)
+      toast.error('Error al consultar el documento. Verifique su conexión.', 5000)
+    } finally {
+      setIsLookingUpDocument(false)
+    }
   }
 
   const handleCreateCustomer = async () => {
@@ -505,20 +560,45 @@ export default function CreateQuotation() {
                       <option value="PASSPORT">Pasaporte</option>
                     </Select>
 
-                    <Input
-                      label="Número de Documento *"
-                      value={manualCustomer.documentNumber}
-                      onChange={e =>
-                        setManualCustomer({ ...manualCustomer, documentNumber: e.target.value })
-                      }
-                      placeholder={
-                        manualCustomer.documentType === 'DNI'
-                          ? '12345678'
-                          : manualCustomer.documentType === 'RUC'
-                          ? '20123456789'
-                          : 'Número'
-                      }
-                    />
+                    {/* Campo Número de Documento con botón de búsqueda */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Número de Documento <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={manualCustomer.documentNumber}
+                          onChange={e =>
+                            setManualCustomer({ ...manualCustomer, documentNumber: e.target.value })
+                          }
+                          placeholder={
+                            manualCustomer.documentType === 'DNI'
+                              ? '12345678'
+                              : manualCustomer.documentType === 'RUC'
+                              ? '20123456789'
+                              : 'Número'
+                          }
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleLookupDocument}
+                          disabled={isLookingUpDocument}
+                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                          title="Buscar datos del documento"
+                        >
+                          {isLookingUpDocument ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Search className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Ingrese DNI (8 dígitos) o RUC (11 dígitos) y haga clic en buscar
+                      </p>
+                    </div>
 
                     <div className="sm:col-span-2">
                       <Input
