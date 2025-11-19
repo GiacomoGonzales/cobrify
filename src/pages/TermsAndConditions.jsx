@@ -72,105 +72,132 @@ export default function TermsAndConditions() {
             </ul>
           </section>
 
-          {/* Planes de Servicio */}
+          {/* Planes de Servicio y Prueba Gratuita */}
           <section className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">3. Planes de Servicio</h2>
-            <p className="text-gray-700 leading-relaxed mb-6">
-              Cobrify ofrece diferentes planes de servicio para adaptarse a las necesidades de tu negocio:
-            </p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">3. Planes de Servicio y Prueba Gratuita</h2>
 
-            {/* Plan Gratuito */}
-            <div className="bg-gray-50 rounded-lg p-6 mb-6 border border-gray-200">
+            {/* Prueba Gratuita */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 mb-6 border-2 border-green-200">
               <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center">
-                <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm mr-3">GRATIS</span>
-                Plan Gratuito
+                <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm mr-3">PRUEBA GRATIS</span>
+                Prueba Gratuita de 1 Día
               </h3>
-              <p className="text-gray-600 mb-4">Ideal para comenzar y probar la plataforma sin compromiso.</p>
+              <p className="text-gray-700 mb-4">
+                Al registrarte en Cobrify, obtienes acceso completo a todas las funcionalidades de la plataforma durante 1 día sin costo alguno.
+              </p>
               <ul className="space-y-2">
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Hasta 10 comprobantes electrónicos por mes</span>
+                  <span><strong>Acceso completo</strong> a todas las funcionalidades</span>
                 </li>
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Gestión básica de productos y clientes</span>
+                  <span>Duración: <strong>1 día</strong> desde el registro</span>
                 </li>
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Punto de venta (POS) básico</span>
+                  <span>Sin tarjeta de crédito requerida</span>
                 </li>
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Reportes básicos</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Soporte por correo electrónico</span>
+                  <span>Acceso a demos interactivas (Retail y Restaurante)</span>
                 </li>
               </ul>
               <p className="text-gray-600 mt-4 text-sm italic">
-                * El plan gratuito tiene limitaciones en el número de comprobantes que se pueden emitir mensualmente.
+                * Después del período de prueba, debes contratar un plan de pago para continuar usando el servicio.
               </p>
             </div>
 
-            {/* Plan Premium */}
-            <div className="bg-primary-50 rounded-lg p-6 mb-6 border-2 border-primary-500">
-              <h3 className="text-xl font-bold text-gray-900 mb-3 flex items-center">
-                <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm mr-3">PREMIUM</span>
-                Plan Premium
-              </h3>
-              <p className="text-gray-600 mb-4">Para negocios que requieren funcionalidades avanzadas y sin límites.</p>
-              <ul className="space-y-2">
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span><strong>Comprobantes ilimitados</strong> - Emite todos los comprobantes que necesites</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Todas las funcionalidades del plan gratuito</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Gestión avanzada de inventario y almacenes</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Control de caja completo</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Modo restaurante con gestión de mesas, mozos y cocina</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Usuarios y permisos múltiples</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Reportes avanzados y estadísticas en tiempo real</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Integración con impresoras térmicas</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Guías de remisión electrónicas</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Soporte prioritario</span>
-                </li>
-                <li className="flex items-start text-gray-700">
-                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Actualizaciones continuas de funcionalidades</span>
-                </li>
-              </ul>
+            <p className="text-gray-700 leading-relaxed mb-6">
+              Cobrify ofrece tres planes de suscripción con las mismas funcionalidades completas. La diferencia está en el período de facturación y el ahorro:
+            </p>
+
+            {/* Plan Mensual */}
+            <div className="bg-white rounded-lg p-6 mb-4 border-2 border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xl font-bold text-gray-900">Plan Mensual</h3>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-gray-900">S/19.90</p>
+                  <p className="text-sm text-gray-500">/mes</p>
+                </div>
+              </div>
+              <p className="text-gray-600 mb-4">Pago mes a mes. Ideal para empezar sin compromisos largos.</p>
             </div>
 
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mt-6">
-              <p className="text-blue-900 text-sm">
-                <strong>Nota:</strong> Los precios y características de los planes están sujetos a cambios. Los usuarios existentes mantendrán sus tarifas durante la vigencia de su suscripción activa.
+            {/* Plan Semestral */}
+            <div className="bg-primary-50 rounded-lg p-6 mb-4 border-2 border-primary-500">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold text-gray-900">Plan Semestral</h3>
+                  <span className="bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold">MÁS POPULAR</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-gray-900">S/99.90</p>
+                  <p className="text-sm text-gray-500">/6 meses</p>
+                </div>
+              </div>
+              <p className="text-gray-600 mb-2">Pago cada 6 meses. Ahorra S/19.50 (16% de descuento).</p>
+              <p className="text-sm text-primary-700 font-semibold">Equivalente a S/16.65/mes</p>
+            </div>
+
+            {/* Plan Anual */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 mb-6 border-2 border-green-500">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold text-gray-900">Plan Anual</h3>
+                  <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">MEJOR AHORRO</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-gray-900">S/149.90</p>
+                  <p className="text-sm text-gray-500">/año</p>
+                </div>
+              </div>
+              <p className="text-gray-600 mb-2">Pago anual. Ahorra S/88.90 (37% de descuento).</p>
+              <p className="text-sm text-green-700 font-semibold">Equivalente a S/12.49/mes</p>
+            </div>
+
+            {/* Características incluidas en todos los planes */}
+            <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+              <h4 className="font-bold text-gray-900 mb-4">Todas las suscripciones incluyen:</h4>
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Facturación ilimitada SUNAT</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Control de stock completo</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Múltiples usuarios</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Soporte prioritario</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Software a medida</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">100% Web (sin instalación)</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Reportes avanzados exportables</span>
+                </div>
+                <div className="flex items-start">
+                  <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-700">Adaptado a cualquier negocio</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200 mt-6">
+              <p className="text-yellow-900 text-sm">
+                <strong>Nota:</strong> Los precios están en Soles Peruanos (PEN) y están sujetos a cambios. Los usuarios con suscripción activa mantendrán su tarifa durante la vigencia de su plan contratado.
               </p>
             </div>
           </section>
