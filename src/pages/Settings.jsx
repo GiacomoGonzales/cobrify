@@ -91,6 +91,9 @@ export default function Settings() {
   // Estados para guías de remisión
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
 
+  // Estados para fecha de emisión
+  const [allowCustomEmissionDate, setAllowCustomEmissionDate] = useState(false)
+
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
   const [restaurantConfig, setRestaurantConfig] = useState({
@@ -263,6 +266,9 @@ export default function Settings() {
 
         // Cargar configuración de guías de remisión
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
+
+        // Cargar configuración de fecha de emisión
+        setAllowCustomEmissionDate(businessData.allowCustomEmissionDate || false)
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -1467,6 +1473,33 @@ export default function Settings() {
                       </div>
                     </div>
                   </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowCustomEmissionDate}
+                      onChange={(e) => setAllowCustomEmissionDate(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir seleccionar fecha de emisión en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowCustomEmissionDate
+                          ? '✓ Habilitado: Se mostrará un selector de fecha en el punto de venta para emitir comprobantes con fechas anteriores (hasta 3 días para facturas, 7 días para boletas según normativa SUNAT).'
+                          : '✗ Deshabilitado: Los comprobantes siempre se emiten con la fecha actual del sistema.'}
+                      </p>
+                      <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs text-blue-700 font-medium">
+                          {allowCustomEmissionDate
+                            ? 'Útil para regularizar ventas de días anteriores'
+                            : 'Emisión con fecha actual solamente'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -1540,6 +1573,7 @@ export default function Settings() {
                       allowDeleteInvoices: allowDeleteInvoices,
                       autoSendToSunat: autoSendToSunat,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
+                      allowCustomEmissionDate: allowCustomEmissionDate,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')

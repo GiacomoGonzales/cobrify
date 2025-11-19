@@ -19,6 +19,7 @@ import {
   Edit2,
   X,
   Check,
+  Calendar,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -117,6 +118,7 @@ export default function POS() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [documentType, setDocumentType] = useState('boleta')
+  const [emissionDate, setEmissionDate] = useState(new Date().toISOString().split('T')[0]) // Fecha de emisión (por defecto hoy)
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -995,7 +997,8 @@ export default function POS() {
           sunatStatus: 'not_applicable',
           sunatResponse: null,
           sunatSentAt: null,
-          createdAt: new Date(),
+          createdAt: new Date(emissionDate + 'T12:00:00'),
+          emissionDate: emissionDate,
         }
 
         setLastInvoiceNumber(demoNumber)
@@ -1110,6 +1113,8 @@ export default function POS() {
         sunatStatus: (documentType === 'factura' || documentType === 'boleta') ? 'pending' : 'not_applicable',
         sunatResponse: null,
         sunatSentAt: null,
+        // Fecha de emisión
+        emissionDate: emissionDate,
         // Información del vendedor
         createdBy: user.uid,
         createdByName: user.displayName || user.email || 'Usuario',
@@ -1602,6 +1607,35 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <option value="nota_venta">Nota de Venta</option>
                   </Select>
                 </div>
+
+                {/* Fecha de Emisión - Solo si está habilitado en configuración */}
+                {businessSettings?.allowCustomEmissionDate && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Fecha de Emisión
+                    </label>
+                    <input
+                      type="date"
+                      value={emissionDate}
+                      max={new Date().toISOString().split('T')[0]}
+                      min={(() => {
+                        const today = new Date()
+                        const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
+                        const minDate = new Date(today)
+                        minDate.setDate(today.getDate() - maxDaysBack)
+                        return minDate.toISOString().split('T')[0]
+                      })()}
+                      onChange={e => setEmissionDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {documentType === 'factura' && 'Máximo 3 días anteriores según SUNAT'}
+                      {documentType === 'boleta' && 'Máximo 7 días anteriores según SUNAT'}
+                      {documentType === 'nota_venta' && 'Sin límite de antigüedad'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Tipo de Pedido - Solo para modo restaurant */}
                 {businessMode === 'restaurant' && (
