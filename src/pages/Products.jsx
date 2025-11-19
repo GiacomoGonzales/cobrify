@@ -369,8 +369,8 @@ export default function Products() {
         hasVariants: hasVariants,
         trackExpiration: trackExpiration,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
-        // Add modifiers if in restaurant mode
-        modifiers: businessMode === 'restaurant' ? modifiers : undefined,
+        // Add modifiers if in restaurant mode (only include if exists)
+        ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
       }
 
       if (hasVariants) {
