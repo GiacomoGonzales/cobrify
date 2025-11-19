@@ -339,7 +339,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Items text
     let itemsText = '';
 
-    // Solo mostrar header de columnas para 58mm (no para 80mm)
+    // Mostrar header de columnas SOLO para 58mm (NO para 80mm)
     if (paperWidth !== 80) {
       const headerLine = 'CANT  DESCRIPCION   PRECIO';
       itemsText += headerLine + '\n';
@@ -368,20 +368,23 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
 
       if (paperWidth === 80) {
-        // FORMATO 80MM - Igual al de la web
+        // FORMATO 80MM - EXACTAMENTE IGUAL AL WEB
         // Línea 1: Nombre del producto completo
         itemsText += `${itemName}\n`;
 
-        // Línea 2: "cantidad x precio unitario" (izq) y "total" (der)
-        const qtyAndPrice = `${item.quantity} x S/${unitPrice.toFixed(2)}`;
-        const totalStr = `S/${itemTotal.toFixed(2)}`;
+        // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
+        const qtyAndPrice = `${item.quantity} X S/ ${unitPrice.toFixed(2)}`;
+        const totalStr = `S/ ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
 
-        // Código si existe
+        // Línea 3: Código si existe
         if (item.code) {
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
+
+        // Línea 4: Separación entre items (línea vacía)
+        itemsText += '\n';
       } else {
         // FORMATO 58MM - Mantener formato actual con columnas fijas
         const cant = String(item.quantity || 0).padEnd(6);
