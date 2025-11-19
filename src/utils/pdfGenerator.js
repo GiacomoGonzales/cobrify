@@ -550,8 +550,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Definir anchos de columnas (simplificado)
   const colWidths = {
     cant: CONTENT_WIDTH * 0.07,
-    cod: CONTENT_WIDTH * 0.11,
-    desc: CONTENT_WIDTH * 0.52,
+    cod: CONTENT_WIDTH * 0.18,  // Aumentado de 11% a 18% para códigos largos
+    desc: CONTENT_WIDTH * 0.45,  // Reducido de 52% a 45%
     pu: CONTENT_WIDTH * 0.13,
     importe: CONTENT_WIDTH * 0.17
   }
@@ -615,14 +615,21 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(item.quantity.toFixed(0), cols.cant + colWidths.cant / 2, dataRowY, { align: 'center' })
 
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
+      doc.setFontSize(7)
       doc.setTextColor(...MEDIUM_GRAY)
-      // Truncar código si es muy largo para evitar superposición
+      // Mostrar código en múltiples líneas si es necesario
       const itemCode = item.code || '-'
-      const maxCodeWidth = colWidths.cod - 4 // Dejar margen
+      const maxCodeWidth = colWidths.cod - 6 // Dejar margen
       const codeLines = doc.splitTextToSize(itemCode, maxCodeWidth)
-      const displayCode = codeLines.length > 1 ? codeLines[0].substring(0, codeLines[0].length - 3) + '...' : codeLines[0]
-      doc.text(displayCode, cols.cod + colWidths.cod / 2, dataRowY, { align: 'center' })
+
+      // Mostrar hasta 2 líneas del código
+      if (codeLines.length === 1) {
+        doc.text(codeLines[0], cols.cod + colWidths.cod / 2, dataRowY, { align: 'center' })
+      } else {
+        // Si hay 2 o más líneas, mostrar las dos primeras
+        doc.text(codeLines[0], cols.cod + colWidths.cod / 2, dataRowY - 3, { align: 'center' })
+        doc.text(codeLines[1] || '', cols.cod + colWidths.cod / 2, dataRowY + 4, { align: 'center' })
+      }
 
       doc.setFontSize(9)
       doc.setTextColor(...DARK_GRAY)
