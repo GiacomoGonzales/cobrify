@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -2382,6 +2382,26 @@ export default function Products() {
                 )}
               </div>
             </div>
+
+            {/* Proveedor */}
+            {viewingProduct.lastSupplier && (
+              <div className="bg-indigo-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Truck className="w-4 h-4" />
+                  Último Proveedor
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Razón Social</label>
+                    <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.lastSupplier.businessName}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">RUC</label>
+                    <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.lastSupplier.documentNumber}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Stock e Inventario */}
             {viewingProduct.trackStock !== false && (

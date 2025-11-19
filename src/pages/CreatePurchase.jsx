@@ -535,7 +535,12 @@ export default function CreatePurchase() {
           const updates = {
             stock: updatedProduct.stock,
             warehouseStocks: updatedProduct.warehouseStocks,
-            cost: averageCost // Actualizar con costo promedio ponderado
+            cost: averageCost, // Actualizar con costo promedio ponderado
+            lastSupplier: {
+              id: selectedSupplier.id,
+              documentNumber: selectedSupplier.documentNumber,
+              businessName: selectedSupplier.businessName
+            }
           }
 
           return updateProduct(user.uid, item.productId, updates)
