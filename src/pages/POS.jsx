@@ -1297,8 +1297,8 @@ export default function POS() {
             toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
             toast.info('Usando impresión estándar...')
           } else {
-            // Imprimir en impresora térmica
-            const result = await printInvoiceTicket(lastInvoiceData, companySettings, printerConfigResult.config.paperWidth || 58)
+            // Imprimir en impresora térmica (80mm por defecto)
+            const result = await printInvoiceTicket(lastInvoiceData, companySettings, printerConfigResult.config.paperWidth || 80)
 
             if (result.success) {
               toast.success('Comprobante impreso en ticketera')

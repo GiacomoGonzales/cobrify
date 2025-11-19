@@ -254,6 +254,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
         address: printerConfig.address,
         name: printerConfig.name,
         type: printerConfig.type || 'bluetooth', // bluetooth o wifi
+        paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
         enabled: printerConfig.enabled !== false,
         updatedAt: new Date()
       }
