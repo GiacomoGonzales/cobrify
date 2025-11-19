@@ -340,24 +340,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     textY = headerY + 5
   }
 
-  // Primero calcular altura del header (fija en 85pt)
-  const headerHeight = 85
-
   // Columna derecha - Recuadro del comprobante (35%)
   const rightColumnWidth = CONTENT_WIDTH * 0.40
   const rightColumnX = MARGIN_LEFT + leftColumnWidth
 
-  // Recuadro con borde negro
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(2)
-  doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+  // Primero procesar el nombre de la empresa para saber cuántas líneas ocupa
+  doc.setFontSize(14)
+  doc.setTextColor(...DARK_GRAY)
+  doc.setFont('helvetica', 'bold')
 
-  // Información de la empresa DEBAJO del logo - alineada con la parte inferior del recuadro
-  // Calcular la posición Y final donde debe terminar el texto (parte inferior del recuadro)
-  const bottomY = headerY + headerHeight - 5 // 5pt de margen inferior
+  const companyName = companySettings?.businessName || 'EMPRESA SAC'
+  const companyNameLines = doc.splitTextToSize(companyName, leftColumnWidth - 10)
 
   // Contar cuántas líneas de información tenemos
-  let lineCount = 1 // Nombre de empresa (siempre)
+  let lineCount = companyNameLines.length // Nombre de empresa (puede ser múltiples líneas)
   if (companySettings?.ruc) lineCount++
   if (companySettings?.address) lineCount++ // Asumiendo 1 línea
   if (companySettings?.phone) lineCount++
@@ -366,6 +362,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Calcular espaciado entre líneas
   const lineHeight = 11
   const totalTextHeight = lineCount * lineHeight
+
+  // Calcular altura del header dinámicamente
+  const minHeaderHeight = 85
+  const requiredHeaderHeight = Math.max(minHeaderHeight, textY - headerY + totalTextHeight + 15)
+  const headerHeight = requiredHeaderHeight
+
+  // Recuadro con borde negro
+  doc.setDrawColor(...BLACK)
+  doc.setLineWidth(2)
+  doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+
+  // Información de la empresa DEBAJO del logo
+  // Calcular la posición Y final donde debe terminar el texto (parte inferior del recuadro)
+  const bottomY = headerY + headerHeight - 5 // 5pt de margen inferior
 
   // Calcular posición inicial del texto
   let calculatedTextY = bottomY - totalTextHeight + lineHeight
@@ -377,14 +387,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Usar la mayor de las dos posiciones para evitar superposición
   textY = Math.max(minTextY, calculatedTextY)
 
-  // Nombre de la empresa
-  doc.setFontSize(14)
-  doc.setTextColor(...DARK_GRAY)
-  doc.setFont('helvetica', 'bold')
-
-  const companyName = companySettings?.businessName || 'EMPRESA SAC'
-  doc.text(companyName, leftColumnX, textY)
-  textY += lineHeight
+  // Nombre de la empresa (puede ser múltiples líneas)
+  companyNameLines.forEach((line, index) => {
+    doc.text(line, leftColumnX, textY + (index * lineHeight))
+  })
+  textY += companyNameLines.length * lineHeight
 
   // RUC de la empresa
   doc.setFontSize(9)
@@ -610,7 +617,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
       doc.setTextColor(...MEDIUM_GRAY)
-      doc.text(item.code || '-', cols.cod + colWidths.cod / 2, dataRowY, { align: 'center' })
+      // Truncar código si es muy largo para evitar superposición
+      const itemCode = item.code || '-'
+      const maxCodeWidth = colWidths.cod - 4 // Dejar margen
+      const codeLines = doc.splitTextToSize(itemCode, maxCodeWidth)
+      const displayCode = codeLines.length > 1 ? codeLines[0].substring(0, codeLines[0].length - 3) + '...' : codeLines[0]
+      doc.text(displayCode, cols.cod + colWidths.cod / 2, dataRowY, { align: 'center' })
 
       doc.setFontSize(9)
       doc.setTextColor(...DARK_GRAY)
