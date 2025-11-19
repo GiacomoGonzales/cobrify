@@ -129,8 +129,8 @@ export default function Dashboard() {
   // Facturas pendientes
   const pendingInvoices = invoices.filter(inv => inv.status === 'pending')
 
-  // Productos con stock bajo (< 10)
-  const lowStockProducts = products.filter(p => p.stock !== null && p.stock < 10)
+  // Productos con stock bajo (< 4)
+  const lowStockProducts = products.filter(p => p.stock !== null && p.stock < 4)
 
   // Datos de ventas de los últimos 7 días
   const salesData = []

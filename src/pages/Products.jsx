@@ -1163,7 +1163,7 @@ export default function Products() {
       return sum
     }, 0)
 
-    const lowStockCount = products.filter(product => product.stock !== null && product.stock < 10).length
+    const lowStockCount = products.filter(product => product.stock !== null && product.stock < 4).length
 
     const expiringProductsCount = products.filter(product => {
       if (!product.trackExpiration || !product.expirationDate) return false
@@ -1568,7 +1568,7 @@ export default function Products() {
                               ) : product.stock !== null && product.stock !== undefined ? (
                                 <span
                                   className={`font-medium ${
-                                    product.stock > 10
+                                    product.stock >= 4
                                       ? 'text-green-600'
                                       : product.stock > 0
                                       ? 'text-yellow-600'
@@ -1670,7 +1670,7 @@ export default function Products() {
                                       </div>
                                       <span
                                         className={`font-semibold ${
-                                          stock > 10
+                                          stock >= 4
                                             ? 'text-green-600'
                                             : stock > 0
                                             ? 'text-yellow-600'
@@ -2414,7 +2414,7 @@ export default function Products() {
                   <div>
                     <label className="text-xs font-medium text-gray-500">Stock Total</label>
                     <p className={`text-2xl font-bold mt-1 ${
-                      (viewingProduct.stock || 0) > 10 ? 'text-green-600' :
+                      (viewingProduct.stock || 0) >= 4 ? 'text-green-600' :
                       (viewingProduct.stock || 0) > 0 ? 'text-yellow-600' :
                       'text-red-600'
                     }`}>
@@ -2436,7 +2436,7 @@ export default function Products() {
                                 {warehouse?.isDefault && <Badge variant="default" className="ml-2 text-xs">Principal</Badge>}
                               </span>
                               <span className={`font-semibold text-sm ${
-                                ws.stock > 10 ? 'text-green-600' :
+                                ws.stock >= 4 ? 'text-green-600' :
                                 ws.stock > 0 ? 'text-yellow-600' :
                                 'text-red-600'
                               }`}>

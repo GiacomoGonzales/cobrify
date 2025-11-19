@@ -724,7 +724,7 @@ export default function Inventory() {
                                       </div>
                                       <span
                                         className={`font-semibold ${
-                                          stock > 10
+                                          stock >= 4
                                             ? 'text-green-600'
                                             : stock > 0
                                             ? 'text-yellow-600'
