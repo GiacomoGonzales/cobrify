@@ -91,6 +91,7 @@ export default function CreatePurchase() {
   const [showCreateProductModal, setShowCreateProductModal] = useState(false)
   const [currentItemIndex, setCurrentItemIndex] = useState(null)
   const [noStock, setNoStock] = useState(false)
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false)
 
   // React Hook Form para el modal de producto
   const {
@@ -331,6 +332,10 @@ export default function CreatePurchase() {
   }
 
   const handleCreateProduct = async (data) => {
+    // Prevenir múltiples clicks
+    if (isCreatingProduct) return
+    setIsCreatingProduct(true)
+
     try {
       const productData = {
         code: data.code,
@@ -376,10 +381,12 @@ export default function CreatePurchase() {
         closeCreateProductModal()
       } else {
         toast.error(result.error || 'Error al crear el producto')
+        setIsCreatingProduct(false)
       }
     } catch (error) {
       console.error('Error al crear producto:', error)
       toast.error('Error al crear el producto')
+      setIsCreatingProduct(false)
     }
   }
 
@@ -388,6 +395,7 @@ export default function CreatePurchase() {
     resetProduct()
     setNoStock(false)
     setCurrentItemIndex(null)
+    setIsCreatingProduct(false)
   }
 
   const validateForm = () => {
@@ -1102,12 +1110,21 @@ export default function CreatePurchase() {
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={closeCreateProductModal}>
+            <Button type="button" variant="outline" onClick={closeCreateProductModal} disabled={isCreatingProduct}>
               Cancelar
             </Button>
-            <Button type="submit">
-              <PackagePlus className="w-4 h-4 mr-2" />
-              Crear Producto
+            <Button type="submit" disabled={isCreatingProduct}>
+              {isCreatingProduct ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                <>
+                  <PackagePlus className="w-4 h-4 mr-2" />
+                  Crear Producto
+                </>
+              )}
             </Button>
           </div>
         </form>
