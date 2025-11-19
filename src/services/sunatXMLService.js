@@ -69,6 +69,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     igv,
     total,
     createdAt,
+    emissionDate,
   } = invoiceData
 
   const {
@@ -103,8 +104,17 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     : DOCUMENT_TYPE_CODES.BOLETA
 
   // Fecha de emisión en formato YYYY-MM-DD
-  const issueDate = dayjs(createdAt.toDate()).format('YYYY-MM-DD')
-  const issueTime = dayjs(createdAt.toDate()).format('HH:mm:ss')
+  // Priorizar emissionDate si existe (fecha seleccionada por usuario), sino usar createdAt
+  let issueDate, issueTime
+  if (emissionDate) {
+    // Si existe emissionDate (formato 'YYYY-MM-DD'), usarlo directamente
+    issueDate = emissionDate
+    issueTime = '12:00:00' // Hora fija para fechas personalizadas
+  } else {
+    // Usar createdAt (Timestamp de Firestore)
+    issueDate = dayjs(createdAt.toDate()).format('YYYY-MM-DD')
+    issueTime = dayjs(createdAt.toDate()).format('HH:mm:ss')
+  }
 
   // Documento completo (serie-número)
   // Si tenemos correlativeNumber, usarlo; si no, usar el number formateado que ya viene
