@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Eliminación de Cuenta - Cobrify - Sistema de facturación electrónica para Perú">
+    <title>Eliminación de Cuenta - Cobrify</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        header {
+            background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
+            color: #fff;
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+
+        .content {
+            padding: 3rem 2rem;
+        }
+
+        .last-updated {
+            background-color: #EEF2FF;
+            border-left: 4px solid #4F46E5;
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            border-radius: 4px;
+        }
+
+        .last-updated strong {
+            color: #4F46E5;
+        }
+
+        h2 {
+            color: #4F46E5;
+            font-size: 1.8rem;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        h3 {
+            color: #3730A3;
+            font-size: 1.3rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.8rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            text-align: justify;
+        }
+
+        ul, ol {
+            margin-bottom: 1rem;
+            padding-left: 2rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        .highlight-box {
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+
+        .warning-box {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+
+        .info-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+
+        .contact-section {
+            background-color: #f9f9f9;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .contact-section h3 {
+            color: #4F46E5;
+            margin-top: 0;
+        }
+
+        .email-link {
+            display: inline-block;
+            background-color: #4F46E5;
+            color: #fff;
+            padding: 1rem 2rem;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            margin-top: 1rem;
+            transition: background-color 0.3s;
+        }
+
+        .email-link:hover {
+            background-color: #3730A3;
+        }
+
+        .steps-list {
+            counter-reset: step-counter;
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .steps-list li {
+            counter-increment: step-counter;
+            margin-bottom: 1.5rem;
+            padding-left: 3rem;
+            position: relative;
+        }
+
+        .steps-list li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
+            color: #fff;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        footer {
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        footer a {
+            color: #4F46E5;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2rem;
+            }
+
+            .content {
+                padding: 2rem 1.5rem;
+            }
+
+            h2 {
+                font-size: 1.5rem;
+            }
+
+            h3 {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Eliminación de Cuenta</h1>
+            <p>Cobrify - Sistema de Facturación Electrónica</p>
+        </header>
+
+        <div class="content">
+            <div class="last-updated">
+                <strong>Última actualización:</strong> 18 de noviembre de 2025
+            </div>
+
+            <p>
+                En <strong>Cobrify</strong>, respetamos tu derecho a solicitar la eliminación de tu cuenta y datos personales.
+                Esta página explica cómo puedes solicitar la eliminación de tu cuenta, qué datos se eliminarán y qué información
+                debemos conservar por obligaciones legales.
+            </p>
+
+            <h2>1. Cómo Solicitar la Eliminación de tu Cuenta</h2>
+
+            <p>
+                Para solicitar la eliminación de tu cuenta de Cobrify, sigue estos pasos:
+            </p>
+
+            <ol class="steps-list">
+                <li>
+                    <strong>Envía un correo electrónico</strong> a nuestro equipo de soporte a la dirección:
+                    <strong>soporte@cobrifyperu.com</strong>
+                </li>
+                <li>
+                    <strong>Asunto del correo:</strong> "Solicitud de Eliminación de Cuenta - Cobrify"
+                </li>
+                <li>
+                    <strong>Incluye la siguiente información</strong> en tu solicitud:
+                    <ul>
+                        <li>Email registrado en tu cuenta de Cobrify</li>
+                        <li>RUC o DNI asociado a tu cuenta</li>
+                        <li>Nombre completo o razón social</li>
+                        <li>Confirmación explícita de que deseas eliminar tu cuenta</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Espera nuestra confirmación:</strong> Procesaremos tu solicitud y te enviaremos un correo de confirmación
+                    en un plazo máximo de <strong>30 días hábiles</strong>.
+                </li>
+            </ol>
+
+            <div class="contact-section">
+                <h3>Contacto para Eliminación de Cuenta</h3>
+                <p>Envía tu solicitud a:</p>
+                <a href="mailto:soporte@cobrifyperu.com?subject=Solicitud%20de%20Eliminaci%C3%B3n%20de%20Cuenta%20-%20Cobrify" class="email-link">
+                    soporte@cobrifyperu.com
+                </a>
+            </div>
+
+            <h2>2. Datos que se Eliminarán</h2>
+
+            <p>
+                Una vez procesada tu solicitud de eliminación, eliminaremos permanentemente los siguientes datos de nuestros sistemas:
+            </p>
+
+            <ul>
+                <li><strong>Información de cuenta personal:</strong> Nombre, apellidos, email, teléfono, dirección.</li>
+                <li><strong>Credenciales de acceso:</strong> Usuario, contraseña y tokens de autenticación.</li>
+                <li><strong>Información de la empresa:</strong> Razón social, nombre comercial, dirección fiscal.</li>
+                <li><strong>Productos y servicios:</strong> Catálogo de productos, inventario, categorías.</li>
+                <li><strong>Datos de clientes:</strong> Lista de clientes registrados en tu cuenta.</li>
+                <li><strong>Configuraciones personalizadas:</strong> Preferencias, ajustes de impresión, configuraciones del sistema.</li>
+                <li><strong>Estadísticas y reportes:</strong> Dashboards, gráficos, métricas de negocio.</li>
+            </ul>
+
+            <div class="warning-box">
+                <strong>⚠️ IMPORTANTE:</strong> La eliminación de datos es <strong>irreversible</strong>. Una vez confirmada la eliminación,
+                no podrás recuperar ninguna información de tu cuenta.
+            </div>
+
+            <h2>3. Datos que se Conservarán (Obligación Legal)</h2>
+
+            <p>
+                De acuerdo con la normativa vigente de la <strong>SUNAT (Superintendencia Nacional de Aduanas y de Administración Tributaria)</strong>
+                y las leyes tributarias del Perú, estamos <strong>obligados legalmente</strong> a conservar cierta información, incluso después de
+                que elimines tu cuenta:
+            </p>
+
+            <h3>Comprobantes Electrónicos Emitidos</h3>
+            <p>
+                Todos los comprobantes electrónicos que hayas emitido a través de Cobrify deben conservarse por un plazo mínimo de
+                <strong>5 años</strong> según lo establecido por la SUNAT:
+            </p>
+            <ul>
+                <li>Facturas electrónicas</li>
+                <li>Boletas de venta electrónicas</li>
+                <li>Notas de crédito electrónicas</li>
+                <li>Notas de débito electrónicas</li>
+                <li>Guías de remisión electrónicas</li>
+            </ul>
+
+            <h3>Registros Contables y Tributarios</h3>
+            <ul>
+                <li><strong>Datos de transacciones:</strong> Fecha, monto, impuestos, número de serie y correlativo.</li>
+                <li><strong>Información fiscal:</strong> RUC, datos tributarios de la empresa.</li>
+                <li><strong>Certificados digitales:</strong> Firmas electrónicas y certificados de comprobantes enviados a SUNAT.</li>
+                <li><strong>Historial de envíos a SUNAT:</strong> CDR (Constancia de Recepción) y respuestas de SUNAT.</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>ℹ️ Información:</strong> La conservación de estos datos es una obligación legal establecida por:
+                <ul style="margin-top: 0.5rem;">
+                    <li>Código Tributario - Artículo 87º (Plazo de prescripción)</li>
+                    <li>Resolución de Superintendencia N° 097-2012/SUNAT</li>
+                    <li>Ley N° 29733 - Ley de Protección de Datos Personales</li>
+                </ul>
+            </div>
+
+            <h2>4. Plazo de Procesamiento</h2>
+
+            <p>
+                El proceso de eliminación de cuenta sigue el siguiente cronograma:
+            </p>
+
+            <ul>
+                <li><strong>Recepción de solicitud:</strong> Recibirás un correo de confirmación de recepción dentro de las 48 horas hábiles.</li>
+                <li><strong>Verificación de identidad:</strong> Nuestro equipo verificará que la solicitud proviene del titular de la cuenta (2-5 días hábiles).</li>
+                <li><strong>Procesamiento de eliminación:</strong> Eliminaremos los datos que no estén sujetos a conservación legal (hasta 15 días hábiles).</li>
+                <li><strong>Confirmación final:</strong> Te enviaremos un correo confirmando que tu cuenta ha sido eliminada (plazo máximo total: 30 días hábiles).</li>
+            </ul>
+
+            <h2>5. Consecuencias de la Eliminación de Cuenta</h2>
+
+            <div class="warning-box">
+                <p><strong>Al eliminar tu cuenta de Cobrify:</strong></p>
+                <ul>
+                    <li>Perderás acceso permanente a tu cuenta y a todas sus funcionalidades.</li>
+                    <li>No podrás acceder al historial de comprobantes emitidos desde el sistema.</li>
+                    <li>Todos los productos, clientes y configuraciones serán eliminados de forma irreversible.</li>
+                    <li>Si deseas volver a usar Cobrify en el futuro, deberás crear una nueva cuenta desde cero.</li>
+                    <li>Los comprobantes emitidos seguirán siendo válidos ante SUNAT, pero no podrás consultarlos desde tu cuenta eliminada.</li>
+                </ul>
+            </div>
+
+            <h2>6. Alternativas a la Eliminación Completa</h2>
+
+            <p>
+                Si no estás seguro de eliminar tu cuenta permanentemente, considera estas alternativas:
+            </p>
+
+            <ul>
+                <li><strong>Suspender suscripción:</strong> Puedes cancelar tu suscripción pero mantener tu cuenta inactiva.</li>
+                <li><strong>Exportar datos:</strong> Antes de eliminar, puedes exportar tus reportes y datos importantes.</li>
+                <li><strong>Soporte técnico:</strong> Si tienes problemas con el servicio, contáctanos antes de eliminar tu cuenta.</li>
+            </ul>
+
+            <h2>7. Preguntas Frecuentes</h2>
+
+            <h3>¿Puedo recuperar mi cuenta después de eliminarla?</h3>
+            <p>
+                No. La eliminación de cuenta es <strong>permanente e irreversible</strong>. Una vez eliminada, no podrás recuperar ninguna información.
+            </p>
+
+            <h3>¿Cuánto tiempo tardan en eliminar mi cuenta?</h3>
+            <p>
+                El proceso completo puede tardar hasta <strong>30 días hábiles</strong> desde que recibimos tu solicitud.
+            </p>
+
+            <h3>¿Por qué conservan algunos de mis datos después de eliminar mi cuenta?</h3>
+            <p>
+                Por <strong>obligación legal tributaria</strong> según las normativas de SUNAT. Los comprobantes electrónicos deben conservarse
+                por al menos 5 años según la ley peruana.
+            </p>
+
+            <h3>¿Mis comprobantes emitidos dejarán de ser válidos?</h3>
+            <p>
+                No. Los comprobantes electrónicos que emitiste a través de Cobrify <strong>seguirán siendo válidos</strong> ante SUNAT,
+                incluso después de eliminar tu cuenta.
+            </p>
+
+            <h3>¿Puedo solicitar una copia de mis datos antes de eliminar mi cuenta?</h3>
+            <p>
+                Sí. Antes de solicitar la eliminación, puedes exportar tus reportes, lista de productos, clientes y otros datos desde
+                el panel de Cobrify. También puedes solicitar una copia de tus datos escribiendo a
+                <a href="mailto:soporte@cobrifyperu.com">soporte@cobrifyperu.com</a>.
+            </p>
+
+            <h2>8. Contacto</h2>
+
+            <p>
+                Si tienes dudas sobre el proceso de eliminación de cuenta o necesitas asistencia, puedes contactarnos:
+            </p>
+
+            <div class="contact-section">
+                <p><strong>Email de Soporte:</strong></p>
+                <a href="mailto:soporte@cobrifyperu.com" class="email-link">soporte@cobrifyperu.com</a>
+                <p style="margin-top: 1.5rem;"><strong>WhatsApp:</strong> <a href="https://wa.me/51900434988" style="color: #667eea;">+51 900 434 988</a></p>
+            </div>
+
+            <div class="info-box">
+                <p>
+                    <strong>Cobrify</strong> se compromete a proteger tu privacidad y a cumplir con todas las normativas de protección de datos
+                    aplicables en Perú, incluyendo la Ley N° 29733 - Ley de Protección de Datos Personales.
+                </p>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Cobrify. Todos los derechos reservados.</p>
+            <p>
+                <a href="/privacy-policy.html">Política de Privacidad</a> |
+                <a href="/delete-account.html">Eliminación de Cuenta</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
