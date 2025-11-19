@@ -633,7 +633,7 @@ export default function LandingPage() {
             <div>
               <h4 className="text-white font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition-colors">Términos de Servicio</a></li>
+                <li><Link to="/terminos-y-condiciones" className="hover:text-white transition-colors">Términos y Condiciones</Link></li>
                 <li><a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Política de Privacidad</a></li>
                 <li><a href="/delete-account.html" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Eliminación de Cuenta</a></li>
               </ul>

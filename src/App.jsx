@@ -47,6 +47,7 @@ import PurchaseHistory from './pages/PurchaseHistory'
 import MobileRedirect from './components/MobileRedirect'
 import SplashScreen from './components/SplashScreen'
 import DispatchGuides from './pages/DispatchGuides'
+import TermsAndConditions from './pages/TermsAndConditions'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -66,6 +67,9 @@ function App() {
 
             {/* Ruta pública de login (también disponible en /login) */}
             <Route path="/login" element={<Login />} />
+
+            {/* Rutas públicas */}
+            <Route path="/terminos-y-condiciones" element={<TermsAndConditions />} />
 
             {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}
             <Route path="/demo" element={<Demo />} />
