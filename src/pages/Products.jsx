@@ -344,18 +344,22 @@ export default function Products() {
   const onSubmit = async data => {
     if (!user?.uid) return
 
+    // Establecer isSaving INMEDIATAMENTE para prevenir múltiples clicks
+    if (isSaving) return // Prevenir ejecución si ya está guardando
+    setIsSaving(true)
+
     // Validate variants if hasVariants is true
     if (hasVariants && variants.length === 0) {
       toast.error('Debes agregar al menos una variante')
+      setIsSaving(false)
       return
     }
 
     if (hasVariants && variantAttributes.length === 0) {
       toast.error('Debes definir al menos un atributo de variante (ej: talla, color)')
+      setIsSaving(false)
       return
     }
-
-    setIsSaving(true)
 
     try {
       // Build product data based on hasVariants
