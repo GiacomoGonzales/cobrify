@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -120,6 +120,8 @@ export default function Products() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [deletingProduct, setDeletingProduct] = useState(null)
+  const [viewingProduct, setViewingProduct] = useState(null)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [noStock, setNoStock] = useState(false)
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
@@ -1610,6 +1612,16 @@ export default function Products() {
                         <TableCell>
                           <div className="flex items-center justify-end space-x-2">
                             <button
+                              onClick={() => {
+                                setViewingProduct(product)
+                                setIsViewModalOpen(true)
+                              }}
+                              className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Ver Detalles"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => openEditModal(product)}
                               className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                               title="Editar"
@@ -2292,6 +2304,272 @@ export default function Products() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal Ver Detalles del Producto */}
+      <Modal
+        isOpen={isViewModalOpen}
+        onClose={() => {
+          setIsViewModalOpen(false)
+          setViewingProduct(null)
+        }}
+        title="Detalles del Producto"
+        size="lg"
+      >
+        {viewingProduct && (
+          <div className="space-y-6">
+            {/* Información Básica */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Información Básica
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Código</label>
+                  <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.code || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Nombre</label>
+                  <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.name}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-gray-500">Descripción</label>
+                  <p className="text-sm text-gray-700 mt-1">{viewingProduct.description || 'Sin descripción'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Categoría</label>
+                  <p className="text-sm text-gray-900 mt-1">
+                    {viewingProduct.category ? getCategoryPath(categories, viewingProduct.category) : 'Sin categoría'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Unidad de Medida</label>
+                  <p className="text-sm text-gray-900 mt-1">
+                    {UNITS.find(u => u.value === viewingProduct.unit)?.label || viewingProduct.unit}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Precios */}
+            <div className="bg-blue-50 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                Precios
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Precio de Venta</label>
+                  <p className="text-lg text-green-600 font-bold mt-1">{formatCurrency(viewingProduct.price)}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Costo</label>
+                  <p className="text-lg text-orange-600 font-bold mt-1">
+                    {viewingProduct.cost ? formatCurrency(viewingProduct.cost) : '-'}
+                  </p>
+                </div>
+                {viewingProduct.price && viewingProduct.cost && (
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-medium text-gray-500">Margen de Ganancia</label>
+                    <p className="text-sm text-gray-900 mt-1">
+                      {formatCurrency(viewingProduct.price - viewingProduct.cost)}
+                      <span className="text-xs text-gray-500 ml-2">
+                        ({(((viewingProduct.price - viewingProduct.cost) / viewingProduct.price) * 100).toFixed(1)}%)
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Stock e Inventario */}
+            {viewingProduct.trackStock !== false && (
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Warehouse className="w-4 h-4" />
+                  Stock e Inventario
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Stock Total</label>
+                    <p className={`text-2xl font-bold mt-1 ${
+                      (viewingProduct.stock || 0) > 10 ? 'text-green-600' :
+                      (viewingProduct.stock || 0) > 0 ? 'text-yellow-600' :
+                      'text-red-600'
+                    }`}>
+                      {viewingProduct.stock || 0} {UNITS.find(u => u.value === viewingProduct.unit)?.label?.toLowerCase() || 'unidades'}
+                    </p>
+                  </div>
+
+                  {/* Stock por Almacén */}
+                  {viewingProduct.warehouseStocks && viewingProduct.warehouseStocks.length > 0 && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-2 block">Stock por Almacén</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        {viewingProduct.warehouseStocks.map(ws => {
+                          const warehouse = warehouses.find(w => w.id === ws.warehouseId)
+                          return (
+                            <div key={ws.warehouseId} className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded">
+                              <span className="text-sm text-gray-700">
+                                {warehouse?.name || 'Almacén desconocido'}
+                                {warehouse?.isDefault && <Badge variant="default" className="ml-2 text-xs">Principal</Badge>}
+                              </span>
+                              <span className={`font-semibold text-sm ${
+                                ws.stock > 10 ? 'text-green-600' :
+                                ws.stock > 0 ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>
+                                {ws.stock}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Fecha de Vencimiento */}
+            {viewingProduct.expirationDate && (
+              <div className="bg-yellow-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Vencimiento
+                </h3>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Fecha de Vencimiento</label>
+                  <p className="text-sm text-gray-900 mt-1">
+                    {(() => {
+                      const expDate = viewingProduct.expirationDate.toDate
+                        ? viewingProduct.expirationDate.toDate()
+                        : new Date(viewingProduct.expirationDate)
+                      const expStatus = getExpirationStatus(viewingProduct.expirationDate)
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span>{expDate.toLocaleDateString('es-PE')}</span>
+                          {expStatus && (
+                            <Badge variant={expStatus.variant}>
+                              {expStatus.expired ? 'Vencido' :
+                               expStatus.days === 0 ? 'Vence hoy' :
+                               expStatus.days <= 7 ? `${expStatus.days}d restantes` :
+                               `${expStatus.days}d restantes`}
+                            </Badge>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Variantes */}
+            {viewingProduct.hasVariants && viewingProduct.variants && viewingProduct.variants.length > 0 && (
+              <div className="bg-purple-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Tag className="w-4 h-4" />
+                  Variantes del Producto
+                </h3>
+                <div className="space-y-2">
+                  {viewingProduct.variants.map((variant, idx) => (
+                    <div key={idx} className="p-3 bg-white border border-gray-200 rounded-lg">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                        <div>
+                          <span className="text-xs text-gray-500">SKU:</span>
+                          <p className="font-medium">{variant.sku}</p>
+                        </div>
+                        {Object.entries(variant.attributes || {}).map(([key, value]) => (
+                          <div key={key}>
+                            <span className="text-xs text-gray-500 capitalize">{key}:</span>
+                            <p className="font-medium">{value}</p>
+                          </div>
+                        ))}
+                        <div>
+                          <span className="text-xs text-gray-500">Precio:</span>
+                          <p className="font-medium text-green-600">{formatCurrency(variant.price)}</p>
+                        </div>
+                        {variant.stock !== undefined && (
+                          <div>
+                            <span className="text-xs text-gray-500">Stock:</span>
+                            <p className="font-medium">{variant.stock}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modificadores (solo modo restaurante) */}
+            {businessMode === 'restaurant' && viewingProduct.modifiers && viewingProduct.modifiers.length > 0 && (
+              <div className="bg-orange-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Modificadores</h3>
+                <div className="space-y-2">
+                  {viewingProduct.modifiers.map((modifier, idx) => (
+                    <div key={idx} className="p-2 bg-white border border-gray-200 rounded">
+                      <p className="text-sm font-medium text-gray-900">{modifier.name}</p>
+                      <p className="text-xs text-gray-500">
+                        Precio adicional: {formatCurrency(modifier.price)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Fechas de Sistema */}
+            <div className="border-t pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-500">
+                {viewingProduct.createdAt && (
+                  <div>
+                    <span className="font-medium">Fecha de creación:</span>
+                    <p className="mt-1">
+                      {viewingProduct.createdAt.toDate
+                        ? viewingProduct.createdAt.toDate().toLocaleString('es-PE')
+                        : new Date(viewingProduct.createdAt).toLocaleString('es-PE')}
+                    </p>
+                  </div>
+                )}
+                {viewingProduct.updatedAt && (
+                  <div>
+                    <span className="font-medium">Última actualización:</span>
+                    <p className="mt-1">
+                      {viewingProduct.updatedAt.toDate
+                        ? viewingProduct.updatedAt.toDate().toLocaleString('es-PE')
+                        : new Date(viewingProduct.updatedAt).toLocaleString('es-PE')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Botones de acción */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsViewModalOpen(false)
+                  setViewingProduct(null)
+                }}
+              >
+                Cerrar
+              </Button>
+              <Button
+                onClick={() => {
+                  setIsViewModalOpen(false)
+                  openEditModal(viewingProduct)
+                }}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Editar Producto
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Modal Gestionar Categorías */}
