@@ -880,6 +880,22 @@ export default function POS() {
       }
     }
 
+    // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT)
+    if (documentType === 'boleta' && amounts.total > 700) {
+      if (!customerData.documentNumber) {
+        toast.error('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el DNI del cliente')
+        return
+      }
+      if (customerData.documentType === ID_TYPES.DNI && customerData.documentNumber.length !== 8) {
+        toast.error('El DNI debe tener 8 dígitos')
+        return
+      }
+      if (!customerData.name || customerData.name.trim() === '') {
+        toast.error('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el nombre completo del cliente')
+        return
+      }
+    }
+
     // Si es boleta, validar datos mínimos (opcional, puede ser cliente general)
     if (documentType === 'boleta' && customerData.documentNumber) {
       // Validar según el tipo de documento seleccionado
@@ -2455,6 +2471,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span>Total:</span>
                   <span className="text-primary-600">{formatCurrency(amounts.total)}</span>
                 </div>
+
+                {/* Advertencia SUNAT para boletas mayores a 700 soles */}
+                {documentType === 'boleta' && amounts.total > 700 && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <span className="text-amber-600 text-lg">⚠️</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-amber-800">
+                          Normativa SUNAT
+                        </p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          Las boletas mayores a S/ 700.00 requieren obligatoriamente el <strong>DNI y nombre completo</strong> del cliente
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Opción de Pago Parcial - Solo para Notas de Venta */}
