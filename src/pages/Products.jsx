@@ -1518,7 +1518,7 @@ export default function Products() {
               <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">
+                  <TableHead className="w-10">
                     <button
                       onClick={toggleSelectAll}
                       className="p-1 hover:bg-gray-100 rounded transition-colors"
@@ -1531,7 +1531,7 @@ export default function Products() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="w-24">
+                  <TableHead className="max-w-[80px]">
                     <button
                       onClick={() => handleSort('code')}
                       className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1541,7 +1541,7 @@ export default function Products() {
                       {getSortIcon('code')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-48">
+                  <TableHead className="min-w-[150px] max-w-[200px]">
                     <button
                       onClick={() => handleSort('name')}
                       className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1551,8 +1551,8 @@ export default function Products() {
                       {getSortIcon('name')}
                     </button>
                   </TableHead>
-                  <TableHead className="hidden lg:table-cell w-64">Descripción</TableHead>
-                  <TableHead className="w-28">
+                  <TableHead className="hidden lg:table-cell max-w-[150px]">Descripción</TableHead>
+                  <TableHead className="max-w-[100px]">
                     <button
                       onClick={() => handleSort('price')}
                       className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1562,8 +1562,8 @@ export default function Products() {
                       {getSortIcon('price')}
                     </button>
                   </TableHead>
-                  <TableHead className="hidden xl:table-cell w-24">Utilidad</TableHead>
-                  <TableHead className="hidden md:table-cell w-32">
+                  <TableHead className="hidden xl:table-cell max-w-[90px]">Utilidad</TableHead>
+                  <TableHead className="hidden md:table-cell max-w-[120px]">
                     <button
                       onClick={() => handleSort('category')}
                       className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1573,7 +1573,7 @@ export default function Products() {
                       {getSortIcon('category')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-20">
+                  <TableHead className="max-w-[80px]">
                     <button
                       onClick={() => handleSort('stock')}
                       className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1583,8 +1583,8 @@ export default function Products() {
                       {getSortIcon('stock')}
                     </button>
                   </TableHead>
-                  <TableHead className="hidden lg:table-cell w-32">Vencimiento</TableHead>
-                  <TableHead className="text-right w-32">Acciones</TableHead>
+                  <TableHead className="hidden lg:table-cell max-w-[110px]">Vencimiento</TableHead>
+                  <TableHead className="text-right max-w-[100px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1607,36 +1607,36 @@ export default function Products() {
                             )}
                           </button>
                         </TableCell>
-                        <TableCell>
-                          <span className="font-mono text-xs text-primary-600">
+                        <TableCell className="max-w-[80px]">
+                          <span className="font-mono text-xs text-primary-600 truncate block">
                             {product.code}
                           </span>
                         </TableCell>
-                        <TableCell className="w-48">
-                          <p className="text-sm font-medium whitespace-normal break-words">{product.name}</p>
+                        <TableCell className="min-w-[150px] max-w-[200px]">
+                          <p className="text-sm font-medium truncate" title={product.name}>{product.name}</p>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell w-64">
-                          <p className="text-xs text-gray-600 whitespace-normal break-words">
+                        <TableCell className="hidden lg:table-cell max-w-[150px]">
+                          <p className="text-xs text-gray-600 truncate" title={product.description || '-'}>
                             {product.description || '-'}
                           </p>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="max-w-[100px]">
                           {product.hasVariants ? (
                             <div>
-                              <span className="text-sm font-semibold">{formatCurrency(product.basePrice)}</span>
+                              <span className="text-sm font-semibold truncate block">{formatCurrency(product.basePrice)}</span>
                               <p className="text-xs text-gray-500">{product.variants?.length || 0} var.</p>
                             </div>
                           ) : (
                             <div>
-                              <span className="text-sm font-semibold">{formatCurrency(product.price)}</span>
-                              <p className="text-xs text-gray-500">{product.unit}</p>
+                              <span className="text-sm font-semibold truncate block">{formatCurrency(product.price)}</span>
+                              <p className="text-xs text-gray-500 truncate">{product.unit}</p>
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className="hidden xl:table-cell">
+                        <TableCell className="hidden xl:table-cell max-w-[90px]">
                           {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
                             <div>
-                              <span className="text-sm font-semibold text-green-600">
+                              <span className="text-sm font-semibold text-green-600 truncate block">
                                 {formatCurrency(product.price - product.cost)}
                               </span>
                               <p className="text-xs text-gray-500">
@@ -1647,22 +1647,22 @@ export default function Products() {
                             <span className="text-xs text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
+                        <TableCell className="hidden md:table-cell max-w-[120px]">
                           {product.category ? (
-                            <span className="text-xs text-gray-700 truncate block">
+                            <span className="text-xs text-gray-700 truncate block" title={getCategoryPath(categories, product.category)}>
                               {getCategoryPath(categories, product.category) || product.category}
                             </span>
                           ) : (
                             <span className="text-xs text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
+                        <TableCell className="max-w-[80px]">
+                          <div className="flex items-center space-x-1">
                             {/* Botón de expandir/contraer solo si hay almacenes */}
                             {warehouses.length > 0 && !product.hasVariants && (
                               <button
                                 onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
-                                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
                                 title={isExpanded ? "Ocultar detalle" : "Ver por almacén"}
                               >
                                 {isExpanded ? (
@@ -1677,11 +1677,11 @@ export default function Products() {
                             <div>
                               {product.hasVariants ? (
                                 <span className="text-xs text-gray-500">
-                                  {product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0} total
+                                  {product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0}
                                 </span>
                               ) : product.stock !== null && product.stock !== undefined ? (
                                 <span
-                                  className={`font-medium ${
+                                  className={`font-medium text-sm ${
                                     product.stock >= 4
                                       ? 'text-green-600'
                                       : product.stock > 0
@@ -1692,12 +1692,12 @@ export default function Products() {
                                   {product.stock}
                                 </span>
                               ) : (
-                                <span className="text-gray-400">N/A</span>
+                                <span className="text-gray-400 text-xs">N/A</span>
                               )}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
+                        <TableCell className="hidden lg:table-cell max-w-[110px]">
                           {product.trackExpiration && product.expirationDate ? (() => {
                             const expStatus = getExpirationStatus(product.expirationDate)
                             const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
@@ -1707,24 +1707,22 @@ export default function Products() {
                               <div className="flex flex-col space-y-1">
                                 <Badge
                                   variant={expStatus.status === 'expired' ? 'danger' : expStatus.status === 'warning' ? 'warning' : 'success'}
-                                  className="text-xs"
+                                  className="text-xs truncate"
                                 >
                                   {expStatus.status === 'expired'
-                                    ? `Vencido hace ${expStatus.days}d`
-                                    : expStatus.status === 'warning'
-                                    ? `${expStatus.days}d restantes`
-                                    : `${expStatus.days}d restantes`
+                                    ? `${expStatus.days}d`
+                                    : `${expStatus.days}d`
                                   }
                                 </Badge>
-                                <span className="text-xs text-gray-500">{formattedDate}</span>
+                                <span className="text-xs text-gray-500 truncate">{formattedDate}</span>
                               </div>
                             )
                           })() : (
                             <span className="text-xs text-gray-400">-</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end space-x-2">
+                        <TableCell className="max-w-[100px]">
+                          <div className="flex items-center justify-end space-x-1">
                             <button
                               onClick={() => {
                                 setViewingProduct(product)
