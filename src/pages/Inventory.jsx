@@ -347,11 +347,11 @@ export default function Inventory() {
 
       let matchesStatus = true
       if (filterStatus === 'low') {
-        matchesStatus = product.stock !== null && product.stock < 10
+        matchesStatus = product.stock !== null && product.stock < 4
       } else if (filterStatus === 'out') {
         matchesStatus = product.stock === 0
       } else if (filterStatus === 'normal') {
-        matchesStatus = product.stock === null || product.stock >= 10
+        matchesStatus = product.stock === null || product.stock >= 4
       }
 
       return matchesSearch && matchesCategory && matchesStatus
@@ -435,7 +435,7 @@ export default function Inventory() {
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
     const productsWithStock = products.filter(p => p.stock !== null)
-    const lowStockItems = productsWithStock.filter(p => p.stock < 10)
+    const lowStockItems = productsWithStock.filter(p => p.stock < 4)
     const outOfStockItems = productsWithStock.filter(p => p.stock === 0)
     const totalValue = productsWithStock.reduce((sum, p) => sum + (p.stock * p.price), 0)
     const totalUnits = productsWithStock.reduce((sum, p) => sum + p.stock, 0)
@@ -458,7 +458,7 @@ export default function Inventory() {
     if (product.stock === 0) {
       return { status: 'Agotado', variant: 'danger', icon: AlertTriangle }
     }
-    if (product.stock < 10) {
+    if (product.stock < 4) {
       return { status: 'Stock Bajo', variant: 'warning', icon: TrendingDown }
     }
     return { status: 'Normal', variant: 'success', icon: TrendingUp }
@@ -768,7 +768,7 @@ export default function Inventory() {
                                   className={`font-bold text-sm ${
                                     product.stock === 0
                                       ? 'text-red-600'
-                                      : product.stock < 10
+                                      : product.stock < 4
                                       ? 'text-yellow-600'
                                       : 'text-green-600'
                                   }`}
