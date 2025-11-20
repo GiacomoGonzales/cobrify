@@ -281,6 +281,9 @@ export const checkAndCreateSubscriptionNotifications = async (userId, subscripti
   // Obtener notificaciones existentes del usuario
   const existingNotifications = await getUserNotifications(userId, 50);
 
+  // Determinar si es prueba gratuita
+  const isTrial = subscription.plan === 'trial';
+
   // Verificar si ya expiró
   if (daysUntilExpiry < 0 && subscription.status === 'active') {
     // Verificar si ya existe notificación de expiración
@@ -298,21 +301,33 @@ export const checkAndCreateSubscriptionNotifications = async (userId, subscripti
       );
     }
   }
-  // Notificar si vence en 7 días o menos (pero no ha vencido)
-  else if (daysUntilExpiry <= 7 && daysUntilExpiry >= 0) {
-    // Verificar si ya existe notificación de próximo vencimiento
-    const hasExpiringNotification = existingNotifications.some(
-      n => n.type === NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON && !n.read
-    );
+  // Notificar próximo vencimiento
+  else if (daysUntilExpiry >= 0) {
+    // Para prueba gratuita: notificar con 7 días o menos
+    // Para planes de pago: notificar solo con 1 día o menos
+    const shouldNotify = isTrial
+      ? daysUntilExpiry <= 7
+      : daysUntilExpiry <= 1;
 
-    if (!hasExpiringNotification) {
-      await createNotification(
-        userId,
-        NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON,
-        'Suscripción por Vencer',
-        `Tu suscripción vence ${daysUntilExpiry === 0 ? 'hoy' : `en ${daysUntilExpiry} ${daysUntilExpiry === 1 ? 'día' : 'días'}`}. Renueva ahora para evitar interrupciones.`,
-        { periodEnd, daysUntilExpiry }
+    if (shouldNotify) {
+      // Verificar si ya existe notificación de próximo vencimiento
+      const hasExpiringNotification = existingNotifications.some(
+        n => n.type === NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON && !n.read
       );
+
+      if (!hasExpiringNotification) {
+        const message = isTrial
+          ? `Tu prueba gratuita vence ${daysUntilExpiry === 0 ? 'hoy' : `en ${daysUntilExpiry} ${daysUntilExpiry === 1 ? 'día' : 'días'}`}. Actualiza a un plan de pago para continuar usando el sistema.`
+          : `Tu suscripción vence ${daysUntilExpiry === 0 ? 'hoy' : 'mañana'}. Renueva ahora para evitar interrupciones.`;
+
+        await createNotification(
+          userId,
+          NOTIFICATION_TYPES.SUBSCRIPTION_EXPIRING_SOON,
+          isTrial ? 'Prueba Gratuita por Vencer' : 'Suscripción por Vencer',
+          message,
+          { periodEnd, daysUntilExpiry, isTrial }
+        );
+      }
     }
   }
 };
