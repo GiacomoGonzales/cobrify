@@ -399,21 +399,22 @@ export default function CreatePurchase() {
   }
 
   const validateForm = () => {
-    if (!selectedSupplier) {
-      setMessage({
-        type: 'error',
-        text: 'Debe seleccionar un proveedor',
-      })
-      return false
-    }
+    // Proveedor y número de factura ahora son opcionales
+    // if (!selectedSupplier) {
+    //   setMessage({
+    //     type: 'error',
+    //     text: 'Debe seleccionar un proveedor',
+    //   })
+    //   return false
+    // }
 
-    if (!invoiceNumber.trim()) {
-      setMessage({
-        type: 'error',
-        text: 'Debe ingresar el número de factura',
-      })
-      return false
-    }
+    // if (!invoiceNumber.trim()) {
+    //   setMessage({
+    //     type: 'error',
+    //     text: 'Debe ingresar el número de factura',
+    //   })
+    //   return false
+    // }
 
     if (purchaseItems.length === 0) {
       setMessage({
@@ -473,7 +474,7 @@ export default function CreatePurchase() {
 
       // 1. Crear datos de la compra
       const purchaseData = {
-        supplier: {
+        supplier: selectedSupplier ? {
           id: selectedSupplier.id,
           documentType: selectedSupplier.documentType,
           documentNumber: selectedSupplier.documentNumber,
@@ -481,8 +482,8 @@ export default function CreatePurchase() {
           contactName: selectedSupplier.contactName || '',
           email: selectedSupplier.email || '',
           phone: selectedSupplier.phone || '',
-        },
-        invoiceNumber: invoiceNumber.trim(),
+        } : null,
+        invoiceNumber: invoiceNumber.trim() || null,
         invoiceDate: new Date(invoiceDate),
         items: purchaseItems.map(item => ({
           productId: item.productId,
@@ -536,11 +537,13 @@ export default function CreatePurchase() {
             stock: updatedProduct.stock,
             warehouseStocks: updatedProduct.warehouseStocks,
             cost: averageCost, // Actualizar con costo promedio ponderado
-            lastSupplier: {
-              id: selectedSupplier.id,
-              documentNumber: selectedSupplier.documentNumber,
-              businessName: selectedSupplier.businessName
-            }
+            ...(selectedSupplier && {
+              lastSupplier: {
+                id: selectedSupplier.id,
+                documentNumber: selectedSupplier.documentNumber,
+                businessName: selectedSupplier.businessName
+              }
+            })
           }
 
           return updateProduct(user.uid, item.productId, updates)
@@ -612,7 +615,7 @@ export default function CreatePurchase() {
             {/* Buscador de Proveedor */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Proveedor <span className="text-red-500">*</span>
+                Proveedor
               </label>
               <div className="relative" ref={supplierInputRef}>
                 <div className="relative">
@@ -676,7 +679,6 @@ export default function CreatePurchase() {
 
             <Input
               label="Número de Factura"
-              required
               placeholder="001-123"
               value={invoiceNumber}
               onChange={e => setInvoiceNumber(e.target.value)}
