@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -131,6 +131,10 @@ export default function Products() {
   // Paginación en cliente
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(50)
+
+  // Ordenamiento
+  const [sortField, setSortField] = useState('name') // 'name', 'code', 'price', 'stock', 'category'
+  const [sortDirection, setSortDirection] = useState('asc') // 'asc' o 'desc'
 
   // Variant management state
   const [hasVariants, setHasVariants] = useState(false)
@@ -845,6 +849,30 @@ export default function Products() {
     }
   }
 
+  // Función para manejar el ordenamiento
+  const handleSort = (field) => {
+    if (sortField === field) {
+      // Si ya está ordenando por este campo, cambiar la dirección
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Si es un campo nuevo, ordenar ascendente
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  // Función para obtener el icono de ordenamiento
+  const getSortIcon = (field) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-4 h-4 text-primary-600" />
+    ) : (
+      <ArrowDown className="w-4 h-4 text-primary-600" />
+    )
+  }
+
   const openBulkActionModal = (action) => {
     if (selectedProducts.size === 0) {
       toast.error('Debes seleccionar al menos un producto')
@@ -1083,9 +1111,9 @@ export default function Products() {
     })
   }
 
-  // Filtrar productos por búsqueda y categoría (optimizado con useMemo)
+  // Filtrar y ordenar productos por búsqueda y categoría (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
-    return products.filter(product => {
+    const filtered = products.filter(product => {
       const search = searchTerm.toLowerCase()
 
       // Get category name for search (backward compatible)
@@ -1128,7 +1156,48 @@ export default function Products() {
 
       return matchesSearch && matchesCategory && matchesExpiration
     })
-  }, [products, searchTerm, selectedCategoryFilter, showExpiringOnly, categories])
+
+    // Ordenar productos
+    const sorted = [...filtered].sort((a, b) => {
+      let aValue, bValue
+
+      switch (sortField) {
+        case 'code':
+          aValue = a.code || ''
+          bValue = b.code || ''
+          break
+        case 'name':
+          aValue = a.name || ''
+          bValue = b.name || ''
+          break
+        case 'price':
+          aValue = a.hasVariants ? a.basePrice : a.price || 0
+          bValue = b.hasVariants ? b.basePrice : b.price || 0
+          break
+        case 'stock':
+          aValue = a.stock !== null && a.stock !== undefined ? a.stock : -1
+          bValue = b.stock !== null && b.stock !== undefined ? b.stock : -1
+          break
+        case 'category':
+          aValue = getCategoryPath(categories, a.category) || ''
+          bValue = getCategoryPath(categories, b.category) || ''
+          break
+        default:
+          aValue = a.name || ''
+          bValue = b.name || ''
+      }
+
+      // Comparar valores
+      if (typeof aValue === 'string') {
+        const comparison = aValue.localeCompare(bValue, 'es', { sensitivity: 'base' })
+        return sortDirection === 'asc' ? comparison : -comparison
+      } else {
+        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
+      }
+    })
+
+    return sorted
+  }, [products, searchTerm, selectedCategoryFilter, showExpiringOnly, categories, sortField, sortDirection])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -1462,13 +1531,58 @@ export default function Products() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="w-24">Código</TableHead>
-                  <TableHead className="w-48">Nombre</TableHead>
+                  <TableHead className="w-24">
+                    <button
+                      onClick={() => handleSort('code')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      title="Ordenar por código"
+                    >
+                      Código
+                      {getSortIcon('code')}
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-48">
+                    <button
+                      onClick={() => handleSort('name')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      title="Ordenar por nombre"
+                    >
+                      Nombre
+                      {getSortIcon('name')}
+                    </button>
+                  </TableHead>
                   <TableHead className="hidden lg:table-cell w-64">Descripción</TableHead>
-                  <TableHead className="w-28">Precio</TableHead>
+                  <TableHead className="w-28">
+                    <button
+                      onClick={() => handleSort('price')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      title="Ordenar por precio"
+                    >
+                      Precio
+                      {getSortIcon('price')}
+                    </button>
+                  </TableHead>
                   <TableHead className="hidden xl:table-cell w-24">Utilidad</TableHead>
-                  <TableHead className="hidden md:table-cell w-32">Categoría</TableHead>
-                  <TableHead className="w-20">Stock</TableHead>
+                  <TableHead className="hidden md:table-cell w-32">
+                    <button
+                      onClick={() => handleSort('category')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      title="Ordenar por categoría"
+                    >
+                      Categoría
+                      {getSortIcon('category')}
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-20">
+                    <button
+                      onClick={() => handleSort('stock')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      title="Ordenar por stock"
+                    >
+                      Stock
+                      {getSortIcon('stock')}
+                    </button>
+                  </TableHead>
                   <TableHead className="hidden lg:table-cell w-32">Vencimiento</TableHead>
                   <TableHead className="text-right w-32">Acciones</TableHead>
                 </TableRow>

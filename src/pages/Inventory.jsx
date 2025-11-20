@@ -13,6 +13,9 @@ import {
   ChevronDown,
   ChevronRight,
   Warehouse,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -71,6 +74,10 @@ export default function Inventory() {
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(50)
+
+  // Ordenamiento
+  const [sortField, setSortField] = useState('name') // 'name', 'code', 'price', 'stock', 'category'
+  const [sortDirection, setSortDirection] = useState('asc') // 'asc' o 'desc'
 
   // Warehouses y transferencias
   const [warehouses, setWarehouses] = useState([])
@@ -200,6 +207,30 @@ export default function Inventory() {
     })
   }
 
+  // Función para manejar el ordenamiento
+  const handleSort = (field) => {
+    if (sortField === field) {
+      // Si ya está ordenando por este campo, cambiar la dirección
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // Si es un campo nuevo, ordenar ascendente
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  // Función para obtener el icono de ordenamiento
+  const getSortIcon = (field) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-4 h-4 text-primary-600" />
+    ) : (
+      <ArrowDown className="w-4 h-4 text-primary-600" />
+    )
+  }
+
   const handleTransfer = async () => {
     if (!user?.uid || !transferProduct) return
 
@@ -303,9 +334,9 @@ export default function Inventory() {
     }
   }
 
-  // Filtrar productos (optimizado con useMemo)
+  // Filtrar y ordenar productos (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
-    return products.filter(product => {
+    const filtered = products.filter(product => {
       const matchesSearch =
         product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -325,7 +356,48 @@ export default function Inventory() {
 
       return matchesSearch && matchesCategory && matchesStatus
     })
-  }, [products, searchTerm, filterCategory, filterStatus])
+
+    // Ordenar productos
+    const sorted = [...filtered].sort((a, b) => {
+      let aValue, bValue
+
+      switch (sortField) {
+        case 'code':
+          aValue = a.code || ''
+          bValue = b.code || ''
+          break
+        case 'name':
+          aValue = a.name || ''
+          bValue = b.name || ''
+          break
+        case 'price':
+          aValue = a.price || 0
+          bValue = b.price || 0
+          break
+        case 'stock':
+          aValue = a.stock !== null && a.stock !== undefined ? a.stock : -1
+          bValue = b.stock !== null && b.stock !== undefined ? b.stock : -1
+          break
+        case 'category':
+          aValue = getCategoryPath(productCategories, a.category) || ''
+          bValue = getCategoryPath(productCategories, b.category) || ''
+          break
+        default:
+          aValue = a.name || ''
+          bValue = b.name || ''
+      }
+
+      // Comparar valores
+      if (typeof aValue === 'string') {
+        const comparison = aValue.localeCompare(bValue, 'es', { sensitivity: 'base' })
+        return sortDirection === 'asc' ? comparison : -comparison
+      } else {
+        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
+      }
+    })
+
+    return sorted
+  }, [products, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -586,11 +658,56 @@ export default function Inventory() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead className="hidden md:table-cell">Categoría</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead className="hidden lg:table-cell">Precio Unit.</TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('code')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por código"
+                      >
+                        Código
+                        {getSortIcon('code')}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('name')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por producto"
+                      >
+                        Producto
+                        {getSortIcon('name')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <button
+                        onClick={() => handleSort('category')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por categoría"
+                      >
+                        Categoría
+                        {getSortIcon('category')}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('stock')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por stock"
+                      >
+                        Stock
+                        {getSortIcon('stock')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <button
+                        onClick={() => handleSort('price')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por precio"
+                      >
+                        Precio Unit.
+                        {getSortIcon('price')}
+                      </button>
+                    </TableHead>
                     <TableHead className="hidden lg:table-cell">Valor Stock</TableHead>
                     <TableHead>Estado</TableHead>
                     {warehouses.length > 1 && <TableHead className="text-right">Acciones</TableHead>}
