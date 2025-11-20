@@ -367,6 +367,37 @@ export default function Products() {
       return
     }
 
+    // Validar código duplicado
+    const codeToCheck = data.code.trim().toUpperCase()
+    const duplicateProduct = products.find(p => {
+      // Si estamos editando, excluir el producto actual de la verificación
+      if (editingProduct && p.id === editingProduct.id) {
+        return false
+      }
+      // Comparar códigos (case-insensitive)
+      return p.code?.trim().toUpperCase() === codeToCheck
+    })
+
+    if (duplicateProduct) {
+      toast.error(`El código "${data.code}" ya está en uso por el producto "${duplicateProduct.name}"`)
+      setIsSaving(false)
+      return
+    }
+
+    // Validar SKUs duplicados en variantes si hasVariants es true
+    if (hasVariants) {
+      const skuCounts = {}
+      for (const variant of variants) {
+        const sku = variant.sku.trim().toUpperCase()
+        skuCounts[sku] = (skuCounts[sku] || 0) + 1
+        if (skuCounts[sku] > 1) {
+          toast.error(`El SKU "${variant.sku}" está duplicado en las variantes`)
+          setIsSaving(false)
+          return
+        }
+      }
+    }
+
     try {
       // Build product data based on hasVariants
       const productData = {
