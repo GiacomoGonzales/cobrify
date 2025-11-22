@@ -43,12 +43,20 @@ async function configureSeries() {
             serie: 'B001',
             lastNumber: 0
           },
-          nota_credito: {
-            serie: 'FC01',
+          nota_credito_factura: {
+            serie: 'FN01',
             lastNumber: 0
           },
-          nota_debito: {
+          nota_credito_boleta: {
+            serie: 'BN01',
+            lastNumber: 0
+          },
+          nota_debito_factura: {
             serie: 'FD01',
+            lastNumber: 0
+          },
+          nota_debito_boleta: {
+            serie: 'BD01',
             lastNumber: 0
           }
         },
@@ -58,8 +66,10 @@ async function configureSeries() {
       console.log('\n✅ Series configuradas exitosamente:');
       console.log('   📄 Facturas: F001-00000001');
       console.log('   🧾 Boletas: B001-00000001');
-      console.log('   ↩️  Notas de Crédito: FC01-00000001');
-      console.log('   ↪️  Notas de Débito: FD01-00000001');
+      console.log('   📝 Notas de Crédito (Facturas): FN01-00000001');
+      console.log('   📝 Notas de Crédito (Boletas): BN01-00000001');
+      console.log('   📋 Notas de Débito (Facturas): FD01-00000001');
+      console.log('   📋 Notas de Débito (Boletas): BD01-00000001');
       console.log('\n🎉 ¡Listo! Ya puedes emitir comprobantes.\n');
 
       rl.close();

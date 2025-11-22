@@ -126,11 +126,16 @@ export default function CreateDebitNote() {
       return
     }
 
+    // Determinar qué serie usar según el tipo de documento referenciado
+    const isFactura = selectedInvoice.documentType === 'factura'
+    const seriesKey = isFactura ? 'nota_debito_factura' : 'nota_debito_boleta'
+    const seriesName = isFactura ? 'Notas de Débito de Facturas' : 'Notas de Débito de Boletas'
+
     // Verificar que existe la serie para notas de débito
-    if (!series || !series.nota_debito) {
+    if (!series || !series[seriesKey]) {
       setMessage({
         type: 'error',
-        text: 'No se ha configurado la serie para Notas de Débito. Ve a Configuración.'
+        text: `No se ha configurado la serie para ${seriesName}. Ve a Configuración.`
       })
       return
     }
@@ -139,8 +144,8 @@ export default function CreateDebitNote() {
 
     try {
       const { subtotal, igv, total } = calculateTotals()
-      const nextNumber = series.nota_debito.lastNumber + 1
-      const debitNoteSeries = series.nota_debito.serie
+      const nextNumber = series[seriesKey].lastNumber + 1
+      const debitNoteSeries = series[seriesKey].serie
       const debitNoteNumber = `${debitNoteSeries}-${String(nextNumber).padStart(8, '0')}`
 
       // Crear item con el cargo adicional

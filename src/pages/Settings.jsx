@@ -35,8 +35,10 @@ export default function Settings() {
     boleta: { serie: 'B001', lastNumber: 0 },
     nota_venta: { serie: 'N001', lastNumber: 0 },
     cotizacion: { serie: 'C001', lastNumber: 0 },
-    nota_credito: { serie: 'FC01', lastNumber: 0 },
-    nota_debito: { serie: 'FD01', lastNumber: 0 },
+    nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
+    nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+    nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+    nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
     guia_remision: { serie: 'T001', lastNumber: 0 },
   })
   const [editingSeries, setEditingSeries] = useState(false)
@@ -215,8 +217,10 @@ export default function Settings() {
             boleta: businessData.series.boleta || { serie: 'B001', lastNumber: 0 },
             cotizacion: businessData.series.cotizacion || { serie: 'C001', lastNumber: 0 },
             nota_venta: businessData.series.nota_venta || { serie: 'N001', lastNumber: 0 },
-            nota_credito: businessData.series.nota_credito || { serie: 'FC01', lastNumber: 0 },
-            nota_debito: businessData.series.nota_debito || { serie: 'FD01', lastNumber: 0 },
+            nota_credito_factura: businessData.series.nota_credito_factura || { serie: 'FN01', lastNumber: 0 },
+            nota_credito_boleta: businessData.series.nota_credito_boleta || { serie: 'BN01', lastNumber: 0 },
+            nota_debito_factura: businessData.series.nota_debito_factura || { serie: 'FD01', lastNumber: 0 },
+            nota_debito_boleta: businessData.series.nota_debito_boleta || { serie: 'BD01', lastNumber: 0 },
             guia_remision: businessData.series.guia_remision || { serie: 'T001', lastNumber: 0 },
           })
         }

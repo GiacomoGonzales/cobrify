@@ -149,11 +149,16 @@ export default function CreateCreditNote() {
       return
     }
 
+    // Determinar qué serie usar según el tipo de documento referenciado
+    const isFactura = selectedInvoice.documentType === 'factura'
+    const seriesKey = isFactura ? 'nota_credito_factura' : 'nota_credito_boleta'
+    const seriesName = isFactura ? 'Notas de Crédito de Facturas' : 'Notas de Crédito de Boletas'
+
     // Verificar que existe la serie para notas de crédito
-    if (!series || !series.nota_credito) {
+    if (!series || !series[seriesKey]) {
       setMessage({
         type: 'error',
-        text: 'No se ha configurado la serie para Notas de Crédito. Ve a Configuración.'
+        text: `No se ha configurado la serie para ${seriesName}. Ve a Configuración.`
       })
       return
     }
@@ -162,8 +167,8 @@ export default function CreateCreditNote() {
 
     try {
       const { subtotal, igv, total } = calculateTotals()
-      const nextNumber = series.nota_credito.lastNumber + 1
-      const creditNoteSeries = series.nota_credito.serie
+      const nextNumber = series[seriesKey].lastNumber + 1
+      const creditNoteSeries = series[seriesKey].serie
       const creditNoteNumber = `${creditNoteSeries}-${String(nextNumber).padStart(8, '0')}`
 
       const creditNoteData = {
