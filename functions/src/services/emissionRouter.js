@@ -17,6 +17,36 @@ import { sendToQPse } from './qpseService.js'
  */
 
 /**
+ * Mapea el tipo de documento interno a código SUNAT (Catálogo 01)
+ *
+ * @param {string} documentType - Tipo de documento interno (factura, boleta, nota_credito, nota_debito)
+ * @returns {string} Código SUNAT (01, 03, 07, 08)
+ *
+ * Catálogo 01 - Tipos de Documentos:
+ * - 01: Factura
+ * - 03: Boleta de Venta
+ * - 07: Nota de Crédito
+ * - 08: Nota de Débito
+ */
+function getDocumentTypeCode(documentType) {
+  const typeMap = {
+    'factura': '01',
+    'boleta': '03',
+    'nota_credito': '07',
+    'nota_debito': '08'
+  }
+
+  const code = typeMap[documentType]
+
+  if (!code) {
+    console.warn(`⚠️ Tipo de documento desconocido: ${documentType}, usando 03 (boleta) por defecto`)
+    return '03'
+  }
+
+  return code
+}
+
+/**
  * Envía un comprobante electrónico usando el método configurado
  *
  * @param {Object} invoiceData - Datos de la factura
@@ -258,8 +288,9 @@ async function emitViaQPse(invoiceData, businessData) {
     console.log('🔨 Generando XML UBL 2.1...')
     const xml = generateInvoiceXML(invoiceData, businessData)
 
-    // 2. Determinar tipo de documento para QPse
-    const tipoDocumento = invoiceData.documentType === 'factura' ? '01' : '03'
+    // 2. Determinar tipo de documento para QPse usando el helper
+    const tipoDocumento = getDocumentTypeCode(invoiceData.documentType)
+    console.log(`📄 Tipo de documento: ${invoiceData.documentType} → Código SUNAT: ${tipoDocumento}`)
 
     // 3. Enviar a QPse (firma y envía automáticamente)
     console.log('📡 Enviando a QPse...')

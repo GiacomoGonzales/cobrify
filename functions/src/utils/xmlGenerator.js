@@ -8,8 +8,21 @@ import { create } from 'xmlbuilder2'
  * - Especificaciones SUNAT: https://cpe.sunat.gob.pe/node/88
  */
 export function generateInvoiceXML(invoiceData, businessData) {
+  // Mapeo de tipos de documento según catálogo 01 de SUNAT
+  const documentTypeMap = {
+    'factura': '01',
+    'boleta': '03',
+    'nota_credito': '07',
+    'nota_debito': '08'
+  }
+
+  const documentTypeCode = documentTypeMap[invoiceData.documentType] || '03'
   const isFactura = invoiceData.documentType === 'factura'
-  const documentTypeCode = isFactura ? '01' : '03' // 01=Factura, 03=Boleta
+  const isCreditNote = invoiceData.documentType === 'nota_credito'
+  const isDebitNote = invoiceData.documentType === 'nota_debito'
+  const isNote = isCreditNote || isDebitNote
+
+  console.log(`📄 Generando XML para: ${invoiceData.documentType} (código ${documentTypeCode})`)
 
   // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
   const igvRate = invoiceData.taxConfig?.igvRate ?? 18
@@ -38,10 +51,18 @@ export function generateInvoiceXML(invoiceData, businessData) {
     issueDate = new Date().toISOString().split('T')[0]
   }
 
+  // Determinar el elemento raíz según tipo de documento
+  const rootElementName = isCreditNote ? 'CreditNote' : isDebitNote ? 'DebitNote' : 'Invoice'
+  const rootNamespace = isCreditNote ?
+    'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2' :
+    isDebitNote ?
+    'urn:oasis:names:specification:ubl:schema:xsd:DebitNote-2' :
+    'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2'
+
   // Construir XML según especificación UBL 2.1
   const root = create({ version: '1.0', encoding: 'UTF-8' })
-    .ele('Invoice', {
-      'xmlns': 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
+    .ele(rootElementName, {
+      'xmlns': rootNamespace,
       'xmlns:cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
       'xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
       'xmlns:ccts': 'urn:un:unece:uncefact:documentation:2',
@@ -84,6 +105,35 @@ export function generateInvoiceXML(invoiceData, businessData) {
     'listName': 'Currency',
     'listAgencyName': 'United Nations Economic Commission for Europe'
   }).txt(invoiceData.currency || 'PEN')
+
+  // === ELEMENTOS ESPECÍFICOS PARA NOTAS DE CRÉDITO/DÉBITO ===
+  if (isNote) {
+    // 1. Referencia al documento modificado (BillingReference)
+    if (invoiceData.referencedDocumentId && invoiceData.referencedDocumentType) {
+      const billingReference = root.ele('cac:BillingReference')
+      const invoiceDocRef = billingReference.ele('cac:InvoiceDocumentReference')
+      invoiceDocRef.ele('cbc:ID').txt(invoiceData.referencedDocumentId)
+      invoiceDocRef.ele('cbc:DocumentTypeCode', {
+        'listAgencyName': 'PE:SUNAT',
+        'listName': 'Tipo de Documento',
+        'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
+      }).txt(invoiceData.referencedDocumentType) // 01=Factura, 03=Boleta
+    }
+
+    // 2. Motivo de la nota (DiscrepancyResponse)
+    if (invoiceData.discrepancyCode) {
+      const discrepancyResponse = root.ele('cac:DiscrepancyResponse')
+      discrepancyResponse.ele('cbc:ReferenceID').txt(invoiceData.referencedDocumentId || '')
+      discrepancyResponse.ele('cbc:ResponseCode', {
+        'listAgencyName': 'PE:SUNAT',
+        'listName': isCreditNote ? 'Tipo de nota de credito' : 'Tipo de nota de debito',
+        'listURI': isCreditNote ?
+          'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo09' :  // Catálogo 09 - Notas de Crédito
+          'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo10'    // Catálogo 10 - Notas de Débito
+      }).txt(invoiceData.discrepancyCode)
+      discrepancyResponse.ele('cbc:Description').txt(invoiceData.discrepancyReason || invoiceData.notes || '')
+    }
+  }
 
   // === FIRMA DIGITAL ===
   // La firma XMLDSig se insertará en ext:UBLExtensions por xmlSigner.js

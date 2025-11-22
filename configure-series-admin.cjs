@@ -43,11 +43,11 @@ async function configureSeries() {
             serie: 'B001',
             lastNumber: 0
           },
-          notaCredito: {
+          nota_credito: {
             serie: 'FC01',
             lastNumber: 0
           },
-          notaDebito: {
+          nota_debito: {
             serie: 'FD01',
             lastNumber: 0
           }
