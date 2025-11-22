@@ -2,6 +2,7 @@ import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { Capacitor } from '@capacitor/core';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { prepareLogoForPrinting } from './imageProcessingService';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -14,17 +15,21 @@ let connectedPrinterAddress = null;
 
 /**
  * Constantes de formato según ancho de papel
+ * Los separadores se ajustan al ancho real de la impresora
+ *
+ * NOTA: Algunos rollos de 58mm solo imprimen ~24 caracteres
+ * por lo que usamos valores conservadores para evitar desbordamiento
  */
 const PAPER_FORMATS = {
   58: {
-    charsPerLine: 32,
-    separator: '----------------------------',
-    halfSeparator: '----------------------------'
+    charsPerLine: 24, // Ancho real de la mayoría de impresoras 58mm
+    separator: '------------------------', // 24 guiones (ancho completo)
+    halfSeparator: '------------' // 12 guiones (medio ancho)
   },
   80: {
-    charsPerLine: 48,
-    separator: '--------------------------------------------',
-    halfSeparator: '--------------------------------------------'
+    charsPerLine: 42, // Ancho real de la mayoría de impresoras 80mm
+    separator: '------------------------------------------', // 42 guiones (ancho completo)
+    halfSeparator: '---------------------' // 21 guiones (medio ancho)
   }
 };
 
@@ -331,10 +336,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     const tipoComprobanteCompleto = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
 
     // Items text - columnas fijas para alinear precios correctamente
-    const lineWidth = paperWidth === 80 ? 48 : 32; // Ancho total de línea
+    const lineWidth = format.charsPerLine; // Usar ancho real configurado (58mm: 24, 80mm: 42)
     const cantWidth = 6; // Columna cantidad
-    const descWidth = paperWidth === 80 ? 26 : 14; // Columna descripción (58mm: 14 chars para dar espacio al precio)
-    const priceWidth = paperWidth === 80 ? 10 : 10; // Columna precio
+    const descWidth = paperWidth === 80 ? 20 : 12; // Columna descripción ajustada
+    const priceWidth = paperWidth === 80 ? 12 : 10; // Columna precio ajustada
 
     // Items text
     let itemsText = '';
@@ -420,19 +425,39 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // ========== HEADER - Datos del Emisor ==========
 
     // Logo optimizado (si existe URL de logo del negocio)
+    console.log('🖨️ Imprimiendo con ancho de papel:', paperWidth, 'mm');
+
     if (business.logoUrl) {
-      // Tamaño reducido según ancho de papel
-      const logoWidth = paperWidth === 80 ? 200 : 120;
-      printer = printer.image(business.logoUrl, logoWidth);
+      console.log('📷 Preparando logo del negocio...');
+      try {
+        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
+
+        if (logoConfig.ready && logoConfig.base64) {
+          // Convertir base64 a data URL para el plugin
+          const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
+          console.log('✅ Logo listo (base64). Ancho:', logoConfig.width, 'px');
+          printer = printer.image(dataUrl, logoConfig.width);
+        } else if (logoConfig.ready && logoConfig.url) {
+          // Fallback: intentar con URL directa
+          console.log('⚠️ Intentando imprimir logo desde URL...');
+          printer = printer.image(logoConfig.url, logoConfig.width);
+        } else {
+          console.warn('⚠️ Logo no disponible, usando header de texto');
+        }
+      } catch (error) {
+        console.error('❌ Error al cargar logo:', error.message);
+        console.warn('Continuando sin logo...');
+      }
+    } else {
+      console.log('ℹ️ No hay logo configurado');
     }
 
-    // Nombre del negocio (company-name)
+    // Nombre del negocio (company-name) - Formato elegante con bold
     const businessName = convertSpanishText(business.tradeName || business.name || 'MI EMPRESA');
-    if (businessName.length <= (paperWidth === 80 ? 24 : 16)) {
-      printer = printer.doubleWidth().text(businessName + '\n').clearFormatting();
-    } else {
-      printer = printer.bold().text(businessName + '\n').clearFormatting();
-    }
+    printer = printer.bold().text(businessName + '\n').clearFormatting();
+
+    // Espaciado antes del RUC
+    printer = printer.text('\n');
 
     // RUC (company-info)
     if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
@@ -474,13 +499,24 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .bold()
       .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
       .clearFormatting()
-      .text(format.separator + '\n');
+      .text(format.separator + '\n')
+      .text('\n'); // Espaciado adicional antes de la fecha
 
     // ========== Fecha y Hora (ticket-section) ==========
+    // Formatear fecha y hora de manera compatible con impresoras térmicas
+    const invoiceDate = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date());
+    const createdDate = new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date());
+
+    // Formatear hora en 24h para evitar problemas con "p.m." / "a.m."
+    const hours = String(createdDate.getHours()).padStart(2, '0');
+    const minutes = String(createdDate.getMinutes()).padStart(2, '0');
+    const seconds = String(createdDate.getSeconds()).padStart(2, '0');
+    const timeString = `${hours}:${minutes}:${seconds}`;
+
     printer = printer
       .align('left')
-      .text(convertSpanishText(`Fecha: ${new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleDateString('es-PE')}\n`))
-      .text(`Hora: ${new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}\n`)
+      .text(convertSpanishText(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}\n`))
+      .text(`Hora: ${timeString}\n`)
       .text(format.separator + '\n');
 
     // ========== Datos del Cliente (ticket-section) ==========
@@ -628,6 +664,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       if (qrData) {
         printer = printer
           .text('\n')
+          .align('center')
           .qr(qrData)
           .text('\n')
           .text('Escanea para validar\n');
@@ -636,6 +673,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       // Consulte comprobante en SUNAT
       printer = printer
         .text('\n')
+        .align('center')
         .text('Consulte su comprobante en:\n')
         .text('www.sunat.gob.pe\n');
     }
@@ -643,13 +681,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Mensaje de agradecimiento
     printer = printer
       .text('\n')
+      .align('center')
       .bold()
       .text(convertSpanishText('!Gracias por su preferencia!\n'))
       .clearFormatting();
 
     // Website (si existe)
     if (business.website) {
-      printer = printer.text(convertSpanishText(business.website + '\n'));
+      printer = printer
+        .align('center')
+        .text(convertSpanishText(business.website + '\n'));
     }
 
     printer = printer.text('\n');
@@ -903,7 +944,7 @@ export const testPrinter = async (paperWidth = 58) => {
   console.log('🖨️ testPrinter - Iniciando prueba de impresión');
   console.log('📱 Plataforma nativa:', isNative);
   console.log('🔌 Impresora conectada:', isPrinterConnected);
-  console.log('📏 Ancho de papel:', paperWidth);
+  console.log('📏 Ancho de papel:', paperWidth, 'mm');
 
   if (!isNative) {
     console.error('❌ No es plataforma nativa');
@@ -921,12 +962,24 @@ export const testPrinter = async (paperWidth = 58) => {
     console.log('📐 Formato seleccionado:', format);
 
     console.log('🔄 Preparando comandos de impresión...');
-    // El plugin usa method chaining - no se necesita await hasta write()
+
+    // Mostrar ancho configurado
+    const widthText = paperWidth === 58 ? '58MM (ESTRECHO)' : '80MM (ANCHO)';
+    const charsText = `${format.charsPerLine} caracteres por linea`;
+
     await CapacitorThermalPrinter.begin()
       .align('center')
       .bold()
       .text('PRUEBA DE IMPRESORA\n')
       .clearFormatting()
+      .text(format.separator + '\n')
+      .text('\n')
+      .bold()
+      .doubleWidth()
+      .text(`${widthText}\n`)
+      .clearFormatting()
+      .text(`${charsText}\n`)
+      .text('\n')
       .text(format.separator + '\n')
       .text('\n')
       .align('left')
@@ -942,7 +995,6 @@ export const testPrinter = async (paperWidth = 58) => {
       .align('center')
       .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`)
       .text('\n')
-      .text(`Ancho: ${paperWidth}mm\n`)
       .text(convertSpanishText('Impresora configurada\n'))
       .text('correctamente!\n')
       .text('\n')
@@ -960,5 +1012,75 @@ export const testPrinter = async (paperWidth = 58) => {
     console.error('Mensaje:', error.message);
     console.error('Stack:', error.stack);
     return { success: false, error: error.message || 'Error desconocido al imprimir' };
+  }
+};
+
+/**
+ * Probar impresión con logo
+ * @param {string} logoUrl - URL del logo a probar
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ */
+export const testPrinterWithLogo = async (logoUrl, paperWidth = 58) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  console.log('🖨️ testPrinterWithLogo - Iniciando prueba con logo');
+  console.log('📷 Logo URL:', logoUrl);
+  console.log('📏 Ancho de papel:', paperWidth, 'mm');
+
+  if (!isNative) {
+    return { success: false, error: 'Solo disponible en app móvil' };
+  }
+
+  if (!isPrinterConnected) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+
+  try {
+    const format = getFormat(paperWidth);
+
+    // Preparar logo
+    console.log('📷 Preparando logo...');
+    const logoConfig = await prepareLogoForPrinting(logoUrl, paperWidth);
+
+    let printer = CapacitorThermalPrinter.begin()
+      .align('center')
+      .bold()
+      .text('PRUEBA DE LOGO\n')
+      .clearFormatting()
+      .text(format.separator + '\n')
+      .text('\n');
+
+    if (logoConfig.ready && logoConfig.base64) {
+      const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
+      console.log('✅ Imprimiendo logo desde base64');
+      printer = printer
+        .image(dataUrl, logoConfig.width)
+        .text('\n')
+        .text('Logo impreso (base64)\n');
+    } else if (logoConfig.ready && logoConfig.url) {
+      console.log('⚠️ Imprimiendo logo desde URL');
+      printer = printer
+        .image(logoConfig.url, logoConfig.width)
+        .text('\n')
+        .text('Logo impreso (URL)\n');
+    } else {
+      console.log('❌ Logo no disponible');
+      printer = printer.text('Logo no disponible\n');
+    }
+
+    await printer
+      .text('\n')
+      .text(format.separator + '\n')
+      .text(`Ancho papel: ${paperWidth}mm\n`)
+      .text(`Ancho logo: ${logoConfig.width}px\n`)
+      .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`)
+      .text('\n\n')
+      .cutPaper()
+      .write();
+
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en testPrinterWithLogo:', error);
+    return { success: false, error: error.message };
   }
 };
