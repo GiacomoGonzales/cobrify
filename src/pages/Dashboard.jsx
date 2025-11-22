@@ -10,6 +10,8 @@ import {
   Loader2,
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -20,12 +22,13 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner } = useAppContext()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [hideDashboardData, setHideDashboardData] = useState(false)
 
   // Determinar el prefijo de ruta según el contexto
   const getRoutePrefix = () => {
@@ -57,6 +60,24 @@ export default function Dashboard() {
     const businessId = getBusinessId()
     setIsLoading(true)
     try {
+      // Load business settings to check privacy options
+      const businessRef = doc(db, 'businesses', businessId)
+      const businessDoc = await getDoc(businessRef)
+      const businessData = businessDoc.exists() ? businessDoc.data() : {}
+
+      // Check if we should hide dashboard data from secondary users
+      const shouldHideData = businessData.hideDashboardDataFromSecondary && !isAdmin && !isBusinessOwner
+      setHideDashboardData(shouldHideData)
+
+      // If we need to hide data, don't load anything
+      if (shouldHideData) {
+        setInvoices([])
+        setCustomers([])
+        setProducts([])
+        setIsLoading(false)
+        return
+      }
+
       const [invoicesResult, customersResult, productsResult] = await Promise.all([
         getInvoices(businessId),
         getCustomers(businessId),

@@ -30,6 +30,9 @@ const CATEGORIES = [
   { value: 'lacteos', label: 'Lácteos' },
   { value: 'condimentos', label: 'Condimentos y Especias' },
   { value: 'bebidas', label: 'Bebidas' },
+  { value: 'estetica', label: 'Estética y Belleza' },
+  { value: 'salud', label: 'Salud y Farmacia' },
+  { value: 'limpieza', label: 'Limpieza' },
   { value: 'otros', label: 'Otros' }
 ]
 
@@ -39,14 +42,44 @@ const UNITS = [
   { value: 'L', label: 'Litros (L)' },
   { value: 'ml', label: 'Mililitros (ml)' },
   { value: 'unidades', label: 'Unidades' },
-  { value: 'cajas', label: 'Cajas' }
+  { value: 'cajas', label: 'Cajas' },
+  { value: 'sobres', label: 'Sobres' },
+  { value: 'piezas', label: 'Piezas' }
 ]
 
 export default function Ingredients() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessMode } = useAppContext()
   const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
+
+  // Textos condicionales según el modo de negocio
+  const isRestaurantMode = businessMode === 'restaurant'
+  const texts = {
+    pageTitle: isRestaurantMode ? 'Ingredientes' : 'Insumos',
+    pageDescription: isRestaurantMode
+      ? 'Gestiona tu inventario de materia prima'
+      : 'Gestiona el stock de insumos de tu negocio',
+    tableHeader: isRestaurantMode ? 'Ingrediente' : 'Insumo',
+    emptyTitle: isRestaurantMode ? 'No hay ingredientes registrados' : 'No hay insumos registrados',
+    emptyDescription: isRestaurantMode
+      ? 'Comienza agregando tu primer ingrediente'
+      : 'Comienza agregando los insumos que usa tu negocio',
+    addButton: isRestaurantMode ? 'Agregar Ingrediente' : 'Agregar Insumo',
+    newButton: isRestaurantMode ? 'Nuevo Ingrediente' : 'Nuevo Insumo',
+    modalTitleAdd: isRestaurantMode ? 'Nuevo Ingrediente' : 'Nuevo Insumo',
+    modalTitleEdit: isRestaurantMode ? 'Editar Ingrediente' : 'Editar Insumo',
+    nameLabel: isRestaurantMode ? 'Nombre del Ingrediente' : 'Nombre del Insumo',
+    namePlaceholder: isRestaurantMode
+      ? 'Ej: Arroz blanco'
+      : 'Ej: Crema limpiadora, Arroz, Algodón, etc.',
+    saveButton: isRestaurantMode ? 'Agregar Ingrediente' : 'Agregar Insumo',
+    deleteTitle: isRestaurantMode ? 'Eliminar Ingrediente' : 'Eliminar Insumo',
+    deleteQuestion: isRestaurantMode ? 'ingrediente' : 'insumo',
+    loadingText: isRestaurantMode ? 'Cargando ingredientes...' : 'Cargando insumos...',
+    emptySearchTitle: isRestaurantMode ? 'No se encontraron ingredientes' : 'No se encontraron insumos',
+  }
+
   const [ingredients, setIngredients] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -88,7 +121,7 @@ export default function Ingredients() {
 
     setIsLoading(true)
     try {
-      // En modo demo, usar ingredientes del contexto de demo o fallback
+      // En modo demo, usar insumos del contexto de demo o fallback
       if (demoContext) {
         const demoIngredients = demoContext.demoData?.ingredients || [
           {
@@ -516,7 +549,7 @@ export default function Ingredients() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-2" />
-          <p className="text-gray-600">Cargando ingredientes...</p>
+          <p className="text-gray-600">{texts.loadingText}</p>
         </div>
       </div>
     )
@@ -527,9 +560,9 @@ export default function Ingredients() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Ingredientes</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{texts.pageTitle}</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Gestiona tu inventario de materia prima
+            {texts.pageDescription}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
@@ -564,7 +597,7 @@ export default function Ingredients() {
           </Button>
           <Button variant="outline" onClick={() => setShowAddModal(true)} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo Ingrediente
+            {texts.newButton}
           </Button>
         </div>
       </div>
@@ -639,18 +672,18 @@ export default function Ingredients() {
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchTerm || filterCategory !== 'all'
-                ? 'No se encontraron ingredientes'
-                : 'No hay ingredientes registrados'}
+                ? texts.emptySearchTitle
+                : texts.emptyTitle}
             </h3>
             <p className="text-gray-600 mb-4">
               {searchTerm || filterCategory !== 'all'
                 ? 'Intenta con otros filtros de búsqueda'
-                : 'Comienza agregando tu primer ingrediente'}
+                : texts.emptyDescription}
             </p>
             {!searchTerm && filterCategory === 'all' && (
               <Button onClick={() => setShowAddModal(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Ingrediente
+                {texts.addButton}
               </Button>
             )}
           </CardContent>
@@ -658,7 +691,7 @@ export default function Ingredients() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Ingrediente</TableHead>
+                <TableHead>{texts.tableHeader}</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead>Stock Actual</TableHead>
                 <TableHead>Costo Promedio</TableHead>
@@ -743,14 +776,14 @@ export default function Ingredients() {
           setShowEditModal(false)
           resetForm()
         }}
-        title={showEditModal ? 'Editar Ingrediente' : 'Nuevo Ingrediente'}
+        title={showEditModal ? texts.modalTitleEdit : texts.modalTitleAdd}
       >
         <div className="space-y-4">
           <Input
-            label="Nombre del Ingrediente"
+            label={texts.nameLabel}
             value={formData.name}
             onChange={e => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Ej: Arroz blanco"
+            placeholder={texts.namePlaceholder}
             required
           />
 
@@ -827,7 +860,7 @@ export default function Ingredients() {
                   Guardando...
                 </>
               ) : (
-                showEditModal ? 'Guardar Cambios' : 'Agregar Ingrediente'
+                showEditModal ? 'Guardar Cambios' : texts.saveButton
               )}
             </Button>
           </div>
@@ -922,7 +955,7 @@ export default function Ingredients() {
           setShowDeleteModal(false)
           setSelectedIngredient(null)
         }}
-        title="Eliminar Ingrediente"
+        title={texts.deleteTitle}
         size="sm"
       >
         <div className="space-y-4">
@@ -933,7 +966,7 @@ export default function Ingredients() {
                 ¿Estás seguro de que deseas eliminar <strong>{selectedIngredient?.name}</strong>?
               </p>
               <p className="text-sm text-gray-600 mt-2">
-                Esta acción no se puede deshacer y se perderá el historial de este ingrediente.
+                Esta acción no se puede deshacer y se perderá el historial de este {texts.deleteQuestion}.
               </p>
             </div>
           </div>

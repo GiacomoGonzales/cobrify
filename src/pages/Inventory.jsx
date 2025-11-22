@@ -30,6 +30,7 @@ import Input from '@/components/ui/Input'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency } from '@/lib/utils'
 import { getProducts, getProductCategories, updateProduct } from '@/services/firestoreService'
+import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock } from '@/services/warehouseService'
 
@@ -61,14 +62,18 @@ const getCategoryPath = (categories, categoryId) => {
 }
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
   const toast = useToast()
+  const isRetailMode = businessMode === 'retail'
+
   const [products, setProducts] = useState([])
+  const [ingredients, setIngredients] = useState([])
   const [productCategories, setProductCategories] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [filterType, setFilterType] = useState('all') // 'all', 'products', 'ingredients'
   const [expandedProduct, setExpandedProduct] = useState(null)
 
   // Paginación
@@ -93,9 +98,12 @@ export default function Inventory() {
 
   useEffect(() => {
     loadProducts()
+    if (isRetailMode) {
+      loadIngredients()
+    }
     loadCategories()
     loadWarehouses()
-  }, [user])
+  }, [user, isRetailMode])
 
   const loadProducts = async () => {
     if (!user?.uid) return
@@ -117,6 +125,19 @@ export default function Inventory() {
       console.error('Error al cargar productos:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadIngredients = async () => {
+    if (!user?.uid) return
+
+    try {
+      const result = await getIngredients(getBusinessId())
+      if (result.success) {
+        setIngredients(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar ingredientes:', error)
     }
   }
 
@@ -334,24 +355,46 @@ export default function Inventory() {
     }
   }
 
-  // Filtrar y ordenar productos (optimizado con useMemo)
+  // Combinar productos e ingredientes en modo retail
+  const allItems = React.useMemo(() => {
+    let items = []
+
+    if (filterType === 'all' || filterType === 'products') {
+      items = [...items, ...products.map(p => ({ ...p, itemType: 'product' }))]
+    }
+
+    if (isRetailMode && (filterType === 'all' || filterType === 'ingredients')) {
+      items = [...items, ...ingredients.map(i => ({
+        ...i,
+        itemType: 'ingredient',
+        code: i.code || '-',
+        price: i.averageCost || 0,
+        stock: i.currentStock || 0,
+        category: i.category
+      }))]
+    }
+
+    return items
+  }, [products, ingredients, filterType, isRetailMode])
+
+  // Filtrar y ordenar items (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
-    const filtered = products.filter(product => {
+    const filtered = allItems.filter(item => {
       const matchesSearch =
-        product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.category?.toLowerCase().includes(searchTerm.toLowerCase())
+        item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.category?.toLowerCase().includes(searchTerm.toLowerCase())
 
       const matchesCategory =
-        filterCategory === 'all' || product.category === filterCategory
+        filterCategory === 'all' || item.category === filterCategory
 
       let matchesStatus = true
       if (filterStatus === 'low') {
-        matchesStatus = product.stock !== null && product.stock < 4
+        matchesStatus = item.stock !== null && item.stock < 4
       } else if (filterStatus === 'out') {
-        matchesStatus = product.stock === 0
+        matchesStatus = item.stock === 0
       } else if (filterStatus === 'normal') {
-        matchesStatus = product.stock === null || product.stock >= 4
+        matchesStatus = item.stock === null || item.stock >= 4
       }
 
       return matchesSearch && matchesCategory && matchesStatus
@@ -423,31 +466,65 @@ export default function Inventory() {
     setCurrentPage(1)
   }, [searchTerm, filterCategory, filterStatus])
 
-  // Obtener categorías únicas con sus IDs (optimizado con useMemo)
+  // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
-    const uniqueCategoryIds = [...new Set(products.map(p => p.category).filter(Boolean))]
-    return uniqueCategoryIds.map(catId => {
+    let allCategories = []
+
+    // Categorías de productos
+    const productCats = [...new Set(products.map(p => p.category).filter(Boolean))]
+    allCategories = productCats.map(catId => {
       const category = productCategories.find(c => c.id === catId)
       return category ? { id: catId, name: category.name } : { id: catId, name: catId }
     })
-  }, [products, productCategories])
+
+    // Categorías de ingredientes en retail
+    if (isRetailMode) {
+      const ingredientCats = [...new Set(ingredients.map(i => i.category).filter(Boolean))]
+      const categoryLabels = {
+        'granos': 'Granos y Cereales',
+        'carnes': 'Carnes',
+        'vegetales': 'Vegetales y Frutas',
+        'lacteos': 'Lácteos',
+        'condimentos': 'Condimentos y Especias',
+        'bebidas': 'Bebidas',
+        'estetica': 'Estética y Belleza',
+        'salud': 'Salud y Farmacia',
+        'limpieza': 'Limpieza',
+        'otros': 'Otros'
+      }
+
+      ingredientCats.forEach(cat => {
+        if (!allCategories.find(c => c.id === cat)) {
+          allCategories.push({
+            id: cat,
+            name: categoryLabels[cat] || cat
+          })
+        }
+      })
+    }
+
+    return allCategories
+  }, [products, ingredients, productCategories, isRetailMode])
 
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
-    const productsWithStock = products.filter(p => p.stock !== null)
-    const lowStockItems = productsWithStock.filter(p => p.stock < 4)
-    const outOfStockItems = productsWithStock.filter(p => p.stock === 0)
-    const totalValue = productsWithStock.reduce((sum, p) => sum + (p.stock * p.price), 0)
-    const totalUnits = productsWithStock.reduce((sum, p) => sum + p.stock, 0)
+    const itemsWithStock = allItems.filter(i => i.stock !== null && i.stock !== undefined)
+    const lowStockItems = itemsWithStock.filter(i => i.stock < 4)
+    const outOfStockItems = itemsWithStock.filter(i => i.stock === 0)
+    const totalValue = itemsWithStock.reduce((sum, i) => {
+      const price = i.itemType === 'ingredient' ? (i.averageCost || 0) : (i.price || 0)
+      return sum + (i.stock * price)
+    }, 0)
+    const totalUnits = itemsWithStock.reduce((sum, i) => sum + i.stock, 0)
 
     return {
-      productsWithStock,
+      productsWithStock: itemsWithStock,
       lowStockItems,
       outOfStockItems,
       totalValue,
       totalUnits
     }
-  }, [products])
+  }, [allItems])
 
   const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
 
@@ -482,7 +559,7 @@ export default function Inventory() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Inventario</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Gestiona el stock de tus productos
+            {isRetailMode ? 'Gestiona el stock de tus productos e insumos' : 'Gestiona el stock de tus productos'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -503,9 +580,11 @@ export default function Inventory() {
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Total Productos</p>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  {isRetailMode ? 'Total Items' : 'Total Productos'}
+                </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-                  {products.length}
+                  {isRetailMode ? products.length + ingredients.length : products.length}
                 </p>
               </div>
               <Package className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
@@ -579,6 +658,54 @@ export default function Inventory() {
         </Alert>
       )}
 
+      {/* Tabs - Solo en modo retail */}
+      {isRetailMode && (
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setFilterType('all')}
+            className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+              filterType === 'all'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Todos ({products.length + ingredients.length})
+          </button>
+          <button
+            onClick={() => setFilterType('products')}
+            className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+              filterType === 'products'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Productos ({products.length})
+          </button>
+          <button
+            onClick={() => setFilterType('ingredients')}
+            className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+              filterType === 'ingredients'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Insumos ({ingredients.length})
+          </button>
+        </div>
+      )}
+
+      {/* Info de ayuda contextual - Solo en retail cuando hay tabs */}
+      {isRetailMode && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-3">
+            <p className="text-xs text-blue-800">
+              <strong>Productos</strong> son los artículos que vendes. <strong>Insumos</strong> son la materia prima que consumen.
+              Ve a <strong>Composición</strong> para definir qué insumos consume cada producto/servicio.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
@@ -636,7 +763,12 @@ export default function Inventory() {
       {/* Inventory Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Productos en Inventario ({filteredProducts.length})</CardTitle>
+          <CardTitle>
+            {isRetailMode
+              ? `${filterType === 'all' ? 'Items' : filterType === 'products' ? 'Productos' : 'Insumos'} en Inventario (${filteredProducts.length})`
+              : `Productos en Inventario (${filteredProducts.length})`
+            }
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {filteredProducts.length === 0 ? (
@@ -655,10 +787,10 @@ export default function Inventory() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="table-fixed w-full">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
+                    <TableHead className="w-[100px]">
                       <button
                         onClick={() => handleSort('code')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -668,17 +800,20 @@ export default function Inventory() {
                         {getSortIcon('code')}
                       </button>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="w-[180px]">
                       <button
                         onClick={() => handleSort('name')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                        title="Ordenar por producto"
+                        title="Ordenar por nombre"
                       >
-                        Producto
+                        {isRetailMode ? 'Nombre' : 'Producto'}
                         {getSortIcon('name')}
                       </button>
                     </TableHead>
-                    <TableHead className="hidden md:table-cell">
+                    {isRetailMode && (
+                      <TableHead className="hidden sm:table-cell w-[100px]">Tipo</TableHead>
+                    )}
+                    <TableHead className="hidden md:table-cell w-[150px]">
                       <button
                         onClick={() => handleSort('category')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -688,7 +823,7 @@ export default function Inventory() {
                         {getSortIcon('category')}
                       </button>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="w-[120px]">
                       <button
                         onClick={() => handleSort('stock')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -698,7 +833,7 @@ export default function Inventory() {
                         {getSortIcon('stock')}
                       </button>
                     </TableHead>
-                    <TableHead className="hidden lg:table-cell">
+                    <TableHead className="w-[120px]">
                       <button
                         onClick={() => handleSort('price')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -708,46 +843,71 @@ export default function Inventory() {
                         {getSortIcon('price')}
                       </button>
                     </TableHead>
-                    <TableHead className="hidden lg:table-cell">Valor Stock</TableHead>
-                    <TableHead>Estado</TableHead>
-                    {warehouses.length > 1 && <TableHead className="text-right">Acciones</TableHead>}
+                    <TableHead className="w-[120px]">Valor Stock</TableHead>
+                    <TableHead className="w-[110px]">Estado</TableHead>
+                    {warehouses.length > 1 && <TableHead className="w-[100px] text-right">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedProducts.map(product => {
-                    const stockStatus = getStockStatus(product)
-                    const isExpanded = expandedProduct === product.id
-                    const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
+                  {paginatedProducts.map(item => {
+                    const stockStatus = getStockStatus(item)
+                    const isExpanded = expandedProduct === item.id
+                    const hasWarehouseStocks = item.warehouseStocks && item.warehouseStocks.length > 0
+                    const isProduct = item.itemType === 'product'
 
                     return (
-                      <React.Fragment key={product.id}>
+                      <React.Fragment key={`${item.itemType}-${item.id}`}>
                       <TableRow>
                         <TableCell>
                           <span className="font-mono text-xs sm:text-sm">
-                            {product.code || '-'}
+                            {item.code || '-'}
                           </span>
                         </TableCell>
-                        <TableCell>
-                          <div>
-                            <span className="font-medium text-sm">{product.name}</span>
-                            {product.category && (
-                              <p className="text-xs text-gray-500 md:hidden">
-                                {getCategoryPath(productCategories, product.category) || product.category}
+                        <TableCell className="max-w-[180px]">
+                          <div className="max-w-[180px]">
+                            <p className="font-medium text-sm truncate" title={item.name}>
+                              {item.name}
+                            </p>
+                            {item.category && (
+                              <p className="text-xs text-gray-500 md:hidden truncate">
+                                {isProduct
+                                  ? getCategoryPath(productCategories, item.category) || item.category
+                                  : item.category
+                                }
                               </p>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Badge variant="default">
-                            {getCategoryPath(productCategories, product.category) || 'Sin categoría'}
-                          </Badge>
+                        {isRetailMode && (
+                          <TableCell className="hidden sm:table-cell">
+                            <Badge variant={isProduct ? 'default' : 'success'}>
+                              {isProduct ? 'Producto' : 'Insumo'}
+                            </Badge>
+                          </TableCell>
+                        )}
+                        <TableCell className="hidden md:table-cell max-w-[200px]">
+                          <div className="max-w-[200px]">
+                            <Badge
+                              variant="default"
+                              className="truncate block"
+                              title={isProduct
+                                ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
+                                : item.category || 'Sin categoría'
+                              }
+                            >
+                              {isProduct
+                                ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
+                                : item.category || 'Sin categoría'
+                              }
+                            </Badge>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center space-x-2">
-                            {/* Botón de expandir/contraer solo si hay almacenes */}
-                            {warehouses.length > 0 && product.stock !== null && (
+                            {/* Botón de expandir/contraer solo si hay almacenes y es producto */}
+                            {warehouses.length > 0 && item.stock !== null && isProduct && (
                               <button
-                                onClick={() => setExpandedProduct(isExpanded ? null : product.id)}
+                                onClick={() => setExpandedProduct(isExpanded ? null : item.id)}
                                 className="p-1 hover:bg-gray-100 rounded transition-colors"
                                 title={isExpanded ? "Ocultar detalle" : "Ver por almacén"}
                               >
@@ -761,31 +921,33 @@ export default function Inventory() {
 
                             {/* Stock total */}
                             <div>
-                              {product.stock === null ? (
+                              {item.stock === null || item.stock === undefined ? (
                                 <span className="text-sm text-gray-500">Sin control</span>
                               ) : (
                                 <span
                                   className={`font-bold text-sm ${
-                                    product.stock === 0
+                                    item.stock === 0
                                       ? 'text-red-600'
-                                      : product.stock < 4
+                                      : item.stock < 4
                                       ? 'text-yellow-600'
                                       : 'text-green-600'
                                   }`}
                                 >
-                                  {product.stock}
+                                  {item.stock} {item.itemType === 'ingredient' ? item.purchaseUnit || '' : ''}
                                 </span>
                               )}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          <span className="text-sm">{formatCurrency(product.price)}</span>
+                        <TableCell>
+                          <span className="text-sm">
+                            {formatCurrency(isProduct ? item.price : (item.averageCost || 0))}
+                          </span>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          {product.stock !== null ? (
+                        <TableCell>
+                          {item.stock !== null && item.stock !== undefined ? (
                             <span className="font-semibold text-sm">
-                              {formatCurrency(product.stock * product.price)}
+                              {formatCurrency(item.stock * (isProduct ? item.price : (item.averageCost || 0)))}
                             </span>
                           ) : (
                             <span className="text-sm text-gray-500">-</span>
@@ -797,21 +959,23 @@ export default function Inventory() {
                         {warehouses.length > 1 && (
                           <TableCell>
                             <div className="flex items-center justify-end">
-                              <button
-                                onClick={() => openTransferModal(product)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Transferir entre almacenes"
-                                disabled={product.stock === null || product.stock === 0}
-                              >
-                                <ArrowRightLeft className="w-4 h-4" />
-                              </button>
+                              {isProduct && (
+                                <button
+                                  onClick={() => openTransferModal(item)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Transferir entre almacenes"
+                                  disabled={item.stock === null || item.stock === 0}
+                                >
+                                  <ArrowRightLeft className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </TableCell>
                         )}
                       </TableRow>
 
-                      {/* Fila expandible con detalle por almacén */}
-                      {isExpanded && warehouses.length > 0 && product.stock !== null && (
+                      {/* Fila expandible con detalle por almacén - solo para productos */}
+                      {isExpanded && warehouses.length > 0 && item.stock !== null && isProduct && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={warehouses.length > 1 ? 8 : 7} className="py-3">
                             <div className="pl-8 space-y-2">
@@ -822,7 +986,7 @@ export default function Inventory() {
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {warehouses.map(warehouse => {
                                   const warehouseStock = hasWarehouseStocks
-                                    ? product.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                    ? item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
                                     : null
                                   const stock = warehouseStock?.stock || 0
 
@@ -976,8 +1140,10 @@ export default function Inventory() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-1">Total Productos</p>
-              <p className="text-2xl font-bold text-gray-900">{products.length}</p>
+              <p className="text-gray-600 mb-1">{isRetailMode ? 'Total Items' : 'Total Productos'}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {isRetailMode ? products.length + ingredients.length : products.length}
+              </p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-gray-600 mb-1">Con Control de Stock</p>

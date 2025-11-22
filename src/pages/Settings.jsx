@@ -94,6 +94,9 @@ export default function Settings() {
   // Estados para fecha de emisión
   const [allowCustomEmissionDate, setAllowCustomEmissionDate] = useState(false)
 
+  // Estados para privacidad
+  const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
+
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
   const [restaurantConfig, setRestaurantConfig] = useState({
@@ -269,6 +272,9 @@ export default function Settings() {
 
         // Cargar configuración de fecha de emisión
         setAllowCustomEmissionDate(businessData.allowCustomEmissionDate || false)
+
+        // Cargar configuración de privacidad
+        setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -1546,6 +1552,50 @@ export default function Settings() {
                   </label>
                 </div>
               </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Configuración de Privacidad */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Privacidad y Permisos</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura qué información pueden ver los usuarios secundarios
+                </p>
+
+                <div className="space-y-4">
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={hideDashboardDataFromSecondary}
+                      onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
+                      className="mt-1 h-4 w-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 group-hover:text-primary-900">
+                        Ocultar datos del dashboard a usuarios secundarios
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
+                        {hideDashboardDataFromSecondary
+                          ? '✓ Habilitado: Los usuarios secundarios verán el dashboard con todos los valores en cero. Solo el propietario y administradores podrán ver las estadísticas reales de ventas, ingresos y otros datos sensibles.'
+                          : '✗ Deshabilitado: Todos los usuarios pueden ver las estadísticas completas del dashboard incluyendo ventas totales, ingresos, productos más vendidos y gráficas.'}
+                      </p>
+                      <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
+                        <div className="flex items-start gap-2">
+                          <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-purple-800 space-y-1">
+                            <p className="font-medium">Control de información sensible</p>
+                            <p>
+                              Útil cuando tienes empleados o vendedores y quieres mantener privada la información financiera del negocio.
+                              Los usuarios secundarios seguirán teniendo acceso a sus funciones asignadas (POS, clientes, productos, etc.).
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
             </div>
           </CardContent>
 
@@ -1574,6 +1624,7 @@ export default function Settings() {
                       autoSendToSunat: autoSendToSunat,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       allowCustomEmissionDate: allowCustomEmissionDate,
+                      hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')

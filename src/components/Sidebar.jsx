@@ -135,6 +135,18 @@ function Sidebar() {
       pageId: 'purchases',
     },
     {
+      path: '/ingredientes',
+      icon: Package,
+      label: 'Insumos',
+      pageId: 'ingredients',
+    },
+    {
+      path: '/recetas',
+      icon: ClipboardList,
+      label: 'Composición',
+      pageId: 'recipes',
+    },
+    {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',

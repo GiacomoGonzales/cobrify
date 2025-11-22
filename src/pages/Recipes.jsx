@@ -16,9 +16,43 @@ import { getIngredients } from '@/services/ingredientService'
 import { getProducts } from '@/services/firestoreService'
 
 export default function Recipes() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, businessMode } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
+
+  // Textos condicionales según el modo de negocio
+  const isRestaurantMode = businessMode === 'restaurant'
+  const texts = {
+    pageTitle: isRestaurantMode ? 'Recetas' : 'Composición',
+    pageDescription: isRestaurantMode
+      ? 'Define los ingredientes de cada plato'
+      : 'Define los insumos que componen tus productos y servicios',
+    newButton: isRestaurantMode ? 'Nueva Receta' : 'Nueva Composición',
+    searchPlaceholder: isRestaurantMode ? 'Buscar receta...' : 'Buscar producto o servicio...',
+    emptyTitle: isRestaurantMode ? 'No hay recetas registradas' : 'No hay composiciones registradas',
+    emptyDescription: isRestaurantMode
+      ? 'Comienza creando recetas para tus productos'
+      : 'Comienza definiendo la composición de tus productos o servicios',
+    createButton: isRestaurantMode ? 'Crear Receta' : 'Crear Composición',
+    tableHeaderProduct: isRestaurantMode ? 'Producto' : 'Producto/Servicio',
+    tableHeaderIngredients: isRestaurantMode ? 'Ingredientes' : 'Insumos Necesarios',
+    modalTitleAdd: isRestaurantMode ? 'Nueva Receta' : 'Definir Composición',
+    modalTitleEdit: isRestaurantMode ? 'Editar Receta' : 'Editar Composición',
+    productLabel: isRestaurantMode ? 'Producto' : 'Producto o Servicio',
+    productPlaceholder: isRestaurantMode ? 'Selecciona un producto' : 'Selecciona un producto o servicio',
+    ingredientsLabel: isRestaurantMode ? 'Ingredientes' : 'Insumos que Consume',
+    ingredientSelect: isRestaurantMode ? 'Selecciona un ingrediente' : 'Selecciona un insumo',
+    addIngredientButton: isRestaurantMode ? 'Agregar Ingrediente' : 'Agregar Insumo',
+    noIngredientsText: isRestaurantMode ? 'No hay ingredientes agregados' : 'No hay insumos agregados',
+    instructionsLabel: isRestaurantMode ? 'Instrucciones (opcional)' : 'Instrucciones o Notas (opcional)',
+    instructionsPlaceholder: isRestaurantMode
+      ? 'Pasos de preparación...'
+      : 'Pasos de preparación, instrucciones de uso, etc...',
+    saveButton: isRestaurantMode ? 'Crear Receta' : 'Guardar',
+    deleteTitle: isRestaurantMode ? 'Eliminar Receta' : 'Eliminar Composición',
+    deleteQuestion: isRestaurantMode ? 'la receta de' : 'la composición de',
+    loadingText: isRestaurantMode ? 'Cargando recetas...' : 'Cargando composiciones...',
+  }
 
   const [recipes, setRecipes] = useState([])
   const [ingredients, setIngredients] = useState([])
@@ -353,7 +387,7 @@ export default function Recipes() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-2" />
-          <p className="text-gray-600">Cargando recetas...</p>
+          <p className="text-gray-600">{texts.loadingText}</p>
         </div>
       </div>
     )
@@ -364,16 +398,39 @@ export default function Recipes() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Recetas</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{texts.pageTitle}</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Define los ingredientes de cada plato
+            {texts.pageDescription}
           </p>
         </div>
         <Button onClick={() => setShowAddModal(true)} disabled={availableProducts.length === 0}>
           <Plus className="w-4 h-4 mr-2" />
-          Nueva Receta
+          {texts.newButton}
         </Button>
       </div>
+
+      {/* Info Card - Solo mostrar en modo retail */}
+      {!isRestaurantMode && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <Package className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-blue-900 mb-1">
+                  ¿Para qué sirve esta sección?
+                </h3>
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  Define qué insumos consume cada producto o servicio que ofreces. Por ejemplo: un plato de "Ceviche"
+                  consume pescado, limón y cebolla. O un servicio de "Limpieza Facial" consume crema, algodón y mascarilla.
+                  El sistema descontará automáticamente los insumos de tu inventario al vender.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search */}
       <Card>
@@ -382,7 +439,7 @@ export default function Recipes() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar receta..."
+              placeholder={texts.searchPlaceholder}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -397,15 +454,15 @@ export default function Recipes() {
           <CardContent className="p-12 text-center">
             <ChefHat className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm ? 'No se encontraron recetas' : 'No hay recetas registradas'}
+              {searchTerm ? 'No se encontraron resultados' : texts.emptyTitle}
             </h3>
             <p className="text-gray-600 mb-4">
-              {searchTerm ? 'Intenta con otro término de búsqueda' : 'Comienza creando recetas para tus productos'}
+              {searchTerm ? 'Intenta con otro término de búsqueda' : texts.emptyDescription}
             </p>
             {!searchTerm && availableProducts.length > 0 && (
               <Button onClick={() => setShowAddModal(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                Crear Receta
+                {texts.createButton}
               </Button>
             )}
           </CardContent>
@@ -413,8 +470,8 @@ export default function Recipes() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Producto</TableHead>
-                <TableHead>Ingredientes</TableHead>
+                <TableHead>{texts.tableHeaderProduct}</TableHead>
+                <TableHead>{texts.tableHeaderIngredients}</TableHead>
                 <TableHead>Porciones</TableHead>
                 <TableHead>Costo Total</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -489,13 +546,13 @@ export default function Recipes() {
           setShowEditModal(false)
           resetForm()
         }}
-        title={showEditModal ? 'Editar Receta' : 'Nueva Receta'}
+        title={showEditModal ? texts.modalTitleEdit : texts.modalTitleAdd}
         size="lg"
       >
         <div className="space-y-4">
           {/* Product Selection */}
           <Select
-            label="Producto"
+            label={texts.productLabel}
             value={formData.productId}
             onChange={e => {
               const product = products.find(p => p.id === e.target.value)
@@ -508,7 +565,7 @@ export default function Recipes() {
             required
             disabled={showEditModal}
           >
-            <option value="">Selecciona un producto</option>
+            <option value="">{texts.productPlaceholder}</option>
             {availableProducts.map(product => (
               <option key={product.id} value={product.id}>
                 {product.name} - {formatCurrency(product.price)}
@@ -535,7 +592,7 @@ export default function Recipes() {
           {/* Ingredients */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ingredientes
+              {texts.ingredientsLabel}
             </label>
 
             {/* Add Ingredient Form */}
@@ -566,7 +623,7 @@ export default function Recipes() {
                   })
                 }}
               >
-                <option value="">Selecciona un ingrediente</option>
+                <option value="">{texts.ingredientSelect}</option>
                 {ingredients.map(ing => (
                   <option key={ing.id} value={ing.id}>
                     {ing.name}
@@ -611,7 +668,7 @@ export default function Recipes() {
                 className="w-full"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Ingrediente
+                {texts.addIngredientButton}
               </Button>
             </div>
 
@@ -637,7 +694,7 @@ export default function Recipes() {
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500 text-sm">
-                No hay ingredientes agregados
+                {texts.noIngredientsText}
               </div>
             )}
           </div>
@@ -645,12 +702,12 @@ export default function Recipes() {
           {/* Instructions */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Instrucciones (opcional)
+              {texts.instructionsLabel}
             </label>
             <textarea
               value={formData.instructions}
               onChange={e => setFormData({ ...formData, instructions: e.target.value })}
-              placeholder="Pasos de preparación..."
+              placeholder={texts.instructionsPlaceholder}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
@@ -675,7 +732,7 @@ export default function Recipes() {
                   Guardando...
                 </>
               ) : (
-                showEditModal ? 'Guardar Cambios' : 'Crear Receta'
+                showEditModal ? 'Guardar Cambios' : texts.saveButton
               )}
             </Button>
           </div>
@@ -689,7 +746,7 @@ export default function Recipes() {
           setShowDeleteModal(false)
           setSelectedRecipe(null)
         }}
-        title="Eliminar Receta"
+        title={texts.deleteTitle}
         size="sm"
       >
         <div className="space-y-4">
@@ -697,7 +754,7 @@ export default function Recipes() {
             <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
             <div>
               <p className="text-sm text-gray-700">
-                ¿Estás seguro de que deseas eliminar la receta de <strong>{selectedRecipe?.productName}</strong>?
+                ¿Estás seguro de que deseas eliminar {texts.deleteQuestion} <strong>{selectedRecipe?.productName}</strong>?
               </p>
               <p className="text-sm text-gray-600 mt-2">
                 Esta acción no se puede deshacer.
