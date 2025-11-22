@@ -344,12 +344,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Items text
     let itemsText = '';
 
-    // Mostrar header de columnas SOLO para 58mm (NO para 80mm)
-    if (paperWidth !== 80) {
-      const headerLine = 'CANT  DESCRIPCION   PRECIO';
-      itemsText += headerLine + '\n';
-      itemsText += format.halfSeparator + '\n';
-    }
+    // NO mostrar header de columnas para ningún formato (ni 58mm ni 80mm)
     for (const item of invoice.items) {
       // Soportar tanto 'description' (facturas) como 'name' (POS)
       const itemName = convertSpanishText(item.description || item.name || '');
@@ -391,30 +386,23 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         // Línea 4: Separación entre items (línea vacía)
         itemsText += '\n';
       } else {
-        // FORMATO 58MM - Mantener formato actual con columnas fijas
-        const cant = String(item.quantity || 0).padEnd(6);
-        const priceStr = `S/${itemTotal.toFixed(2)}`;
+        // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
+        // Línea 1: Nombre del producto completo
+        itemsText += `${itemName}\n`;
 
-        const displayName = itemName.length > descWidth
-          ? itemName.substring(0, descWidth)
-          : itemName.padEnd(descWidth);
+        // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
+        const qtyAndPrice = `${item.quantity}x S/ ${unitPrice.toFixed(2)}`;
+        const totalStr = `S/ ${itemTotal.toFixed(2)}`;
+        const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
+        itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
 
-        itemsText += `${cant}${displayName}${priceStr}\n`;
-
-        // Si el nombre era más largo, mostrar el resto en líneas adicionales
-        if (itemName.length > descWidth) {
-          let remainingName = itemName.substring(descWidth);
-          while (remainingName.length > 0) {
-            const chunk = remainingName.substring(0, descWidth);
-            itemsText += `      ${chunk}\n`;
-            remainingName = remainingName.substring(descWidth);
-          }
-        }
-
-        // Código del producto
+        // Línea 3: Código si existe (alineado a la izquierda)
         if (item.code) {
-          itemsText += `      Codigo: ${convertSpanishText(item.code)}\n`;
+          itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
+
+        // Línea 4: Separación entre items (línea vacía)
+        itemsText += '\n';
       }
     }
 
