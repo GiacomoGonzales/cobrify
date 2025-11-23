@@ -261,6 +261,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
         type: printerConfig.type || 'bluetooth', // bluetooth o wifi
         paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
         enabled: printerConfig.enabled !== false,
+        webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
         updatedAt: new Date()
       }
     }, { merge: true });
