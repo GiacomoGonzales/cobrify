@@ -379,26 +379,60 @@ export default function CashRegister() {
       difference: 0
     }
 
-    // Total de ventas por método de pago
-    const salesCash = todayInvoices
-      .filter(inv => inv.paymentMethod === 'Efectivo')
-      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+    // Inicializar totales por método de pago
+    let salesCash = 0
+    let salesCard = 0
+    let salesTransfer = 0
+    let salesYape = 0
+    let salesPlin = 0
 
-    const salesCard = todayInvoices
-      .filter(inv => inv.paymentMethod === 'Tarjeta')
-      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
-
-    const salesTransfer = todayInvoices
-      .filter(inv => inv.paymentMethod === 'Transferencia')
-      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
-
-    const salesYape = todayInvoices
-      .filter(inv => inv.paymentMethod === 'Yape')
-      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
-
-    const salesPlin = todayInvoices
-      .filter(inv => inv.paymentMethod === 'Plin')
-      .reduce((sum, invoice) => sum + (invoice.total || 0), 0)
+    // Recorrer cada factura y sumar por método de pago
+    todayInvoices.forEach(invoice => {
+      // Si la factura tiene múltiples métodos de pago (array payments)
+      if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+        // Sumar cada pago al método correspondiente
+        invoice.payments.forEach(payment => {
+          const amount = parseFloat(payment.amount) || 0
+          switch (payment.method) {
+            case 'Efectivo':
+              salesCash += amount
+              break
+            case 'Tarjeta':
+              salesCard += amount
+              break
+            case 'Transferencia':
+              salesTransfer += amount
+              break
+            case 'Yape':
+              salesYape += amount
+              break
+            case 'Plin':
+              salesPlin += amount
+              break
+          }
+        })
+      } else {
+        // Facturas antiguas sin array payments - usar paymentMethod y sumar el total completo
+        const total = invoice.total || 0
+        switch (invoice.paymentMethod) {
+          case 'Efectivo':
+            salesCash += total
+            break
+          case 'Tarjeta':
+            salesCard += total
+            break
+          case 'Transferencia':
+            salesTransfer += total
+            break
+          case 'Yape':
+            salesYape += total
+            break
+          case 'Plin':
+            salesPlin += total
+            break
+        }
+      }
+    })
 
     // Total de ventas (todos los métodos)
     const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin
