@@ -1884,6 +1884,198 @@ export default function Settings() {
               </div>
             </div>
 
+            {/* Notas de Crédito - Facturas */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Notas de Crédito - Facturas (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.nota_credito_factura.serie}
+                    onChange={e => handleSeriesChange('nota_credito_factura', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="FN01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.nota_credito_factura.lastNumber}
+                    onChange={e => handleSeriesChange('nota_credito_factura', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.nota_credito_factura.serie, series.nota_credito_factura.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para anular, corregir o devolver facturas aceptadas por SUNAT
+              </p>
+            </div>
+
+            {/* Notas de Crédito - Boletas */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Notas de Crédito - Boletas (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.nota_credito_boleta.serie}
+                    onChange={e => handleSeriesChange('nota_credito_boleta', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="BN01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.nota_credito_boleta.lastNumber}
+                    onChange={e => handleSeriesChange('nota_credito_boleta', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.nota_credito_boleta.serie, series.nota_credito_boleta.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para anular, corregir o devolver boletas aceptadas por SUNAT
+              </p>
+            </div>
+
+            {/* Notas de Débito - Facturas */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Notas de Débito - Facturas (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.nota_debito_factura.serie}
+                    onChange={e => handleSeriesChange('nota_debito_factura', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="FD01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.nota_debito_factura.lastNumber}
+                    onChange={e => handleSeriesChange('nota_debito_factura', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.nota_debito_factura.serie, series.nota_debito_factura.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para aumentar el valor de facturas aceptadas por SUNAT (intereses, penalidades, etc.)
+              </p>
+            </div>
+
+            {/* Notas de Débito - Boletas */}
+            <div className="pt-4 border-t">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">
+                Notas de Débito - Boletas (SUNAT)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Serie
+                  </label>
+                  <Input
+                    value={series.nota_debito_boleta.serie}
+                    onChange={e => handleSeriesChange('nota_debito_boleta', 'serie', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    maxLength={4}
+                    placeholder="BD01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Último Número
+                  </label>
+                  <Input
+                    type="number"
+                    value={series.nota_debito_boleta.lastNumber}
+                    onChange={e => handleSeriesChange('nota_debito_boleta', 'lastNumber', e.target.value)}
+                    disabled={!editingSeries}
+                    className={!editingSeries ? 'bg-gray-100' : ''}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Siguiente
+                  </label>
+                  <Input
+                    value={getNextNumber(series.nota_debito_boleta.serie, series.nota_debito_boleta.lastNumber)}
+                    disabled
+                    className="bg-gray-100 font-mono"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Para aumentar el valor de boletas aceptadas por SUNAT (intereses, penalidades, etc.)
+              </p>
+            </div>
+
             {/* Guías de Remisión */}
             <div className="pt-4 border-t">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
