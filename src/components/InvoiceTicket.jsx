@@ -183,7 +183,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             width: ${paperWidth}mm !important;
             max-width: ${paperWidth}mm !important;
             margin: 0 auto !important;
-            padding: ${is58mm ? '1.5mm 6mm' : '2mm 6mm'} !important;
+            padding: ${is58mm ? '1.5mm 8mm' : '2mm 8mm'} !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
             font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
