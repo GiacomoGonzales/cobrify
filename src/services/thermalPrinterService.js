@@ -312,6 +312,25 @@ const convertSpanishText = (text) => {
 };
 
 /**
+ * Añadir separador centrado para 58mm
+ * @param {Object} printer - Objeto printer
+ * @param {string} separator - Línea separadora
+ * @param {number} paperWidth - Ancho de papel
+ * @param {string} currentAlign - Alineación actual ('left', 'center', 'right')
+ * @returns {Object} Printer object
+ */
+const addSeparator = (printer, separator, paperWidth, currentAlign = 'left') => {
+  if (paperWidth === 58) {
+    return printer
+      .align('center')
+      .text(separator + '\n')
+      .align(currentAlign);
+  } else {
+    return printer.text(separator + '\n');
+  }
+};
+
+/**
  * Imprimir ticket de comprobante (Factura/Boleta)
  * @param {Object} invoice - Datos del comprobante
  * @param {Object} business - Datos del negocio
@@ -497,8 +516,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .bold()
       .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
       .clearFormatting()
-      .align('left')
-      .text(format.separator + '\n');
+      .align('left');
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
     // ========== Fecha y Hora (ticket-section) ==========
     // Formatear fecha y hora de manera compatible con impresoras térmicas
@@ -514,8 +534,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     printer = printer
       .align('left')
       .text(convertSpanishText(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}\n`))
-      .text(`Hora: ${timeString}\n`)
-      .text(format.separator + '\n');
+      .text(`Hora: ${timeString}\n`);
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
     // ========== Datos del Cliente (ticket-section) ==========
     // Solo mostrar para facturas y boletas (NO para notas de venta)
@@ -553,7 +574,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         }
       }
 
-      printer = printer.text(format.separator + '\n');
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
     }
 
     // ========== Detalle de Productos/Servicios (ticket-section) ==========
@@ -562,8 +583,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .bold()
       .text('DETALLE\n')
       .clearFormatting()
-      .text(itemsText)
-      .text(format.separator + '\n')
+      .text(itemsText);
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'left')
       // Totales - alineados a la derecha
       .align('right');
 
@@ -602,8 +624,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // ========== Forma de Pago (ticket-section) ==========
     if (invoice.paymentMethod || invoice.payments) {
+      printer = addSeparator(printer, format.separator, paperWidth, 'center');
+
       printer = printer
-        .text(format.separator + '\n')
         .bold()
         .text('FORMA DE PAGO\n')
         .clearFormatting();
@@ -619,8 +642,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // ========== Observaciones (ticket-section) ==========
     if (invoice.notes) {
+      printer = addSeparator(printer, format.separator, paperWidth, 'center');
+
       printer = printer
-        .text(format.separator + '\n')
         .bold()
         .text('OBSERVACIONES\n')
         .clearFormatting()
@@ -628,9 +652,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     }
 
     // ========== FOOTER (ticket-footer) ==========
-    printer = printer
-      .text(format.separator + '\n')
-      .align('center');
+    printer = addSeparator(printer, format.separator, paperWidth, 'center');
+
+    printer = printer.align('center');
 
     // Leyenda legal según tipo de documento
     if (isNotaVenta) {
@@ -761,9 +785,12 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
       .doubleWidth()
       .bold()
       .text('*** COMANDA ***\n')
-      .clearFormatting()
-      .text(format.separator + '\n')
-      // Información de la orden
+      .clearFormatting();
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'center');
+
+    // Información de la orden
+    printer = printer
       .align('left')
       .bold()
       .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`);
@@ -774,13 +801,19 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
         .text(`Mozo: ${table.waiter || 'N/A'}\n`);
     }
 
-    await printer
+    printer = printer
       .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`)
-      .clearFormatting()
-      .text(format.separator + '\n')
+      .clearFormatting();
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'left');
+
+    printer = printer
       // Items (aquí se resetea formato antes de cada item usando clearFormatting + bold + doubleWidth)
-      .text(itemsText)
-      .text(format.separator + '\n')
+      .text(itemsText);
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'left');
+
+    await printer
       .text('\n')
       .text('\n')
       .cutPaper()
@@ -875,7 +908,7 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     }
 
     // Construir comando en cadena
-    await CapacitorThermalPrinter.begin()
+    let printer = CapacitorThermalPrinter.begin()
       // Encabezado
       .align('center')
       .doubleWidth()
@@ -886,10 +919,12 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .bold()
       .doubleWidth()
       .text('PRECUENTA\n')
-      .clearFormatting()
-      .text(format.separator + '\n')
-      // Información
-      .align('left')
+      .clearFormatting();
+
+    printer = addSeparator(printer, format.separator, paperWidth, 'center');
+
+    // Información
+    printer = printer.align('left')
       .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`)
       .text(`Mesa: ${table.number}\n`)
       .text(`Mozo: ${table.waiter || 'N/A'}\n`)
@@ -904,10 +939,12 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .bold()
       .doubleWidth()
       .text(`TOTAL: S/ ${total.toFixed(2)}\n`)
-      .clearFormatting()
-      // Pie de página
-      .align('center')
-      .text(format.separator + '\n')
+      .clearFormatting();
+
+    // Pie de página
+    printer = addSeparator(printer, format.separator, paperWidth, 'center');
+
+    await printer
       .bold()
       .text('*** PRECUENTA ***\n')
       .clearFormatting()
