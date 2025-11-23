@@ -1884,54 +1884,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Notas de Débito */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Notas de Débito (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_debito.serie}
-                    onChange={e => handleSeriesChange('nota_debito', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="FD01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_debito.lastNumber}
-                    onChange={e => handleSeriesChange('nota_debito', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_debito.serie, series.nota_debito.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para aumentar el valor de facturas/boletas aceptadas por SUNAT (intereses, penalidades, etc.)
-              </p>
-            </div>
-
             {/* Guías de Remisión */}
             <div className="pt-4 border-t">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
