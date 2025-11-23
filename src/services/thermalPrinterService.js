@@ -453,9 +453,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     const businessName = convertSpanishText(business.tradeName || business.name || 'MI EMPRESA');
     printer = printer.bold().text(businessName + '\n').clearFormatting();
 
-    // Espaciado antes del RUC
-    printer = printer.text('\n');
-
     // RUC (company-info)
     if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
       printer = printer.text(convertSpanishText(`RUC: ${business.ruc || '00000000000'}\n`));
@@ -486,7 +483,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // Tipo de documento (document-type) - CENTRADO
     printer = printer
-      .text('\n')
       .align('center')
       .bold()
       .text(tipoComprobanteCompleto + '\n')
@@ -499,8 +495,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
       .clearFormatting()
       .align('left')
-      .text(format.separator + '\n')
-      .text('\n'); // Espaciado adicional antes de la fecha
+      .text(format.separator + '\n');
 
     // ========== Fecha y Hora (ticket-section) ==========
     // Formatear fecha y hora de manera compatible con impresoras térmicas
@@ -651,7 +646,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       // Hash SUNAT (si existe)
       if (invoice.sunatHash) {
         printer = printer
-          .text('\n')
           .align('left')
           .bold()
           .text('Hash: ')
@@ -663,16 +657,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       // QR Code con texto "Escanea para validar"
       if (qrData) {
         printer = printer
-          .text('\n')
           .align('center')
           .qr(qrData)
-          .text('\n')
           .text('Escanea para validar\n');
       }
 
       // Consulte comprobante en SUNAT
       printer = printer
-        .text('\n')
         .align('center')
         .text('Consulte su comprobante en:\n')
         .text('www.sunat.gob.pe\n');
@@ -680,7 +671,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // Mensaje de agradecimiento
     printer = printer
-      .text('\n')
       .align('center')
       .bold()
       .text(convertSpanishText('!Gracias por su preferencia!\n'))
