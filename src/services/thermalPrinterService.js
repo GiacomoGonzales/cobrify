@@ -421,8 +421,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       try {
         const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
 
-        // Determinar ancho en milímetros según papel
-        const logoWidthMm = paperWidth === 58 ? 45 : 65;
+        // Determinar ancho en milímetros según papel (30% más pequeño)
+        const logoWidthMm = paperWidth === 58 ? 32 : 46;
         console.log(`📏 Ancho de logo: ${logoWidthMm}mm para papel de ${paperWidth}mm`);
 
         if (logoConfig.ready && logoConfig.base64) {
