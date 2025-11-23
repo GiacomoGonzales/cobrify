@@ -1884,54 +1884,6 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Notas de Crédito */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Notas de Crédito (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_credito.serie}
-                    onChange={e => handleSeriesChange('nota_credito', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="FC01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_credito.lastNumber}
-                    onChange={e => handleSeriesChange('nota_credito', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_credito.serie, series.nota_credito.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para anular, corregir o devolver facturas/boletas aceptadas por SUNAT
-              </p>
-            </div>
-
             {/* Notas de Débito */}
             <div className="pt-4 border-t">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
