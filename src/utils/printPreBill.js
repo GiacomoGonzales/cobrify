@@ -2,7 +2,7 @@
  * Utility para imprimir precuenta de restaurante
  */
 
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80) => {
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false) => {
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
 
@@ -70,9 +70,9 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
 
         body {
           font-family: Arial, sans-serif;
-          font-size: ${is58mm ? '8pt' : '9pt'};
-          font-weight: normal;
-          line-height: 1.2;
+          font-size: ${webPrintLegible ? (is58mm ? '11pt' : '12pt') : (is58mm ? '8pt' : '9pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
+          line-height: ${webPrintLegible ? '1.4' : '1.2'};
           padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'};
           width: ${paperWidth}mm;
           background: white;

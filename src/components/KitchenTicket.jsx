@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false }, ref) => {
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -45,7 +45,7 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
   }
 
   return (
-    <div ref={ref} className="kitchen-ticket-container">
+    <div ref={ref} className="kitchen-ticket-container" data-web-print-legible={webPrintLegible}>
       {/* Estilos de impresión */}
       <style>{`
         @media print {
@@ -83,12 +83,44 @@ const KitchenTicket = forwardRef(({ order, companySettings }, ref) => {
             padding: 2mm 1.5mm !important;
             box-sizing: border-box;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 8.5pt;
-            font-weight: 600;
-            line-height: 1.25;
+            font-size: ${webPrintLegible ? '11pt' : '8.5pt'};
+            font-weight: ${webPrintLegible ? '700' : '600'};
+            line-height: ${webPrintLegible ? '1.4' : '1.25'};
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: hidden;
+          }
+
+          /* Estilos adicionales para modo legible */
+          [data-web-print-legible="true"] .kitchen-title {
+            font-size: 20pt !important;
+          }
+          [data-web-print-legible="true"] .kitchen-subtitle {
+            font-size: 13pt !important;
+          }
+          [data-web-print-legible="true"] .order-number-big {
+            font-size: 28pt !important;
+          }
+          [data-web-print-legible="true"] .info-row {
+            font-size: 11pt !important;
+          }
+          [data-web-print-legible="true"] .section-title {
+            font-size: 13pt !important;
+          }
+          [data-web-print-legible="true"] .item-header {
+            font-size: 14pt !important;
+          }
+          [data-web-print-legible="true"] .item-qty {
+            font-size: 16pt !important;
+          }
+          [data-web-print-legible="true"] .item-modifiers {
+            font-size: 11pt !important;
+          }
+          [data-web-print-legible="true"] .item-notes {
+            font-size: 11pt !important;
+          }
+          [data-web-print-legible="true"] .footer-time {
+            font-size: 11pt !important;
           }
         }
 

@@ -38,6 +38,25 @@ export default function Orders() {
   const [orderToPrint, setOrderToPrint] = useState(null)
   const kitchenTicketRef = useRef()
 
+  // Estado para configuración de impresión web legible
+  const [webPrintLegible, setWebPrintLegible] = useState(false)
+
+  // Cargar configuración de impresora para webPrintLegible
+  useEffect(() => {
+    const loadPrinterConfig = async () => {
+      if (!user?.uid) return
+      try {
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+        if (printerConfigResult.success && printerConfigResult.config) {
+          setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+        }
+      } catch (error) {
+        console.error('Error loading printer config:', error)
+      }
+    }
+    loadPrinterConfig()
+  }, [user])
+
   // Listener para la configuración del negocio
   useEffect(() => {
     if (!user?.uid || isDemoMode) return
@@ -732,6 +751,7 @@ export default function Orders() {
             ref={kitchenTicketRef}
             order={orderToPrint}
             companySettings={companySettings}
+            webPrintLegible={webPrintLegible}
           />
         </div>
       )}

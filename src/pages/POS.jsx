@@ -168,6 +168,9 @@ export default function POS() {
     quantity: 1
   })
 
+  // Estado para configuración de impresión web legible
+  const [webPrintLegible, setWebPrintLegible] = useState(false)
+
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
   const [editingPrice, setEditingPrice] = useState('')
@@ -191,6 +194,23 @@ export default function POS() {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [])
+
+  // Cargar configuración de impresora para webPrintLegible
+  useEffect(() => {
+    const loadPrinterConfig = async () => {
+      if (!user?.uid) return
+      try {
+        const { getPrinterConfig } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+        if (printerConfigResult.success && printerConfigResult.config) {
+          setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+        }
+      } catch (error) {
+        console.error('Error loading printer config:', error)
+      }
+    }
+    loadPrinterConfig()
+  }, [user])
 
   // Ref para evitar ejecución duplicada del efecto de carga de mesa
   const tableLoadedRef = useRef(false)
@@ -2955,7 +2975,41 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
       {/* Ticket Oculto para Impresión */}
       {lastInvoiceData && (
-        <div className="hidden print:block">
+        <div className="hidden print:block" data-web-print-legible={webPrintLegible}>
+          {/* CSS para impresión web legible */}
+          <style>{`
+            @media print {
+              [data-web-print-legible="true"] {
+                font-size: 12pt !important;
+                font-weight: 600 !important;
+                line-height: 1.4 !important;
+              }
+              [data-web-print-legible="true"] * {
+                font-size: 12pt !important;
+                font-weight: 600 !important;
+                line-height: 1.4 !important;
+              }
+              [data-web-print-legible="true"] .text-sm,
+              [data-web-print-legible="true"] .text-xs {
+                font-size: 10pt !important;
+              }
+              [data-web-print-legible="true"] .text-lg {
+                font-size: 14pt !important;
+              }
+              [data-web-print-legible="true"] .text-xl {
+                font-size: 16pt !important;
+                font-weight: bold !important;
+              }
+              [data-web-print-legible="true"] .text-2xl {
+                font-size: 18pt !important;
+                font-weight: bold !important;
+              }
+              [data-web-print-legible="true"] .font-semibold,
+              [data-web-print-legible="true"] .font-bold {
+                font-weight: 700 !important;
+              }
+            }
+          `}</style>
           <InvoiceTicket
             ref={ticketRef}
             invoice={{

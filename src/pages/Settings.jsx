@@ -125,6 +125,7 @@ export default function Settings() {
     name: '',
     type: 'bluetooth', // bluetooth o wifi
     paperWidth: 58, // 58mm o 80mm
+    webPrintLegible: false, // Modo legible para impresión web (letras más grandes)
   })
   const [availablePrinters, setAvailablePrinters] = useState([])
   const [isScanning, setIsScanning] = useState(false)
@@ -2140,6 +2141,35 @@ export default function Settings() {
                       <p className="text-xs text-gray-500 mt-2">
                         Selecciona el ancho de papel de tu impresora térmica. Esto ajustará automáticamente el formato de impresión.
                       </p>
+                    </div>
+
+                    {/* Modo legible para impresión web */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <input
+                          type="checkbox"
+                          id="webPrintLegible"
+                          checked={printerConfig.webPrintLegible || false}
+                          onChange={async (e) => {
+                            const newConfig = {
+                              ...printerConfig,
+                              webPrintLegible: e.target.checked
+                            }
+                            setPrinterConfig(newConfig)
+                            await savePrinterConfig(getBusinessId(), newConfig)
+                            toast.success(e.target.checked ? 'Modo legible activado' : 'Modo legible desactivado')
+                          }}
+                          className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <label htmlFor="webPrintLegible" className="block text-sm font-medium text-gray-700 cursor-pointer">
+                            Impresión Web Legible
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Activa esta opción para hacer las letras más grandes y gruesas al imprimir desde el navegador web (comprobantes, precuentas, comandas). No afecta la impresión térmica Bluetooth.
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

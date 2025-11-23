@@ -496,6 +496,7 @@ export default function Tables() {
         try {
           // Obtener configuración de impresora
           const printerConfigResult = await getPrinterConfig(businessId)
+          const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
 
           if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
             // Reconectar a la impresora
@@ -519,7 +520,10 @@ export default function Tables() {
       }
 
       // Fallback: impresión estándar (web o si falla la térmica)
-      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig)
+      const printerConfigResult = await getPrinterConfig(businessId)
+      const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
+      const paperWidth = printerConfigResult.config?.paperWidth || 80
+      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)

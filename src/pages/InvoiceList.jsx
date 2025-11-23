@@ -99,6 +99,21 @@ export default function InvoiceList() {
   const [newPaymentAmount, setNewPaymentAmount] = useState('')
   const [newPaymentMethod, setNewPaymentMethod] = useState('Efectivo')
 
+  // Estado para configuración de impresión web legible
+  const [webPrintLegible, setWebPrintLegible] = useState(false)
+
+  // Cargar configuración de impresora para webPrintLegible
+  useEffect(() => {
+    const loadPrinterConfig = async () => {
+      if (!user?.uid) return
+      const printerConfigResult = await getPrinterConfig(getBusinessId())
+      if (printerConfigResult.success && printerConfigResult.config) {
+        setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+      }
+    }
+    loadPrinterConfig()
+  }, [user])
+
   // Función para imprimir ticket
   const handlePrintTicket = async () => {
     if (!viewingInvoice || !companySettings) return
@@ -1140,7 +1155,36 @@ ${companySettings?.website ? companySettings.website : ''}`
         size="lg"
       >
         {viewingInvoice && (
-          <div className="space-y-6">
+          <div className="space-y-6" data-web-print-legible={webPrintLegible}>
+            {/* CSS para impresión web legible */}
+            <style>{`
+              @media print {
+                [data-web-print-legible="true"] {
+                  font-size: 12pt !important;
+                  font-weight: 600 !important;
+                  line-height: 1.4 !important;
+                }
+                [data-web-print-legible="true"] .text-sm,
+                [data-web-print-legible="true"] .text-xs {
+                  font-size: 10pt !important;
+                }
+                [data-web-print-legible="true"] .text-lg {
+                  font-size: 14pt !important;
+                }
+                [data-web-print-legible="true"] .text-xl {
+                  font-size: 16pt !important;
+                  font-weight: bold !important;
+                }
+                [data-web-print-legible="true"] .text-2xl {
+                  font-size: 18pt !important;
+                  font-weight: bold !important;
+                }
+                [data-web-print-legible="true"] .font-semibold,
+                [data-web-print-legible="true"] .font-bold {
+                  font-weight: 700 !important;
+                }
+              }
+            `}</style>
             {/* Header Info */}
             <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
               <div>
