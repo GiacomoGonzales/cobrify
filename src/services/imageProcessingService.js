@@ -221,8 +221,16 @@ export async function prepareLogoForPrinting(logoUrl, paperWidth = 58) {
   // Verificar caché
   const cacheKey = `${logoUrl}_${paperWidth}`;
   if (logoCache.has(cacheKey)) {
-    console.log('📷 Logo recuperado del caché');
-    return logoCache.get(cacheKey);
+    const cached = logoCache.get(cacheKey);
+    // Invalidar entradas antiguas sin base64 (fallback de errores CORS previos)
+    if (cached.base64 === null) {
+      console.log('🗑️ Caché inválido detectado (sin base64), eliminando y re-procesando...');
+      logoCache.delete(cacheKey);
+      // Continuar con el procesamiento normal
+    } else {
+      console.log('📷 Logo recuperado del caché');
+      return cached;
+    }
   }
 
   console.log('📷 Procesando logo desde URL:', logoUrl);
