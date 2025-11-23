@@ -107,8 +107,11 @@ export default function InvoiceList() {
     const loadPrinterConfig = async () => {
       if (!user?.uid) return
       const printerConfigResult = await getPrinterConfig(getBusinessId())
+      console.log('📄 InvoiceList - Resultado getPrinterConfig:', printerConfigResult)
       if (printerConfigResult.success && printerConfigResult.config) {
-        setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+        const webPrintValue = printerConfigResult.config.webPrintLegible || false
+        console.log('📄 InvoiceList - webPrintLegible cargado:', webPrintValue)
+        setWebPrintLegible(webPrintValue)
       }
     }
     loadPrinterConfig()
@@ -1157,13 +1160,16 @@ ${companySettings?.website ? companySettings.website : ''}`
         {viewingInvoice && (
           <div className="space-y-6" data-web-print-legible={webPrintLegible}>
             {/* CSS para impresión web legible */}
+            {console.log('🖨️ Renderizando modal de invoice - webPrintLegible:', webPrintLegible)}
             <style>{`
               @media print {
-                [data-web-print-legible="true"] {
+                /* Aplicar a TODOS los elementos dentro del contenedor */
+                [data-web-print-legible="true"] * {
                   font-size: 12pt !important;
                   font-weight: 600 !important;
                   line-height: 1.4 !important;
                 }
+                /* Tamaños específicos para clases de texto */
                 [data-web-print-legible="true"] .text-sm,
                 [data-web-print-legible="true"] .text-xs {
                   font-size: 10pt !important;
