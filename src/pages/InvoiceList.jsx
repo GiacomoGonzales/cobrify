@@ -655,43 +655,45 @@ ${companySettings?.website ? companySettings.website : ''}`
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-gray-600">Total Comprobantes</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-gray-600">Pagadas</p>
-              <p className="text-xl sm:text-2xl font-bold text-green-600 mt-2">{stats.paid}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-gray-600">Pendientes</p>
-              <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-2">{stats.pending}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div>
-              <p className="text-xs sm:text-sm font-medium text-gray-600">Monto Total</p>
-              <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
-                {formatCurrency(stats.totalAmount)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Stats - Ocultar para usuarios secundarios si está configurado */}
+      {!((user?.ownerId || user?.isBusinessOwner !== true) && businessSettings?.hideDashboardDataFromSecondary) && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Total Comprobantes</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Pagadas</p>
+                <p className="text-xl sm:text-2xl font-bold text-green-600 mt-2">{stats.paid}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Pendientes</p>
+                <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-2">{stats.pending}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 sm:p-6">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">Monto Total</p>
+                <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
+                  {formatCurrency(stats.totalAmount)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>

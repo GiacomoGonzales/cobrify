@@ -48,6 +48,7 @@ import MobileRedirect from './components/MobileRedirect'
 import SplashScreen from './components/SplashScreen'
 import DispatchGuides from './pages/DispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
+import MigratePurchases from './pages/MigratePurchases'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -91,6 +92,7 @@ function App() {
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="compras/migrar" element={<MigratePurchases />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="configuracion" element={<Settings />} />
@@ -153,6 +155,7 @@ function App() {
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="compras/migrar" element={<MigratePurchases />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="configuracion" element={<Settings />} />

@@ -91,6 +91,9 @@ export default function Purchases() {
   }
 
   const filteredPurchases = purchases.filter(purchase => {
+    // Si no hay término de búsqueda, mostrar todas las compras
+    if (!searchTerm || searchTerm.trim() === '') return true
+
     const search = searchTerm.toLowerCase()
     return (
       purchase.invoiceNumber?.toLowerCase().includes(search) ||

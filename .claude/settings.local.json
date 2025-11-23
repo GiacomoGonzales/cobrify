@@ -81,7 +81,12 @@
       "Bash(firebase hosting:channel:deploy:*)",
       "Bash(./gradlew assembleRelease:*)",
       "Bash(npm start)",
-      "Bash(./android/gradlew.bat:*)"
+      "Bash(./android/gradlew.bat:*)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:learn.adafruit.com)",
+      "Bash(gradlew assembleRelease:*)"
     ],
     "deny": [],
     "ask": []

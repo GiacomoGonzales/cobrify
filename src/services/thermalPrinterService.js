@@ -475,18 +475,21 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       printer = printer.text(convertSpanishText(business.socialMedia + '\n'));
     }
 
-    // Tipo de documento (document-type) - con separador visual para destacar
+    // Tipo de documento (document-type) - CENTRADO
     printer = printer
       .text('\n')
+      .align('center')
       .bold()
       .text(tipoComprobanteCompleto + '\n')
       .clearFormatting();
 
-    // Número de documento (document-number)
+    // Número de documento (document-number) - CENTRADO
     printer = printer
+      .align('center')
       .bold()
       .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
       .clearFormatting()
+      .align('left')
       .text(format.separator + '\n')
       .text('\n'); // Espaciado adicional antes de la fecha
 

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -57,6 +58,7 @@ const getSubcategories = (cats, parentId) => {
 
 export default function CreatePurchase() {
   const { user } = useAuth()
+  const { getBusinessId } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [suppliers, setSuppliers] = useState([])
@@ -120,15 +122,16 @@ export default function CreatePurchase() {
   }, [user])
 
   const loadData = async () => {
-    if (!user?.uid) return
+    const businessId = getBusinessId()
+    if (!businessId) return
 
     setIsLoading(true)
     try {
       const [suppliersResult, productsResult, categoriesResult, warehousesResult] = await Promise.all([
-        getSuppliers(user.uid),
-        getProducts(user.uid),
-        getProductCategories(user.uid),
-        getWarehouses(user.uid),
+        getSuppliers(businessId),
+        getProducts(businessId),
+        getProductCategories(businessId),
+        getWarehouses(businessId),
       ])
 
       if (suppliersResult.success) {
@@ -336,6 +339,13 @@ export default function CreatePurchase() {
     if (isCreatingProduct) return
     setIsCreatingProduct(true)
 
+    const businessId = getBusinessId()
+    if (!businessId) {
+      toast.error('Error: No se pudo identificar el negocio')
+      setIsCreatingProduct(false)
+      return
+    }
+
     try {
       const productData = {
         code: data.code,
@@ -349,12 +359,12 @@ export default function CreatePurchase() {
         initialStock: noStock ? null : 0, // Productos creados desde compras inician con stock inicial 0
       }
 
-      const result = await createProduct(user.uid, productData)
+      const result = await createProduct(businessId, productData)
       if (result.success) {
         toast.success('Producto creado exitosamente')
 
         // Recargar la lista de productos
-        const productsResult = await getProducts(user.uid)
+        const productsResult = await getProducts(businessId)
         if (productsResult.success) {
           setProducts(productsResult.data || [])
         }
@@ -455,7 +465,14 @@ export default function CreatePurchase() {
   }
 
   const handleSave = async () => {
-    if (!user?.uid) return
+    const businessId = getBusinessId()
+    if (!businessId) {
+      setMessage({
+        type: 'error',
+        text: 'Error: No se pudo identificar el negocio',
+      })
+      return
+    }
 
     // Asegurar que todos los items tengan costWithoutIGV calculado
     const itemsWithCostWithoutIGV = purchaseItems.map(item => ({
@@ -498,7 +515,7 @@ export default function CreatePurchase() {
       }
 
       // 2. Guardar la compra
-      const result = await createPurchase(user.uid, purchaseData)
+      const result = await createPurchase(businessId, purchaseData)
       if (!result.success) {
         throw new Error(result.error || 'Error al crear la compra')
       }
@@ -546,7 +563,7 @@ export default function CreatePurchase() {
             })
           }
 
-          return updateProduct(user.uid, item.productId, updates)
+          return updateProduct(businessId, item.productId, updates)
         }
       })
 
