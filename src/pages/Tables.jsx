@@ -521,7 +521,9 @@ export default function Tables() {
 
       // Fallback: impresión estándar (web o si falla la térmica)
       const printerConfigResult = await getPrinterConfig(businessId)
+      console.log('🖨️ Tables - Configuración de impresora:', printerConfigResult)
       const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
+      console.log('🖨️ Tables - webPrintLegible:', webPrintLegible)
       const paperWidth = printerConfigResult.config?.paperWidth || 80
       printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible)
       toast.success('Imprimiendo precuenta...')

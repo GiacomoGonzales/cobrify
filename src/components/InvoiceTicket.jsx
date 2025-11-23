@@ -14,7 +14,7 @@ import { QRCodeSVG } from 'qrcode.react'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -186,9 +186,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
             padding: ${is58mm ? '1.5mm 6mm' : '2mm 6mm'} !important;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif;
-            font-size: ${is58mm ? '7pt' : '8pt'};
-            font-weight: 400;
-            line-height: 1.2;
+            font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+            font-weight: ${webPrintLegible ? '600' : '400'};
+            line-height: ${webPrintLegible ? '1.4' : '1.2'};
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: hidden;
@@ -244,9 +244,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
           margin: 0 auto;
           padding: ${is58mm ? '1.5mm' : '2mm'};
           font-family: Arial, Helvetica, sans-serif;
-          font-size: ${is58mm ? '8pt' : '9pt'};
-          font-weight: 400;
-          line-height: 1.2;
+          font-size: ${webPrintLegible ? (is58mm ? '11pt' : '12pt') : (is58mm ? '8pt' : '9pt')};
+          font-weight: ${webPrintLegible ? '600' : '400'};
+          line-height: ${webPrintLegible ? '1.4' : '1.2'};
           background: white;
           color: #000;
           box-sizing: border-box;
@@ -277,7 +277,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         }
 
         .company-name {
-          font-size: ${is58mm ? '9pt' : '11pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '12pt' : '14pt') : (is58mm ? '9pt' : '11pt')};
           font-weight: 700;
           margin-bottom: 1px;
           color: #000;
@@ -285,15 +285,15 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         }
 
         .company-info {
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: 400;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : '400'};
           margin: 0.5px 0;
           color: #000;
           line-height: 1.2;
         }
 
         .document-type {
-          font-size: ${is58mm ? '8pt' : '9pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '11pt' : '12pt') : (is58mm ? '8pt' : '9pt')};
           font-weight: 700;
           margin: 3px 0 2px 0;
           padding: 2px 4px;
@@ -304,7 +304,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         }
 
         .document-number {
-          font-size: ${is58mm ? '9pt' : '10pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '12pt' : '13pt') : (is58mm ? '9pt' : '10pt')};
           font-weight: 700;
           margin: 2px 0;
           color: #000;
@@ -323,7 +323,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
 
         .section-title {
           font-weight: 700;
-          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
           margin-bottom: 1px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
@@ -336,14 +336,14 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
           align-items: flex-start;
           gap: ${is58mm ? '2px' : '4px'};
           margin: 1px 0;
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: 400;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : '400'};
           overflow: hidden;
           line-height: 1.2;
         }
 
         .info-label {
-          font-weight: 700;
+          font-weight: ${webPrintLegible ? '700' : '700'};
           flex-shrink: 0;
           white-space: nowrap;
         }
@@ -360,7 +360,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         .items-table {
           width: 100%;
           margin: 2px 0;
-          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
         }
 
         .items-header {
@@ -377,8 +377,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         }
 
         .item-desc {
-          font-weight: 600;
-          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: ${webPrintLegible ? '700' : '600'};
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
           margin-bottom: 1px;
           color: #000;
           overflow-wrap: break-word;
@@ -392,8 +392,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
           justify-content: space-between;
           align-items: flex-start;
           gap: ${is58mm ? '2px' : '4px'};
-          font-size: ${is58mm ? '6.5pt' : '7.5pt'};
-          font-weight: 400;
+          font-size: ${webPrintLegible ? (is58mm ? '9.5pt' : '10.5pt') : (is58mm ? '6.5pt' : '7.5pt')};
+          font-weight: ${webPrintLegible ? '600' : '400'};
           line-height: 1.2;
         }
 
@@ -413,9 +413,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         }
 
         .item-code {
-          font-size: ${is58mm ? '6pt' : '7pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
           color: #666;
-          font-weight: 400;
+          font-weight: ${webPrintLegible ? '600' : '400'};
           margin-top: 1px;
         }
 
@@ -434,8 +434,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
           align-items: center;
           gap: ${is58mm ? '2px' : '4px'};
           margin: 1px 0;
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: 600;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '700' : '600'};
           overflow: hidden;
           line-height: 1.2;
         }
@@ -452,7 +452,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
         }
 
         .total-row.final {
-          font-size: ${is58mm ? '9pt' : '10pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '12pt' : '13pt') : (is58mm ? '9pt' : '10pt')};
           font-weight: 700;
           margin-top: 2px;
           padding: 4px 2px;
@@ -467,18 +467,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80 },
           padding-top: 3px;
           border-top: 1px solid #000;
           text-align: center;
-          font-size: ${is58mm ? '6pt' : '7pt'};
-          font-weight: 400;
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
+          font-weight: ${webPrintLegible ? '600' : '400'};
         }
 
         .footer-text {
           margin: 1px 0;
-          font-weight: 400;
+          font-weight: ${webPrintLegible ? '600' : '400'};
           line-height: 1.2;
         }
 
         .representation-text {
-          font-size: ${is58mm ? '6pt' : '7pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
           margin-top: 3px;
           font-weight: 700;
           line-height: 1.2;

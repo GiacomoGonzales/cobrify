@@ -3033,6 +3033,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             }}
             companySettings={companySettings}
             paperWidth={80}
+            webPrintLegible={webPrintLegible}
           />
         </div>
       )}

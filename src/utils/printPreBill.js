@@ -3,6 +3,7 @@
  */
 
 export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false) => {
+  console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible })
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
 
@@ -118,21 +119,21 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         }
 
         .header h1 {
-          font-size: ${is58mm ? '11pt' : '12pt'};
-          font-weight: bold;
+          font-size: ${webPrintLegible ? (is58mm ? '14pt' : '16pt') : (is58mm ? '11pt' : '12pt')};
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
           margin: ${is58mm ? '1mm' : '1.5mm'} 0;
           letter-spacing: 0.5px;
         }
 
         .header .business-name {
-          font-size: ${is58mm ? '10pt' : '11pt'};
-          font-weight: bold;
+          font-size: ${webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '10pt' : '11pt')};
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
           margin-bottom: ${is58mm ? '0.5mm' : '1mm'};
         }
 
         .header .info {
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: normal;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
           color: #000;
           margin: ${is58mm ? '0.3mm' : '0.5mm'} 0;
         }
@@ -150,20 +151,20 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           display: flex;
           justify-content: space-between;
           margin-bottom: ${is58mm ? '0.5mm' : '1mm'};
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: normal;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
         }
 
         .info-row strong {
-          font-weight: bold;
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
         }
 
         .items-header {
           border-top: 1px dashed #000;
           border-bottom: 1px solid #000;
           padding: ${is58mm ? '1mm' : '1.5mm'} 0;
-          font-weight: bold;
-          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
           margin: ${is58mm ? '2mm' : '3mm'} 0 ${is58mm ? '1mm' : '1.5mm'} 0;
           display: flex;
           justify-content: space-between;
@@ -189,8 +190,8 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: ${is58mm ? '1mm' : '1.5mm'};
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: normal;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
           padding-bottom: ${is58mm ? '0.5mm' : '1mm'};
           border-bottom: 1px dotted #ccc;
         }
@@ -198,7 +199,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         .item-row .qty {
           width: ${is58mm ? '25px' : '35px'};
           text-align: center;
-          font-weight: bold;
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
         }
 
         .item-row .desc {
@@ -212,11 +213,11 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         .item-row .price {
           width: ${is58mm ? '50px' : '60px'};
           text-align: right;
-          font-weight: bold;
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
         }
 
         .item-notes {
-          font-size: ${is58mm ? '6pt' : '7pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
           font-style: italic;
           margin-left: ${is58mm ? '25px' : '35px'};
           margin-top: ${is58mm ? '0.5mm' : '1mm'};
@@ -234,13 +235,13 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           display: flex;
           justify-content: space-between;
           margin-bottom: ${is58mm ? '0.5mm' : '1mm'};
-          font-size: ${is58mm ? '8pt' : '9pt'};
-          font-weight: normal;
+          font-size: ${webPrintLegible ? (is58mm ? '11pt' : '12pt') : (is58mm ? '8pt' : '9pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
         }
 
         .totals .total {
-          font-size: ${is58mm ? '10pt' : '11pt'};
-          font-weight: bold;
+          font-size: ${webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '10pt' : '11pt')};
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
           border-top: 1px solid #000;
           padding-top: ${is58mm ? '1.5mm' : '2mm'};
           margin-top: ${is58mm ? '1mm' : '1.5mm'};
@@ -251,13 +252,13 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           margin-top: ${is58mm ? '3mm' : '4mm'};
           padding-top: ${is58mm ? '2mm' : '3mm'};
           border-top: 1px dashed #000;
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: normal;
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
         }
 
         .footer .precuenta {
-          font-size: ${is58mm ? '11pt' : '12pt'};
-          font-weight: bold;
+          font-size: ${webPrintLegible ? (is58mm ? '14pt' : '16pt') : (is58mm ? '11pt' : '12pt')};
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
           margin-bottom: ${is58mm ? '2mm' : '3mm'};
           letter-spacing: 0.5px;
         }
@@ -267,7 +268,8 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           color: #92400e;
           padding: ${is58mm ? '1.5mm' : '2mm'};
           border-radius: 2px;
-          font-size: ${is58mm ? '7pt' : '8pt'};
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
           margin-bottom: ${is58mm ? '1mm' : '1.5mm'};
           text-transform: none;
         }

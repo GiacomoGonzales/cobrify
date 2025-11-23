@@ -1729,7 +1729,7 @@ ${companySettings?.website ? companySettings.website : ''}`
       {/* Ticket Oculto para Impresión */}
       {viewingInvoice && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} />
         </div>
       )}
 
