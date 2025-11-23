@@ -40,9 +40,17 @@ export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
 
       console.log('✅ Imagen descargada con Capacitor HTTP');
 
-      // Convertir blob a base64
-      const blob = response.data;
-      const base64Data = await blobToBase64(blob);
+      // CapacitorHttp.get() con responseType 'blob' retorna base64 string en response.data
+      // No es un Blob real, es ya un base64 string
+      let base64Data = response.data;
+
+      // Si no tiene el prefijo data:image, agregarlo
+      if (!base64Data.startsWith('data:')) {
+        // Detectar tipo de imagen (por defecto png)
+        base64Data = `data:image/png;base64,${base64Data}`;
+      }
+
+      console.log('🔄 Procesando imagen descargada...');
 
       // Procesar imagen (resize + dithering)
       const processedBase64 = await processImageData(base64Data, maxWidth, applyDithering);
