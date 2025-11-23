@@ -416,6 +416,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Logo optimizado (si existe URL de logo del negocio)
     console.log('🖨️ Imprimiendo con ancho de papel:', paperWidth, 'mm');
 
+    // Centrar todo el header en 58mm para mejor presentación
+    printer = printer.align('center');
+
     if (business.logoUrl) {
       console.log('📷 Preparando logo del negocio...');
       try {
