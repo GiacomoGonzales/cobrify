@@ -2143,34 +2143,6 @@ export default function Settings() {
                       </p>
                     </div>
 
-                    {/* Modo legible para impresión web */}
-                    <div className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start space-x-3">
-                        <input
-                          type="checkbox"
-                          id="webPrintLegible"
-                          checked={printerConfig.webPrintLegible || false}
-                          onChange={async (e) => {
-                            const newConfig = {
-                              ...printerConfig,
-                              webPrintLegible: e.target.checked
-                            }
-                            setPrinterConfig(newConfig)
-                            await savePrinterConfig(getBusinessId(), newConfig)
-                            toast.success(e.target.checked ? 'Modo legible activado' : 'Modo legible desactivado')
-                          }}
-                          className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                        />
-                        <div className="flex-1">
-                          <label htmlFor="webPrintLegible" className="block text-sm font-medium text-gray-700 cursor-pointer">
-                            Impresión Web Legible
-                          </label>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Activa esta opción para hacer las letras más grandes y gruesas al imprimir desde el navegador web (comprobantes, precuentas, comandas). No afecta la impresión térmica Bluetooth.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 )}
 
@@ -2318,6 +2290,38 @@ export default function Settings() {
                     <strong>Compatibilidad:</strong> Compatible con impresoras térmicas ESC/POS de 58mm y 80mm
                     (Epson, Star, Bixolon, y otras marcas compatibles con ESC/POS)
                   </p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200 my-6"></div>
+
+              {/* Modo legible para impresión web - SIEMPRE VISIBLE */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-blue-50">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="webPrintLegible"
+                    checked={printerConfig.webPrintLegible || false}
+                    onChange={async (e) => {
+                      const newConfig = {
+                        ...printerConfig,
+                        webPrintLegible: e.target.checked
+                      }
+                      setPrinterConfig(newConfig)
+                      await savePrinterConfig(getBusinessId(), newConfig)
+                      toast.success(e.target.checked ? 'Modo legible activado' : 'Modo legible desactivado')
+                    }}
+                    className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="webPrintLegible" className="block text-sm font-medium text-gray-900 cursor-pointer">
+                      Impresión Web Legible
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Activa esta opción para hacer las letras más grandes y gruesas al imprimir desde el navegador web (comprobantes, precuentas, comandas). No afecta la impresión térmica Bluetooth.
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>
