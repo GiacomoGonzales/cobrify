@@ -421,15 +421,23 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       try {
         const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
 
+        // Determinar ancho en milímetros según papel
+        const logoWidthMm = paperWidth === 58 ? 45 : 65;
+        console.log(`📏 Ancho de logo: ${logoWidthMm}mm para papel de ${paperWidth}mm`);
+
         if (logoConfig.ready && logoConfig.base64) {
           // Convertir base64 a data URL para el plugin
           const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
-          console.log('✅ Logo listo (base64). Ancho:', logoConfig.width, 'px');
-          printer = printer.image(dataUrl, logoConfig.width);
+          console.log('✅ Logo listo (base64). Aplicando ancho:', logoWidthMm, 'mm');
+          printer = printer
+            .limitWidth(logoWidthMm)
+            .image(dataUrl);
         } else if (logoConfig.ready && logoConfig.url) {
           // Fallback: intentar con URL directa
           console.log('⚠️ Intentando imprimir logo desde URL...');
-          printer = printer.image(logoConfig.url, logoConfig.width);
+          printer = printer
+            .limitWidth(logoWidthMm)
+            .image(logoConfig.url);
         } else {
           console.warn('⚠️ Logo no disponible, usando header de texto');
         }

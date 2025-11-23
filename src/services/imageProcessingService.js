@@ -3,6 +3,8 @@
  * Maneja conversión de URLs a base64, optimización y caché
  */
 
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+
 const logoCache = new Map();
 
 export const LOGO_SPECS = {
@@ -26,6 +28,34 @@ export const LOGO_SPECS = {
  * @returns {Promise<string>} Base64 string (sin esquema data:image)
  */
 export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
+  // Si estamos en plataforma nativa, usar Capacitor HTTP para evitar CORS
+  if (Capacitor.isNativePlatform()) {
+    console.log('📱 Plataforma nativa detectada, usando Capacitor HTTP para evitar CORS');
+    try {
+      // Descargar imagen con Capacitor HTTP (bypasses CORS)
+      const response = await CapacitorHttp.get({
+        url: url,
+        responseType: 'blob'
+      });
+
+      console.log('✅ Imagen descargada con Capacitor HTTP');
+
+      // Convertir blob a base64
+      const blob = response.data;
+      const base64Data = await blobToBase64(blob);
+
+      // Procesar imagen (resize + dithering)
+      const processedBase64 = await processImageData(base64Data, maxWidth, applyDithering);
+
+      return processedBase64;
+    } catch (error) {
+      console.error('❌ Error con Capacitor HTTP, intentando método fallback:', error);
+      // Continuar con método Image() como fallback
+    }
+  }
+
+  // Método original con Image() (para web o como fallback)
+  console.log('🌐 Usando método Image() estándar');
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -73,6 +103,70 @@ export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
     };
 
     img.src = url;
+  });
+}
+
+/**
+ * Convertir Blob a base64
+ * @param {Blob} blob - Blob de la imagen
+ * @returns {Promise<string>} Base64 con esquema data:image
+ */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Procesar imagen base64 (resize + dithering)
+ * @param {string} base64DataUrl - Base64 data URL (data:image/...)
+ * @param {number} maxWidth - Ancho máximo
+ * @param {boolean} applyDithering - Aplicar dithering
+ * @returns {Promise<string>} Base64 procesado (sin esquema)
+ */
+function processImageData(base64DataUrl, maxWidth, applyDithering) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+
+    img.onload = function() {
+      try {
+        // Crear canvas
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Calcular dimensiones manteniendo aspect ratio
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width = Math.floor(img.width * scale);
+        canvas.height = Math.floor(img.height * scale);
+
+        // Dibujar imagen
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        // Aplicar dithering si está habilitado
+        if (applyDithering) {
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          applyFloydSteinbergDithering(imageData);
+          ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Convertir a base64 sin el esquema data:image/png;base64,
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+
+        resolve(base64);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    img.onerror = () => {
+      reject(new Error('Error al procesar imagen'));
+    };
+
+    img.src = base64DataUrl;
   });
 }
 
