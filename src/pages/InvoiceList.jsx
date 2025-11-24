@@ -860,11 +860,17 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <TableCell className="py-2.5 px-3">
                       <div className="flex flex-col gap-0.5">
                         <span className="font-semibold text-sm whitespace-nowrap">{formatCurrency(invoice.total)}</span>
-                        {/* Mostrar info de pago parcial si aplica */}
-                        {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'partial' && (
+                        {/* Mostrar info de pago parcial o al crédito si aplica */}
+                        {invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
                           <div className="text-xs space-y-0.5">
-                            <div className="text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</div>
-                            <div className="text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</div>
+                            {invoice.paymentStatus === 'pending' ? (
+                              <div className="text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0)}</div>
+                            ) : (
+                              <>
+                                <div className="text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</div>
+                                <div className="text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</div>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -872,10 +878,10 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <TableCell className="py-2.5 px-2">
                       <div className="flex flex-col gap-1">
                         <div className="scale-90 origin-left">{getStatusBadge(invoice.status)}</div>
-                        {/* Badge de estado de pago solo para notas de venta con pago parcial pendiente */}
-                        {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'partial' && (
+                        {/* Badge de estado de pago para notas de venta con pago parcial o al crédito */}
+                        {invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
                           <Badge className="text-xs bg-orange-100 text-orange-800">
-                            Pago Pendiente
+                            {invoice.paymentStatus === 'pending' ? 'Al Crédito' : 'Pago Pendiente'}
                           </Badge>
                         )}
                       </div>
@@ -1083,8 +1089,8 @@ ${companySettings?.website ? companySettings.website : ''}`
                   {/* Registrar Pago - Solo para notas de venta con saldo pendiente */}
                   {invoice.documentType === 'nota_venta' &&
                    invoice.status !== 'cancelled' &&
-                   invoice.paymentStatus === 'partial' &&
-                   invoice.balance > 0 && (
+                   (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') &&
+                   (invoice.balance > 0 || invoice.status === 'pending') && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
                       <button
