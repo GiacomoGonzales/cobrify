@@ -683,21 +683,59 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       {/* Métodos de Pago */}
       <div className="ticket-section">
         <div className="section-title">FORMA DE PAGO</div>
-        {invoice.payments && invoice.payments.length > 0 ? (
-          <div className="space-y-1">
-            {invoice.payments.map((payment, index) => (
-              <div key={index} className="info-row">
-                <span className="info-label">{payment.method}:</span>
-                <span>{formatCurrency(payment.amount)}</span>
+        {(() => {
+          // Calcular total pagado
+          const totalPaid = invoice.payments && invoice.payments.length > 0
+            ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
+            : 0
+
+          // Detectar si es venta al crédito (sin pagos o pago = 0)
+          const isCreditSale = totalPaid === 0
+
+          if (isCreditSale) {
+            // Venta al crédito
+            return (
+              <>
+                <div className="info-row">
+                  <span className="info-label">Método:</span>
+                  <span style={{ fontWeight: 'bold' }}>AL CRÉDITO</span>
+                </div>
+                <div className="info-row" style={{ marginTop: '4px' }}>
+                  <span className="info-label">Saldo Pendiente:</span>
+                  <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(invoice.total || 0)}</span>
+                </div>
+              </>
+            )
+          } else if (invoice.payments && invoice.payments.length > 0) {
+            // Pagos múltiples registrados
+            return (
+              <>
+                <div className="space-y-1">
+                  {invoice.payments.map((payment, index) => (
+                    <div key={index} className="info-row">
+                      <span className="info-label">{payment.method}:</span>
+                      <span>{formatCurrency(payment.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+                {totalPaid < invoice.total && (
+                  <div className="info-row" style={{ marginTop: '4px' }}>
+                    <span className="info-label">Saldo Pendiente:</span>
+                    <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(invoice.total - totalPaid)}</span>
+                  </div>
+                )}
+              </>
+            )
+          } else {
+            // Método de pago simple (compatibilidad con estructura antigua)
+            return (
+              <div className="info-row">
+                <span className="info-label">Método:</span>
+                <span>{invoice.paymentMethod || 'Efectivo'}</span>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="info-row">
-            <span className="info-label">Método:</span>
-            <span>{invoice.paymentMethod || 'Efectivo'}</span>
-          </div>
-        )}
+            )
+          }
+        })()}
       </div>
 
       {/* Observaciones */}

@@ -805,10 +805,17 @@ export default function POS() {
   // Calcular totales de pago (optimizado con useMemo)
   const paymentTotals = React.useMemo(() => {
     const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
-    // Si hay pago parcial, el "total a pagar ahora" es el monto parcial, no el total de la venta
-    const amountToPay = enablePartialPayment && parseFloat(partialPaymentAmount) > 0
-      ? parseFloat(partialPaymentAmount)
-      : amounts.total
+
+    // Si hay pago parcial habilitado, el monto a pagar ahora es el especificado
+    // Si el monto es 0 o vacío, es una venta al crédito (no requiere pago inmediato)
+    let amountToPay
+    if (enablePartialPayment) {
+      const partialAmount = parseFloat(partialPaymentAmount) || 0
+      amountToPay = partialAmount
+    } else {
+      amountToPay = amounts.total
+    }
+
     const remaining = amountToPay - totalPaid
     return { totalPaid, remaining, amountToPay }
   }, [payments, amounts.total, enablePartialPayment, partialPaymentAmount])
@@ -934,8 +941,12 @@ export default function POS() {
       }
     }
 
+    // Detectar si es venta al crédito (pago parcial habilitado con monto 0)
+    const isCreditSale = enablePartialPayment && amountToPay === 0
+
     // Validar que se haya cubierto el monto a pagar (total o parcial)
-    if (totalPaid < amountToPay) {
+    // EXCEPCIÓN: Si es venta al crédito, no requiere pago inmediato
+    if (!isCreditSale && totalPaid < amountToPay) {
       toast.error(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
@@ -949,7 +960,9 @@ export default function POS() {
         amount: parseFloat(p.amount)
       }))
 
-    if (allPayments.length === 0) {
+    // Validar que haya al menos un método de pago
+    // EXCEPCIÓN: Si es venta al crédito, no requiere método de pago
+    if (!isCreditSale && allPayments.length === 0) {
       toast.error('Debes seleccionar al menos un método de pago')
       return
     }
@@ -2562,7 +2575,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         disabled={lastInvoiceData !== null}
                       />
                       <span className="text-sm text-gray-700">
-                        Pago parcial (adelanto)
+                        Pago parcial o al crédito
                       </span>
                     </label>
 
@@ -2590,6 +2603,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           </div>
                         </div>
 
+                        {/* Mostrar cuando hay pago parcial (monto mayor a 0) */}
                         {partialPaymentAmount && parseFloat(partialPaymentAmount) > 0 && parseFloat(partialPaymentAmount) <= amounts.total && (
                           <div className="text-xs space-y-1 pt-1">
                             <div className="flex justify-between text-gray-600">
@@ -2617,7 +2631,27 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {/* Payment Methods Section */}
               {cart.length > 0 && (
                 <div className="border-t pt-4 mt-4 space-y-3">
-                  <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
+                  {/* Si es venta al crédito (pago adelantado = 0), mostrar mensaje en lugar de métodos de pago */}
+                  {enablePartialPayment && amountToPay === 0 ? (
+                    <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <CreditCard className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-blue-900">
+                            Venta al Crédito
+                          </p>
+                          <p className="text-xs text-blue-700 mt-1">
+                            No requiere pago inmediato. El cliente pagará después.
+                          </p>
+                          <p className="text-xs text-blue-700 mt-2">
+                            <strong>Saldo pendiente:</strong> {formatCurrency(amounts.total)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
                   {payments.map((payment, index) => (
                     <div key={index} className="flex items-center gap-2">
                       {/* Método de pago */}
@@ -2686,6 +2720,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </div>
                       )}
                     </div>
+                  )}
+                    </>
                   )}
                 </div>
               )}

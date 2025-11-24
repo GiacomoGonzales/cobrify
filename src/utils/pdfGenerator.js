@@ -717,7 +717,81 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   currentY = totalsY + 20
 
-  // ========== 4.5. ESTADO DE PAGO (para notas de venta con pagos parciales o completados) ==========
+  // ========== 4.5. FORMA DE PAGO ==========
+
+  // Calcular total pagado
+  const totalPaid = invoice.payments && invoice.payments.length > 0
+    ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
+    : 0
+
+  // Detectar si es venta al crédito
+  const isCreditSale = totalPaid === 0
+
+  // Mostrar forma de pago
+  const paymentBoxHeight = isCreditSale ? 30 : (invoice.payments && invoice.payments.length > 1 ? 10 + (invoice.payments.length * 7) : 22)
+
+  doc.setDrawColor(...BORDER_GRAY)
+  doc.setLineWidth(0.5)
+  doc.roundedRect(totalsX - 10, currentY, totalsBoxWidth + 10, paymentBoxHeight, 3, 3)
+
+  currentY += 8
+
+  // Título
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...DARK_GRAY)
+  doc.text('FORMA DE PAGO', totalsX, currentY)
+  currentY += 8
+
+  if (isCreditSale) {
+    // Venta al crédito
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('Método:', totalsX, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.text('AL CRÉDITO', totalsX + totalsBoxWidth, currentY, { align: 'right' })
+    currentY += 7
+
+    doc.setFont('helvetica', 'normal')
+    doc.text('Saldo Pendiente:', totalsX, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 102, 0) // Naranja
+    doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
+  } else if (invoice.payments && invoice.payments.length > 0) {
+    // Mostrar métodos de pago múltiples
+    doc.setFontSize(8)
+    invoice.payments.forEach((payment, index) => {
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text(`${payment.method}:`, totalsX, currentY)
+      doc.setFont('helvetica', 'bold')
+      doc.text(`S/ ${(payment.amount || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
+      currentY += 6
+    })
+
+    // Si hay saldo pendiente, mostrarlo
+    if (totalPaid < invoice.total) {
+      currentY += 2
+      doc.setFont('helvetica', 'normal')
+      doc.text('Saldo Pendiente:', totalsX, currentY)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(255, 102, 0) // Naranja
+      doc.text(`S/ ${(invoice.total - totalPaid).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
+    }
+  } else {
+    // Método de pago simple (compatibilidad con estructura antigua)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('Método:', totalsX, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(invoice.paymentMethod || 'Efectivo', totalsX + totalsBoxWidth, currentY, { align: 'right' })
+  }
+
+  currentY += 15
+
+  // ========== 4.6. ESTADO DE PAGO (para notas de venta con pagos parciales o completados) ==========
 
   if (invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
     // Recuadro con borde discontinuo para la información de pago
