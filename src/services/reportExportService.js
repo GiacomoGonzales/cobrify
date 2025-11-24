@@ -9,7 +9,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
  * Exportar reporte general a Excel
  */
 export const exportGeneralReport = (data) => {
-  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange } = data
+  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats } = data
 
   // Crear un nuevo workbook
   const wb = XLSX.utils.book_new()
@@ -39,12 +39,27 @@ export const exportGeneralReport = (data) => {
     ['Crecimiento vs Período Anterior', `${stats.revenueGrowth.toFixed(2)}%`],
   ]
 
+  // Agregar resumen de métodos de pago si está disponible
+  if (paymentMethodStats && paymentMethodStats.length > 0) {
+    summaryData.push([])
+    summaryData.push(['MÉTODOS DE PAGO'])
+    summaryData.push(['Método', 'Monto Total', 'Transacciones'])
+    paymentMethodStats.forEach(method => {
+      summaryData.push([
+        method.method,
+        formatCurrency(method.total),
+        method.count
+      ])
+    })
+  }
+
   const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
 
   // Ajustar ancho de columnas
   ws1['!cols'] = [
     { wch: 30 },
-    { wch: 20 }
+    { wch: 20 },
+    { wch: 15 }
   ]
 
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
@@ -95,21 +110,36 @@ export const exportGeneralReport = (data) => {
 
   // Hoja 5: Detalle de Ventas
   if (filteredInvoices && filteredInvoices.length > 0) {
-    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV']]
-    const invoicesData = filteredInvoices.slice(0, 1000).map(invoice => [
-      invoice.number,
-      invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
-      invoice.documentType === 'factura' ? 'Factura' : 'Boleta',
-      invoice.customer?.name || 'Cliente General',
-      invoice.customer?.documentNumber || '-',
-      invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
-      Number((invoice.total || 0).toFixed(2)),
-      Number((invoice.totalCost || 0).toFixed(2)),
-      Number((invoice.profit || 0).toFixed(2)),
-      Number((invoice.profitMargin || 0).toFixed(2)),
-      Number((invoice.subtotal || 0).toFixed(2)),
-      Number((invoice.igv || 0).toFixed(2))
-    ])
+    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Método Pago', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV']]
+    const invoicesData = filteredInvoices.slice(0, 1000).map(invoice => {
+      // Obtener método(s) de pago
+      let paymentMethods = 'Efectivo'
+      if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+        if (invoice.payments.length === 1) {
+          paymentMethods = invoice.payments[0].method || 'Efectivo'
+        } else {
+          paymentMethods = invoice.payments.map(p => `${p.method || 'Efectivo'} (${formatCurrency(p.amount || 0)})`).join(', ')
+        }
+      } else if (invoice.paymentMethod) {
+        paymentMethods = invoice.paymentMethod
+      }
+
+      return [
+        invoice.number,
+        invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
+        invoice.documentType === 'factura' ? 'Factura' : 'Boleta',
+        invoice.customer?.name || 'Cliente General',
+        invoice.customer?.documentNumber || '-',
+        invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
+        paymentMethods,
+        Number((invoice.total || 0).toFixed(2)),
+        Number((invoice.totalCost || 0).toFixed(2)),
+        Number((invoice.profit || 0).toFixed(2)),
+        Number((invoice.profitMargin || 0).toFixed(2)),
+        Number((invoice.subtotal || 0).toFixed(2)),
+        Number((invoice.igv || 0).toFixed(2))
+      ]
+    })
 
     const ws5 = XLSX.utils.aoa_to_sheet([...invoicesHeader, ...invoicesData])
     ws5['!cols'] = [
@@ -119,6 +149,7 @@ export const exportGeneralReport = (data) => {
       { wch: 30 },  // Cliente
       { wch: 15 },  // Documento
       { wch: 12 },  // Estado
+      { wch: 25 },  // Método Pago
       { wch: 15 },  // Precio Venta
       { wch: 15 },  // Costo
       { wch: 15 },  // Utilidad
@@ -141,7 +172,7 @@ export const exportGeneralReport = (data) => {
  * Exportar reporte de ventas a Excel
  */
 export const exportSalesReport = (data) => {
-  const { stats, salesByMonth, filteredInvoices, dateRange } = data
+  const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats } = data
 
   const wb = XLSX.utils.book_new()
 
@@ -167,8 +198,25 @@ export const exportSalesReport = (data) => {
     ['Crecimiento', `${stats.revenueGrowth.toFixed(2)}%`],
   ]
 
+  // Agregar resumen de métodos de pago si está disponible
+  if (paymentMethodStats && paymentMethodStats.length > 0) {
+    summaryData.push([])
+    summaryData.push(['MÉTODOS DE PAGO'])
+    summaryData.push(['Método', 'Monto Total', 'Transacciones', '% del Total'])
+    const totalAmount = paymentMethodStats.reduce((sum, m) => sum + (m.total || 0), 0)
+    paymentMethodStats.forEach(method => {
+      const percentage = totalAmount > 0 ? ((method.total / totalAmount) * 100).toFixed(1) : 0
+      summaryData.push([
+        method.method,
+        formatCurrency(method.total),
+        method.count,
+        `${percentage}%`
+      ])
+    })
+  }
+
   const ws1 = XLSX.utils.aoa_to_sheet(summaryData)
-  ws1['!cols'] = [{ wch: 30 }, { wch: 20 }]
+  ws1['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 12 }]
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
 
   // Hoja 2: Ventas Mensuales
@@ -185,22 +233,36 @@ export const exportSalesReport = (data) => {
 
   // Hoja 3: Detalle Completo
   const detailHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente', 'Estado', 'Método Pago', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV', 'Notas']]
-  const detailData = filteredInvoices.map(invoice => [
-    invoice.number,
-    invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
-    invoice.documentType === 'factura' ? 'Factura' : 'Boleta',
-    invoice.customer?.name || 'Cliente General',
-    `${invoice.customer?.documentType || ''} ${invoice.customer?.documentNumber || ''}`,
-    invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
-    invoice.paymentMethod || '-',
-    Number((invoice.total || 0).toFixed(2)),
-    Number((invoice.totalCost || 0).toFixed(2)),
-    Number((invoice.profit || 0).toFixed(2)),
-    Number((invoice.profitMargin || 0).toFixed(2)),
-    Number((invoice.subtotal || 0).toFixed(2)),
-    Number((invoice.igv || 0).toFixed(2)),
-    invoice.notes || ''
-  ])
+  const detailData = filteredInvoices.map(invoice => {
+    // Obtener método(s) de pago
+    let paymentMethods = 'Efectivo'
+    if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+      if (invoice.payments.length === 1) {
+        paymentMethods = invoice.payments[0].method || 'Efectivo'
+      } else {
+        paymentMethods = invoice.payments.map(p => `${p.method || 'Efectivo'} (${formatCurrency(p.amount || 0)})`).join(', ')
+      }
+    } else if (invoice.paymentMethod) {
+      paymentMethods = invoice.paymentMethod
+    }
+
+    return [
+      invoice.number,
+      invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
+      invoice.documentType === 'factura' ? 'Factura' : 'Boleta',
+      invoice.customer?.name || 'Cliente General',
+      `${invoice.customer?.documentType || ''} ${invoice.customer?.documentNumber || ''}`,
+      invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
+      paymentMethods,
+      Number((invoice.total || 0).toFixed(2)),
+      Number((invoice.totalCost || 0).toFixed(2)),
+      Number((invoice.profit || 0).toFixed(2)),
+      Number((invoice.profitMargin || 0).toFixed(2)),
+      Number((invoice.subtotal || 0).toFixed(2)),
+      Number((invoice.igv || 0).toFixed(2)),
+      invoice.notes || ''
+    ]
+  })
 
   const ws3 = XLSX.utils.aoa_to_sheet([...detailHeader, ...detailData])
   ws3['!cols'] = [
@@ -210,7 +272,7 @@ export const exportSalesReport = (data) => {
     { wch: 30 },  // Cliente
     { wch: 18 },  // Doc Cliente
     { wch: 12 },  // Estado
-    { wch: 15 },  // Método Pago
+    { wch: 25 },  // Método Pago (ampliado para múltiples métodos)
     { wch: 15 },  // Precio Venta
     { wch: 15 },  // Costo
     { wch: 15 },  // Utilidad

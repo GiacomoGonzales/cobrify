@@ -389,37 +389,158 @@ export default function Reports() {
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
   }, [filteredInvoices])
 
-  // Ventas por mes (últimos 12 meses)
-  const salesByMonth = useMemo(() => {
-    const monthsData = {}
-    const now = new Date()
+  // Estadísticas por método de pago
+  const paymentMethodStats = useMemo(() => {
+    const methods = {}
 
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      monthsData[key] = {
-        month: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
-        revenue: 0,
-        count: 0,
+    filteredInvoices.forEach(invoice => {
+      // Soportar múltiples formas de pago
+      if (invoice.payments && Array.isArray(invoice.payments)) {
+        invoice.payments.forEach(payment => {
+          const method = payment.method || 'Efectivo'
+          const amount = payment.amount || 0
+
+          if (!methods[method]) {
+            methods[method] = {
+              method,
+              total: 0,
+              count: 0,
+            }
+          }
+
+          methods[method].total += amount
+          methods[method].count += 1
+        })
+      } else {
+        // Compatibilidad con facturas antiguas que solo tienen paymentMethod
+        const method = invoice.paymentMethod || 'Efectivo'
+        const amount = invoice.total || 0
+
+        if (!methods[method]) {
+          methods[method] = {
+            method,
+            total: 0,
+            count: 0,
+          }
+        }
+
+        methods[method].total += amount
+        methods[method].count += 1
       }
+    })
+
+    return Object.values(methods)
+      .sort((a, b) => b.total - a.total)
+  }, [filteredInvoices])
+
+  // Datos para gráfico de métodos de pago
+  const paymentMethodsData = useMemo(() => {
+    return paymentMethodStats.map((method, index) => ({
+      name: method.method,
+      value: method.total,
+      color: COLORS[index % COLORS.length]
+    }))
+  }, [paymentMethodStats])
+
+  // Ventas por período según el rango seleccionado
+  const salesByPeriod = useMemo(() => {
+    const now = new Date()
+    let periodsData = {}
+    let groupBy = 'month' // 'day', 'week', 'month'
+
+    // Determinar agrupación según el rango
+    if (dateRange === 'week') {
+      groupBy = 'day'
+      // Últimos 7 días
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+          revenue: 0,
+          count: 0,
+        }
+      }
+    } else if (dateRange === 'month') {
+      groupBy = 'day'
+      // Últimos 30 días
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+          revenue: 0,
+          count: 0,
+        }
+      }
+    } else if (dateRange === 'quarter') {
+      groupBy = 'month'
+      // Últimos 3 meses
+      for (let i = 2; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          revenue: 0,
+          count: 0,
+        }
+      }
+    } else if (dateRange === 'year') {
+      groupBy = 'month'
+      // Últimos 12 meses
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          revenue: 0,
+          count: 0,
+        }
+      }
+    } else {
+      // 'all' - mostrar por mes
+      groupBy = 'month'
+      invoices.forEach(invoice => {
+        if (!invoice.createdAt) return
+        const invoiceDate = invoice.createdAt.toDate
+          ? invoice.createdAt.toDate()
+          : new Date(invoice.createdAt)
+        const key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`
+
+        if (!periodsData[key]) {
+          periodsData[key] = {
+            period: invoiceDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+            revenue: 0,
+            count: 0,
+          }
+        }
+      })
     }
 
-    invoices.forEach(invoice => {
+    // Procesar facturas filtradas
+    filteredInvoices.forEach(invoice => {
       if (!invoice.createdAt) return
       const invoiceDate = invoice.createdAt.toDate
         ? invoice.createdAt.toDate()
         : new Date(invoice.createdAt)
-      const key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`
 
-      if (monthsData[key]) {
-        // Redondear a 2 decimales para evitar errores de punto flotante
-        monthsData[key].revenue = Number((monthsData[key].revenue + (invoice.total || 0)).toFixed(2))
-        monthsData[key].count += 1
+      let key
+      if (groupBy === 'day') {
+        key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}-${String(invoiceDate.getDate()).padStart(2, '0')}`
+      } else {
+        key = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}`
+      }
+
+      if (periodsData[key]) {
+        periodsData[key].revenue = Number((periodsData[key].revenue + (invoice.total || 0)).toFixed(2))
+        periodsData[key].count += 1
       }
     })
 
-    return Object.values(monthsData)
-  }, [invoices])
+    return Object.entries(periodsData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value)
+  }, [filteredInvoices, dateRange, invoices])
 
   // Datos para gráfico de torta de tipos de documentos
   const documentTypesData = useMemo(() => {
@@ -586,7 +707,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={() => exportGeneralReport({ stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange })}
+              onClick={() => exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -703,14 +824,21 @@ export default function Reports() {
 
           {/* Gráficos principales */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Gráfico de Ventas por Mes */}
+            {/* Gráfico de Ventas por Período */}
             <Card>
               <CardHeader>
-                <CardTitle>Tendencia de Ventas (Últimos 12 Meses)</CardTitle>
+                <CardTitle>
+                  Tendencia de Ventas
+                  {dateRange === 'week' && ' (Última Semana)'}
+                  {dateRange === 'month' && ' (Último Mes)'}
+                  {dateRange === 'quarter' && ' (Último Trimestre)'}
+                  {dateRange === 'year' && ' (Último Año)'}
+                  {dateRange === 'all' && ' (Todo el Período)'}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={salesByMonth}>
+                  <AreaChart data={salesByPeriod}>
                     <defs>
                       <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8}/>
@@ -718,7 +846,7 @@ export default function Reports() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                    <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomTooltip />} />
                     <Area
@@ -838,7 +966,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={() => exportSalesReport({ stats, salesByMonth, filteredInvoices, dateRange })}
+              onClick={() => exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -846,6 +974,7 @@ export default function Reports() {
             </button>
           </div>
 
+          {/* Resumen de Ventas */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardContent className="p-6">
@@ -912,31 +1041,103 @@ export default function Reports() {
             </Card>
           </div>
 
-          {/* Gráfico de área de ingresos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Evolución de Ingresos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={salesByMonth}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke={COLORS[0]}
-                    strokeWidth={3}
-                    dot={{ fill: COLORS[0], r: 6 }}
-                    name="Ingresos"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {/* Cards de Métodos de Pago */}
+          {paymentMethodStats.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Resumen por Método de Pago</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {paymentMethodStats.map((method, index) => (
+                    <div
+                      key={method.method}
+                      className="p-4 rounded-lg border border-gray-200 bg-gradient-to-br from-white to-gray-50"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-gray-600">{method.method}</p>
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        />
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {formatCurrency(method.total)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {method.count} {method.count === 1 ? 'transacción' : 'transacciones'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Gráficos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de línea de ingresos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Evolución de Ingresos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={salesByPeriod}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke={COLORS[0]}
+                      strokeWidth={3}
+                      dot={{ fill: COLORS[0], r: 6 }}
+                      name="Ingresos"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Métodos de Pago */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución por Método de Pago</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {paymentMethodsData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <RePieChart>
+                      <Pie
+                        data={paymentMethodsData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent, value }) => `${name}: ${formatCurrency(value)} (${(percent * 100).toFixed(0)}%)`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {paymentMethodsData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => formatCurrency(value)}
+                      />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[400px] text-gray-500">
+                    <p>No hay datos de métodos de pago disponibles</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>
@@ -952,6 +1153,7 @@ export default function Reports() {
                       <TableHead>Fecha</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Estado</TableHead>
+                      <TableHead>Método Pago</TableHead>
                       <TableHead className="text-right">Precio Venta</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead className="text-right">Utilidad</TableHead>
@@ -959,59 +1161,76 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvoices.slice(0, 20).map(invoice => (
-                      <TableRow key={invoice.id}>
-                        <TableCell className="font-medium">{invoice.number}</TableCell>
-                        <TableCell>{invoice.customer?.name || 'Cliente General'}</TableCell>
-                        <TableCell>
-                          {invoice.createdAt
-                            ? formatDate(
-                                invoice.createdAt.toDate
-                                  ? invoice.createdAt.toDate()
-                                  : invoice.createdAt
-                              )
-                            : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={invoice.documentType === 'factura' ? 'primary' : 'default'}>
-                            {invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              invoice.status === 'paid'
-                                ? 'success'
-                                : invoice.status === 'pending'
-                                ? 'warning'
-                                : 'default'
-                            }
-                          >
-                            {invoice.status === 'paid' ? 'Pagada' : 'Pendiente'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(invoice.total)}
-                        </TableCell>
-                        <TableCell className="text-right text-red-600">
-                          {formatCurrency(invoice.totalCost || 0)}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-green-600">
-                          {formatCurrency(invoice.profit || 0)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className={`font-medium ${
-                            (invoice.profitMargin || 0) >= 30
-                              ? 'text-green-600'
-                              : (invoice.profitMargin || 0) >= 15
-                              ? 'text-yellow-600'
-                              : 'text-red-600'
-                          }`}>
-                            {(invoice.profitMargin || 0).toFixed(1)}%
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredInvoices.slice(0, 20).map(invoice => {
+                      // Obtener métodos de pago
+                      let paymentMethods = 'Efectivo'
+                      if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+                        if (invoice.payments.length === 1) {
+                          paymentMethods = invoice.payments[0].method || 'Efectivo'
+                        } else {
+                          paymentMethods = 'Múltiples'
+                        }
+                      } else if (invoice.paymentMethod) {
+                        paymentMethods = invoice.paymentMethod
+                      }
+
+                      return (
+                        <TableRow key={invoice.id}>
+                          <TableCell className="font-medium">{invoice.number}</TableCell>
+                          <TableCell>{invoice.customer?.name || 'Cliente General'}</TableCell>
+                          <TableCell>
+                            {invoice.createdAt
+                              ? formatDate(
+                                  invoice.createdAt.toDate
+                                    ? invoice.createdAt.toDate()
+                                    : invoice.createdAt
+                                )
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={invoice.documentType === 'factura' ? 'primary' : 'default'}>
+                              {invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                invoice.status === 'paid'
+                                  ? 'success'
+                                  : invoice.status === 'pending'
+                                  ? 'warning'
+                                  : 'default'
+                              }
+                            >
+                              {invoice.status === 'paid' ? 'Pagada' : 'Pendiente'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="default">{paymentMethods}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(invoice.total)}
+                          </TableCell>
+                          <TableCell className="text-right text-red-600">
+                            {formatCurrency(invoice.totalCost || 0)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-green-600">
+                            {formatCurrency(invoice.profit || 0)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-medium ${
+                              (invoice.profitMargin || 0) >= 30
+                                ? 'text-green-600'
+                                : (invoice.profitMargin || 0) >= 15
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                            }`}>
+                              {(invoice.profitMargin || 0).toFixed(1)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
