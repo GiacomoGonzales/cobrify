@@ -990,6 +990,9 @@ export default function POS() {
         const demoNumber = documentType === 'factura' ? 'F001-00000099' :
                           documentType === 'boleta' ? 'B001-00000099' : 'NV01-00000099'
 
+        // Detectar venta al crédito para demo
+        const isCreditSaleDemo = isCreditSale && documentType === 'nota_venta'
+
         const invoiceData = {
           number: demoNumber,
           series: documentType === 'factura' ? 'F001' : documentType === 'boleta' ? 'B001' : 'NV01',
@@ -1025,7 +1028,7 @@ export default function POS() {
           total: amounts.total,
           payments: allPayments,
           paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
-          status: 'paid',
+          status: isCreditSaleDemo ? 'pending' : 'paid',
           notes: '',
           sunatStatus: 'not_applicable',
           sunatResponse: null,
@@ -1082,11 +1085,14 @@ export default function POS() {
       }))
 
       // 3. Crear factura
-      // Calcular datos de pago parcial
-      const isPartialPayment = enablePartialPayment && parseFloat(partialPaymentAmount) > 0 && documentType === 'nota_venta'
-      const amountPaid = isPartialPayment ? parseFloat(partialPaymentAmount) : amounts.total
-      const balance = isPartialPayment ? amounts.total - amountPaid : 0
-      const paymentStatus = isPartialPayment ? (balance > 0 ? 'partial' : 'completed') : 'completed'
+      // Calcular datos de pago parcial y ventas al crédito
+      const partialAmount = parseFloat(partialPaymentAmount) || 0
+      const isCreditSaleForInvoice = enablePartialPayment && partialAmount === 0 && documentType === 'nota_venta'
+      const isPartialPayment = enablePartialPayment && partialAmount > 0 && documentType === 'nota_venta'
+
+      const amountPaid = isCreditSaleForInvoice ? 0 : (isPartialPayment ? partialAmount : amounts.total)
+      const balance = isCreditSaleForInvoice ? amounts.total : (isPartialPayment ? amounts.total - amountPaid : 0)
+      const paymentStatus = isCreditSaleForInvoice ? 'pending' : (isPartialPayment ? (balance > 0 ? 'partial' : 'completed') : 'completed')
 
       const invoiceData = {
         number: numberResult.number,
@@ -1127,7 +1133,7 @@ export default function POS() {
         payments: allPayments,
         // Guardar el primer método como principal para compatibilidad
         paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
-        status: 'paid',
+        status: isCreditSaleForInvoice ? 'pending' : 'paid',
         // Datos de pago parcial (solo para notas de venta)
         ...(documentType === 'nota_venta' && {
           paymentStatus: paymentStatus,
