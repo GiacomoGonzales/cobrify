@@ -389,7 +389,9 @@ ${companySettings?.website ? companySettings.website : ''}`
         amountPaid: newAmountPaid,
         balance: newBalance,
         paymentStatus: newPaymentStatus,
-        paymentHistory: updatedPaymentHistory
+        paymentHistory: updatedPaymentHistory,
+        // Actualizar status principal cuando se completa el pago
+        status: newPaymentStatus === 'completed' ? 'paid' : 'pending'
       })
 
       if (result.success) {
