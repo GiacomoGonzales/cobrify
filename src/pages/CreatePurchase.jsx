@@ -245,6 +245,15 @@ export default function CreatePurchase() {
     const newItems = [...purchaseItems]
     newItems[index].productId = product.id
     newItems[index].productName = product.name
+
+    // Hidratar el costo con el costo actual del producto (si existe)
+    if (product.cost && product.cost > 0) {
+      const costValue = product.cost
+      newItems[index].cost = costValue
+      // Calcular costo sin IGV automáticamente
+      newItems[index].costWithoutIGV = Math.round((costValue / 1.18) * 100) / 100
+    }
+
     setPurchaseItems(newItems)
 
     const newSearches = { ...productSearches }
