@@ -222,35 +222,105 @@ export function generateInvoiceXML(invoiceData, businessData) {
   paymentTerms.ele('cbc:ID').txt('FormaPago')
   paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
 
-  // === DESCUENTO GLOBAL ===
-  // Si hay descuento aplicado, agregarlo como AllowanceCharge
-  const discount = invoiceData.discount || 0
-  if (discount > 0) {
-    // subtotalBeforeDiscount: subtotal ANTES del descuento (suma de items)
-    // discount: monto del descuento
-    // subtotal: subtotal DESPUÉS del descuento (base imponible para IGV)
-    const subtotalBeforeDiscount = invoiceData.subtotalBeforeDiscount || (invoiceData.subtotal + discount)
+  // === DESCUENTO ===
+  // IMPORTANTE: El descuento viene CON IGV desde el POS
+  // En lugar de usar descuento global (que causa errores 4309/4310 en SUNAT),
+  // distribuimos el descuento proporcionalmente a cada línea.
+  const discountWithIGV = invoiceData.discount || 0
+  const discountWithoutIGV = discountWithIGV > 0 ? Math.round((discountWithIGV / (1 + igvMultiplier)) * 100) / 100 : 0
 
-    const allowanceCharge = root.ele('cac:AllowanceCharge')
-    allowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento, true = cargo
-    allowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // 00 = Descuento global
-    allowanceCharge.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(discount.toFixed(2))
-    allowanceCharge.ele('cbc:BaseAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(subtotalBeforeDiscount.toFixed(2))
-  }
+  // Primero calcular la suma total SIN descuento para obtener el factor de descuento
+  let sumBeforeDiscount = 0
+  invoiceData.items.forEach((item) => {
+    const taxAffectation = item.taxAffectation || (igvExempt ? '20' : '10')
+    const isGravado = taxAffectation === '10'
+    const priceWithIGV = item.unitPrice
+    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
+    sumBeforeDiscount += item.quantity * priceWithoutIGV
+  })
+  sumBeforeDiscount = Math.round(sumBeforeDiscount * 100) / 100
+
+  // Factor de descuento (qué porcentaje del total representa el descuento)
+  const discountFactor = discountWithoutIGV > 0 && sumBeforeDiscount > 0
+    ? discountWithoutIGV / sumBeforeDiscount
+    : 0
+
+  // Calcular LineExtensionAmount de cada item CON descuento proporcional aplicado
+  // Esto evita los errores 4309/4310 porque:
+  // - Suma de LineExtensionAmount de líneas = LineExtensionAmount global
+  // - Suma de IGV de líneas = IGV global
+  // También guardamos los precios ajustados para evitar errores 4287/4288
+  const lineExtensions = []
+  const lineIGVs = []
+  const linePricesWithIGV = []      // Precio unitario CON IGV (ajustado por descuento)
+  const linePricesWithoutIGV = []   // Precio unitario SIN IGV (ajustado por descuento)
+  let sumLineExtension = 0
+  let sumLineIGV = 0
+
+  invoiceData.items.forEach((item) => {
+    const taxAffectation = item.taxAffectation || (igvExempt ? '20' : '10')
+    const isGravado = taxAffectation === '10'
+    const originalPriceWithIGV = item.unitPrice
+    const originalPriceWithoutIGV = isGravado ? originalPriceWithIGV / (1 + igvMultiplier) : originalPriceWithIGV
+
+    // Aplicar descuento proporcional al precio unitario
+    // Esto asegura que: LineExtensionAmount = cantidad × precio sin IGV (ajustado)
+    const adjustedPriceWithoutIGV = originalPriceWithoutIGV * (1 - discountFactor)
+    const adjustedPriceWithIGV = isGravado
+      ? adjustedPriceWithoutIGV * (1 + igvMultiplier)
+      : adjustedPriceWithoutIGV
+
+    // Calcular LineExtensionAmount usando el precio ajustado
+    const lineTotal = Math.round(item.quantity * adjustedPriceWithoutIGV * 100) / 100
+
+    lineExtensions.push(lineTotal)
+    linePricesWithIGV.push(Math.round(adjustedPriceWithIGV * 100) / 100)
+    linePricesWithoutIGV.push(Math.round(adjustedPriceWithoutIGV * 100) / 100)
+    sumLineExtension += lineTotal
+
+    // IGV de la línea (calculado sobre el valor YA descontado)
+    const lineIGV = isGravado ? Math.round(lineTotal * igvMultiplier * 100) / 100 : 0
+    lineIGVs.push(lineIGV)
+    sumLineIGV += lineIGV
+  })
+
+  // Redondear sumas finales
+  sumLineExtension = Math.round(sumLineExtension * 100) / 100
+  sumLineIGV = Math.round(sumLineIGV * 100) / 100
+
+  // Los valores globales ahora coinciden exactamente con la suma de líneas
+  const taxableAmount = sumLineExtension
+  const igvAmount = sumLineIGV
+  const totalAmount = Math.round((taxableAmount + igvAmount) * 100) / 100
+
+  // DEBUG: Log de valores calculados
+  console.log('🧮 XML Generator - Cálculos SUNAT (descuento distribuido en líneas):')
+  console.log(`   Items count: ${invoiceData.items.length}`)
+  console.log(`   sumBeforeDiscount (suma ANTES de descuento): ${sumBeforeDiscount}`)
+  console.log(`   discountWithIGV (desde POS): ${discountWithIGV}`)
+  console.log(`   discountWithoutIGV: ${discountWithoutIGV}`)
+  console.log(`   discountFactor: ${(discountFactor * 100).toFixed(2)}%`)
+  console.log(`   LineExtensions por item (YA con descuento): ${JSON.stringify(lineExtensions)}`)
+  console.log(`   LineIGVs por item: ${JSON.stringify(lineIGVs)}`)
+  console.log(`   sumLineExtension (taxableAmount): ${sumLineExtension}`)
+  console.log(`   sumLineIGV (igvAmount): ${sumLineIGV}`)
+  console.log(`   totalAmount: ${totalAmount}`)
 
   // === IMPUESTOS (IGV) ===
   // IMPORTANTE: TaxTotal DEBE ir ANTES de LegalMonetaryTotal según UBL 2.1
+  // SIEMPRE usar los valores calculados para que cuadren con las líneas
+  const finalIgv = igvAmount
+  const finalTaxable = taxableAmount
+
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.igv.toFixed(2))
+    .txt(finalIgv.toFixed(2))
 
   const taxSubtotal = taxTotal.ele('cac:TaxSubtotal')
   taxSubtotal.ele('cbc:TaxableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.subtotal.toFixed(2))
+    .txt(finalTaxable.toFixed(2))
   taxSubtotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.igv.toFixed(2))
+    .txt(finalIgv.toFixed(2))
 
   const taxCategory = taxSubtotal.ele('cac:TaxCategory')
   // Tax Category ID según si es exonerado o no:
@@ -279,25 +349,27 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // El orden de los elementos es CRÍTICO según el esquema XSD UBL 2.1 de SUNAT:
   // LineExtensionAmount -> TaxInclusiveAmount -> AllowanceTotalAmount -> PayableAmount
 
+  // SIEMPRE usar los valores calculados para que cuadren con las líneas
+  const finalTotal = totalAmount
+
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
 
-  // 1. Total valor de venta (sin IGV) - este es el subtotal DESPUÉS del descuento
+  // Con el nuevo enfoque (descuento distribuido en líneas):
+  // - LineExtensionAmount = suma de LineExtensionAmount de cada línea (YA con descuento aplicado)
+  // - TaxInclusiveAmount = LineExtensionAmount + IGV
+  // - No hay AllowanceCharge global ni AllowanceTotalAmount
+
+  // 1. LineExtensionAmount = suma de líneas (ya tienen el descuento proporcional aplicado)
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.subtotal.toFixed(2))
+    .txt(sumLineExtension.toFixed(2))
 
   // 2. Total impuestos incluidos
   legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.total.toFixed(2))
+    .txt(finalTotal.toFixed(2))
 
-  // 3. Si hay descuento, incluir el monto total de descuentos (DESPUÉS de TaxInclusiveAmount)
-  if (discount > 0) {
-    legalMonetaryTotal.ele('cbc:AllowanceTotalAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(discount.toFixed(2))
-  }
-
-  // 4. Total a pagar
+  // 3. Total a pagar
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(invoiceData.total.toFixed(2))
+    .txt(finalTotal.toFixed(2))
 
   // === ITEMS ===
   invoiceData.items.forEach((item, index) => {
@@ -323,19 +395,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
 
-    // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
-    // Necesitamos calcular el precio sin IGV para el XML UBL 2.1
+    // USAR los precios pre-calculados (ya ajustados por descuento proporcional)
+    // Esto asegura que: LineExtensionAmount = cantidad × priceWithoutIGV
+    const priceWithIGV = linePricesWithIGV[index]
+    const priceWithoutIGV = linePricesWithoutIGV[index]
 
-    // Precio unitario CON IGV (el que viene de la base de datos)
-    const priceWithIGV = item.unitPrice
-
-    // Precio unitario SIN IGV (valor base para SUNAT)
-    // Para items gravados, dividimos entre 1.18 para obtener el valor sin IGV
-    // Para items exonerados/inafectos, el precio ya está sin IGV
-    const priceWithoutIGV = isGravado ? priceWithIGV / 1.18 : priceWithIGV
-
-    // Total de la línea SIN IGV (base imponible)
-    const lineTotal = item.quantity * priceWithoutIGV
+    // Total de la línea SIN IGV (base imponible) - pre-calculado
+    const lineTotal = lineExtensions[index]
     invoiceLine.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
@@ -352,8 +418,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
     // Impuesto de la línea
     const lineTaxTotal = invoiceLine.ele('cac:TaxTotal')
-    // Calcular IGV según la tasa configurada (puede ser 0% para exonerados)
-    const lineIGV = isGravado ? lineTotal * igvMultiplier : 0
+    // USAR el IGV pre-calculado en lineIGVs para garantizar que la suma cuadre
+    const lineIGV = lineIGVs[index]
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(lineIGV.toFixed(2))
 
