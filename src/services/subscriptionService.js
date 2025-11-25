@@ -301,7 +301,7 @@ export const reactivateUser = async (userId, extendDays = 30) => {
 };
 
 // Registrar pago manual (Admin)
-export const registerPayment = async (userId, amount, method = 'Transferencia', selectedPlan = 'plan_3_months') => {
+export const registerPayment = async (userId, amount, method = 'Transferencia', selectedPlan = 'plan_3_months', customEndDate = null) => {
   try {
     const subscriptionRef = doc(db, 'subscriptions', userId);
     const subscriptionSnap = await getDoc(subscriptionRef);
@@ -318,14 +318,22 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
     const planConfig = PLANS[selectedPlan];
     const monthsToAdd = planConfig?.months || 3;
 
-    // Si la fecha de vencimiento ya pasó, extender desde HOY
-    // Si no, extender desde la fecha de vencimiento actual
-    const baseDate = currentPeriodEnd && new Date(currentPeriodEnd) > now
-      ? new Date(currentPeriodEnd)
-      : now;
+    let newPeriodEnd;
 
-    const newPeriodEnd = new Date(baseDate);
-    newPeriodEnd.setMonth(newPeriodEnd.getMonth() + monthsToAdd);
+    // Si se proporciona una fecha personalizada, usarla
+    if (customEndDate) {
+      newPeriodEnd = new Date(customEndDate);
+    } else {
+      // Calcular automáticamente sumando meses
+      // Si la fecha de vencimiento ya pasó, extender desde HOY
+      // Si no, extender desde la fecha de vencimiento actual
+      const baseDate = currentPeriodEnd && new Date(currentPeriodEnd) > now
+        ? new Date(currentPeriodEnd)
+        : now;
+
+      newPeriodEnd = new Date(baseDate);
+      newPeriodEnd.setMonth(newPeriodEnd.getMonth() + monthsToAdd);
+    }
 
     // Agregar pago al historial
     const paymentRecord = {

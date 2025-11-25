@@ -30,6 +30,8 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
   const [showPasswords, setShowPasswords] = useState(false);
+  const [useCustomDate, setUseCustomDate] = useState(false);
+  const [customEndDate, setCustomEndDate] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [emissionConfig, setEmissionConfig] = useState({
     method: 'qpse',
@@ -567,7 +569,13 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                onRegisterPayment(user.userId, paymentAmount, paymentMethod, selectedPlanForPayment);
+                onRegisterPayment(
+                  user.userId,
+                  paymentAmount,
+                  paymentMethod,
+                  selectedPlanForPayment,
+                  useCustomDate && customEndDate ? new Date(customEndDate) : null
+                );
               }}
               className="space-y-4"
             >
@@ -691,30 +699,86 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 </select>
               </div>
 
+              {/* Toggle para usar fecha personalizada */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="useCustomDate"
+                    checked={useCustomDate}
+                    onChange={(e) => {
+                      setUseCustomDate(e.target.checked);
+                      if (!e.target.checked) {
+                        setCustomEndDate('');
+                      }
+                    }}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <label htmlFor="useCustomDate" className="flex-1 cursor-pointer">
+                    <p className="font-semibold text-gray-900">Establecer fecha de vencimiento manual</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Útil para regalar días extra o ajustar fechas a discreción
+                    </p>
+                  </label>
+                </div>
+              </div>
+
               {/* Vista previa de la nueva fecha */}
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-5 h-5 text-blue-600" />
-                  <p className="font-semibold text-blue-900">Vista Previa de Renovación</p>
-                </div>
-                <div className="space-y-1 text-sm text-blue-800">
-                  <p>
-                    <strong>Vencimiento actual:</strong>{' '}
-                    {periodEnd ? format(new Date(periodEnd), "dd/MM/yyyy", { locale: es }) : 'N/A'}
-                  </p>
-                  <p>
-                    <strong>Se extenderá desde:</strong>{' '}
-                    {format(baseDate, "dd/MM/yyyy", { locale: es })}
-                    {baseDate > now ? ' (fecha de vencimiento)' : ' (hoy - vencido)'}
-                  </p>
-                  <p>
-                    <strong>Duración:</strong> {monthsToAdd} {monthsToAdd === 1 ? 'mes' : 'meses'}
-                  </p>
-                  <p className="text-lg font-bold text-blue-900 pt-2 border-t border-blue-200">
-                    <strong>Nuevo vencimiento:</strong>{' '}
-                    {format(calculatedNewDate, "dd/MM/yyyy", { locale: es })}
+                  <p className="font-semibold text-blue-900">
+                    {useCustomDate ? 'Fecha de Vencimiento Personalizada' : 'Vista Previa de Renovación'}
                   </p>
                 </div>
+
+                {useCustomDate ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-900 mb-2">
+                        Fecha de fin de suscripción:
+                      </label>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        min={format(now, 'yyyy-MM-dd')}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-primary-500 bg-white"
+                      />
+                    </div>
+                    {customEndDate && (
+                      <div className="pt-2 border-t border-blue-200">
+                        <p className="text-sm text-blue-800">
+                          <strong>Vencimiento actual:</strong>{' '}
+                          {periodEnd ? format(new Date(periodEnd), "dd/MM/yyyy", { locale: es }) : 'N/A'}
+                        </p>
+                        <p className="text-lg font-bold text-blue-900 mt-2">
+                          <strong>Nuevo vencimiento:</strong>{' '}
+                          {format(new Date(customEndDate), "dd/MM/yyyy", { locale: es })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1 text-sm text-blue-800">
+                    <p>
+                      <strong>Vencimiento actual:</strong>{' '}
+                      {periodEnd ? format(new Date(periodEnd), "dd/MM/yyyy", { locale: es }) : 'N/A'}
+                    </p>
+                    <p>
+                      <strong>Se extenderá desde:</strong>{' '}
+                      {format(baseDate, "dd/MM/yyyy", { locale: es })}
+                      {baseDate > now ? ' (fecha de vencimiento)' : ' (hoy - vencido)'}
+                    </p>
+                    <p>
+                      <strong>Duración:</strong> {monthsToAdd} {monthsToAdd === 1 ? 'mes' : 'meses'}
+                    </p>
+                    <p className="text-lg font-bold text-blue-900 pt-2 border-t border-blue-200">
+                      <strong>Nuevo vencimiento:</strong>{' '}
+                      {format(calculatedNewDate, "dd/MM/yyyy", { locale: es })}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">
