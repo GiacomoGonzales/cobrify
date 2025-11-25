@@ -180,17 +180,20 @@ export const sendInvoiceToSunat = onRequest(
         return
       }
 
-      // Validar estado: permitir reenvío si está pendiente o rechazada
-      if (invoiceData.sunatStatus !== 'pending' && invoiceData.sunatStatus !== 'rejected') {
+      // Validar estado: permitir reenvío si está pendiente, rechazada o firmada (no enviada)
+      const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
+      if (!allowedStatuses.includes(invoiceData.sunatStatus)) {
         res.status(400).json({
           error: `La factura ya fue aceptada por SUNAT. Estado actual: ${invoiceData.sunatStatus}`
         })
         return
       }
 
-      // Log si es un reenvío de factura rechazada
+      // Log si es un reenvío
       if (invoiceData.sunatStatus === 'rejected') {
         console.log(`🔄 Reenviando factura rechazada - Intento de corrección`)
+      } else if (invoiceData.sunatStatus === 'signed' || invoiceData.sunatStatus === 'SIGNED') {
+        console.log(`🔄 Reenviando documento firmado que no llegó a SUNAT`)
       }
 
       // 2. Obtener configuración SUNAT

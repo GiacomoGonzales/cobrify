@@ -616,6 +616,7 @@ ${companySettings?.website ? companySettings.website : ''}`
           </Badge>
         )
       case 'SIGNED':
+      case 'signed':
         return (
           <Badge variant="warning" className="flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
@@ -984,7 +985,7 @@ ${companySettings?.website ? companySettings.website : ''}`
 
                   {/* Reenviar a SUNAT (para facturas rechazadas o firmadas pero no enviadas) */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED') && (
+                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed') && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -999,7 +1000,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                         <Send className="w-4 h-4 text-orange-600" />
                       )}
                       <span className="text-orange-600 font-medium">
-                        {invoice.sunatStatus === 'SIGNED' ? 'Enviar documento firmado a SUNAT' : 'Reintentar envío a SUNAT'}
+                        Reintentar envío a SUNAT
                       </span>
                     </button>
                   )}
