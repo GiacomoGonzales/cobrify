@@ -420,10 +420,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (item.code) {
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
-
-        // Línea 4: Separación entre items (línea vacía)
-        itemsText += '\n';
       }
+    }
+
+    // Eliminar el último salto de línea extra si existe
+    if (itemsText.endsWith('\n\n')) {
+      itemsText = itemsText.slice(0, -1);
     }
 
     // Construir comando en cadena
@@ -471,37 +473,44 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       console.log('ℹ️ No hay logo configurado');
     }
 
-    // Nombre del negocio (company-name) - Formato elegante con bold
+    // Nombre del negocio (company-name) - Formato elegante con bold - CENTRADO
     const businessName = convertSpanishText(business.tradeName || business.name || 'MI EMPRESA');
-    printer = printer.bold().text(businessName + '\n').clearFormatting();
+    printer = printer
+      .align('center')
+      .bold()
+      .text(businessName + '\n')
+      .clearFormatting();
 
-    // RUC (company-info)
+    // RUC (company-info) - CENTRADO
     if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
-      printer = printer.text(convertSpanishText(`RUC: ${business.ruc || '00000000000'}\n`));
+      printer = printer.align('center').text(convertSpanishText(`RUC: ${business.ruc || '00000000000'}\n`));
     }
 
-    // Razón Social (si existe y es diferente del nombre comercial)
+    // Razón Social (si existe y es diferente del nombre comercial) - CENTRADO
     if (business.businessName && business.businessName !== business.tradeName) {
-      printer = printer.text(convertSpanishText(business.businessName + '\n'));
+      printer = printer.align('center').text(convertSpanishText(business.businessName + '\n'));
     }
 
-    // Dirección (company-info)
-    printer = printer.text(convertSpanishText((business.address || 'Direccion no configurada') + '\n'));
+    // Dirección (company-info) - CENTRADO
+    printer = printer.align('center').text(convertSpanishText((business.address || 'Direccion no configurada') + '\n'));
 
-    // Teléfono (company-info)
+    // Teléfono (company-info) - CENTRADO
     if (business.phone) {
-      printer = printer.text(convertSpanishText(`Tel: ${business.phone}\n`));
+      printer = printer.align('center').text(convertSpanishText(`Tel: ${business.phone}\n`));
     }
 
-    // Email (company-info) - NUEVO
+    // Email (company-info) - CENTRADO
     if (business.email) {
-      printer = printer.text(convertSpanishText(`Email: ${business.email}\n`));
+      printer = printer.align('center').text(convertSpanishText(`Email: ${business.email}\n`));
     }
 
-    // Redes sociales (company-info) - NUEVO
+    // Redes sociales (company-info) - CENTRADO
     if (business.socialMedia) {
-      printer = printer.text(convertSpanishText(business.socialMedia + '\n'));
+      printer = printer.align('center').text(convertSpanishText(business.socialMedia + '\n'));
     }
+
+    // Espacio antes del tipo de documento
+    printer = printer.align('center').text('\n');
 
     // Tipo de documento (document-type) - CENTRADO
     printer = printer
@@ -515,10 +524,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .align('center')
       .bold()
       .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
-      .clearFormatting()
-      .align('left');
+      .clearFormatting();
 
-    printer = addSeparator(printer, format.separator, paperWidth, 'left');
+    printer = addSeparator(printer, format.separator, paperWidth, 'center');
 
     // ========== Fecha y Hora (ticket-section) ==========
     // Formatear fecha y hora de manera compatible con impresoras térmicas
@@ -536,18 +544,17 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       .text(convertSpanishText(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}\n`))
       .text(`Hora: ${timeString}\n`);
 
-    printer = addSeparator(printer, format.separator, paperWidth, 'left');
-
     // ========== Datos del Cliente (ticket-section) ==========
-    // Solo mostrar para facturas y boletas (NO para notas de venta)
-    if (isInvoice || invoice.documentType === 'boleta') {
+    // Mostrar para facturas, boletas y notas de venta
+    if (isInvoice || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
       printer = printer
+        .align('left')
         .bold()
         .text('DATOS DEL CLIENTE\n')
         .clearFormatting();
 
-      if (invoice.documentType === 'boleta') {
-        // Para boletas - DNI y Nombre
+      if (invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
+        // Para boletas y notas de venta - DNI y Nombre
         printer = printer
           .text(convertSpanishText(`DNI: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerDni || '-'}\n`))
           .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`));
@@ -624,9 +631,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // ========== Forma de Pago (ticket-section) ==========
     if (invoice.paymentMethod || invoice.payments) {
-      printer = addSeparator(printer, format.separator, paperWidth, 'center');
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
       printer = printer
+        .align('left')
         .bold()
         .text('FORMA DE PAGO\n')
         .clearFormatting();
