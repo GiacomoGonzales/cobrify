@@ -3,6 +3,7 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   query,
   getDocs,
@@ -541,6 +542,75 @@ export const resetMonthlyUsage = async (userId) => {
     });
   } catch (error) {
     console.error('Error al resetear uso mensual:', error);
+    throw error;
+  }
+};
+
+// Extender suscripción sin registrar pago (Admin)
+// Útil para regalar días, ajustes manuales, cortesías, etc.
+export const extendSubscription = async (userId, newEndDate) => {
+  try {
+    const subscriptionRef = doc(db, 'subscriptions', userId);
+    const subscriptionSnap = await getDoc(subscriptionRef);
+
+    if (!subscriptionSnap.exists()) {
+      throw new Error('Suscripción no encontrada');
+    }
+
+    await updateDoc(subscriptionRef, {
+      currentPeriodEnd: Timestamp.fromDate(new Date(newEndDate)),
+      nextPaymentDate: Timestamp.fromDate(new Date(newEndDate)),
+      status: 'active',
+      accessBlocked: false,
+      blockReason: null,
+      blockedAt: null,
+      updatedAt: serverTimestamp()
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error al extender suscripción:', error);
+    throw error;
+  }
+};
+
+// Eliminar usuario completamente (Admin)
+// ADVERTENCIA: Esta acción elimina la suscripción y el documento de usuario
+// Los datos del negocio (businesses/{userId}) se mantienen por seguridad
+export const deleteUser = async (userId) => {
+  try {
+    // 1. Eliminar suscripción
+    const subscriptionRef = doc(db, 'subscriptions', userId);
+    const subscriptionSnap = await getDoc(subscriptionRef);
+
+    if (subscriptionSnap.exists()) {
+      await deleteDoc(subscriptionRef);
+    }
+
+    // 2. Eliminar documento de usuario
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      await deleteDoc(userRef);
+    }
+
+    // 3. Eliminar sub-usuarios asociados
+    const usersRef = collection(db, 'users');
+    const subUsersQuery = query(usersRef, where('ownerId', '==', userId));
+    const subUsersSnap = await getDocs(subUsersQuery);
+
+    const deletePromises = subUsersSnap.docs.map(subUserDoc =>
+      deleteDoc(doc(db, 'users', subUserDoc.id))
+    );
+    await Promise.all(deletePromises);
+
+    return {
+      success: true,
+      deletedSubUsers: subUsersSnap.size
+    };
+  } catch (error) {
+    console.error('Error al eliminar usuario:', error);
     throw error;
   }
 };

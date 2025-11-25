@@ -9,6 +9,8 @@ import {
   registerPayment,
   changePlan,
   updateNotes,
+  deleteUser,
+  extendSubscription,
   PLANS
 } from '@/services/subscriptionService';
 import UserDetailsModal from '@/components/admin/UserDetailsModal';
@@ -29,7 +31,9 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  UserCircle
+  UserCircle,
+  Trash2,
+  CalendarPlus
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -49,6 +53,8 @@ export default function UserManagement() {
   const [actionLoading, setActionLoading] = useState(false);
   const [expandedOwners, setExpandedOwners] = useState(new Set()); // Para controlar qué owners están expandidos
   const [subUsers, setSubUsers] = useState({}); // Almacenar sub-usuarios por ownerId
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [extendDate, setExtendDate] = useState('');
 
   // Cargar sub-usuarios de un owner
   const loadSubUsers = async (ownerId) => {
@@ -195,6 +201,60 @@ export default function UserManagement() {
     } catch (error) {
       console.error('Error:', error);
       toast.error('Error al cambiar plan');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    const confirmMessage = `¿Estás seguro de ELIMINAR permanentemente al usuario "${user.businessName || user.email}"?\n\nEsta acción:\n- Eliminará la suscripción\n- Eliminará el documento de usuario\n- Eliminará todos los sub-usuarios asociados\n\n⚠️ Los datos del negocio se mantendrán por seguridad.\n\nEscribe "ELIMINAR" para confirmar:`;
+
+    const confirmation = window.prompt(confirmMessage);
+
+    if (confirmation !== 'ELIMINAR') {
+      if (confirmation !== null) {
+        toast.error('Confirmación incorrecta. El usuario NO fue eliminado.');
+      }
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const result = await deleteUser(user.userId);
+      await loadSubscriptions();
+      toast.success(`Usuario eliminado. ${result.deletedSubUsers > 0 ? `También se eliminaron ${result.deletedSubUsers} sub-usuario(s).` : ''}`);
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error al eliminar usuario');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openExtendModal = (user) => {
+    setSelectedUser(user);
+    // Pre-llenar con la fecha actual de vencimiento + 30 días
+    const currentEnd = user.currentPeriodEnd?.toDate?.() || user.currentPeriodEnd || new Date();
+    const newDate = new Date(currentEnd);
+    newDate.setDate(newDate.getDate() + 30);
+    setExtendDate(format(newDate, 'yyyy-MM-dd'));
+    setShowExtendModal(true);
+  };
+
+  const handleExtendSubscription = async () => {
+    if (!selectedUser || !extendDate) return;
+
+    try {
+      setActionLoading(true);
+      await extendSubscription(selectedUser.userId, extendDate);
+      await loadSubscriptions();
+      setShowExtendModal(false);
+      setSelectedUser(null);
+      setExtendDate('');
+      toast.success('Suscripción extendida exitosamente');
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error al extender suscripción');
     } finally {
       setActionLoading(false);
     }
@@ -529,6 +589,24 @@ export default function UserManagement() {
                           >
                             <Settings className="w-5 h-5" />
                           </button>
+
+                          <button
+                            onClick={() => openExtendModal(sub)}
+                            className="text-orange-600 hover:text-orange-900"
+                            title="Extender suscripción"
+                            disabled={actionLoading}
+                          >
+                            <CalendarPlus className="w-5 h-5" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteUser(sub)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Eliminar usuario"
+                            disabled={actionLoading}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -653,6 +731,133 @@ export default function UserManagement() {
           loading={actionLoading}
           toast={toast}
         />
+      )}
+
+      {/* Modal Extender Suscripción */}
+      {showExtendModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Extender Suscripción</h2>
+                <p className="text-sm text-gray-600">{selectedUser.businessName || selectedUser.email}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowExtendModal(false);
+                  setSelectedUser(null);
+                  setExtendDate('');
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Info de vencimiento actual */}
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-600">Vencimiento actual:</p>
+                <p className="font-semibold text-gray-900">
+                  {selectedUser.currentPeriodEnd
+                    ? format(
+                        selectedUser.currentPeriodEnd.toDate?.() || selectedUser.currentPeriodEnd,
+                        "dd/MM/yyyy",
+                        { locale: es }
+                      )
+                    : 'No definido'}
+                </p>
+              </div>
+
+              {/* Selector de nueva fecha */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nueva fecha de vencimiento
+                </label>
+                <input
+                  type="date"
+                  value={extendDate}
+                  onChange={(e) => setExtendDate(e.target.value)}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Botones rápidos */}
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Atajos rápidos:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[7, 15, 30, 60, 90].map((days) => {
+                    const currentEnd = selectedUser.currentPeriodEnd?.toDate?.() || selectedUser.currentPeriodEnd || new Date();
+                    const baseDate = new Date(currentEnd) > new Date() ? new Date(currentEnd) : new Date();
+                    const newDate = new Date(baseDate);
+                    newDate.setDate(newDate.getDate() + days);
+
+                    return (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setExtendDate(format(newDate, 'yyyy-MM-dd'))}
+                        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition-colors"
+                      >
+                        +{days} días
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Vista previa */}
+              {extendDate && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-700">Nueva fecha de vencimiento:</p>
+                  <p className="font-bold text-green-900 text-lg">
+                    {format(new Date(extendDate), "dd 'de' MMMM 'de' yyyy", { locale: es })}
+                  </p>
+                </div>
+              )}
+
+              {/* Info */}
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                <strong>Nota:</strong> Esta acción NO registra un pago. Solo extiende la fecha de vencimiento.
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExtendModal(false);
+                    setSelectedUser(null);
+                    setExtendDate('');
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExtendSubscription}
+                  disabled={actionLoading || !extendDate}
+                  className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2"
+                >
+                  {actionLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <CalendarPlus className="w-4 h-4" />
+                      Extender
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
