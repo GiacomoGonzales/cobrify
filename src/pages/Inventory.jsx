@@ -787,10 +787,10 @@ export default function Inventory() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="table-fixed w-full">
+              <Table className="w-full">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px]">
+                    <TableHead className="w-20">
                       <button
                         onClick={() => handleSort('code')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -800,7 +800,7 @@ export default function Inventory() {
                         {getSortIcon('code')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-[180px]">
+                    <TableHead>
                       <button
                         onClick={() => handleSort('name')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -811,9 +811,9 @@ export default function Inventory() {
                       </button>
                     </TableHead>
                     {isRetailMode && (
-                      <TableHead className="hidden sm:table-cell w-[100px]">Tipo</TableHead>
+                      <TableHead className="hidden sm:table-cell w-20">Tipo</TableHead>
                     )}
-                    <TableHead className="hidden md:table-cell w-[150px]">
+                    <TableHead className="hidden md:table-cell">
                       <button
                         onClick={() => handleSort('category')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -823,29 +823,29 @@ export default function Inventory() {
                         {getSortIcon('category')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-[120px]">
+                    <TableHead className="w-20 text-right">
                       <button
                         onClick={() => handleSort('stock')}
-                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        className="flex items-center gap-1 justify-end hover:text-primary-600 transition-colors"
                         title="Ordenar por stock"
                       >
                         Stock
                         {getSortIcon('stock')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-[120px]">
+                    <TableHead className="w-24 text-right">
                       <button
                         onClick={() => handleSort('price')}
-                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        className="flex items-center gap-1 justify-end hover:text-primary-600 transition-colors"
                         title="Ordenar por precio"
                       >
-                        Precio Unit.
+                        Precio
                         {getSortIcon('price')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-[120px]">Valor Stock</TableHead>
-                    <TableHead className="w-[110px]">Estado</TableHead>
-                    {warehouses.length > 1 && <TableHead className="w-[100px] text-right">Acciones</TableHead>}
+                    <TableHead className="w-24 text-right">Valor</TableHead>
+                    <TableHead className="w-20 text-center">Estado</TableHead>
+                    {warehouses.length > 1 && <TableHead className="w-20 text-right">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -863,8 +863,8 @@ export default function Inventory() {
                             {item.code || '-'}
                           </span>
                         </TableCell>
-                        <TableCell className="max-w-[180px]">
-                          <div className="max-w-[180px]">
+                        <TableCell>
+                          <div>
                             <p className="font-medium text-sm truncate" title={item.name}>
                               {item.name}
                             </p>
@@ -885,25 +885,23 @@ export default function Inventory() {
                             </Badge>
                           </TableCell>
                         )}
-                        <TableCell className="hidden md:table-cell max-w-[200px]">
-                          <div className="max-w-[200px]">
-                            <Badge
-                              variant="default"
-                              className="truncate block"
-                              title={isProduct
-                                ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
-                                : item.category || 'Sin categoría'
-                              }
-                            >
-                              {isProduct
-                                ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
-                                : item.category || 'Sin categoría'
-                              }
-                            </Badge>
-                          </div>
+                        <TableCell className="hidden md:table-cell">
+                          <Badge
+                            variant="default"
+                            className="truncate"
+                            title={isProduct
+                              ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
+                              : item.category || 'Sin categoría'
+                            }
+                          >
+                            {isProduct
+                              ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
+                              : item.category || 'Sin categoría'
+                            }
+                          </Badge>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
                             {/* Botón de expandir/contraer solo si hay almacenes y es producto */}
                             {warehouses.length > 0 && item.stock !== null && isProduct && (
                               <button
@@ -939,12 +937,12 @@ export default function Inventory() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-right">
                           <span className="text-sm">
                             {formatCurrency(isProduct ? item.price : (item.averageCost || 0))}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-right">
                           {item.stock !== null && item.stock !== undefined ? (
                             <span className="font-semibold text-sm">
                               {formatCurrency(item.stock * (isProduct ? item.price : (item.averageCost || 0)))}
@@ -953,7 +951,7 @@ export default function Inventory() {
                             <span className="text-sm text-gray-500">-</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           <Badge variant={stockStatus.variant}>{stockStatus.status}</Badge>
                         </TableCell>
                         {warehouses.length > 1 && (
