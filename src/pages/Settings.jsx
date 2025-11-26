@@ -289,7 +289,11 @@ export default function Settings() {
 
         // Cargar configuración de impresora
         if (businessData.printerConfig) {
-          setPrinterConfig(businessData.printerConfig)
+          // Merge con valores por defecto para asegurar que todos los campos existan
+          setPrinterConfig(prev => ({
+            ...prev,
+            ...businessData.printerConfig
+          }))
         }
       }
     } catch (error) {
