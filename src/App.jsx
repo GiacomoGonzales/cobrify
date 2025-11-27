@@ -5,6 +5,7 @@ import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
 import { Capacitor } from '@capacitor/core'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import InvoiceList from './pages/InvoiceList'
 import Customers from './pages/Customers'
@@ -66,8 +67,9 @@ function App() {
             {/* Landing Page / Splash - En móvil muestra splash primero */}
             <Route path="/" element={isNative ? <SplashScreen /> : <LandingPage />} />
 
-            {/* Ruta pública de login (también disponible en /login) */}
+            {/* Rutas públicas de autenticación */}
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
             {/* Rutas públicas */}
             <Route path="/terminos-y-condiciones" element={<TermsAndConditions />} />
