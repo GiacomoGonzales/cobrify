@@ -522,6 +522,75 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
   }
 }
 
+/**
+ * Enviar Nota de Crédito a SUNAT
+ * Usa una Cloud Function independiente para no afectar facturas/boletas
+ */
+export const sendCreditNoteToSunat = async (userId, creditNoteId) => {
+  try {
+    console.log(`📤 Enviando Nota de Crédito ${creditNoteId} a SUNAT...`)
+
+    // Obtener token de autenticación del usuario actual
+    const user = auth.currentUser
+    if (!user) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    const idToken = await user.getIdToken()
+
+    // Determinar URL de la Cloud Function (emulador o producción)
+    const useEmulator = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true'
+
+    const functionUrl = useEmulator
+      ? 'http://127.0.0.1:5001/cobrify-395fe/us-central1/sendCreditNoteToSunat'
+      : 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendCreditNoteToSunat'
+
+    console.log(`🌐 Llamando a: ${functionUrl}`)
+
+    // Llamar a la Cloud Function con fetch
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        userId,
+        creditNoteId,
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ Error HTTP Response:', errorText)
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: errorText }
+      }
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ Respuesta de SUNAT (NC):', result)
+
+    return {
+      success: result.success,
+      status: result.status,
+      message: result.message,
+      observations: result.observations || [],
+    }
+  } catch (error) {
+    console.error('❌ Error al enviar NC a SUNAT:', error)
+
+    return {
+      success: false,
+      error: error.message || 'Error al enviar nota de crédito a SUNAT',
+    }
+  }
+}
+
 // ==================== PROVEEDORES ====================
 
 /**

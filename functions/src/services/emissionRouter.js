@@ -1,4 +1,4 @@
-import { generateInvoiceXML } from '../utils/xmlGenerator.js'
+import { generateInvoiceXML, generateCreditNoteXML } from '../utils/xmlGenerator.js'
 import { signXML } from '../utils/xmlSigner.js'
 import { sendToSunat } from '../utils/sunatClient.js'
 import { sendToNubefact, parseNubefactResponse } from './nubefactService.js'
@@ -368,5 +368,188 @@ export async function anularComprobante(invoiceData, businessData, motivo) {
   return {
     success: false,
     error: 'Funcionalidad de anulación pendiente de implementación'
+  }
+}
+
+/**
+ * Emite una Nota de Crédito electrónica usando el método configurado
+ *
+ * Esta función es independiente de emitirComprobante para no afectar
+ * el flujo existente de facturas y boletas.
+ *
+ * @param {Object} creditNoteData - Datos de la nota de crédito
+ * @param {Object} businessData - Datos del negocio
+ * @returns {Promise<Object>} Resultado del envío
+ */
+export async function emitirNotaCredito(creditNoteData, businessData) {
+  try {
+    console.log('🚀 Iniciando emisión de NOTA DE CRÉDITO...')
+    console.log(`📋 Documento: ${creditNoteData.documentType} ${creditNoteData.series}-${creditNoteData.correlativeNumber}`)
+    console.log(`📄 Documento referenciado: ${creditNoteData.referencedDocumentId} (tipo: ${creditNoteData.referencedDocumentType})`)
+    console.log(`📝 Motivo: ${creditNoteData.discrepancyCode} - ${creditNoteData.discrepancyReason}`)
+
+    // Determinar qué método usar
+    const emissionMethod = determineEmissionMethod(businessData)
+    console.log(`📡 Método de emisión seleccionado: ${emissionMethod}`)
+
+    // Ejecutar el método correspondiente
+    let result
+
+    if (emissionMethod === 'qpse') {
+      result = await emitCreditNoteViaQPse(creditNoteData, businessData)
+    } else if (emissionMethod === 'sunat_direct') {
+      result = await emitCreditNoteViaSunatDirect(creditNoteData, businessData)
+    } else {
+      // NubeFact no soportado por ahora para NC
+      throw new Error('NubeFact no está soportado para notas de crédito. Use QPse o SUNAT directo.')
+    }
+
+    return result
+
+  } catch (error) {
+    console.error('❌ Error en emisión de nota de crédito:', error)
+
+    return {
+      success: false,
+      method: 'error',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Nota de Crédito vía SUNAT DIRECTO
+ */
+async function emitCreditNoteViaSunatDirect(creditNoteData, businessData) {
+  console.log('📤 Emitiendo Nota de Crédito vía SUNAT DIRECTO...')
+
+  try {
+    // Validar configuración SUNAT
+    if (!businessData.sunat || !businessData.sunat.enabled) {
+      throw new Error('SUNAT no está habilitado para este negocio')
+    }
+
+    if (!businessData.sunat.solUser || !businessData.sunat.solPassword) {
+      throw new Error('Credenciales SOL no configuradas')
+    }
+
+    if (!businessData.sunat.certificateData || !businessData.sunat.certificatePassword) {
+      throw new Error('Certificado digital no configurado')
+    }
+
+    // 1. Generar XML usando generateCreditNoteXML (específico para NC)
+    console.log('🔨 Generando XML UBL 2.1 para Nota de Crédito...')
+    const xml = generateCreditNoteXML(creditNoteData, businessData)
+
+    // 2. Firmar XML
+    console.log('🔏 Firmando XML con certificado digital...')
+    const signedXML = await signXML(xml, {
+      certificate: businessData.sunat.certificateData,
+      certificatePassword: businessData.sunat.certificatePassword
+    })
+
+    // 3. Enviar a SUNAT (tipo documento 07 = Nota de Crédito)
+    console.log('📡 Enviando Nota de Crédito a SUNAT...')
+    const sunatResponse = await sendToSunat(signedXML, {
+      ruc: businessData.ruc,
+      documentType: 'nota_credito', // Se mapea a '07' en sunatClient
+      series: creditNoteData.series,
+      number: creditNoteData.correlativeNumber,
+      solUser: businessData.sunat.solUser,
+      solPassword: businessData.sunat.solPassword,
+      environment: businessData.sunat.environment || 'production'
+    })
+
+    return {
+      success: sunatResponse.accepted,
+      method: 'sunat_direct',
+      accepted: sunatResponse.accepted,
+      responseCode: sunatResponse.responseCode,
+      description: sunatResponse.description,
+      notes: sunatResponse.notes,
+      cdrData: sunatResponse.cdrData,
+      xml: signedXML,
+      sunatResponse: sunatResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión NC vía SUNAT directo:', error)
+
+    return {
+      success: false,
+      method: 'sunat_direct',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Nota de Crédito vía QPse
+ */
+async function emitCreditNoteViaQPse(creditNoteData, businessData) {
+  console.log('📤 Emitiendo Nota de Crédito vía QPSE...')
+
+  try {
+    // Validar configuración QPse
+    if (!businessData.qpse || !businessData.qpse.enabled) {
+      throw new Error('QPse no está habilitado para este negocio')
+    }
+
+    if (!businessData.qpse.usuario || !businessData.qpse.password) {
+      throw new Error('Credenciales de QPse no configuradas')
+    }
+
+    // 1. Generar XML usando generateCreditNoteXML (específico para NC)
+    console.log('🔨 Generando XML UBL 2.1 para Nota de Crédito...')
+    const xml = generateCreditNoteXML(creditNoteData, businessData)
+
+    // 2. Tipo de documento: 07 = Nota de Crédito
+    const tipoDocumento = '07'
+    console.log(`📄 Tipo de documento: nota_credito → Código SUNAT: ${tipoDocumento}`)
+
+    // 3. Enviar a QPse (firma y envía automáticamente)
+    console.log('📡 Enviando Nota de Crédito a QPse...')
+    const qpseResponse = await sendToQPse(
+      xml,
+      businessData.ruc,
+      tipoDocumento,
+      creditNoteData.series,
+      creditNoteData.correlativeNumber,
+      businessData.qpse,
+      businessData
+    )
+
+    // Si el código es PENDING_MANUAL, el documento está firmado pero necesita envío manual
+    const isPendingManual = qpseResponse.responseCode === 'PENDING_MANUAL'
+
+    return {
+      success: true,
+      method: 'qpse',
+      accepted: qpseResponse.accepted,
+      responseCode: qpseResponse.responseCode,
+      description: qpseResponse.description,
+      notes: qpseResponse.notes,
+      cdrUrl: qpseResponse.cdrUrl,
+      xmlUrl: qpseResponse.xmlUrl,
+      pdfUrl: qpseResponse.pdfUrl,
+      ticket: qpseResponse.ticket,
+      hash: qpseResponse.hash,
+      nombreArchivo: qpseResponse.nombreArchivo,
+      xmlFirmado: qpseResponse.xmlFirmado,
+      pendingManual: isPendingManual,
+      qpseResponse: qpseResponse.rawResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión NC vía QPse:', error)
+
+    return {
+      success: false,
+      method: 'qpse',
+      error: error.message,
+      errorDetails: error
+    }
   }
 }

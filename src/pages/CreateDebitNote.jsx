@@ -201,7 +201,7 @@ export default function CreateDebitNote() {
 
       if (result.success) {
         setMessage({ type: 'success', text: 'Nota de Débito creada exitosamente' })
-        setTimeout(() => navigate('/facturas'), 2000)
+        setTimeout(() => navigate('/app/facturas'), 2000)
       } else {
         throw new Error(result.error)
       }

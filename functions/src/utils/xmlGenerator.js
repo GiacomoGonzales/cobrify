@@ -735,7 +735,8 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
     // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
     const priceWithIGV = item.unitPrice
-    const priceWithoutIGV = isGravado ? priceWithIGV / 1.18 : priceWithIGV
+    // Usar la tasa IGV del taxConfig (no hardcodear 1.18)
+    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
 
     // Total línea SIN IGV (base imponible)
     const lineTotal = item.quantity * priceWithoutIGV
@@ -1063,7 +1064,8 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
     // IMPORTANTE: item.unitPrice YA INCLUYE IGV (viene del POS/frontend con IGV incluido)
     const priceWithIGV = item.unitPrice
-    const priceWithoutIGV = isGravado ? priceWithIGV / 1.18 : priceWithIGV
+    // Usar la tasa IGV del taxConfig (no hardcodear 1.18)
+    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
 
     // Total línea SIN IGV (base imponible)
     const lineTotal = item.quantity * priceWithoutIGV

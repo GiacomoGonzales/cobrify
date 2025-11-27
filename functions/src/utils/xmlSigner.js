@@ -66,6 +66,15 @@ export async function signXML(xmlContent, certificateConfig) {
 
     console.log('✅ Certificado y clave privada extraídos correctamente')
 
+    // Detectar el tipo de documento (Invoice, CreditNote, DebitNote)
+    let rootElement = 'Invoice' // Default
+    if (xmlContent.includes('<CreditNote') || xmlContent.includes('CreditNote-2')) {
+      rootElement = 'CreditNote'
+    } else if (xmlContent.includes('<DebitNote') || xmlContent.includes('DebitNote-2')) {
+      rootElement = 'DebitNote'
+    }
+    console.log(`📄 Tipo de documento detectado: ${rootElement}`)
+
     // Crear firma XMLDSig usando xml-crypto
     const sig = new SignedXml({
       privateKey: privateKeyPem,
@@ -77,7 +86,7 @@ export async function signXML(xmlContent, certificateConfig) {
     // Agregar referencia al documento completo con URI vacío (sin IDs)
     // IMPORTANTE: El orden de los transforms importa
     sig.addReference({
-      xpath: "//*[local-name()='Invoice']",
+      xpath: `//*[local-name()='${rootElement}']`,
       digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
       transforms: [
         'http://www.w3.org/2000/09/xmldsig#enveloped-signature',

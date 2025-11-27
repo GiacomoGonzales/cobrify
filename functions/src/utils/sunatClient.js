@@ -32,7 +32,14 @@ export async function sendToSunat(signedXML, config) {
     console.log(`🌐 Endpoint SUNAT: ${url}`)
 
     // Nombre del archivo ZIP (RUC-TipoDoc-Serie-Numero.xml)
-    const docTypeCode = documentType === 'factura' ? '01' : '03'
+    // Catálogo 01: 01=Factura, 03=Boleta, 07=Nota de Crédito, 08=Nota de Débito
+    const docTypeMap = {
+      'factura': '01',
+      'boleta': '03',
+      'nota_credito': '07',
+      'nota_debito': '08'
+    }
+    const docTypeCode = docTypeMap[documentType] || '03'
     const fileName = `${ruc}-${docTypeCode}-${series}-${String(number).padStart(8, '0')}`
 
     // Comprimir XML en ZIP (SUNAT requiere XML dentro de ZIP)

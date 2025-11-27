@@ -35,7 +35,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat } from '@/services/firestoreService'
+import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
@@ -507,6 +507,38 @@ ${companySettings?.website ? companySettings.website : ''}`
     }
   }
 
+  // Función específica para enviar Notas de Crédito a SUNAT
+  const handleSendCreditNoteToSunat = async (creditNoteId) => {
+    if (!user?.uid) return
+
+    const businessId = getBusinessId()
+    setSendingToSunat(creditNoteId)
+    try {
+      console.log('📤 Enviando Nota de Crédito a SUNAT...', creditNoteId)
+
+      const result = await sendCreditNoteToSunat(businessId, creditNoteId)
+
+      if (result.success) {
+        toast.success(result.message || 'Nota de Crédito enviada exitosamente', 5000)
+
+        // Si hay observaciones, mostrarlas
+        if (result.observations && result.observations.length > 0) {
+          console.log('📝 Observaciones SUNAT:', result.observations)
+        }
+
+        // Recargar documentos para ver el estado actualizado
+        loadInvoices()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al enviar NC a SUNAT:', error)
+      toast.error(error.message || 'Error al enviar Nota de Crédito a SUNAT.', 5000)
+    } finally {
+      setSendingToSunat(null)
+    }
+  }
+
   // Obtener lista única de vendedores
   const sellers = Array.from(
     new Set(
@@ -568,7 +600,20 @@ ${companySettings?.website ? companySettings.website : ''}`
     setVisibleInvoicesCount(20)
   }, [searchTerm, filterStatus, filterType, filterSeller, filterStartDate, filterEndDate])
 
-  const getStatusBadge = status => {
+  const getStatusBadge = (status, documentType) => {
+    // Para Notas de Crédito, usar estados específicos
+    if (documentType === 'nota_credito') {
+      switch (status) {
+        case 'applied':
+          return <Badge variant="success">Aplicada</Badge>
+        case 'pending':
+          return <Badge variant="warning">Pendiente</Badge>
+        default:
+          return <Badge>{status}</Badge>
+      }
+    }
+
+    // Para Facturas, Boletas y Notas de Venta
     switch (status) {
       case 'paid':
         return <Badge variant="success">Pagada</Badge>
@@ -577,7 +622,9 @@ ${companySettings?.website ? companySettings.website : ''}`
       case 'overdue':
         return <Badge variant="danger">Vencida</Badge>
       case 'cancelled':
-        return <Badge>Anulada</Badge>
+        return <Badge className="bg-red-100 text-red-800">Anulada</Badge>
+      case 'partial_refund':
+        return <Badge className="bg-orange-100 text-orange-800">Dev. Parcial</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -880,7 +927,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
                       <div className="flex flex-col gap-1">
-                        <div className="scale-90 origin-left">{getStatusBadge(invoice.status)}</div>
+                        <div className="scale-90 origin-left">{getStatusBadge(invoice.status, invoice.documentType)}</div>
                         {/* Badge de estado de pago para notas de venta con pago parcial o al crédito */}
                         {invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
                           <Badge className="text-xs bg-orange-100 text-orange-800">
@@ -1005,6 +1052,48 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </button>
                   )}
 
+                  {/* Enviar Nota de Crédito a SUNAT */}
+                  {invoice.documentType === 'nota_credito' &&
+                   invoice.sunatStatus === 'pending' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        handleSendCreditNoteToSunat(invoice.id)
+                      }}
+                      disabled={sendingToSunat === invoice.id}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {sendingToSunat === invoice.id ? (
+                        <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 text-green-600" />
+                      )}
+                      <span>Enviar NC a SUNAT</span>
+                    </button>
+                  )}
+
+                  {/* Reenviar Nota de Crédito a SUNAT (rechazada o firmada) */}
+                  {invoice.documentType === 'nota_credito' &&
+                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed') && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        handleSendCreditNoteToSunat(invoice.id)
+                      }}
+                      disabled={sendingToSunat === invoice.id}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {sendingToSunat === invoice.id ? (
+                        <Loader2 className="w-4 h-4 text-orange-600 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4 text-orange-600" />
+                      )}
+                      <span className="text-orange-600 font-medium">
+                        Reintentar envío NC a SUNAT
+                      </span>
+                    </button>
+                  )}
+
                   {/* Crear Nota de Crédito */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
                    invoice.sunatStatus === 'accepted' && (
@@ -1012,7 +1101,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                       <button
                         onClick={() => {
                           setOpenMenuId(null)
-                          navigate(`/nota-credito?invoiceId=${invoice.id}`)
+                          navigate(`/app/nota-credito?invoiceId=${invoice.id}`)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
@@ -1023,7 +1112,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                       <button
                         onClick={() => {
                           setOpenMenuId(null)
-                          navigate(`/nota-debito?invoiceId=${invoice.id}`)
+                          navigate(`/app/nota-debito?invoiceId=${invoice.id}`)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >

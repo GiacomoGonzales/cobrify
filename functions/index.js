@@ -3,7 +3,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { emitirComprobante } from './src/services/emissionRouter.js'
+import { emitirComprobante, emitirNotaCredito } from './src/services/emissionRouter.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -426,6 +426,401 @@ export const sendInvoiceToSunat = onRequest(
     } catch (error) {
       console.error('❌ Error general:', error)
       res.status(500).json({ error: error.message || 'Error al procesar el documento' })
+    }
+  }
+)
+
+// ========================================
+// NOTA DE CRÉDITO - Cloud Function independiente
+// ========================================
+
+/**
+ * Cloud Function: Enviar Nota de Crédito a SUNAT
+ *
+ * Función INDEPENDIENTE de sendInvoiceToSunat para no afectar
+ * el flujo existente de facturas y boletas.
+ *
+ * Esta función:
+ * 1. Obtiene los datos de la nota de crédito de Firestore
+ * 2. Obtiene la configuración del usuario (QPse o SUNAT directo)
+ * 3. Genera el XML específico para Nota de Crédito (UBL 2.1)
+ * 4. Firma y envía a SUNAT
+ * 5. Actualiza el estado en Firestore
+ */
+export const sendCreditNoteToSunat = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async (req, res) => {
+    // Manejar preflight OPTIONS request
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    // Solo aceptar POST
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Obtener y verificar token de autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      // Obtener datos del body
+      const { userId, creditNoteId } = req.body
+
+      // Validar parámetros
+      if (!userId || !creditNoteId) {
+        res.status(400).json({ error: 'userId y creditNoteId son requeridos' })
+        return
+      }
+
+      // Verificar autorización: debe ser el owner O un usuario secundario del owner
+      if (authenticatedUserId !== userId) {
+        try {
+          const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+
+          if (!userDoc.exists) {
+            res.status(403).json({ error: 'Usuario no encontrado' })
+            return
+          }
+
+          const userData = userDoc.data()
+
+          if (userData.ownerId !== userId) {
+            res.status(403).json({
+              error: 'No autorizado para esta operación. Usuario no pertenece a este negocio.'
+            })
+            return
+          }
+
+          if (!userData.isActive) {
+            res.status(403).json({ error: 'Usuario inactivo' })
+            return
+          }
+
+          console.log(`✅ Sub-usuario autorizado: ${authenticatedUserId} del owner: ${userId}`)
+        } catch (error) {
+          console.error('Error al verificar sub-usuario:', error)
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`📤 Iniciando envío de NOTA DE CRÉDITO a SUNAT - Usuario: ${userId}, NC: ${creditNoteId}`)
+
+      // 1. Obtener datos de la nota de crédito
+      const creditNoteRef = db.collection('businesses').doc(userId).collection('invoices').doc(creditNoteId)
+      const creditNoteDoc = await creditNoteRef.get()
+
+      if (!creditNoteDoc.exists) {
+        res.status(404).json({ error: 'Nota de crédito no encontrada' })
+        return
+      }
+
+      const creditNoteData = creditNoteDoc.data()
+
+      // Validar que sea nota de crédito
+      if (creditNoteData.documentType !== 'nota_credito') {
+        res.status(400).json({ error: 'El documento no es una nota de crédito' })
+        return
+      }
+
+      // Validar estado: permitir envío si está pendiente, rechazada o firmada
+      const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
+      if (!allowedStatuses.includes(creditNoteData.sunatStatus)) {
+        res.status(400).json({
+          error: `La nota de crédito ya fue aceptada por SUNAT. Estado actual: ${creditNoteData.sunatStatus}`
+        })
+        return
+      }
+
+      // Log si es un reenvío
+      if (creditNoteData.sunatStatus === 'rejected') {
+        console.log(`🔄 Reenviando nota de crédito rechazada`)
+      } else if (creditNoteData.sunatStatus === 'signed' || creditNoteData.sunatStatus === 'SIGNED') {
+        console.log(`🔄 Reenviando NC firmada que no llegó a SUNAT`)
+      }
+
+      // 2. Obtener configuración del negocio
+      const businessRef = db.collection('businesses').doc(userId)
+      const businessDoc = await businessRef.get()
+
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Configuración de empresa no encontrada' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      // Mapear emissionConfig (configurado por super admin) al formato esperado
+      if (businessData.emissionConfig) {
+        console.log('📋 Usando configuración de emisión del admin')
+        const config = businessData.emissionConfig
+
+        if (config.method === 'qpse') {
+          businessData.qpse = {
+            enabled: config.qpse.enabled !== false,
+            usuario: config.qpse.usuario,
+            password: config.qpse.password,
+            environment: config.qpse.environment || 'demo',
+            firmasDisponibles: config.qpse.firmasDisponibles || 0,
+            firmasUsadas: config.qpse.firmasUsadas || 0
+          }
+          businessData.sunat = { enabled: false }
+          businessData.nubefact = { enabled: false }
+        } else if (config.method === 'sunat_direct') {
+          businessData.sunat = {
+            enabled: config.sunat.enabled !== false,
+            environment: config.sunat.environment || 'beta',
+            solUser: config.sunat.solUser,
+            solPassword: config.sunat.solPassword,
+            certificateName: config.sunat.certificateName,
+            certificatePassword: config.sunat.certificatePassword,
+            certificateData: config.sunat.certificateData,
+            homologated: config.sunat.homologated || false
+          }
+          businessData.qpse = { enabled: false }
+          businessData.nubefact = { enabled: false }
+        }
+      }
+
+      // Validar que al menos un método esté habilitado
+      const sunatEnabled = businessData.sunat?.enabled === true
+      const qpseEnabled = businessData.qpse?.enabled === true
+
+      if (!sunatEnabled && !qpseEnabled) {
+        res.status(400).json({
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse.'
+        })
+        return
+      }
+
+      console.log(`🏢 Empresa: ${businessData.businessName} - RUC: ${businessData.ruc}`)
+
+      // 3. Verificar límite de documentos del plan (solo si no es reenvío)
+      if (creditNoteData.sunatStatus === 'pending') {
+        try {
+          const subscriptionRef = db.collection('subscriptions').doc(userId)
+          const subscriptionDoc = await subscriptionRef.get()
+
+          if (subscriptionDoc.exists) {
+            const subscription = subscriptionDoc.data()
+            const currentUsage = subscription.usage?.invoicesThisMonth || 0
+            const maxInvoices = subscription.limits?.maxInvoicesPerMonth || -1
+
+            if (maxInvoices !== -1 && currentUsage >= maxInvoices) {
+              console.log(`🚫 Límite de documentos alcanzado: ${currentUsage}/${maxInvoices}`)
+
+              await creditNoteRef.update({
+                sunatStatus: 'rejected',
+                sunatResponse: {
+                  code: 'LIMIT_EXCEEDED',
+                  description: `Límite de ${maxInvoices} comprobantes por mes alcanzado. Actual: ${currentUsage}`,
+                  observations: ['Actualiza tu plan para emitir más comprobantes'],
+                  error: true,
+                  method: 'validation'
+                },
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+
+              res.status(400).json({
+                error: `Límite de ${maxInvoices} comprobantes por mes alcanzado`,
+                currentUsage,
+                maxInvoices,
+                message: 'Actualiza tu plan para emitir más comprobantes'
+              })
+              return
+            }
+
+            console.log(`✅ Límite OK: ${currentUsage}/${maxInvoices === -1 ? '∞' : maxInvoices}`)
+          }
+        } catch (limitError) {
+          console.error('⚠️ Error al verificar límite (continuando):', limitError)
+        }
+      }
+
+      // 4. Emitir nota de crédito usando la función específica
+      console.log('📨 Emitiendo Nota de Crédito electrónica...')
+
+      const emissionResult = await emitirNotaCredito(creditNoteData, businessData)
+
+      console.log(`✅ Resultado: ${emissionResult.success ? 'ÉXITO' : 'FALLO'}`)
+      console.log(`📡 Método usado: ${emissionResult.method}`)
+
+      if (!emissionResult.success) {
+        // Actualizar NC con error
+        await creditNoteRef.update({
+          sunatStatus: 'rejected',
+          sunatResponse: {
+            code: 'ERROR',
+            description: emissionResult.error || 'Error al emitir nota de crédito',
+            observations: [],
+            error: true,
+            method: emissionResult.method
+          },
+          sunatSentAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        res.status(500).json({
+          error: emissionResult.error || 'Error al emitir nota de crédito',
+          method: emissionResult.method
+        })
+        return
+      }
+
+      // 5. Actualizar estado en Firestore
+      const isPendingManual = emissionResult.pendingManual === true
+      const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
+
+      // Normalizar observations
+      let observations = []
+      if (Array.isArray(emissionResult.notes)) {
+        observations = emissionResult.notes.map(note =>
+          typeof note === 'string' ? note : JSON.stringify(note)
+        )
+      } else if (emissionResult.notes) {
+        observations = [String(emissionResult.notes)]
+      }
+
+      const sunatResponseBase = {
+        code: emissionResult.responseCode || '',
+        description: emissionResult.description || '',
+        observations: observations,
+        method: emissionResult.method,
+        pendingManual: isPendingManual
+      }
+
+      // Agregar datos específicos según el método
+      let methodSpecificData = {}
+      if (emissionResult.method === 'qpse') {
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl,
+          ticket: emissionResult.ticket,
+          hash: emissionResult.hash,
+          nombreArchivo: emissionResult.nombreArchivo
+        }))
+      } else if (emissionResult.method === 'sunat_direct') {
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
+          cdrData: emissionResult.cdrData
+        }))
+      }
+
+      const updateData = {
+        sunatStatus: finalStatus,
+        sunatResponse: sanitizeForFirestore({
+          ...sunatResponseBase,
+          ...methodSpecificData
+        }),
+        sunatSentAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      // Si fue aceptada, cambiar status a 'applied' (no 'pending')
+      if (emissionResult.accepted === true) {
+        updateData.status = 'applied'
+      }
+
+      await creditNoteRef.update(updateData)
+      console.log(`💾 Estado de NC actualizado en Firestore`)
+
+      // 6. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO
+      if (emissionResult.accepted === true) {
+        try {
+          const subscriptionRef = db.collection('subscriptions').doc(userId)
+          await subscriptionRef.update({
+            'usage.invoicesThisMonth': FieldValue.increment(1)
+          })
+          console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+        } catch (counterError) {
+          console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
+        }
+
+        // 7. Actualizar el documento original (boleta/factura) como anulado o con devolución parcial
+        try {
+          // Buscar el documento original por su número (referencedDocumentId)
+          const referencedDocId = creditNoteData.referencedDocumentId // Ej: "B001-00000001"
+          const referencedFirestoreId = creditNoteData.referencedInvoiceFirestoreId // ID de Firestore
+
+          if (referencedFirestoreId) {
+            const originalDocRef = db.collection('businesses').doc(userId).collection('invoices').doc(referencedFirestoreId)
+            const originalDoc = await originalDocRef.get()
+
+            if (originalDoc.exists) {
+              const originalData = originalDoc.data()
+              const originalTotal = originalData.total || 0
+              const ncTotal = creditNoteData.total || 0
+
+              // Determinar si es anulación total o parcial
+              // Tolerancia de 0.01 para errores de redondeo
+              const isFullCancellation = Math.abs(originalTotal - ncTotal) < 0.01
+
+              const newStatus = isFullCancellation ? 'cancelled' : 'partial_refund'
+
+              await originalDocRef.update({
+                status: newStatus,
+                creditNoteId: creditNoteId,
+                creditNoteNumber: creditNoteData.number,
+                creditNoteTotal: ncTotal,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+
+              console.log(`📝 Documento original ${referencedDocId} actualizado a '${newStatus}'`)
+            } else {
+              console.log(`⚠️ No se encontró el documento original con ID: ${referencedFirestoreId}`)
+            }
+          } else {
+            console.log(`⚠️ No hay referencedInvoiceFirestoreId en la NC`)
+          }
+        } catch (updateOriginalError) {
+          console.error('⚠️ Error al actualizar documento original (no crítico):', updateOriginalError)
+          // No fallar la operación si esto falla
+        }
+      } else {
+        console.log(`⏭️ NC rechazada - No se incrementa el contador`)
+      }
+
+      res.status(200).json({
+        success: true,
+        status: emissionResult.accepted ? 'accepted' : 'rejected',
+        message: emissionResult.description,
+        method: emissionResult.method,
+        ...(emissionResult.method === 'qpse' && {
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl
+        })
+      })
+
+    } catch (error) {
+      console.error('❌ Error general:', error)
+      res.status(500).json({ error: error.message || 'Error al procesar la nota de crédito' })
     }
   }
 )

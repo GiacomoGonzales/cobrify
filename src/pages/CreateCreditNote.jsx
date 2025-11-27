@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, getDocumentSeries } from '@/services/firestoreService'
+import { getInvoices, createInvoice, getDocumentSeries, updateDocumentSeries } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 
 // Catálogo 09 - Tipos de nota de crédito SUNAT
@@ -125,11 +125,22 @@ export default function CreateCreditNote() {
 
   const calculateTotals = () => {
     const selectedItems = formData.items.filter(item => item.selected)
-    const subtotal = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
-    const igv = subtotal * 0.18
-    const total = subtotal + igv
 
-    return { subtotal, igv, total }
+    // item.subtotal YA INCLUYE IGV (es el precio final que pagó el cliente)
+    const totalConIgv = selectedItems.reduce((sum, item) => sum + item.subtotal, 0)
+
+    // Usar la tasa IGV del documento original (si está exonerado, IGV = 0)
+    const igvRate = selectedInvoice?.taxConfig?.igvRate ?? 18
+    const igvExempt = selectedInvoice?.taxConfig?.igvExempt ?? false
+
+    // Extraer el IGV del total (no sumarlo)
+    // Total = Subtotal + IGV = Subtotal * (1 + igvRate/100)
+    // Subtotal = Total / (1 + igvRate/100)
+    const subtotal = igvExempt ? totalConIgv : totalConIgv / (1 + igvRate / 100)
+    const igv = igvExempt ? 0 : totalConIgv - subtotal
+    const total = totalConIgv // El total es lo que el cliente pagó
+
+    return { subtotal, igv, total, igvRate, igvExempt }
   }
 
   const handleSubmit = async (e) => {
@@ -166,7 +177,7 @@ export default function CreateCreditNote() {
     setIsSaving(true)
 
     try {
-      const { subtotal, igv, total } = calculateTotals()
+      const { subtotal, igv, total, igvRate, igvExempt } = calculateTotals()
       const nextNumber = series[seriesKey].lastNumber + 1
       const creditNoteSeries = series[seriesKey].serie
       const creditNoteNumber = `${creditNoteSeries}-${String(nextNumber).padStart(8, '0')}`
@@ -180,6 +191,7 @@ export default function CreateCreditNote() {
         // Referencia al documento modificado
         referencedDocumentId: selectedInvoice.number,
         referencedDocumentType: selectedInvoice.documentType === 'factura' ? '01' : '03',
+        referencedInvoiceFirestoreId: selectedInvoice.id, // ID de Firestore para referencia
 
         // Motivo
         discrepancyCode: formData.discrepancyCode,
@@ -200,6 +212,13 @@ export default function CreateCreditNote() {
         total,
         currency: selectedInvoice.currency || 'PEN',
 
+        // Configuración de impuestos (heredada del documento original)
+        taxConfig: {
+          igvRate: igvRate,
+          igvExempt: igvExempt,
+          exemptionReason: selectedInvoice?.taxConfig?.exemptionReason || ''
+        },
+
         // Estado
         status: 'pending',
         sunatStatus: 'pending',
@@ -217,8 +236,18 @@ export default function CreateCreditNote() {
       const result = await createInvoice(user.uid, creditNoteData)
 
       if (result.success) {
+        // Incrementar el número de serie después de crear exitosamente
+        const updatedSeries = {
+          ...series,
+          [seriesKey]: {
+            ...series[seriesKey],
+            lastNumber: nextNumber
+          }
+        }
+        await updateDocumentSeries(user.uid, updatedSeries)
+
         setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente' })
-        setTimeout(() => navigate('/facturas'), 2000)
+        setTimeout(() => navigate('/app/facturas'), 2000)
       } else {
         throw new Error(result.error)
       }
