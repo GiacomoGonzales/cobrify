@@ -6,7 +6,8 @@ import {
   sendPasswordResetEmail,
   updateProfile,
 } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from '@/lib/firebase'
 import { createSubscription } from './subscriptionService'
 import { setAsBusinessOwner } from './adminService'
 
@@ -33,9 +34,9 @@ export const loginWithEmail = async (email, password) => {
 }
 
 /**
- * Registrar nuevo usuario
+ * Registrar nuevo usuario con datos del negocio
  */
-export const registerUser = async (email, password, displayName) => {
+export const registerUser = async (email, password, displayName, businessData = null) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
 
@@ -51,6 +52,31 @@ export const registerUser = async (email, password, displayName) => {
     } catch (ownerError) {
       console.error('Error al marcar como business owner:', ownerError)
       // Continuar aunque falle
+    }
+
+    // Guardar datos del negocio si se proporcionaron
+    if (businessData) {
+      try {
+        const businessRef = doc(db, 'businesses', userCredential.user.uid)
+        await setDoc(businessRef, {
+          ruc: businessData.ruc || '',
+          businessName: businessData.businessName || '',
+          name: businessData.tradeName || businessData.businessName || '',
+          phone: businessData.phone || '',
+          email: email,
+          address: businessData.address || '',
+          district: businessData.district || '',
+          province: businessData.province || '',
+          department: businessData.department || '',
+          ubigeo: businessData.ubigeo || '',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
+        console.log('✅ Datos del negocio guardados')
+      } catch (businessError) {
+        console.error('Error al guardar datos del negocio:', businessError)
+        // Continuar aunque falle
+      }
     }
 
     // Crear suscripción de prueba de 1 día automáticamente
