@@ -105,7 +105,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
       return date.toISOString().split('T')[0]
     }
-    const fecha = formatDateISO(invoice.createdAt)
+    // Usar issueDate si existe, sino createdAt
+    const fecha = formatDateISO(invoice.issueDate || invoice.createdAt)
 
     // Tipo de documento del cliente (6=RUC, 1=DNI, 4=Carnet Extranjería, 7=Pasaporte, -=Sin documento)
     const getClientDocType = () => {
@@ -542,11 +543,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <div className="ticket-section">
         <div className="info-row">
           <span className="info-label">Fecha:</span>
-          <span>{formatDate(invoice.createdAt)}</span>
+          <span>{formatDate(invoice.issueDate || invoice.createdAt)}</span>
         </div>
         <div className="info-row">
           <span className="info-label">Hora:</span>
-          <span>{formatTime(invoice.createdAt)}</span>
+          <span>{formatTime(invoice.issueDate || invoice.createdAt)}</span>
         </div>
       </div>
 

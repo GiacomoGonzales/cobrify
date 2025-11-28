@@ -186,13 +186,15 @@ const generateSunatQR = async (invoice, companySettings) => {
                          invoice.customer?.documentType === 'DNI' ? '1' : '0'
     const clientDocNumber = invoice.customer?.documentNumber || '-'
 
+    // Usar issueDate si existe, sino createdAt
+    const dateSource = invoice.issueDate || invoice.createdAt
     let invoiceDate = new Date().toLocaleDateString('es-PE')
-    if (invoice.createdAt) {
-      if (invoice.createdAt.toDate) {
-        const date = invoice.createdAt.toDate()
+    if (dateSource) {
+      if (dateSource.toDate) {
+        const date = dateSource.toDate()
         invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
-      } else if (invoice.createdAt instanceof Date) {
-        invoiceDate = `${String(invoice.createdAt.getDate()).padStart(2, '0')}/${String(invoice.createdAt.getMonth() + 1).padStart(2, '0')}/${invoice.createdAt.getFullYear()}`
+      } else if (dateSource instanceof Date) {
+        invoiceDate = `${String(dateSource.getDate()).padStart(2, '0')}/${String(dateSource.getMonth() + 1).padStart(2, '0')}/${dateSource.getFullYear()}`
       }
     }
 
@@ -522,13 +524,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(9)
   doc.setTextColor(...DARK_GRAY)
 
+  // Usar issueDate si existe, sino createdAt
+  const pdfDateSource = invoice.issueDate || invoice.createdAt
   let invoiceDate = new Date().toLocaleDateString('es-PE')
-  if (invoice.createdAt) {
-    if (invoice.createdAt.toDate) {
-      const date = invoice.createdAt.toDate()
+  if (pdfDateSource) {
+    if (pdfDateSource.toDate) {
+      const date = pdfDateSource.toDate()
       invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
-    } else if (invoice.createdAt instanceof Date) {
-      const date = invoice.createdAt
+    } else if (pdfDateSource instanceof Date) {
+      const date = pdfDateSource
       invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
     }
   }
