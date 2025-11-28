@@ -47,7 +47,8 @@ export const generateProductsExcel = (products, categories, businessData) => {
 
   // Encabezados de la tabla
   productData.push([
-    'Código',
+    'SKU',
+    'Código de Barras',
     'Nombre',
     'Categoría',
     'Descripción',
@@ -80,7 +81,8 @@ export const generateProductsExcel = (products, categories, businessData) => {
     }
 
     productData.push([
-      product.code || 'N/A',
+      product.sku || '',
+      product.code || '',
       product.name || 'N/A',
       getCategoryHierarchy(product.category),
       product.description || '',
@@ -112,7 +114,8 @@ export const generateProductsExcel = (products, categories, businessData) => {
 
   // Configurar anchos de columna
   worksheet['!cols'] = [
-    { width: 15 },  // Código
+    { width: 15 },  // SKU
+    { width: 18 },  // Código de Barras
     { width: 30 },  // Nombre
     { width: 25 },  // Categoría
     { width: 35 },  // Descripción

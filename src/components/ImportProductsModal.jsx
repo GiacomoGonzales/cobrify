@@ -78,12 +78,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     data.forEach((row, index) => {
       const rowNum = index + 2 // +2 porque Excel empieza en 1 y tiene header
 
-      // Validar campos requeridos
-      if (!row.codigo && !row.Codigo && !row.CODIGO && !row.code && !row.Code && !row.CODE) {
-        errors.push(`Fila ${rowNum}: Falta el código del producto`)
-        return
-      }
-
+      // Validar campos requeridos (solo nombre y precio son obligatorios)
       if (!row.nombre && !row.Nombre && !row.NOMBRE && !row.name && !row.Name && !row.NAME) {
         errors.push(`Fila ${rowNum}: Falta el nombre del producto`)
         return
@@ -107,8 +102,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       }
 
       // Mapear campos (soportar diferentes nombres de columnas)
+      // SKU / Código interno (nuevo campo)
+      const sku = String(row.sku || row.SKU || row.Sku || row.codigo_interno || row.Codigo_Interno || row.CODIGO_INTERNO || row.codigoInterno || row.CodigoInterno || '').trim()
+
+      // Código de barras (campo existente, ahora opcional)
+      const code = String(row.codigo_barras || row.Codigo_Barras || row.CODIGO_BARRAS || row.codigoBarras || row.CodigoBarras || row.barcode || row.Barcode || row.BARCODE || row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim()
+
       const product = {
-        code: String(row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || '').trim(),
+        sku: sku,
+        code: code,
         name: String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || '').trim(),
         description: String(row.descripcion || row.Descripcion || row.DESCRIPCION || row.description || row.Description || row.DESCRIPTION || '').trim(),
         cost: row.costo || row.Costo || row.COSTO || row.cost || row.Cost || row.COST || row.valor_unitario || row.valor_Unitario || row.VALOR_UNITARIO || row.precio_unitario || row.Precio_Unitario || row.PRECIO_UNITARIO || null,
@@ -204,10 +206,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
   }
 
   const downloadTemplate = () => {
-    // Crear plantilla de ejemplo
+    // Crear plantilla de ejemplo con SKU y código de barras
     const template = [
       {
-        codigo: 'PROD001',
+        sku: 'SKU-001',
+        codigo_barras: '7501234567890',
         nombre: 'Producto con Stock',
         descripcion: 'Descripción del producto',
         costo: 8.50,
@@ -219,7 +222,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         almacen: 'Almacén Principal'
       },
       {
-        codigo: 'PROD002',
+        sku: 'SKU-002',
+        codigo_barras: '',
         nombre: 'Servicio (Sin Stock)',
         descripcion: 'No controla inventario',
         costo: 20.00,
@@ -231,9 +235,10 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         almacen: ''
       },
       {
-        codigo: 'PROD003',
-        nombre: 'Producto Normal',
-        descripcion: '',
+        sku: '',
+        codigo_barras: '7509876543210',
+        nombre: 'Producto Solo con Barras',
+        descripcion: 'Sin código interno',
         costo: 12.00,
         precio: 15.00,
         stock: 50,
@@ -250,7 +255,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
 
     // Ajustar anchos de columna
     ws['!cols'] = [
-      { wch: 12 }, // codigo
+      { wch: 15 }, // sku
+      { wch: 18 }, // codigo_barras
       { wch: 30 }, // nombre
       { wch: 40 }, // descripcion
       { wch: 10 }, // costo
@@ -294,7 +300,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: codigo, nombre, descripcion, costo, precio, stock, trackStock (SI/NO), unidad, categoria, almacen
+            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, stock, trackStock (SI/NO), unidad, categoria, almacen
           </p>
         </div>
 
@@ -363,18 +369,19 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Código</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Cód. Barras</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nombre</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Precio</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stock</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Control Stock</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Unidad</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Control</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {previewData.slice(0, 50).map((product, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm text-gray-900">{product.code}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{product.sku || '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{product.code || '-'}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">{product.name}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">S/ {product.price.toFixed(2)}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{product.stock ?? 'N/A'}</td>
@@ -385,7 +392,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
                           <span className="text-gray-400">NO</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{product.unit}</td>
                     </tr>
                   ))}
                 </tbody>
