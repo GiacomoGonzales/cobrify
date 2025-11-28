@@ -128,14 +128,14 @@ export default function Reports() {
 
     // Primero filtrar facturas para evitar duplicados:
     // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
-    // - Excluir notas de venta anuladas
+    // - Excluir documentos anulados (notas de venta, boletas, facturas)
     const validInvoices = invoices.filter(invoice => {
       // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
       if (invoice.convertedFrom) {
         return false
       }
-      // Si es una nota de venta anulada, no contar
-      if (invoice.documentType === 'nota_venta' && invoice.status === 'voided') {
+      // Si el documento está anulado, no contar
+      if (invoice.status === 'cancelled' || invoice.status === 'voided') {
         return false
       }
       return true

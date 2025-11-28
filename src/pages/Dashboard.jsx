@@ -131,14 +131,14 @@ export default function Dashboard() {
 
   // Filtrar facturas válidas para cálculos de ventas:
   // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
-  // - Excluir notas de venta anuladas
+  // - Excluir documentos anulados (notas de venta, boletas, facturas)
   const validInvoicesForSales = invoices.filter(inv => {
     // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
     if (inv.convertedFrom) {
       return false
     }
-    // Si es una nota de venta anulada, no contar
-    if (inv.documentType === 'nota_venta' && inv.status === 'voided') {
+    // Si el documento está anulado, no contar
+    if (inv.status === 'cancelled' || inv.status === 'voided') {
       return false
     }
     return true

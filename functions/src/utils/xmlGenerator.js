@@ -639,11 +639,8 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     creditNoteData.customer.businessName || creditNoteData.customer.name
   )
 
-  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
-  // PaymentTerms debe ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
-  const paymentTermsCredit = root.ele('cac:PaymentTerms')
-  paymentTermsCredit.ele('cbc:ID').txt('FormaPago')
-  paymentTermsCredit.ele('cbc:PaymentMeansID').txt('Contado')
+  // NOTA: Las notas de crédito NO llevan PaymentTerms según UBL 2.1
+  // El nodo PaymentTerms es solo para facturas/boletas, no para documentos de ajuste
 
   // === DESCUENTO GLOBAL ===
   const creditDiscount = creditNoteData.discount || 0
@@ -968,11 +965,8 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     debitNoteData.customer.businessName || debitNoteData.customer.name
   )
 
-  // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
-  // PaymentTerms debe ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
-  const paymentTermsDebit = root.ele('cac:PaymentTerms')
-  paymentTermsDebit.ele('cbc:ID').txt('FormaPago')
-  paymentTermsDebit.ele('cbc:PaymentMeansID').txt('Contado')
+  // NOTA: Las notas de débito NO llevan PaymentTerms según UBL 2.1
+  // El nodo PaymentTerms es solo para facturas/boletas, no para documentos de ajuste
 
   // === DESCUENTO GLOBAL ===
   const debitDiscount = debitNoteData.discount || 0
