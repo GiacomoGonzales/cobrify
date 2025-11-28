@@ -126,6 +126,34 @@ export default function Reports() {
     const now = new Date()
     const filterDate = new Date()
 
+    // Primero filtrar facturas para evitar duplicados:
+    // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
+    // - Excluir notas de venta anuladas
+    const validInvoices = invoices.filter(invoice => {
+      // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
+      if (invoice.convertedFrom) {
+        return false
+      }
+      // Si es una nota de venta anulada, no contar
+      if (invoice.documentType === 'nota_venta' && invoice.status === 'voided') {
+        return false
+      }
+      return true
+    })
+
+    const addCostCalculations = (invoice) => {
+      let totalCost = 0
+      invoice.items?.forEach(item => {
+        totalCost += calculateItemCost(item)
+      })
+      return {
+        ...invoice,
+        totalCost,
+        profit: (invoice.total || 0) - totalCost,
+        profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
+      }
+    }
+
     switch (dateRange) {
       case 'week':
         filterDate.setDate(now.getDate() - 7)
@@ -140,35 +168,12 @@ export default function Reports() {
         filterDate.setFullYear(now.getFullYear() - 1)
         break
       case 'all':
-        return invoices.map(invoice => {
-          // Calcular costo total de la venta
-          let totalCost = 0
-          invoice.items?.forEach(item => {
-            totalCost += calculateItemCost(item)
-          })
-          return {
-            ...invoice,
-            totalCost,
-            profit: (invoice.total || 0) - totalCost,
-            profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
-          }
-        })
+        return validInvoices.map(addCostCalculations)
       default:
-        return invoices.map(invoice => {
-          let totalCost = 0
-          invoice.items?.forEach(item => {
-            totalCost += calculateItemCost(item)
-          })
-          return {
-            ...invoice,
-            totalCost,
-            profit: (invoice.total || 0) - totalCost,
-            profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
-          }
-        })
+        return validInvoices.map(addCostCalculations)
     }
 
-    return invoices
+    return validInvoices
       .filter(invoice => {
         if (!invoice.createdAt) return false
         const invoiceDate = invoice.createdAt.toDate
@@ -176,19 +181,7 @@ export default function Reports() {
           : new Date(invoice.createdAt)
         return invoiceDate >= filterDate
       })
-      .map(invoice => {
-        // Calcular costo total de la venta
-        let totalCost = 0
-        invoice.items?.forEach(item => {
-          totalCost += calculateItemCost(item)
-        })
-        return {
-          ...invoice,
-          totalCost,
-          profit: (invoice.total || 0) - totalCost,
-          profitMargin: invoice.total > 0 ? ((invoice.total - totalCost) / invoice.total) * 100 : 0
-        }
-      })
+      .map(addCostCalculations)
   }, [invoices, dateRange, calculateItemCost])
 
   // Función helper para calcular revenue del período anterior

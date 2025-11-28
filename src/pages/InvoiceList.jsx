@@ -24,6 +24,8 @@ import {
   FileSpreadsheet,
   Share2,
   Truck,
+  ArrowRightCircle,
+  Receipt,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -35,7 +37,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
+import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
@@ -79,9 +81,11 @@ export default function InvoiceList() {
   // Estados para exportación
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportFilters, setExportFilters] = useState({
-    type: 'all',
+    types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'], // Array de tipos seleccionados
+    sunatStatus: 'all', // 'all', 'accepted', 'pending', 'rejected', 'not_applicable'
     startDate: '',
     endDate: '',
+    excludeConverted: true, // Por defecto excluir boletas convertidas desde notas
   })
 
   // Estados para modal de guía de remisión
@@ -98,6 +102,15 @@ export default function InvoiceList() {
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [newPaymentAmount, setNewPaymentAmount] = useState('')
   const [newPaymentMethod, setNewPaymentMethod] = useState('Efectivo')
+
+  // Estados para conversión de Nota de Venta a Boleta
+  const [convertingInvoice, setConvertingInvoice] = useState(null)
+  const [isConverting, setIsConverting] = useState(false)
+  const [convertCustomerData, setConvertCustomerData] = useState({
+    name: '',
+    documentType: 'DNI',
+    documentNumber: '',
+  })
 
   // Estado para configuración de impresión web legible
   const [webPrintLegible, setWebPrintLegible] = useState(false)
@@ -343,6 +356,83 @@ ${companySettings?.website ? companySettings.website : ''}`
     }
   }
 
+  // Función para abrir modal de conversión
+  const handleOpenConvertModal = (invoice) => {
+    // Pre-llenar con datos del cliente de la nota de venta
+    setConvertCustomerData({
+      name: invoice.customer?.name || '',
+      documentType: invoice.customer?.documentType || 'DNI',
+      documentNumber: invoice.customer?.documentNumber || '',
+    })
+    setConvertingInvoice(invoice)
+  }
+
+  // Función para convertir Nota de Venta a Boleta
+  const handleConvertToBoleta = async () => {
+    if (!convertingInvoice || !user?.uid) return
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    // Validar que tenga DNI para boleta
+    if (!convertCustomerData.documentNumber || convertCustomerData.documentNumber.length < 8) {
+      toast.error('Debe ingresar un DNI válido (8 dígitos) para generar la boleta')
+      return
+    }
+
+    const businessId = getBusinessId()
+    setIsConverting(true)
+
+    try {
+      // Convertir la nota de venta a boleta
+      const result = await convertNotaVentaToBoleta(
+        businessId,
+        convertingInvoice.id,
+        convertCustomerData
+      )
+
+      if (result.success) {
+        toast.success(`Boleta ${result.boletaNumber} generada exitosamente`)
+
+        // Preguntar si desea enviar a SUNAT
+        const sendToSunat = window.confirm(
+          `La boleta ${result.boletaNumber} ha sido creada.\n\n¿Deseas enviarla a SUNAT ahora?`
+        )
+
+        if (sendToSunat) {
+          // Enviar a SUNAT
+          setSendingToSunat(result.boletaId)
+          try {
+            const sunatResult = await sendInvoiceToSunat(businessId, result.boletaId)
+            if (sunatResult.success) {
+              toast.success('Boleta enviada a SUNAT exitosamente')
+            } else {
+              toast.error('Error al enviar a SUNAT: ' + (sunatResult.error || 'Error desconocido'))
+            }
+          } catch (sunatError) {
+            console.error('Error al enviar a SUNAT:', sunatError)
+            toast.error('Error al enviar a SUNAT. Puedes reintentarlo más tarde.')
+          } finally {
+            setSendingToSunat(null)
+          }
+        }
+
+        // Cerrar modal y recargar lista
+        setConvertingInvoice(null)
+        setViewingInvoice(null)
+        loadInvoices()
+      } else {
+        toast.error('Error: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al convertir nota de venta:', error)
+      toast.error('Error al convertir la nota de venta')
+    } finally {
+      setIsConverting(false)
+    }
+  }
+
   const handleRegisterPayment = async () => {
     if (!paymentInvoice || !user?.uid) return
     if (isDemoMode) {
@@ -416,9 +506,32 @@ ${companySettings?.website ? companySettings.website : ''}`
       // Filtrar facturas según los criterios seleccionados
       let filteredInvoices = [...invoices];
 
-      // Filtrar por tipo
-      if (exportFilters.type && exportFilters.type !== 'all') {
-        filteredInvoices = filteredInvoices.filter(inv => inv.type === exportFilters.type);
+      // Filtrar por tipos seleccionados (array)
+      if (exportFilters.types && exportFilters.types.length > 0) {
+        filteredInvoices = filteredInvoices.filter(inv => exportFilters.types.includes(inv.documentType));
+      }
+
+      // Filtrar por estado SUNAT
+      if (exportFilters.sunatStatus && exportFilters.sunatStatus !== 'all') {
+        filteredInvoices = filteredInvoices.filter(inv => {
+          const status = inv.sunatStatus || 'pending';
+          // Las notas de venta no se envían a SUNAT
+          if (inv.documentType === 'nota_venta') {
+            return exportFilters.sunatStatus === 'not_applicable';
+          }
+          return status === exportFilters.sunatStatus;
+        });
+      }
+
+      // Excluir boletas convertidas desde notas de venta (si está activado)
+      if (exportFilters.excludeConverted) {
+        filteredInvoices = filteredInvoices.filter(inv => {
+          // Excluir boletas que fueron convertidas desde nota de venta
+          if (inv.convertedFrom) return false;
+          // Excluir notas de venta que ya fueron convertidas a boleta
+          if (inv.documentType === 'nota_venta' && inv.convertedTo) return false;
+          return true;
+        });
       }
 
       // Filtrar por rango de fechas
@@ -427,7 +540,7 @@ ${companySettings?.website ? companySettings.website : ''}`
         const [year, month, day] = exportFilters.startDate.split('-').map(Number);
         const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         filteredInvoices = filteredInvoices.filter(inv => {
-          const invDate = inv.createdAt?.toDate();
+          const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt);
           return invDate && invDate >= startDate;
         });
       }
@@ -437,7 +550,7 @@ ${companySettings?.website ? companySettings.website : ''}`
         const [year, month, day] = exportFilters.endDate.split('-').map(Number);
         const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
         filteredInvoices = filteredInvoices.filter(inv => {
-          const invDate = inv.createdAt?.toDate();
+          const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt);
           return invDate && invDate <= endDate;
         });
       }
@@ -892,7 +1005,23 @@ ${companySettings?.website ? companySettings.website : ''}`
                       </span>
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
-                      <span className="text-sm whitespace-nowrap">{getDocumentTypeName(invoice.documentType)}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm whitespace-nowrap">{getDocumentTypeName(invoice.documentType)}</span>
+                        {/* Indicador de nota convertida */}
+                        {invoice.convertedTo && (
+                          <span className="text-xs text-green-600 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Convertida
+                          </span>
+                        )}
+                        {/* Indicador de boleta desde nota */}
+                        {invoice.convertedFrom && (
+                          <span className="text-xs text-blue-600 flex items-center gap-1">
+                            <ArrowRightCircle className="w-3 h-3" />
+                            Desde nota
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <div className="max-w-[140px]">
@@ -1456,6 +1585,40 @@ ${companySettings?.website ? companySettings.website : ''}`
               </div>
             )}
 
+            {/* Mostrar info de conversión si ya fue convertida */}
+            {viewingInvoice.convertedTo && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-green-900">
+                      Esta nota fue convertida a Boleta
+                    </p>
+                    <p className="text-sm text-green-800">
+                      Boleta: <strong>{viewingInvoice.convertedTo.number}</strong>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mostrar info de origen si es una boleta convertida desde nota */}
+            {viewingInvoice.convertedFrom && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <ArrowRightCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-blue-900">
+                      Este comprobante fue generado desde una Nota de Venta
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      Nota de Venta: <strong>{viewingInvoice.convertedFrom.number}</strong>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setViewingInvoice(null)}>
@@ -1509,6 +1672,130 @@ ${companySettings?.website ? companySettings.website : ''}`
               >
                 <Download className="w-4 h-4 mr-2" />
                 PDF
+              </Button>
+              {/* Botón Convertir a Boleta - Solo para Notas de Venta no convertidas y no anuladas */}
+              {viewingInvoice.documentType === 'nota_venta' &&
+               !viewingInvoice.convertedTo &&
+               viewingInvoice.status !== 'voided' && (
+                <Button
+                  variant="success"
+                  onClick={() => handleOpenConvertModal(viewingInvoice)}
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Convertir a Boleta
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de Conversión de Nota de Venta a Boleta */}
+      <Modal
+        isOpen={!!convertingInvoice}
+        onClose={() => !isConverting && setConvertingInvoice(null)}
+        title="Convertir Nota de Venta a Boleta"
+        size="md"
+      >
+        {convertingInvoice && (
+          <div className="space-y-6">
+            {/* Info de la nota de venta */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Nota de Venta</p>
+                  <p className="font-semibold">{convertingInvoice.number}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Total</p>
+                  <p className="font-semibold text-lg">{formatCurrency(convertingInvoice.total)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Aviso importante */}
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-800">
+                  <p className="font-medium mb-1">Importante:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Se generará una <strong>Boleta electrónica</strong> que se enviará a SUNAT</li>
+                    <li>El stock <strong>NO</strong> se descontará nuevamente</li>
+                    <li>La nota de venta quedará marcada como convertida</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Datos del cliente */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-gray-900">Datos del Cliente para la Boleta</h4>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre / Razón Social
+                </label>
+                <Input
+                  value={convertCustomerData.name}
+                  onChange={e => setConvertCustomerData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Documento
+                  </label>
+                  <Select
+                    value={convertCustomerData.documentType}
+                    onChange={e => setConvertCustomerData(prev => ({ ...prev, documentType: e.target.value }))}
+                  >
+                    <option value="DNI">DNI</option>
+                    <option value="CE">Carnet de Extranjería</option>
+                    <option value="PASAPORTE">Pasaporte</option>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Número de Documento *
+                  </label>
+                  <Input
+                    value={convertCustomerData.documentNumber}
+                    onChange={e => setConvertCustomerData(prev => ({ ...prev, documentNumber: e.target.value }))}
+                    placeholder="Ej: 12345678"
+                    maxLength={convertCustomerData.documentType === 'DNI' ? 8 : 12}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setConvertingInvoice(null)}
+                disabled={isConverting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="success"
+                onClick={handleConvertToBoleta}
+                disabled={isConverting || !convertCustomerData.documentNumber}
+              >
+                {isConverting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Convirtiendo...
+                  </>
+                ) : (
+                  <>
+                    <Receipt className="w-4 h-4 mr-2" />
+                    Generar Boleta
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -1768,21 +2055,155 @@ ${companySettings?.website ? companySettings.website : ''}`
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Selecciona los filtros para exportar tus comprobantes a Excel
+            Selecciona los tipos de comprobantes y el rango de fechas para exportar
           </p>
 
-          <Select
-            label="Tipo de Comprobante"
-            value={exportFilters.type}
-            onChange={(e) => setExportFilters({ ...exportFilters, type: e.target.value })}
-          >
-            <option value="all">Todos los tipos</option>
-            <option value="factura">Solo Facturas</option>
-            <option value="boleta">Solo Boletas</option>
-            <option value="nota-credito">Solo Notas de Crédito</option>
-            <option value="nota-debito">Solo Notas de Débito</option>
-          </Select>
+          {/* Checkboxes de tipos de comprobante */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tipos de Comprobante
+            </label>
+            <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
+              {/* Seleccionar/Deseleccionar todos */}
+              <label className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                <input
+                  type="checkbox"
+                  checked={exportFilters.types.length === 5}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setExportFilters({ ...exportFilters, types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'] })
+                    } else {
+                      setExportFilters({ ...exportFilters, types: [] })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Seleccionar todos</span>
+              </label>
 
+              {/* Facturas */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportFilters.types.includes('factura')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setExportFilters({ ...exportFilters, types: [...exportFilters.types, 'factura'] })
+                    } else {
+                      setExportFilters({ ...exportFilters, types: exportFilters.types.filter(t => t !== 'factura') })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Facturas</span>
+              </label>
+
+              {/* Boletas */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportFilters.types.includes('boleta')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setExportFilters({ ...exportFilters, types: [...exportFilters.types, 'boleta'] })
+                    } else {
+                      setExportFilters({ ...exportFilters, types: exportFilters.types.filter(t => t !== 'boleta') })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Boletas</span>
+              </label>
+
+              {/* Notas de Venta */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportFilters.types.includes('nota_venta')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setExportFilters({ ...exportFilters, types: [...exportFilters.types, 'nota_venta'] })
+                    } else {
+                      setExportFilters({ ...exportFilters, types: exportFilters.types.filter(t => t !== 'nota_venta') })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Notas de Venta</span>
+              </label>
+
+              {/* Notas de Crédito */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportFilters.types.includes('nota_credito')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setExportFilters({ ...exportFilters, types: [...exportFilters.types, 'nota_credito'] })
+                    } else {
+                      setExportFilters({ ...exportFilters, types: exportFilters.types.filter(t => t !== 'nota_credito') })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Notas de Crédito</span>
+              </label>
+
+              {/* Notas de Débito */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={exportFilters.types.includes('nota_debito')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setExportFilters({ ...exportFilters, types: [...exportFilters.types, 'nota_debito'] })
+                    } else {
+                      setExportFilters({ ...exportFilters, types: exportFilters.types.filter(t => t !== 'nota_debito') })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Notas de Débito</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Filtro de estado SUNAT */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Estado SUNAT
+            </label>
+            <Select
+              value={exportFilters.sunatStatus}
+              onChange={(e) => setExportFilters({ ...exportFilters, sunatStatus: e.target.value })}
+            >
+              <option value="all">Todos los estados</option>
+              <option value="accepted">Aceptados por SUNAT</option>
+              <option value="pending">Pendientes de envío</option>
+              <option value="rejected">Rechazados por SUNAT</option>
+              <option value="not_applicable">No aplica (Notas de Venta)</option>
+            </Select>
+          </div>
+
+          {/* Opción para excluir documentos convertidos */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={exportFilters.excludeConverted}
+                onChange={(e) => setExportFilters({ ...exportFilters, excludeConverted: e.target.checked })}
+                className="w-4 h-4 mt-0.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-amber-800">Evitar duplicados por conversión</span>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Excluye las boletas generadas desde notas de venta y las notas ya convertidas para evitar contar ventas dobles.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Rango de fechas */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               type="date"
@@ -1800,7 +2221,7 @@ ${companySettings?.website ? companySettings.website : ''}`
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-800">
-              <strong>Nota:</strong> Si no seleccionas fechas, se exportarán todos los comprobantes del tipo seleccionado.
+              <strong>Nota:</strong> Si no seleccionas fechas, se exportarán todos los comprobantes de los tipos seleccionados.
             </p>
           </div>
 
@@ -1814,6 +2235,7 @@ ${companySettings?.website ? companySettings.website : ''}`
             </Button>
             <Button
               onClick={handleExportToExcel}
+              disabled={exportFilters.types.length === 0}
               className="w-full sm:flex-1"
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />

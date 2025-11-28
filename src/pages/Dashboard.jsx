@@ -129,8 +129,23 @@ export default function Dashboard() {
     return inv.createdAt.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
   }
 
+  // Filtrar facturas válidas para cálculos de ventas:
+  // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
+  // - Excluir notas de venta anuladas
+  const validInvoicesForSales = invoices.filter(inv => {
+    // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
+    if (inv.convertedFrom) {
+      return false
+    }
+    // Si es una nota de venta anulada, no contar
+    if (inv.documentType === 'nota_venta' && inv.status === 'voided') {
+      return false
+    }
+    return true
+  })
+
   // Calcular ventas del día
-  const todaysSales = invoices
+  const todaysSales = validInvoicesForSales
     .filter(inv => {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false
@@ -139,7 +154,7 @@ export default function Dashboard() {
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
 
   // Calcular ventas del mes
-  const monthSales = invoices
+  const monthSales = validInvoicesForSales
     .filter(inv => {
       const invDate = getInvoiceDate(inv)
       if (!invDate) return false
@@ -162,7 +177,7 @@ export default function Dashboard() {
     const dayEnd = new Date(dayStart)
     dayEnd.setHours(23, 59, 59, 999)
 
-    const daySales = invoices
+    const daySales = validInvoicesForSales
       .filter(inv => {
         const invDate = getInvoiceDate(inv)
         if (!invDate) return false
@@ -205,7 +220,7 @@ export default function Dashboard() {
       title: 'Ventas del Mes',
       value: formatCurrency(monthSales),
       icon: TrendingUp,
-      change: `${invoices.filter(inv => {
+      change: `${validInvoicesForSales.filter(inv => {
         const invDate = getInvoiceDate(inv)
         if (!invDate) return false
         return invDate >= getStartOfMonth()

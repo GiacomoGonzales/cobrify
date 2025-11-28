@@ -429,8 +429,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     }
 
     // Construir comando en cadena
-    let printer = CapacitorThermalPrinter.begin()
-      .align('center');
+    let printer = CapacitorThermalPrinter.begin();
+
+    // Solo aplicar lineSpacing para 80mm (el de 58mm ya está bien)
+    if (paperWidth === 80) {
+      printer = printer.lineSpacing(2); // Espaciado vertical entre líneas (0-255mm)
+    }
+
+    printer = printer.align('center');
 
     // ========== HEADER - Datos del Emisor ==========
 
@@ -554,10 +560,17 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .clearFormatting();
 
       if (invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
-        // Para boletas y notas de venta - DNI y Nombre
+        // Para boletas y notas de venta - DNI, Nombre y Dirección (si existe)
+        const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
+
         printer = printer
           .text(convertSpanishText(`DNI: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerDni || '-'}\n`))
           .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`));
+
+        // Dirección (si existe)
+        if (customerAddress) {
+          printer = printer.text(convertSpanishText(`Direccion: ${customerAddress}\n`));
+        }
       }
 
       if (isInvoice) {

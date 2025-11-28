@@ -386,8 +386,23 @@ export default function CashRegister() {
     let salesYape = 0
     let salesPlin = 0
 
-    // Recorrer cada factura y sumar por método de pago
-    todayInvoices.forEach(invoice => {
+    // Filtrar facturas:
+    // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar)
+    // - Excluir notas de venta anuladas
+    const validInvoices = todayInvoices.filter(invoice => {
+      // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
+      if (invoice.convertedFrom) {
+        return false
+      }
+      // Si es una nota de venta anulada, no contar
+      if (invoice.documentType === 'nota_venta' && invoice.status === 'voided') {
+        return false
+      }
+      return true
+    })
+
+    // Recorrer cada factura válida y sumar por método de pago
+    validInvoices.forEach(invoice => {
       // Si la factura tiene múltiples métodos de pago (array payments)
       if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
         // Sumar cada pago al método correspondiente

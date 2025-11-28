@@ -413,6 +413,136 @@ export const updateDocumentSeries = async (userId, seriesData) => {
 }
 
 /**
+ * Convertir una Nota de Venta a Boleta
+ * - Crea una nueva boleta con los datos de la nota de venta
+ * - NO descuenta stock (ya fue descontado en la venta original)
+ * - Marca la nota de venta como convertida
+ * - Retorna la nueva boleta para enviarla a SUNAT si es necesario
+ */
+export const convertNotaVentaToBoleta = async (userId, notaVentaId, customerData = null) => {
+  try {
+    // 1. Obtener la nota de venta
+    const notaRef = doc(db, 'businesses', userId, 'invoices', notaVentaId)
+    const notaSnap = await getDoc(notaRef)
+
+    if (!notaSnap.exists()) {
+      return { success: false, error: 'Nota de venta no encontrada' }
+    }
+
+    const notaVenta = { id: notaSnap.id, ...notaSnap.data() }
+
+    // 2. Verificar que sea una nota de venta
+    if (notaVenta.documentType !== 'nota_venta') {
+      return { success: false, error: 'El documento no es una nota de venta' }
+    }
+
+    // 3. Verificar que no haya sido convertida antes
+    if (notaVenta.convertedTo) {
+      return { success: false, error: `Esta nota ya fue convertida a boleta ${notaVenta.convertedTo}` }
+    }
+
+    // 4. Verificar que no esté anulada
+    if (notaVenta.status === 'voided') {
+      return { success: false, error: 'No se puede convertir una nota de venta anulada' }
+    }
+
+    // 5. Obtener siguiente número de boleta
+    const numberResult = await getNextDocumentNumber(userId, 'boleta')
+    if (!numberResult.success) {
+      return { success: false, error: 'Error al obtener número de boleta: ' + numberResult.error }
+    }
+
+    // 6. Preparar datos del cliente (usar los proporcionados o los originales)
+    const customer = customerData || notaVenta.customer || {
+      name: 'VARIOS',
+      documentType: 'DNI',
+      documentNumber: '00000000'
+    }
+
+    // 7. Crear la nueva boleta
+    const boletaData = {
+      // Datos del documento
+      documentType: 'boleta',
+      number: numberResult.number,
+      series: numberResult.series,
+      correlativeNumber: numberResult.correlativeNumber,
+
+      // Datos del cliente
+      customer: {
+        name: customer.name || 'VARIOS',
+        documentType: customer.documentType || 'DNI',
+        documentNumber: customer.documentNumber || '00000000',
+        address: customer.address || '',
+        email: customer.email || '',
+        phone: customer.phone || '',
+      },
+
+      // Copiar items de la nota de venta
+      items: notaVenta.items || [],
+
+      // Copiar totales
+      subtotal: notaVenta.subtotal || 0,
+      tax: notaVenta.tax || 0,
+      total: notaVenta.total || 0,
+      discount: notaVenta.discount || 0,
+
+      // Estado
+      status: 'completed',
+      sunatStatus: 'pending', // Pendiente de envío a SUNAT
+
+      // Datos de pago
+      paymentMethod: notaVenta.paymentMethod || 'Efectivo',
+      paymentStatus: 'paid',
+
+      // Referencia a la nota de venta original
+      convertedFrom: {
+        type: 'nota_venta',
+        id: notaVentaId,
+        number: notaVenta.number,
+      },
+
+      // Metadata
+      notes: notaVenta.notes || '',
+      sellerId: notaVenta.sellerId || null,
+      sellerName: notaVenta.sellerName || null,
+
+      // Flag para indicar que NO debe descontar stock
+      skipStockDeduction: true,
+
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }
+
+    // 8. Guardar la boleta
+    const boletaRef = await addDoc(collection(db, 'businesses', userId, 'invoices'), boletaData)
+
+    // 9. Actualizar la nota de venta para marcarla como convertida
+    await updateDoc(notaRef, {
+      convertedTo: {
+        type: 'boleta',
+        id: boletaRef.id,
+        number: numberResult.number,
+        convertedAt: serverTimestamp(),
+      },
+      updatedAt: serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      boletaId: boletaRef.id,
+      boletaNumber: numberResult.number,
+      boleta: {
+        id: boletaRef.id,
+        ...boletaData,
+      }
+    }
+  } catch (error) {
+    console.error('Error al convertir nota de venta a boleta:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener siguiente número de documento
  */
 export const getNextDocumentNumber = async (userId, documentType) => {

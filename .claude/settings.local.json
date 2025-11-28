@@ -87,7 +87,12 @@
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:learn.adafruit.com)",
       "Bash(gradlew assembleRelease:*)",
-      "Bash(copy androidappbuildoutputsapkreleaseapp-release.apk Cobrify-v1.6-ThermalPrintFixed.apk)"
+      "Bash(copy androidappbuildoutputsapkreleaseapp-release.apk Cobrify-v1.6-ThermalPrintFixed.apk)",
+      "WebFetch(domain:fe-primer.greenter.dev)",
+      "WebFetch(domain:www.carlosmayanga.com)",
+      "WebFetch(domain:community.greenter.dev)",
+      "Bash(git restore:*)",
+      "WebFetch(domain:cpe.sunat.gob.pe)"
     ],
     "deny": [],
     "ask": []
