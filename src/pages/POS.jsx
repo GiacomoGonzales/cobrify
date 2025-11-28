@@ -48,7 +48,7 @@ import {
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId } from '@/services/recipeService'
-import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse } from '@/services/warehouseService'
+import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock } from '@/services/warehouseService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -448,19 +448,26 @@ export default function POS() {
     if (exactMatches.length === 1) {
       const product = exactMatches[0]
 
-      // Verificar que el producto tenga stock disponible (solo si allowNegativeStock es false)
-      if (product.stock > 0 || !product.trackStock || companySettings?.allowNegativeStock) {
+      // Verificar que el producto tenga stock disponible en el almacén seleccionado
+      // IMPORTANTE: Usar getStockInWarehouse para verificar stock real del almacén
+      const warehouseStock = selectedWarehouse
+        ? getStockInWarehouse(product, selectedWarehouse.id)
+        : (product.stock || 0)
+
+      const hasStock = warehouseStock > 0 || !product.trackStock || product.stock === null || companySettings?.allowNegativeStock
+
+      if (hasStock) {
         addToCart(product)
         // Limpiar el campo de búsqueda después de agregar
         setSearchTerm('')
         // Mostrar feedback al usuario
         toast.success(`${product.name} agregado al carrito`)
       } else {
-        toast.error(`${product.name} no tiene stock disponible`)
+        toast.error(`${product.name} no tiene stock disponible en ${selectedWarehouse?.name || 'este almacén'}`)
         setSearchTerm('')
       }
     }
-  }, [searchTerm, products, companySettings])
+  }, [searchTerm, products, companySettings, selectedWarehouse])
 
   const addToCart = product => {
     // If product has variants, show variant selection modal
@@ -1555,10 +1562,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     }
   }
 
-  // Obtener stock del almacén seleccionado
+  // Obtener stock del almacén seleccionado (incluyendo stock huérfano)
   const getCurrentWarehouseStock = (product) => {
     if (!selectedWarehouse) return product.stock || 0
-    return getStockInWarehouse(product, selectedWarehouse.id)
+    // Usar getTotalAvailableStock que incluye stock del almacén + stock huérfano
+    return getTotalAvailableStock(product, selectedWarehouse.id)
   }
 
   const getStockBadge = product => {
@@ -2277,8 +2285,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
-                  // Si allowNegativeStock es false, deshabilitar si stock === 0
-                  const isOutOfStock = !product.hasVariants && product.stock === 0 && !companySettings?.allowNegativeStock
+                  // Si allowNegativeStock es false, deshabilitar si stock del almacén === 0
+                  // IMPORTANTE: Usar getCurrentWarehouseStock para verificar stock del almacén seleccionado
+                  const warehouseStock = getCurrentWarehouseStock(product)
+                  const isOutOfStock = !product.hasVariants &&
+                    product.stock !== null && // Solo si tiene control de stock
+                    warehouseStock <= 0 &&
+                    !companySettings?.allowNegativeStock
 
                   return (
                 <button

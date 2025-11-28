@@ -380,6 +380,184 @@ export const initializeWarehouseStocks = (product, defaultWarehouseId) => {
   return product
 }
 
+/**
+ * Detectar productos con stock huérfano
+ * Incluye:
+ * 1. Productos con stock > 0 pero warehouseStocks vacío o suma 0
+ * 2. Productos con warehouseStocks apuntando a almacenes eliminados
+ *
+ * @param {Array} products - Lista de productos
+ * @param {Array} activeWarehouses - Lista de almacenes activos (opcional)
+ * @returns {Array} - Productos con stock huérfano
+ */
+export const getOrphanStockProducts = (products, activeWarehouses = null) => {
+  if (!products || products.length === 0) return []
+
+  const activeWarehouseIds = activeWarehouses ? activeWarehouses.map(w => w.id) : null
+
+  return products.filter(product => {
+    // Solo productos con control de stock activo
+    if (product.stock === null || product.stock === undefined || product.stock <= 0) {
+      return false
+    }
+
+    // Si no tiene trackStock habilitado, no aplica
+    if (product.trackStock === false) {
+      return false
+    }
+
+    // Calcular suma de warehouseStocks (solo de almacenes activos si tenemos la lista)
+    let warehouseTotal = 0
+    if (product.warehouseStocks && product.warehouseStocks.length > 0) {
+      product.warehouseStocks.forEach(ws => {
+        // Si tenemos lista de almacenes activos, solo contar los que existen
+        if (activeWarehouseIds === null || activeWarehouseIds.includes(ws.warehouseId)) {
+          warehouseTotal += ws.stock || 0
+        }
+      })
+    }
+
+    // Es huérfano si el stock general es mayor que la suma de almacenes activos
+    return product.stock > warehouseTotal
+  })
+}
+
+/**
+ * Calcular el stock huérfano de un producto
+ * Incluye stock en almacenes que ya no existen
+ *
+ * @param {Object} product - Producto
+ * @param {Array} activeWarehouses - Lista de almacenes activos (opcional)
+ * @returns {number} - Cantidad de stock huérfano
+ */
+export const getOrphanStock = (product, activeWarehouses = null) => {
+  if (!product || product.stock === null || product.stock === undefined) {
+    return 0
+  }
+
+  const activeWarehouseIds = activeWarehouses ? activeWarehouses.map(w => w.id) : null
+
+  // Calcular stock solo en almacenes activos
+  let activeWarehouseTotal = 0
+  if (product.warehouseStocks && product.warehouseStocks.length > 0) {
+    product.warehouseStocks.forEach(ws => {
+      if (activeWarehouseIds === null || activeWarehouseIds.includes(ws.warehouseId)) {
+        activeWarehouseTotal += ws.stock || 0
+      }
+    })
+  }
+
+  const orphanStock = product.stock - activeWarehouseTotal
+  return orphanStock > 0 ? orphanStock : 0
+}
+
+/**
+ * Obtener stock en almacenes eliminados de un producto
+ * @param {Object} product - Producto
+ * @param {Array} activeWarehouses - Lista de almacenes activos
+ * @returns {Object} - { total: number, details: [{warehouseId, stock}] }
+ */
+export const getDeletedWarehouseStock = (product, activeWarehouses) => {
+  if (!product || !product.warehouseStocks || !activeWarehouses) {
+    return { total: 0, details: [] }
+  }
+
+  const activeWarehouseIds = activeWarehouses.map(w => w.id)
+  const details = []
+  let total = 0
+
+  product.warehouseStocks.forEach(ws => {
+    if (!activeWarehouseIds.includes(ws.warehouseId) && ws.stock > 0) {
+      details.push({
+        warehouseId: ws.warehouseId,
+        stock: ws.stock
+      })
+      total += ws.stock
+    }
+  })
+
+  return { total, details }
+}
+
+/**
+ * Migrar stock huérfano de un producto a un almacén específico
+ * También limpia referencias a almacenes eliminados
+ *
+ * @param {Object} product - Producto a migrar
+ * @param {string} targetWarehouseId - ID del almacén destino
+ * @param {Array} activeWarehouses - Lista de almacenes activos (para limpiar referencias eliminadas)
+ * @returns {Object} - Producto actualizado con warehouseStocks limpios
+ */
+export const migrateOrphanStock = (product, targetWarehouseId, activeWarehouses = null) => {
+  if (!product || !targetWarehouseId) return product
+
+  const orphanStock = getOrphanStock(product, activeWarehouses)
+
+  if (orphanStock <= 0) {
+    return product
+  }
+
+  // Si tenemos lista de almacenes activos, filtrar solo los que existen
+  let warehouseStocks = []
+  if (activeWarehouses) {
+    const activeWarehouseIds = activeWarehouses.map(w => w.id)
+    // Mantener solo entradas de almacenes que aún existen
+    warehouseStocks = (product.warehouseStocks || []).filter(ws =>
+      activeWarehouseIds.includes(ws.warehouseId)
+    )
+  } else {
+    warehouseStocks = product.warehouseStocks ? [...product.warehouseStocks] : []
+  }
+
+  // Buscar si ya existe entrada para el almacén destino
+  const existingIndex = warehouseStocks.findIndex(ws => ws.warehouseId === targetWarehouseId)
+
+  if (existingIndex >= 0) {
+    // Sumar al stock existente del almacén
+    warehouseStocks[existingIndex] = {
+      ...warehouseStocks[existingIndex],
+      stock: (warehouseStocks[existingIndex].stock || 0) + orphanStock
+    }
+  } else {
+    // Crear nueva entrada para el almacén
+    warehouseStocks.push({
+      warehouseId: targetWarehouseId,
+      stock: orphanStock,
+      minStock: 0
+    })
+  }
+
+  return {
+    ...product,
+    warehouseStocks
+  }
+}
+
+/**
+ * Obtener el stock total de un producto incluyendo stock huérfano
+ * @param {Object} product - Producto
+ * @param {string} warehouseId - ID del almacén (opcional, si no se pasa devuelve stock total)
+ * @returns {number} - Stock del producto
+ */
+export const getTotalAvailableStock = (product, warehouseId = null) => {
+  if (!product) return 0
+
+  // Si no tiene control de stock, retornar Infinity (disponibilidad ilimitada)
+  if (product.stock === null || product.trackStock === false) {
+    return Infinity
+  }
+
+  // Si se especifica almacén, devolver stock de ese almacén + stock huérfano
+  if (warehouseId) {
+    const warehouseStock = getStockInWarehouse(product, warehouseId)
+    const orphanStock = getOrphanStock(product)
+    return warehouseStock + orphanStock
+  }
+
+  // Si no se especifica almacén, devolver stock total
+  return product.stock || 0
+}
+
 export default {
   // Warehouses
   getWarehouses,
@@ -397,4 +575,10 @@ export default {
   updateWarehouseStock,
   getStockInWarehouse,
   initializeWarehouseStocks,
+  // Orphan Stock Helpers
+  getOrphanStockProducts,
+  getOrphanStock,
+  getDeletedWarehouseStock,
+  migrateOrphanStock,
+  getTotalAvailableStock,
 }

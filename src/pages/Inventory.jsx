@@ -32,7 +32,7 @@ import { formatCurrency } from '@/lib/utils'
 import { getProducts, getProductCategories, updateProduct } from '@/services/firestoreService'
 import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock } from '@/services/warehouseService'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -95,6 +95,9 @@ export default function Inventory() {
     notes: ''
   })
   const [isTransferring, setIsTransferring] = useState(false)
+
+  // Estado para migración de stock huérfano
+  const [isMigratingOrphanStock, setIsMigratingOrphanStock] = useState(false)
 
   useEffect(() => {
     loadProducts()
@@ -528,6 +531,83 @@ export default function Inventory() {
 
   const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
 
+  // Calcular productos con stock huérfano (pasando almacenes activos para detectar almacenes eliminados)
+  const orphanStockProducts = React.useMemo(() => {
+    return getOrphanStockProducts(products, warehouses)
+  }, [products, warehouses])
+
+  // Calcular total de stock huérfano (incluyendo stock en almacenes eliminados)
+  const totalOrphanStock = React.useMemo(() => {
+    return orphanStockProducts.reduce((sum, p) => sum + getOrphanStock(p, warehouses), 0)
+  }, [orphanStockProducts, warehouses])
+
+  // Calcular cuántos productos tienen stock en almacenes eliminados
+  const productsWithDeletedWarehouseStock = React.useMemo(() => {
+    return products.filter(p => {
+      const deleted = getDeletedWarehouseStock(p, warehouses)
+      return deleted.total > 0
+    })
+  }, [products, warehouses])
+
+  // Obtener almacén por defecto
+  const defaultWarehouse = React.useMemo(() => {
+    return warehouses.find(w => w.isDefault) || warehouses[0] || null
+  }, [warehouses])
+
+  // Función para migrar todo el stock huérfano al almacén por defecto
+  // También limpia referencias a almacenes eliminados
+  const handleMigrateOrphanStock = async () => {
+    if (!defaultWarehouse || orphanStockProducts.length === 0) return
+
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    setIsMigratingOrphanStock(true)
+
+    try {
+      const businessId = getBusinessId()
+      let successCount = 0
+      let errorCount = 0
+
+      for (const product of orphanStockProducts) {
+        try {
+          // Pasar los almacenes activos para limpiar referencias a almacenes eliminados
+          const updatedProduct = migrateOrphanStock(product, defaultWarehouse.id, warehouses)
+
+          // Guardar en Firestore
+          const result = await updateProduct(businessId, product.id, {
+            warehouseStocks: updatedProduct.warehouseStocks
+          })
+
+          if (result.success) {
+            successCount++
+          } else {
+            errorCount++
+          }
+        } catch (error) {
+          console.error(`Error al migrar producto ${product.id}:`, error)
+          errorCount++
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} producto(s) migrado(s) exitosamente al almacén "${defaultWarehouse.name}"`)
+        loadProducts() // Recargar productos
+      }
+
+      if (errorCount > 0) {
+        toast.error(`${errorCount} producto(s) no pudieron ser migrados`)
+      }
+    } catch (error) {
+      console.error('Error al migrar stock huérfano:', error)
+      toast.error('Error al migrar el stock')
+    } finally {
+      setIsMigratingOrphanStock(false)
+    }
+  }
+
   const getStockStatus = product => {
     if (product.stock === null) {
       return { status: 'Sin control', variant: 'default', icon: Package }
@@ -634,6 +714,43 @@ export default function Inventory() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Alert for orphan stock - Stock sin asignar a almacén o en almacenes eliminados */}
+      {orphanStockProducts.length > 0 && defaultWarehouse && (
+        <Alert
+          variant="warning"
+          title={`${orphanStockProducts.length} producto(s) con stock sin asignar a almacén`}
+        >
+          <p className="text-sm mb-3">
+            Tienes <strong>{totalOrphanStock} unidades</strong> de stock que no están asignadas a ningún almacén activo.
+            {productsWithDeletedWarehouseStock.length > 0 && (
+              <span className="block mt-1 text-amber-700">
+                Incluye {productsWithDeletedWarehouseStock.length} producto(s) con stock en almacenes que fueron eliminados.
+              </span>
+            )}
+            <span className="block mt-1">
+              El stock no asignado no aparecerá disponible en el Punto de Venta.
+            </span>
+          </p>
+          <Button
+            size="sm"
+            onClick={handleMigrateOrphanStock}
+            disabled={isMigratingOrphanStock}
+          >
+            {isMigratingOrphanStock ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Migrando...
+              </>
+            ) : (
+              <>
+                <Warehouse className="w-4 h-4 mr-2" />
+                Asignar todo al almacén "{defaultWarehouse.name}"
+              </>
+            )}
+          </Button>
+        </Alert>
+      )}
 
       {/* Alert for low/out of stock */}
       {(lowStockItems.length > 0 || outOfStockItems.length > 0) && (

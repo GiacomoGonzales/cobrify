@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder } from '@/services/orderService'
+import Modal from '@/components/ui/Modal'
+import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
@@ -40,6 +41,11 @@ export default function Orders() {
 
   // Estado para configuración de impresión web legible
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+
+  // Estado para modal de cierre de orden
+  const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
+  const [orderToClose, setOrderToClose] = useState(null)
+  const [isClosingOrder, setIsClosingOrder] = useState(false)
 
   // Cargar configuración de impresora para webPrintLegible
   useEffect(() => {
@@ -298,16 +304,54 @@ export default function Orders() {
   }
 
   const handleCloseOrder = (order) => {
+    // Abrir modal para elegir: con comprobante o sin comprobante
+    setOrderToClose(order)
+    setShowCloseOrderModal(true)
+  }
+
+  const handleCloseWithReceipt = () => {
+    if (!orderToClose) return
+
     // Navegar al POS con los items de la orden precargados
     navigate('/app/pos', {
       state: {
         fromOrder: true,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        items: order.items,
-        orderType: order.orderType,
+        orderId: orderToClose.id,
+        orderNumber: orderToClose.orderNumber,
+        items: orderToClose.items,
+        orderType: orderToClose.orderType,
       }
     })
+    setShowCloseOrderModal(false)
+    setOrderToClose(null)
+  }
+
+  const handleCloseWithoutReceipt = async () => {
+    if (!orderToClose) return
+
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      setShowCloseOrderModal(false)
+      setOrderToClose(null)
+      return
+    }
+
+    setIsClosingOrder(true)
+    try {
+      const result = await completeOrder(getBusinessId(), orderToClose.id)
+      if (result.success) {
+        toast.success(`Orden #${orderToClose.orderNumber} cerrada exitosamente`)
+      } else {
+        toast.error('Error al cerrar la orden: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al cerrar orden sin comprobante:', error)
+      toast.error('Error al cerrar la orden')
+    } finally {
+      setIsClosingOrder(false)
+      setShowCloseOrderModal(false)
+      setOrderToClose(null)
+    }
   }
 
   const handleStatusChange = async (orderId, currentStatus) => {
@@ -755,6 +799,100 @@ export default function Orders() {
           />
         </div>
       )}
+
+      {/* Modal para cerrar orden */}
+      <Modal
+        isOpen={showCloseOrderModal}
+        onClose={() => {
+          setShowCloseOrderModal(false)
+          setOrderToClose(null)
+        }}
+        title={`Cerrar Cuenta - Orden #${orderToClose?.orderNumber || ''}`}
+        size="md"
+      >
+        {orderToClose && (
+          <div className="space-y-6">
+            {/* Resumen de la cuenta */}
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-700 font-medium">Total a Cobrar:</span>
+                <span className="text-3xl font-bold text-primary-600">
+                  S/ {(orderToClose.total || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="text-sm text-gray-600 space-y-1">
+                <div className="flex justify-between">
+                  <span>Tipo de orden:</span>
+                  <span className="capitalize">{orderToClose.orderType === 'delivery' ? 'Delivery' : orderToClose.orderType === 'takeout' ? 'Para llevar' : orderToClose.orderType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Items:</span>
+                  <span>{orderToClose.items?.length || 0} producto(s)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Opciones de cierre */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                ¿Cómo desea cerrar la cuenta?
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={handleCloseWithReceipt}
+                  className="p-6 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-center"
+                >
+                  <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-primary-600" />
+                  <div className="font-semibold text-gray-900 mb-1">Crear Comprobante</div>
+                  <div className="text-xs text-gray-600">
+                    Ir al POS para generar Boleta, Factura o Nota de Venta
+                  </div>
+                </button>
+                <button
+                  onClick={handleCloseWithoutReceipt}
+                  disabled={isClosingOrder}
+                  className="p-6 border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isClosingOrder ? (
+                    <Loader2 className="w-10 h-10 mx-auto mb-3 text-gray-600 animate-spin" />
+                  ) : (
+                    <X className="w-10 h-10 mx-auto mb-3 text-gray-600" />
+                  )}
+                  <div className="font-semibold text-gray-900 mb-1">
+                    {isClosingOrder ? 'Cerrando...' : 'Cerrar sin Comprobante'}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    Marcar la orden como completada sin generar comprobante
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Nota informativa */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-xs text-amber-800">
+                <strong>Nota:</strong> Si ya generaste un comprobante para esta orden, usa "Cerrar sin Comprobante" para evitar duplicar la venta.
+              </p>
+            </div>
+
+            {/* Botón cancelar */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCloseOrderModal(false)
+                  setOrderToClose(null)
+                }}
+                className="w-full"
+                disabled={isClosingOrder}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
