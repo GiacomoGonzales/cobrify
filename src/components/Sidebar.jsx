@@ -269,7 +269,8 @@ function Sidebar() {
       icon: CreditCard,
       label: 'Mi Suscripción',
       adminOnly: false,
-      pageId: null, // Todos tienen acceso
+      businessOwnerOnly: true, // Solo visible para el usuario principal/owner
+      pageId: null,
     },
     {
       path: '/usuarios',
