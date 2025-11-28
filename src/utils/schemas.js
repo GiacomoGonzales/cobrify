@@ -97,7 +97,8 @@ export const productVariantSchema = z.object({
 
 // Schema para Producto/Servicio
 export const productSchema = z.object({
-  code: z.string().min(1, 'Código es requerido'),
+  code: z.string().optional(), // Código de barras (opcional)
+  sku: z.string().optional(), // Código interno/SKU (opcional)
   name: z.string().min(1, 'Nombre es requerido'),
   description: z.string().optional(),
   price: z

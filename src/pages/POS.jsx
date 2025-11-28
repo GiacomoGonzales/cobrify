@@ -387,9 +387,11 @@ export default function POS() {
   // Optimizar filtrado de productos con useMemo
   const filteredProducts = React.useMemo(() => {
     return products.filter(p => {
+      const search = searchTerm.toLowerCase()
       const matchesSearch =
-        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.code?.toLowerCase().includes(searchTerm.toLowerCase())
+        p.name?.toLowerCase().includes(search) ||
+        p.code?.toLowerCase().includes(search) ||
+        p.sku?.toLowerCase().includes(search)
 
       // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
       let matchesCategory = false
@@ -435,9 +437,11 @@ export default function POS() {
     // Solo ejecutar si hay un término de búsqueda
     if (!searchTerm || searchTerm.length < 3) return
 
-    // Buscar productos que coincidan exactamente con el código
+    // Buscar productos que coincidan exactamente con el código de barras o SKU
+    const searchLower = searchTerm.toLowerCase()
     const exactMatches = products.filter(p =>
-      p.code?.toLowerCase() === searchTerm.toLowerCase()
+      p.code?.toLowerCase() === searchLower ||
+      p.sku?.toLowerCase() === searchLower
     )
 
     // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente

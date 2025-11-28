@@ -175,6 +175,7 @@ export default function Products() {
     resolver: zodResolver(productSchema),
     defaultValues: {
       code: '',
+      sku: '',
       name: '',
       description: '',
       price: '',
@@ -276,6 +277,7 @@ export default function Products() {
     setSelectedWarehouse(defaultWh?.id || (warehouses.length > 0 ? warehouses[0].id : ''))
     reset({
       code: '',
+      sku: '',
       name: '',
       description: '',
       price: '',
@@ -323,7 +325,8 @@ export default function Products() {
     }
 
     reset({
-      code: product.code,
+      code: product.code || '',
+      sku: product.sku || '',
       name: product.name,
       description: product.description || '',
       price: productHasVariants ? '' : (product.price?.toString() || ''),
@@ -367,21 +370,34 @@ export default function Products() {
       return
     }
 
-    // Validar código duplicado
-    const codeToCheck = data.code.trim().toUpperCase()
-    const duplicateProduct = products.find(p => {
-      // Si estamos editando, excluir el producto actual de la verificación
-      if (editingProduct && p.id === editingProduct.id) {
-        return false
-      }
-      // Comparar códigos (case-insensitive)
-      return p.code?.trim().toUpperCase() === codeToCheck
-    })
+    // Validar código de barras duplicado (solo si se ingresó uno)
+    if (data.code && data.code.trim()) {
+      const codeToCheck = data.code.trim().toUpperCase()
+      const duplicateByCode = products.find(p => {
+        if (editingProduct && p.id === editingProduct.id) return false
+        return p.code?.trim().toUpperCase() === codeToCheck
+      })
 
-    if (duplicateProduct) {
-      toast.error(`El código "${data.code}" ya está en uso por el producto "${duplicateProduct.name}"`)
-      setIsSaving(false)
-      return
+      if (duplicateByCode) {
+        toast.error(`El código de barras "${data.code}" ya está en uso por el producto "${duplicateByCode.name}"`)
+        setIsSaving(false)
+        return
+      }
+    }
+
+    // Validar SKU duplicado (solo si se ingresó uno)
+    if (data.sku && data.sku.trim()) {
+      const skuToCheck = data.sku.trim().toUpperCase()
+      const duplicateBySku = products.find(p => {
+        if (editingProduct && p.id === editingProduct.id) return false
+        return p.sku?.trim().toUpperCase() === skuToCheck
+      })
+
+      if (duplicateBySku) {
+        toast.error(`El SKU "${data.sku}" ya está en uso por el producto "${duplicateBySku.name}"`)
+        setIsSaving(false)
+        return
+      }
     }
 
     // Validar SKUs duplicados en variantes si hasVariants es true
@@ -401,7 +417,8 @@ export default function Products() {
     try {
       // Build product data based on hasVariants
       const productData = {
-        code: data.code,
+        code: data.code || '',
+        sku: data.sku || '',
         name: data.name,
         description: data.description || '',
         unit: data.unit,
@@ -1154,6 +1171,7 @@ export default function Products() {
 
       const matchesSearch =
         product.code?.toLowerCase().includes(search) ||
+        product.sku?.toLowerCase().includes(search) ||
         product.name?.toLowerCase().includes(search) ||
         categoryName.toLowerCase().includes(search) ||
         product.description?.toLowerCase().includes(search)
@@ -1193,6 +1211,10 @@ export default function Products() {
       let aValue, bValue
 
       switch (sortField) {
+        case 'sku':
+          aValue = a.sku || ''
+          bValue = b.sku || ''
+          break
         case 'code':
           aValue = a.code || ''
           bValue = b.code || ''
@@ -1562,13 +1584,23 @@ export default function Products() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="max-w-[80px]">
+                  <TableHead className="max-w-[100px]">
+                    <button
+                      onClick={() => handleSort('sku')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      title="Ordenar por SKU"
+                    >
+                      SKU
+                      {getSortIcon('sku')}
+                    </button>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell max-w-[100px]">
                     <button
                       onClick={() => handleSort('code')}
                       className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                      title="Ordenar por código"
+                      title="Ordenar por código de barras"
                     >
-                      Código
+                      Cód. Barras
                       {getSortIcon('code')}
                     </button>
                   </TableHead>
@@ -1638,9 +1670,14 @@ export default function Products() {
                             )}
                           </button>
                         </TableCell>
-                        <TableCell className="max-w-[80px]">
-                          <span className="font-mono text-xs text-primary-600 truncate block">
-                            {product.code}
+                        <TableCell className="max-w-[100px]">
+                          <span className="font-mono text-xs text-primary-600 truncate block" title={product.sku || ''}>
+                            {product.sku || '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell max-w-[100px]">
+                          <span className="font-mono text-xs text-gray-500 truncate block" title={product.code || ''}>
+                            {product.code || '-'}
                           </span>
                         </TableCell>
                         <TableCell className="min-w-[150px] max-w-[200px]">
@@ -1948,13 +1985,29 @@ export default function Products() {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="Nombre"
+            required
+            placeholder="Nombre del producto o servicio"
+            error={errors.name?.message}
+            {...register('name')}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              label="Código"
-              required
-              placeholder="PROD001"
+              label="SKU / Código Interno"
+              placeholder="SKU-001"
+              error={errors.sku?.message}
+              {...register('sku')}
+              helperText="Código interno de tu negocio"
+            />
+
+            <Input
+              label="Código de Barras"
+              placeholder="7501234567890"
               error={errors.code?.message}
               {...register('code')}
+              helperText="EAN, UPC u otro"
             />
 
             <Select
@@ -1970,14 +2023,6 @@ export default function Products() {
               ))}
             </Select>
           </div>
-
-          <Input
-            label="Nombre"
-            required
-            placeholder="Nombre del producto o servicio"
-            error={errors.name?.message}
-            {...register('name')}
-          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -2468,13 +2513,17 @@ export default function Products() {
                 Información Básica
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-medium text-gray-500">Código</label>
-                  <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.code || '-'}</p>
-                </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="text-xs font-medium text-gray-500">Nombre</label>
                   <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.name}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">SKU / Código Interno</label>
+                  <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.sku || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Código de Barras</label>
+                  <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.code || '-'}</p>
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-xs font-medium text-gray-500">Descripción</label>
