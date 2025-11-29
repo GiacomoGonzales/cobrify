@@ -186,11 +186,15 @@ const generateSunatQR = async (invoice, companySettings) => {
                          invoice.customer?.documentType === 'DNI' ? '1' : '0'
     const clientDocNumber = invoice.customer?.documentNumber || '-'
 
-    // Usar issueDate si existe, sino createdAt
-    const dateSource = invoice.issueDate || invoice.createdAt
+    // Usar emissionDate primero (fecha de emisión seleccionada), luego issueDate, luego createdAt
+    const dateSource = invoice.emissionDate || invoice.issueDate || invoice.createdAt
     let invoiceDate = new Date().toLocaleDateString('es-PE')
     if (dateSource) {
-      if (dateSource.toDate) {
+      // Si es un string en formato YYYY-MM-DD, parsearlo directamente
+      if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
+        const [year, month, day] = dateSource.split('-')
+        invoiceDate = `${day}/${month}/${year}`
+      } else if (dateSource.toDate) {
         const date = dateSource.toDate()
         invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
       } else if (dateSource instanceof Date) {
@@ -524,20 +528,24 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(9)
   doc.setTextColor(...DARK_GRAY)
 
-  // Usar issueDate si existe, sino createdAt
-  const pdfDateSource = invoice.issueDate || invoice.createdAt
-  let invoiceDate = new Date().toLocaleDateString('es-PE')
+  // Usar emissionDate primero (fecha de emisión seleccionada), luego issueDate, luego createdAt
+  const pdfDateSource = invoice.emissionDate || invoice.issueDate || invoice.createdAt
+  let pdfInvoiceDate = new Date().toLocaleDateString('es-PE')
   if (pdfDateSource) {
-    if (pdfDateSource.toDate) {
+    // Si es un string en formato YYYY-MM-DD, parsearlo directamente
+    if (typeof pdfDateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pdfDateSource)) {
+      const [year, month, day] = pdfDateSource.split('-')
+      pdfInvoiceDate = `${day}/${month}/${year}`
+    } else if (pdfDateSource.toDate) {
       const date = pdfDateSource.toDate()
-      invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+      pdfInvoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
     } else if (pdfDateSource instanceof Date) {
       const date = pdfDateSource
-      invoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+      pdfInvoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
     }
   }
 
-  doc.text(invoiceDate, dateX, dateY)
+  doc.text(pdfInvoiceDate, dateX, dateY)
   dateY += 11
 
   doc.setFontSize(8)

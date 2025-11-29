@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import { getInvoices, createInvoice, getDocumentSeries, updateDocumentSeries } from '@/services/firestoreService'
+import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 
 // Catálogo 09 - Tipos de nota de crédito SUNAT
@@ -245,6 +245,18 @@ export default function CreateCreditNote() {
           }
         }
         await updateDocumentSeries(user.uid, updatedSeries)
+
+        // Actualizar la boleta/factura original para marcarla como pendiente de anulación
+        // Esto asegura que no se cuente en el Dashboard/Caja hasta que SUNAT procese la NC
+        const isFullCancellation = Math.abs(selectedInvoice.total - total) < 0.01
+        const newStatus = isFullCancellation ? 'pending_cancellation' : 'partial_refund_pending'
+
+        await updateInvoice(user.uid, selectedInvoice.id, {
+          status: newStatus,
+          pendingCreditNoteId: result.id,
+          pendingCreditNoteNumber: creditNoteNumber,
+          pendingCreditNoteTotal: total
+        })
 
         setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente' })
         setTimeout(() => navigate('/app/facturas'), 2000)

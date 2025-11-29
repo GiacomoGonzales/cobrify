@@ -768,6 +768,13 @@ ${companySettings?.website ? companySettings.website : ''}`
             Pendiente
           </Badge>
         )
+      case 'sending':
+        return (
+          <Badge variant="info" className="flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Enviando...
+          </Badge>
+        )
       case 'rejected':
         return (
           <Badge variant="danger" className="flex items-center gap-1">

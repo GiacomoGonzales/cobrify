@@ -31,24 +31,40 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const igvMultiplier = igvRate / 100
 
   // Formatear fecha para SUNAT (YYYY-MM-DD)
+  // Usar emissionDate primero (fecha seleccionada por el usuario), luego issueDate, luego fecha actual
   let issueDate
-  if (invoiceData.issueDate?.toDate) {
+  const dateSource = invoiceData.emissionDate || invoiceData.issueDate
+
+  if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
+    // Si es un string en formato YYYY-MM-DD, usarlo directamente
+    issueDate = dateSource
+  } else if (dateSource?.toDate) {
     // Si es un Firestore Timestamp
-    issueDate = invoiceData.issueDate.toDate().toISOString().split('T')[0]
-  } else if (invoiceData.issueDate) {
+    const date = dateSource.toDate()
+    // Usar getFullYear, getMonth, getDate para respetar zona horaria local
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    issueDate = `${year}-${month}-${day}`
+  } else if (dateSource) {
     // Si es un string o Date válido
-    const date = new Date(invoiceData.issueDate)
+    const date = new Date(dateSource)
     if (!isNaN(date.getTime())) {
-      issueDate = date.toISOString().split('T')[0]
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      issueDate = `${year}-${month}-${day}`
     } else {
       // Fecha inválida, usar fecha actual
       console.warn('⚠️ Fecha de emisión inválida, usando fecha actual')
-      issueDate = new Date().toISOString().split('T')[0]
+      const now = new Date()
+      issueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     }
   } else {
     // No hay fecha, usar fecha actual
     console.warn('⚠️ No hay fecha de emisión, usando fecha actual')
-    issueDate = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    issueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   }
 
   // Determinar el elemento raíz según tipo de documento

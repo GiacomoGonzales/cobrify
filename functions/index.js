@@ -163,30 +163,69 @@ export const sendInvoiceToSunat = onRequest(
 
       console.log(`📤 Iniciando envío a SUNAT - Usuario: ${userId}, Factura: ${invoiceId}`)
 
-      // 1. Obtener datos de la factura
+      // 1. Obtener datos de la factura usando una transacción para prevenir envíos duplicados
       const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId)
-      const invoiceDoc = await invoiceRef.get()
 
-      if (!invoiceDoc.exists) {
-        res.status(404).json({ error: 'Factura no encontrada' })
-        return
-      }
+      // Usar transacción para verificar y marcar como "sending" atómicamente
+      // Esto previene condiciones de carrera donde dos envíos concurrentes pasen la validación
+      let invoiceData
+      try {
+        invoiceData = await db.runTransaction(async (transaction) => {
+          const invoiceDoc = await transaction.get(invoiceRef)
 
-      const invoiceData = invoiceDoc.data()
+          if (!invoiceDoc.exists) {
+            throw new Error('NOT_FOUND')
+          }
 
-      // Validar que sea factura o boleta
-      if (invoiceData.documentType !== 'factura' && invoiceData.documentType !== 'boleta') {
-        res.status(400).json({ error: 'Solo se pueden enviar facturas y boletas a SUNAT' })
-        return
-      }
+          const data = invoiceDoc.data()
 
-      // Validar estado: permitir reenvío si está pendiente, rechazada o firmada (no enviada)
-      const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
-      if (!allowedStatuses.includes(invoiceData.sunatStatus)) {
-        res.status(400).json({
-          error: `La factura ya fue aceptada por SUNAT. Estado actual: ${invoiceData.sunatStatus}`
+          // Validar que sea factura o boleta
+          if (data.documentType !== 'factura' && data.documentType !== 'boleta') {
+            throw new Error('INVALID_TYPE')
+          }
+
+          // Validar estado: rechazar si ya está en proceso de envío
+          if (data.sunatStatus === 'sending') {
+            throw new Error('ALREADY_SENDING')
+          }
+
+          // Validar estado: permitir reenvío si está pendiente, rechazada o firmada (no enviada)
+          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
+          if (!allowedStatuses.includes(data.sunatStatus)) {
+            throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
+          }
+
+          // Marcar como "sending" para prevenir envíos duplicados
+          transaction.update(invoiceRef, {
+            sunatStatus: 'sending',
+            sunatSendingStartedAt: FieldValue.serverTimestamp()
+          })
+
+          return data
         })
-        return
+      } catch (transactionError) {
+        if (transactionError.message === 'NOT_FOUND') {
+          res.status(404).json({ error: 'Factura no encontrada' })
+          return
+        }
+        if (transactionError.message === 'INVALID_TYPE') {
+          res.status(400).json({ error: 'Solo se pueden enviar facturas y boletas a SUNAT' })
+          return
+        }
+        if (transactionError.message === 'ALREADY_SENDING') {
+          res.status(409).json({
+            error: 'El documento ya está siendo enviado a SUNAT. Por favor espera unos segundos.'
+          })
+          return
+        }
+        if (transactionError.message.startsWith('INVALID_STATUS:')) {
+          const currentStatus = transactionError.message.split(':')[1]
+          res.status(400).json({
+            error: `La factura ya fue aceptada por SUNAT. Estado actual: ${currentStatus}`
+          })
+          return
+        }
+        throw transactionError
       }
 
       // Log si es un reenvío
@@ -425,6 +464,28 @@ export const sendInvoiceToSunat = onRequest(
 
     } catch (error) {
       console.error('❌ Error general:', error)
+
+      // Intentar revertir el estado "sending" si ocurrió un error inesperado
+      try {
+        const invoiceRef = db.collection('businesses').doc(req.body.userId).collection('invoices').doc(req.body.invoiceId)
+        const currentDoc = await invoiceRef.get()
+        if (currentDoc.exists && currentDoc.data().sunatStatus === 'sending') {
+          await invoiceRef.update({
+            sunatStatus: 'pending', // Revertir a pending para permitir reintento
+            sunatResponse: {
+              code: 'ERROR',
+              description: error.message || 'Error inesperado al procesar el documento',
+              observations: ['El envío falló. Puede reintentar.'],
+              error: true
+            },
+            updatedAt: FieldValue.serverTimestamp()
+          })
+          console.log('🔄 Estado revertido a pending tras error inesperado')
+        }
+      } catch (revertError) {
+        console.error('⚠️ Error al revertir estado:', revertError)
+      }
+
       res.status(500).json({ error: error.message || 'Error al procesar el documento' })
     }
   }
@@ -532,30 +593,68 @@ export const sendCreditNoteToSunat = onRequest(
 
       console.log(`📤 Iniciando envío de NOTA DE CRÉDITO a SUNAT - Usuario: ${userId}, NC: ${creditNoteId}`)
 
-      // 1. Obtener datos de la nota de crédito
+      // 1. Obtener datos de la nota de crédito usando una transacción para prevenir envíos duplicados
       const creditNoteRef = db.collection('businesses').doc(userId).collection('invoices').doc(creditNoteId)
-      const creditNoteDoc = await creditNoteRef.get()
 
-      if (!creditNoteDoc.exists) {
-        res.status(404).json({ error: 'Nota de crédito no encontrada' })
-        return
-      }
+      // Usar transacción para verificar y marcar como "sending" atómicamente
+      let creditNoteData
+      try {
+        creditNoteData = await db.runTransaction(async (transaction) => {
+          const creditNoteDoc = await transaction.get(creditNoteRef)
 
-      const creditNoteData = creditNoteDoc.data()
+          if (!creditNoteDoc.exists) {
+            throw new Error('NOT_FOUND')
+          }
 
-      // Validar que sea nota de crédito
-      if (creditNoteData.documentType !== 'nota_credito') {
-        res.status(400).json({ error: 'El documento no es una nota de crédito' })
-        return
-      }
+          const data = creditNoteDoc.data()
 
-      // Validar estado: permitir envío si está pendiente, rechazada o firmada
-      const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
-      if (!allowedStatuses.includes(creditNoteData.sunatStatus)) {
-        res.status(400).json({
-          error: `La nota de crédito ya fue aceptada por SUNAT. Estado actual: ${creditNoteData.sunatStatus}`
+          // Validar que sea nota de crédito
+          if (data.documentType !== 'nota_credito') {
+            throw new Error('INVALID_TYPE')
+          }
+
+          // Validar estado: rechazar si ya está en proceso de envío
+          if (data.sunatStatus === 'sending') {
+            throw new Error('ALREADY_SENDING')
+          }
+
+          // Validar estado: permitir envío si está pendiente, rechazada o firmada
+          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
+          if (!allowedStatuses.includes(data.sunatStatus)) {
+            throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
+          }
+
+          // Marcar como "sending" para prevenir envíos duplicados
+          transaction.update(creditNoteRef, {
+            sunatStatus: 'sending',
+            sunatSendingStartedAt: FieldValue.serverTimestamp()
+          })
+
+          return data
         })
-        return
+      } catch (transactionError) {
+        if (transactionError.message === 'NOT_FOUND') {
+          res.status(404).json({ error: 'Nota de crédito no encontrada' })
+          return
+        }
+        if (transactionError.message === 'INVALID_TYPE') {
+          res.status(400).json({ error: 'El documento no es una nota de crédito' })
+          return
+        }
+        if (transactionError.message === 'ALREADY_SENDING') {
+          res.status(409).json({
+            error: 'La nota de crédito ya está siendo enviada a SUNAT. Por favor espera unos segundos.'
+          })
+          return
+        }
+        if (transactionError.message.startsWith('INVALID_STATUS:')) {
+          const currentStatus = transactionError.message.split(':')[1]
+          res.status(400).json({
+            error: `La nota de crédito ya fue aceptada por SUNAT. Estado actual: ${currentStatus}`
+          })
+          return
+        }
+        throw transactionError
       }
 
       // Log si es un reenvío
@@ -820,6 +919,28 @@ export const sendCreditNoteToSunat = onRequest(
 
     } catch (error) {
       console.error('❌ Error general:', error)
+
+      // Intentar revertir el estado "sending" si ocurrió un error inesperado
+      try {
+        const creditNoteRef = db.collection('businesses').doc(req.body.userId).collection('invoices').doc(req.body.creditNoteId)
+        const currentDoc = await creditNoteRef.get()
+        if (currentDoc.exists && currentDoc.data().sunatStatus === 'sending') {
+          await creditNoteRef.update({
+            sunatStatus: 'pending', // Revertir a pending para permitir reintento
+            sunatResponse: {
+              code: 'ERROR',
+              description: error.message || 'Error inesperado al procesar la nota de crédito',
+              observations: ['El envío falló. Puede reintentar.'],
+              error: true
+            },
+            updatedAt: FieldValue.serverTimestamp()
+          })
+          console.log('🔄 Estado de NC revertido a pending tras error inesperado')
+        }
+      } catch (revertError) {
+        console.error('⚠️ Error al revertir estado de NC:', revertError)
+      }
+
       res.status(500).json({ error: error.message || 'Error al procesar la nota de crédito' })
     }
   }

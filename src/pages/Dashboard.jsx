@@ -137,8 +137,9 @@ export default function Dashboard() {
     if (inv.convertedFrom) {
       return false
     }
-    // Si el documento está anulado, no contar
-    if (inv.status === 'cancelled' || inv.status === 'voided') {
+    // Si el documento está anulado o pendiente de anulación por NC, no contar
+    if (inv.status === 'cancelled' || inv.status === 'voided' ||
+        inv.status === 'pending_cancellation' || inv.status === 'partial_refund_pending') {
       return false
     }
     return true

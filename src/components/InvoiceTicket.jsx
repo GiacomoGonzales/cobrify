@@ -100,13 +100,22 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
     const total = (invoice.total || 0).toFixed(2)
 
     // Formatear fecha en formato ISO (YYYY-MM-DD)
-    const formatDateISO = (timestamp) => {
-      if (!timestamp) return new Date().toISOString().split('T')[0]
-      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-      return date.toISOString().split('T')[0]
+    const formatDateISO = (dateValue) => {
+      if (!dateValue) return new Date().toISOString().split('T')[0]
+      // Si es un string en formato YYYY-MM-DD, usarlo directamente
+      if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue
+      }
+      // Si es un Timestamp de Firestore o Date, convertir respetando zona horaria local
+      const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue)
+      // Usar formato local para evitar problemas de zona horaria
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
     }
-    // Usar issueDate si existe, sino createdAt
-    const fecha = formatDateISO(invoice.issueDate || invoice.createdAt)
+    // Usar emissionDate primero (fecha de emisión seleccionada), luego issueDate, luego createdAt
+    const fecha = formatDateISO(invoice.emissionDate || invoice.issueDate || invoice.createdAt)
 
     // Tipo de documento del cliente (6=RUC, 1=DNI, 4=Carnet Extranjería, 7=Pasaporte, -=Sin documento)
     const getClientDocType = () => {
@@ -122,10 +131,24 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
     return `${ruc}|${tipoDoc}|${serie}|${numero}|${igv}|${total}|${fecha}|${tipoDocCliente}|${numDocCliente}|`
   }
 
-  // Formatear fecha
-  const formatDate = (timestamp) => {
-    if (!timestamp) return new Date().toLocaleDateString('es-PE')
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  // Formatear fecha para mostrar
+  const formatDate = (dateValue) => {
+    if (!dateValue) return new Date().toLocaleDateString('es-PE')
+
+    // Si es un string en formato YYYY-MM-DD, parsearlo correctamente
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      const [year, month, day] = dateValue.split('-').map(Number)
+      // Crear fecha a mediodia para evitar problemas de zona horaria
+      const date = new Date(year, month - 1, day, 12, 0, 0)
+      return date.toLocaleDateString('es-PE', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+    }
+
+    // Si es un Timestamp de Firestore o Date
+    const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue)
     return date.toLocaleDateString('es-PE', {
       year: 'numeric',
       month: '2-digit',
@@ -543,7 +566,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <div className="ticket-section">
         <div className="info-row">
           <span className="info-label">Fecha:</span>
-          <span>{formatDate(invoice.issueDate || invoice.createdAt)}</span>
+          <span>{formatDate(invoice.emissionDate || invoice.issueDate || invoice.createdAt)}</span>
         </div>
         <div className="info-row">
           <span className="info-label">Hora:</span>

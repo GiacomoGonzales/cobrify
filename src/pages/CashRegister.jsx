@@ -394,8 +394,9 @@ export default function CashRegister() {
       if (invoice.convertedFrom) {
         return false
       }
-      // Si el documento está anulado, no contar
-      if (invoice.status === 'cancelled' || invoice.status === 'voided') {
+      // Si el documento está anulado o pendiente de anulación por NC, no contar
+      if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
+          invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending') {
         return false
       }
       return true
