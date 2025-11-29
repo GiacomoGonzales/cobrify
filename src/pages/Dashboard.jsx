@@ -130,9 +130,14 @@ export default function Dashboard() {
   }
 
   // Filtrar facturas válidas para cálculos de ventas:
+  // - Excluir notas de crédito y débito (no son ventas, son ajustes)
   // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
   // - Excluir documentos anulados (notas de venta, boletas, facturas)
   const validInvoicesForSales = invoices.filter(inv => {
+    // Excluir notas de crédito y débito (no son ventas)
+    if (inv.documentType === 'nota_credito' || inv.documentType === 'nota_debito') {
+      return false
+    }
     // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
     if (inv.convertedFrom) {
       return false

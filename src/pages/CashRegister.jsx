@@ -387,9 +387,14 @@ export default function CashRegister() {
     let salesPlin = 0
 
     // Filtrar facturas:
+    // - Excluir notas de crédito y débito (no son ventas, son ajustes)
     // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar)
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
     const validInvoices = todayInvoices.filter(invoice => {
+      // Excluir notas de crédito y débito (no son ventas)
+      if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') {
+        return false
+      }
       // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
       if (invoice.convertedFrom) {
         return false
