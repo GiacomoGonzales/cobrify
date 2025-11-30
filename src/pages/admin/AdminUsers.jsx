@@ -150,13 +150,17 @@ export default function AdminUsers() {
         }
 
         // Determinar método de emisión
-        // Prioridad: emissionConfig.method > qpse/sunat enabled > credenciales existentes
+        // Prioridad: qpse/sunat raíz > emissionConfig.method > emissionConfig.qpse/sunat
         let emissionMethod = 'none'
-        if (business.emissionConfig?.method) {
-          emissionMethod = business.emissionConfig.method
-        } else if (business.qpse?.enabled || business.qpse?.usuario) {
+        if (business.qpse?.enabled || business.qpse?.usuario) {
           emissionMethod = 'qpse'
         } else if (business.sunat?.enabled || business.sunat?.solUser) {
+          emissionMethod = 'sunat_direct'
+        } else if (business.emissionConfig?.method) {
+          emissionMethod = business.emissionConfig.method
+        } else if (business.emissionConfig?.qpse?.enabled || business.emissionConfig?.qpse?.usuario) {
+          emissionMethod = 'qpse'
+        } else if (business.emissionConfig?.sunat?.enabled || business.emissionConfig?.sunat?.solUser) {
           emissionMethod = 'sunat_direct'
         } else if (business.emissionMethod) {
           emissionMethod = business.emissionMethod
@@ -314,39 +318,55 @@ export default function AdminUsers() {
         console.log('📋 Datos del negocio cargados:', businessData)
 
         // Determinar método de emisión
-        // Prioridad: emissionConfig.method > qpse/sunat enabled > credenciales existentes
+        // Prioridad: qpse/sunat raíz > emissionConfig.method > emissionConfig.qpse/sunat
         let method = 'none'
-        if (businessData.emissionConfig?.method) {
-          method = businessData.emissionConfig.method
-        } else if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
+        if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
           method = 'qpse'
         } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
+          method = 'sunat_direct'
+        } else if (businessData.emissionConfig?.method) {
+          method = businessData.emissionConfig.method
+        } else if (businessData.emissionConfig?.qpse?.enabled || businessData.emissionConfig?.qpse?.usuario) {
+          method = 'qpse'
+        } else if (businessData.emissionConfig?.sunat?.enabled || businessData.emissionConfig?.sunat?.solUser) {
           method = 'sunat_direct'
         } else if (businessData.emissionMethod) {
           method = businessData.emissionMethod
         }
 
-        // Obtener datos de qpse/sunat (puede estar en emissionConfig o directamente)
-        const qpseData = businessData.emissionConfig?.qpse || businessData.qpse || {}
-        const sunatData = businessData.emissionConfig?.sunat || businessData.sunat || {}
+        // Obtener datos de qpse/sunat (prioridad: raíz > emissionConfig)
+        const qpseData = businessData.qpse || businessData.emissionConfig?.qpse || {}
+        const sunatData = businessData.sunat || businessData.emissionConfig?.sunat || {}
 
         console.log('📋 Método detectado:', method)
         console.log('📋 emissionConfig:', businessData.emissionConfig)
         console.log('📋 QPse data:', qpseData)
         console.log('📋 SUNAT data:', sunatData)
 
+        // Normalizar environment (production -> produccion, beta -> beta)
+        const normalizeEnv = (env) => {
+          if (env === 'production') return 'produccion'
+          if (env === 'produccion') return 'produccion'
+          return env || 'demo'
+        }
+
+        const normalizeSunatEnv = (env) => {
+          if (env === 'production' || env === 'produccion') return 'produccion'
+          return env || 'beta'
+        }
+
         setSunatForm({
           emissionMethod: method,
           // QPse
           qpseUsuario: qpseData.usuario || '',
           qpsePassword: qpseData.password || '',
-          qpseEnvironment: qpseData.environment || 'demo',
+          qpseEnvironment: normalizeEnv(qpseData.environment),
           // SUNAT Directo
           solUser: sunatData.solUser || '',
           solPassword: sunatData.solPassword || '',
           certificatePassword: sunatData.certificatePassword || '',
           certificateName: sunatData.certificateName || '',
-          sunatEnvironment: sunatData.environment || 'beta',
+          sunatEnvironment: normalizeSunatEnv(sunatData.environment),
           homologated: sunatData.homologated || false
         })
       } else {
