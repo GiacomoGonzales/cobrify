@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore'
 import { PLANS } from '@/services/subscriptionService'
 import {
   Users,
@@ -277,12 +277,27 @@ export default function AdminUsers() {
     setSunatUserToEdit(user)
     setShowSunatModal(true)
 
+    // Reset form primero
+    setSunatForm({
+      emissionMethod: 'none',
+      qpseUsuario: '',
+      qpsePassword: '',
+      qpseEnvironment: 'demo',
+      solUser: '',
+      solPassword: '',
+      certificatePassword: '',
+      sunatEnvironment: 'beta'
+    })
+
     // Cargar configuración actual del negocio
     try {
-      const businessDoc = await getDocs(collection(db, 'businesses'))
-      const businessData = businessDoc.docs.find(d => d.id === user.id)?.data()
+      const businessRef = doc(db, 'businesses', user.id)
+      const businessSnap = await getDoc(businessRef)
 
-      if (businessData) {
+      if (businessSnap.exists()) {
+        const businessData = businessSnap.data()
+        console.log('📋 Datos del negocio cargados:', businessData)
+
         setSunatForm({
           emissionMethod: businessData.emissionMethod || 'none',
           // QPse
@@ -296,17 +311,7 @@ export default function AdminUsers() {
           sunatEnvironment: businessData.sunat?.environment || 'beta'
         })
       } else {
-        // Reset form
-        setSunatForm({
-          emissionMethod: 'none',
-          qpseUsuario: '',
-          qpsePassword: '',
-          qpseEnvironment: 'demo',
-          solUser: '',
-          solPassword: '',
-          certificatePassword: '',
-          sunatEnvironment: 'beta'
-        })
+        console.warn('⚠️ No se encontró documento de negocio para:', user.id)
       }
     } catch (error) {
       console.error('Error loading SUNAT config:', error)
