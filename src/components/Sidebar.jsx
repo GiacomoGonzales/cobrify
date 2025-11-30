@@ -280,9 +280,9 @@ function Sidebar() {
       pageId: 'users',
     },
     {
-      path: '/admin/users',
+      path: '/admin/dashboard',
       icon: Shield,
-      label: 'Admin - Negocios',
+      label: 'Panel Admin',
       adminOnly: true, // Solo para super admins
       pageId: null,
     },

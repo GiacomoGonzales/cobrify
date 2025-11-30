@@ -119,14 +119,21 @@ export const AuthProvider = ({ children }) => {
 
           // Obtener suscripción con timeout
           try {
+            // Primero verificar si es sub-usuario (tiene ownerId)
+            const userDataForSub = await getUserData(firebaseUser.uid)
+            const isSubUser = userDataForSub.success && userDataForSub.data?.ownerId
+            const ownerIdForSubscription = isSubUser ? userDataForSub.data.ownerId : firebaseUser.uid
+
+            console.log(`📋 Usuario: ${isSubUser ? 'Sub-usuario (owner: ' + ownerIdForSubscription + ')' : 'Principal'}`)
+
             const subscriptionPromise = Promise.race([
-              getSubscription(firebaseUser.uid),
+              getSubscription(ownerIdForSubscription),
               new Promise((_, reject) => setTimeout(() => reject(new Error('Subscription timeout')), 5000))
             ])
             let userSubscription = await subscriptionPromise
 
-            // Si no tiene suscripción, crear una de prueba automáticamente
-            if (!userSubscription && !superAdminStatus) {
+            // Si no tiene suscripción, crear una de prueba SOLO si es usuario principal (no sub-usuario)
+            if (!userSubscription && !superAdminStatus && !isSubUser) {
               try {
                 await createSubscription(
                   firebaseUser.uid,

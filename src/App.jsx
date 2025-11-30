@@ -25,6 +25,12 @@ import CashRegister from './pages/CashRegister'
 import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
 import UserManagement from './pages/admin/UserManagement'
+import AdminLayout from './layouts/AdminLayout'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminPayments from './pages/admin/AdminPayments'
+import AdminAnalytics from './pages/admin/AdminAnalytics'
+import AdminSettings from './pages/admin/AdminSettings'
 import Users from './pages/Users'
 import BusinessManagement from './pages/BusinessManagement'
 import GetMyUID from './pages/GetMyUID'
@@ -175,9 +181,17 @@ function App() {
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
 
-              {/* Rutas de administración */}
-              <Route path="admin/users" element={<UserManagement />} />
-              <Route path="admin/businesses" element={<BusinessManagement />} />
+              {/* Rutas de administración legacy eliminadas - usar /app/admin/dashboard */}
+            </Route>
+
+            {/* Panel de Administración (nuevo) */}
+            <Route path="/app/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="payments" element={<AdminPayments />} />
+              <Route path="analytics" element={<AdminAnalytics />} />
+              <Route path="settings" element={<AdminSettings />} />
             </Route>
 
             {/* Ruta 404 */}
