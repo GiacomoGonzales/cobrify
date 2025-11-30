@@ -205,6 +205,10 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
         totalCustomers: 0,
         totalProducts: 0
       },
+      // Features especiales habilitadas por admin (productImages, etc.)
+      features: {
+        productImages: false
+      },
       paymentHistory: [],
       notes: '',
       createdAt: serverTimestamp(),
@@ -462,6 +466,20 @@ export const updateNotes = async (userId, notes) => {
     });
   } catch (error) {
     console.error('Error al actualizar notas:', error);
+    throw error;
+  }
+};
+
+// Actualizar features de un usuario (Admin)
+export const updateUserFeatures = async (userId, features) => {
+  try {
+    const subscriptionRef = doc(db, 'subscriptions', userId);
+    await updateDoc(subscriptionRef, {
+      features,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error al actualizar features:', error);
     throw error;
   }
 };

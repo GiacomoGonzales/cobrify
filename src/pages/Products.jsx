@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -25,6 +25,7 @@ import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse } from '@/services/warehouseService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
+import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 
 // Unidades de medida
 const UNITS = [
@@ -110,7 +111,7 @@ const getExpirationStatus = (expirationDate) => {
 }
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -163,6 +164,11 @@ export default function Products() {
 
   // Modifiers state (for restaurant mode)
   const [modifiers, setModifiers] = useState([])
+
+  // Image upload state
+  const [productImage, setProductImage] = useState(null) // File object
+  const [productImagePreview, setProductImagePreview] = useState(null) // URL preview
+  const [uploadingImage, setUploadingImage] = useState(false)
 
   const {
     register,
@@ -317,6 +323,10 @@ export default function Products() {
     // Load modifiers if product has them (restaurant mode)
     setModifiers(product.modifiers || [])
 
+    // Load product image if exists
+    setProductImage(null)
+    setProductImagePreview(product.imageUrl || null)
+
     // Format expiration date if exists (from Firestore Timestamp to YYYY-MM-DD)
     let formattedExpirationDate = ''
     if (product.expirationDate) {
@@ -347,6 +357,12 @@ export default function Products() {
     setEditingProduct(null)
     setSelectedWarehouse('')
     setModifiers([]) // Limpiar modificadores
+    // Limpiar imagen
+    if (productImagePreview) {
+      revokeImagePreview(productImagePreview)
+    }
+    setProductImage(null)
+    setProductImagePreview(null)
     reset()
   }
 
@@ -494,6 +510,28 @@ export default function Products() {
         productData.variants = []
       }
 
+      // Handle product image upload (only if feature is enabled)
+      if (hasFeature('productImages') && productImage) {
+        try {
+          setUploadingImage(true)
+          const businessId = getBusinessId()
+          const tempProductId = editingProduct?.id || `temp_${Date.now()}`
+          const imageUrl = await uploadProductImage(businessId, tempProductId, productImage)
+          productData.imageUrl = imageUrl
+        } catch (imageError) {
+          console.error('Error al subir imagen:', imageError)
+          toast.error('Error al subir la imagen. El producto se guardará sin imagen.')
+        } finally {
+          setUploadingImage(false)
+        }
+      } else if (editingProduct?.imageUrl && !productImagePreview) {
+        // Si se eliminó la imagen, limpiar la URL
+        productData.imageUrl = null
+      } else if (editingProduct?.imageUrl && productImagePreview && !productImage) {
+        // Mantener la imagen existente si no se cambió
+        productData.imageUrl = editingProduct.imageUrl
+      }
+
       let result
 
       if (editingProduct) {
@@ -521,6 +559,45 @@ export default function Products() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // Handle image selection
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!validTypes.includes(file.type)) {
+      toast.error('Tipo de archivo no válido. Use JPG, PNG, WebP o GIF.')
+      return
+    }
+
+    // Validar tamaño (max 5MB)
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error('La imagen es muy grande. Máximo 5MB.')
+      return
+    }
+
+    // Limpiar preview anterior
+    if (productImagePreview && productImagePreview.startsWith('blob:')) {
+      revokeImagePreview(productImagePreview)
+    }
+
+    // Crear preview
+    const previewUrl = createImagePreview(file)
+    setProductImage(file)
+    setProductImagePreview(previewUrl)
+  }
+
+  // Handle image removal
+  const handleImageRemove = () => {
+    if (productImagePreview && productImagePreview.startsWith('blob:')) {
+      revokeImagePreview(productImagePreview)
+    }
+    setProductImage(null)
+    setProductImagePreview(null)
   }
 
   const handleDelete = async () => {
@@ -1584,6 +1661,7 @@ export default function Products() {
                       )}
                     </button>
                   </TableHead>
+                  <TableHead className="w-12"></TableHead>
                   <TableHead className="max-w-[100px]">
                     <button
                       onClick={() => handleSort('sku')}
@@ -1669,6 +1747,21 @@ export default function Products() {
                               <Square className="w-5 h-5 text-gray-400" />
                             )}
                           </button>
+                        </TableCell>
+                        <TableCell className="w-12">
+                          {product.imageUrl ? (
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                              <Package className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="max-w-[100px]">
                           <span className="font-mono text-xs text-primary-600 truncate block" title={product.sku || ''}>
@@ -1985,6 +2078,66 @@ export default function Products() {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Image upload section - only shown if feature is enabled */}
+          {hasFeature('productImages') && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Imagen del producto
+              </label>
+              <div className="flex items-start gap-4">
+                {/* Preview */}
+                <div className="relative">
+                  {productImagePreview ? (
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
+                      <img
+                        src={productImagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleImageRemove}
+                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
+                      <Package className="w-8 h-8 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                {/* Upload button */}
+                <div className="flex-1">
+                  <label className="cursor-pointer">
+                    <div className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors w-fit">
+                      <Camera className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-700">
+                        {productImagePreview ? 'Cambiar imagen' : 'Subir imagen'}
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500">
+                    JPG, PNG, WebP o GIF. Máximo 5MB.
+                  </p>
+                  {uploadingImage && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-primary-600">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Subiendo imagen...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <Input
             label="Nombre"
             required

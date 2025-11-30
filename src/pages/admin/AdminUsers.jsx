@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { collection, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore'
-import { PLANS } from '@/services/subscriptionService'
+import { PLANS, updateUserFeatures } from '@/services/subscriptionService'
 import {
   Users,
   Search,
@@ -30,7 +30,9 @@ import {
   Key,
   FileKey,
   Save,
-  Loader2
+  Loader2,
+  Image,
+  Sparkles
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -84,6 +86,14 @@ export default function AdminUsers() {
     qpse: false,
     sol: false,
     cert: false
+  })
+
+  // Estados para modal de features
+  const [showFeaturesModal, setShowFeaturesModal] = useState(false)
+  const [featuresUserToEdit, setFeaturesUserToEdit] = useState(null)
+  const [savingFeatures, setSavingFeatures] = useState(false)
+  const [featuresForm, setFeaturesForm] = useState({
+    productImages: false
   })
 
   useEffect(() => {
@@ -187,7 +197,8 @@ export default function AdminUsers() {
           accessBlocked: data.accessBlocked || false,
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
           subUsersCount: subUsersCountMap[doc.id] || 0,
-          subUsers: subUsersByOwner[doc.id] || []
+          subUsers: subUsersByOwner[doc.id] || [],
+          features: data.features || { productImages: false }
         })
       })
 
@@ -490,6 +501,34 @@ export default function AdminUsers() {
       alert('Error al guardar la configuración')
     } finally {
       setSavingSunat(false)
+    }
+  }
+
+  // Abrir modal de features
+  function openFeaturesModal(user) {
+    setFeaturesUserToEdit(user)
+    setFeaturesForm({
+      productImages: user.features?.productImages || false
+    })
+    setShowFeaturesModal(true)
+  }
+
+  // Guardar features
+  async function saveFeatures() {
+    if (!featuresUserToEdit) return
+
+    setSavingFeatures(true)
+    try {
+      await updateUserFeatures(featuresUserToEdit.id, featuresForm)
+      setShowFeaturesModal(false)
+      setFeaturesUserToEdit(null)
+      loadUsers()
+      alert('Features actualizados correctamente')
+    } catch (error) {
+      console.error('Error saving features:', error)
+      alert('Error al guardar features')
+    } finally {
+      setSavingFeatures(false)
     }
   }
 
@@ -943,6 +982,19 @@ export default function AdminUsers() {
                   Configurar SUNAT
                 </button>
 
+                <button
+                  onClick={() => {
+                    openFeaturesModal(selectedUser)
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Features
+                  {selectedUser.features?.productImages && (
+                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                  )}
+                </button>
+
                 {selectedUser.status !== 'suspended' ? (
                   <button
                     onClick={() => {
@@ -967,16 +1019,7 @@ export default function AdminUsers() {
                   </button>
                 )}
 
-                <button
-                  onClick={() => {
-                    window.open(`mailto:${selectedUser.email}`, '_blank')
-                  }}
-                  className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200"
-                >
-                  <Mail className="w-5 h-5" />
-                  Email
-                </button>
-              </div>
+                </div>
             </div>
           </div>
         </div>
@@ -1292,6 +1335,100 @@ export default function AdminUsers() {
               </div>
               </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Features */}
+      {showFeaturesModal && featuresUserToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Features Especiales</h2>
+                <p className="text-sm text-gray-500">{featuresUserToEdit.businessName}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFeaturesModal(false)
+                  setFeaturesUserToEdit(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <p className="text-sm text-gray-600">
+                Activa features especiales para este usuario. Estos features son adicionales al plan contratado.
+              </p>
+
+              {/* Feature: Imágenes de productos */}
+              <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <Image className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">Imágenes de productos</h3>
+                      <p className="text-xs text-gray-500">Permite subir fotos a los productos</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={featuresForm.productImages}
+                      onChange={e => setFeaturesForm({ ...featuresForm, productImages: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+                {featuresForm.productImages && (
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-purple-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-purple-600" />
+                    <span className="text-sm text-purple-700 font-medium">Feature habilitado</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Placeholder para futuros features */}
+              <div className="text-center py-4 text-gray-400 text-sm border border-dashed border-gray-300 rounded-lg">
+                Más features próximamente...
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowFeaturesModal(false)
+                    setFeaturesUserToEdit(null)
+                  }}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveFeatures}
+                  disabled={savingFeatures}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {savingFeatures ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Guardar
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

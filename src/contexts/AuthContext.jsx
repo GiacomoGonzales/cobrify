@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
   const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant'
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
+  const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -190,6 +191,13 @@ export const AuthProvider = ({ children }) => {
 
             setSubscription(userSubscription)
 
+            // Cargar features del usuario
+            if (userSubscription?.features) {
+              setUserFeatures(userSubscription.features)
+            } else {
+              setUserFeatures({ productImages: false })
+            }
+
             // Verificar acceso activo (super admin y business owner siempre tienen acceso)
             const accessStatus = superAdminStatus || businessOwnerStatus ? true : hasActiveAccess(userSubscription)
             setHasAccess(accessStatus)
@@ -263,6 +271,7 @@ export const AuthProvider = ({ children }) => {
           setAllowedPages([])
           setBusinessMode('retail')
           setBusinessSettings(null)
+          setUserFeatures({ productImages: false })
         }
       } catch (error) {
         console.error('Error en AuthContext:', error)
@@ -323,6 +332,7 @@ export const AuthProvider = ({ children }) => {
       setAllowedPages([])
       setBusinessMode('retail')
       setBusinessSettings(null)
+      setUserFeatures({ productImages: false })
       navigate('/')
     } catch (error) {
       console.error('Error al cerrar sesión:', error)
@@ -392,6 +402,14 @@ export const AuthProvider = ({ children }) => {
     return user.uid
   }
 
+  // Función helper para verificar si un feature está habilitado
+  const hasFeature = (featureName) => {
+    // Super Admin siempre tiene todos los features
+    if (isAdmin) return true
+
+    return userFeatures?.[featureName] === true
+  }
+
   const value = {
     user,
     isAuthenticated,
@@ -408,6 +426,8 @@ export const AuthProvider = ({ children }) => {
     getBusinessId, // Función para obtener el ID del negocio (owner)
     businessMode, // Modo de negocio: 'retail' | 'restaurant'
     businessSettings, // Configuración completa del negocio (incluye dispatchGuidesEnabled)
+    userFeatures, // Features especiales habilitadas
+    hasFeature, // Función helper para verificar features
     login,
     logout,
     refreshSubscription,

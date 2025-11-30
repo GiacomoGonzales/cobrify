@@ -541,6 +541,7 @@ export default function POS() {
         stock: variant.stock,
         quantity: 1,
         isVariant: true,
+        imageUrl: product.imageUrl, // Include product image
       }
       setCart([...cart, cartItem])
     }
@@ -2304,33 +2305,47 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
                 >
-                  <div className="flex flex-col h-full">
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="font-semibold text-gray-900 line-clamp-2 text-sm sm:text-base flex-1">
-                          {product.name}
-                        </p>
-                        {product.hasVariants && (
-                          <Badge variant="secondary" className="text-xs flex-shrink-0">
-                            {product.variants?.length || 0} vars
-                          </Badge>
+                  <div className="flex gap-3 h-full">
+                    {/* Product Image - Square on the left */}
+                    {product.imageUrl && (
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+                    {/* Product Info - Right side */}
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="font-semibold text-gray-900 line-clamp-2 text-sm sm:text-base flex-1">
+                            {product.name}
+                          </p>
+                          {product.hasVariants && (
+                            <Badge variant="secondary" className="text-xs flex-shrink-0">
+                              {product.variants?.length || 0} vars
+                            </Badge>
+                          )}
+                        </div>
+                        {product.code && !product.hasVariants && (
+                          <p className="text-xs text-gray-500">{product.code}</p>
                         )}
                       </div>
-                      {product.code && !product.hasVariants && (
-                        <p className="text-xs text-gray-500 mb-2">{product.code}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-base sm:text-lg font-bold text-primary-600">
-                        {product.hasVariants
-                          ? formatCurrency(product.basePrice)
-                          : formatCurrency(product.price)
-                        }
-                      </p>
-                      {!product.hasVariants && getStockBadge(product)}
-                      {product.hasVariants && (
-                        <span className="text-xs text-gray-500">Ver opciones</span>
-                      )}
+                      <div className="flex items-center justify-between mt-auto pt-1">
+                        <p className="text-base sm:text-lg font-bold text-primary-600">
+                          {product.hasVariants
+                            ? formatCurrency(product.basePrice)
+                            : formatCurrency(product.price)
+                          }
+                        </p>
+                        {!product.hasVariants && getStockBadge(product)}
+                        {product.hasVariants && (
+                          <span className="text-xs text-gray-500">Ver opciones</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -2382,98 +2397,113 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     const itemId = item.cartId || item.id
                     return (
                       <div key={itemId} className="p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 pr-2">
-                            <p className="font-medium text-sm text-gray-900 line-clamp-2">
-                              {item.name}
-                            </p>
-                            {item.isVariant && item.variantAttributes && (
-                              <p className="text-xs text-gray-600 mt-1">
-                                {Object.entries(item.variantAttributes).map(([key, value]) => (
-                                  <span key={key} className="mr-2">
-                                    {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
-                                  </span>
-                                ))}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => removeFromCart(itemId)}
-                            className="text-red-600 hover:text-red-800 flex-shrink-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => updateQuantity(itemId, -1)}
-                              className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="w-8 text-center font-semibold text-sm">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => updateQuantity(itemId, 1)}
-                              className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-
-                          {/* Precio unitario editable */}
-                          <div className="flex items-center gap-2">
-                            {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  value={editingPrice}
-                                  onChange={(e) => setEditingPrice(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      saveEditedPrice(itemId)
-                                    } else if (e.key === 'Escape') {
-                                      cancelEditingPrice()
-                                    }
-                                  }}
-                                  className="w-16 px-2 py-1 text-sm font-bold text-right border border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                  autoFocus
-                                  step="0.01"
-                                  min="0.01"
-                                />
-                                <button
-                                  onClick={() => saveEditedPrice(itemId)}
-                                  className="text-green-600 hover:text-green-800 p-1"
-                                  title="Guardar"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={cancelEditingPrice}
-                                  className="text-gray-600 hover:text-gray-800 p-1"
-                                  title="Cancelar"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <p className="font-bold text-gray-900 text-sm">
-                                  {formatCurrency(item.price * item.quantity)}
+                        <div className="flex gap-3">
+                          {/* Product thumbnail - Left side */}
+                          {item.imageUrl && (
+                            <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                          {/* Content - Right side */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 pr-2">
+                                <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                                  {item.name}
                                 </p>
-                                {companySettings?.allowPriceEdit && !item.isCustom && (
-                                  <button
-                                    onClick={() => startEditingPrice(itemId, item.price)}
-                                    className="text-primary-600 hover:text-primary-700 p-1"
-                                    title="Editar precio"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
+                                {item.isVariant && item.variantAttributes && (
+                                  <p className="text-xs text-gray-600 mt-1">
+                                    {Object.entries(item.variantAttributes).map(([key, value]) => (
+                                      <span key={key} className="mr-2">
+                                        {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+                                      </span>
+                                    ))}
+                                  </p>
                                 )}
                               </div>
-                            )}
+                              <button
+                                onClick={() => removeFromCart(itemId)}
+                                className="text-red-600 hover:text-red-800 flex-shrink-0"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => updateQuantity(itemId, -1)}
+                                  className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <span className="w-8 text-center font-semibold text-sm">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  onClick={() => updateQuantity(itemId, 1)}
+                                  className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              {/* Precio unitario editable */}
+                              <div className="flex items-center gap-2">
+                                {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      value={editingPrice}
+                                      onChange={(e) => setEditingPrice(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          saveEditedPrice(itemId)
+                                        } else if (e.key === 'Escape') {
+                                          cancelEditingPrice()
+                                        }
+                                      }}
+                                      className="w-16 px-2 py-1 text-sm font-bold text-right border border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                      autoFocus
+                                      step="0.01"
+                                      min="0.01"
+                                    />
+                                    <button
+                                      onClick={() => saveEditedPrice(itemId)}
+                                      className="text-green-600 hover:text-green-800 p-1"
+                                      title="Guardar"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={cancelEditingPrice}
+                                      className="text-gray-600 hover:text-gray-800 p-1"
+                                      title="Cancelar"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1">
+                                    <p className="font-bold text-gray-900 text-sm">
+                                      {formatCurrency(item.price * item.quantity)}
+                                    </p>
+                                    {companySettings?.allowPriceEdit && !item.isCustom && (
+                                      <button
+                                        onClick={() => startEditingPrice(itemId, item.price)}
+                                        className="text-primary-600 hover:text-primary-700 p-1"
+                                        title="Editar precio"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
