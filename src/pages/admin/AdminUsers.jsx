@@ -147,6 +147,16 @@ export default function AdminUsers() {
           status = 'expired'
         }
 
+        // Determinar método de emisión basado en enabled
+        let emissionMethod = 'none'
+        if (business.qpse?.enabled) {
+          emissionMethod = 'qpse'
+        } else if (business.sunat?.enabled) {
+          emissionMethod = 'sunat_direct'
+        } else if (business.emissionMethod) {
+          emissionMethod = business.emissionMethod
+        }
+
         usersData.push({
           id: doc.id,
           email: data.email || 'N/A',
@@ -154,7 +164,7 @@ export default function AdminUsers() {
           ruc: business.ruc || data.ruc || null,
           phone: business.phone || null,
           address: business.address || null,
-          emissionMethod: business.emissionMethod || 'none',
+          emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
           plan: data.plan || 'unknown',
           status,
