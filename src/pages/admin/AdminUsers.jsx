@@ -147,11 +147,11 @@ export default function AdminUsers() {
           status = 'expired'
         }
 
-        // Determinar método de emisión basado en enabled
+        // Determinar método de emisión basado en enabled o credenciales existentes
         let emissionMethod = 'none'
-        if (business.qpse?.enabled) {
+        if (business.qpse?.enabled || business.qpse?.usuario) {
           emissionMethod = 'qpse'
-        } else if (business.sunat?.enabled) {
+        } else if (business.sunat?.enabled || business.sunat?.solUser) {
           emissionMethod = 'sunat_direct'
         } else if (business.emissionMethod) {
           emissionMethod = business.emissionMethod
@@ -308,11 +308,11 @@ export default function AdminUsers() {
         const businessData = businessSnap.data()
         console.log('📋 Datos del negocio cargados:', businessData)
 
-        // Determinar método de emisión basado en enabled
+        // Determinar método de emisión basado en enabled o credenciales existentes
         let method = 'none'
-        if (businessData.qpse?.enabled) {
+        if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
           method = 'qpse'
-        } else if (businessData.sunat?.enabled) {
+        } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
           method = 'sunat_direct'
         } else if (businessData.emissionMethod) {
           method = businessData.emissionMethod
