@@ -1375,6 +1375,19 @@ export default function Products() {
 
   const { totalValue, lowStockCount, expiringProductsCount } = statistics
 
+  // Calcular qué columnas tienen datos (para ocultar columnas vacías)
+  const visibleColumns = React.useMemo(() => {
+    return {
+      image: products.some(p => p.imageUrl),
+      sku: products.some(p => p.sku && p.sku.trim() !== ''),
+      code: products.some(p => p.code && p.code.trim() !== ''),
+      description: products.some(p => p.description && p.description.trim() !== ''),
+      cost: products.some(p => p.cost !== undefined && p.cost !== null),
+      category: products.some(p => p.category && p.category.trim() !== ''),
+      expiration: products.some(p => p.trackExpiration && p.expirationDate),
+    }
+  }, [products])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -1661,27 +1674,31 @@ export default function Products() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead className="max-w-[100px]">
-                    <button
-                      onClick={() => handleSort('sku')}
-                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                      title="Ordenar por SKU"
-                    >
-                      SKU
-                      {getSortIcon('sku')}
-                    </button>
-                  </TableHead>
-                  <TableHead className="hidden md:table-cell max-w-[100px]">
-                    <button
-                      onClick={() => handleSort('code')}
-                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                      title="Ordenar por código de barras"
-                    >
-                      Cód. Barras
-                      {getSortIcon('code')}
-                    </button>
-                  </TableHead>
+                  {visibleColumns.image && <TableHead className="w-12"></TableHead>}
+                  {visibleColumns.sku && (
+                    <TableHead className="max-w-[100px]">
+                      <button
+                        onClick={() => handleSort('sku')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por SKU"
+                      >
+                        SKU
+                        {getSortIcon('sku')}
+                      </button>
+                    </TableHead>
+                  )}
+                  {visibleColumns.code && (
+                    <TableHead className="hidden md:table-cell max-w-[100px]">
+                      <button
+                        onClick={() => handleSort('code')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por código de barras"
+                      >
+                        Cód. Barras
+                        {getSortIcon('code')}
+                      </button>
+                    </TableHead>
+                  )}
                   <TableHead className="min-w-[150px] max-w-[200px]">
                     <button
                       onClick={() => handleSort('name')}
@@ -1692,7 +1709,9 @@ export default function Products() {
                       {getSortIcon('name')}
                     </button>
                   </TableHead>
-                  <TableHead className="hidden lg:table-cell max-w-[150px]">Descripción</TableHead>
+                  {visibleColumns.description && (
+                    <TableHead className="hidden lg:table-cell max-w-[150px]">Descripción</TableHead>
+                  )}
                   <TableHead className="max-w-[100px]">
                     <button
                       onClick={() => handleSort('price')}
@@ -1703,17 +1722,21 @@ export default function Products() {
                       {getSortIcon('price')}
                     </button>
                   </TableHead>
-                  <TableHead className="hidden xl:table-cell max-w-[90px]">Utilidad</TableHead>
-                  <TableHead className="hidden md:table-cell max-w-[120px]">
-                    <button
-                      onClick={() => handleSort('category')}
-                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                      title="Ordenar por categoría"
-                    >
-                      Categoría
-                      {getSortIcon('category')}
-                    </button>
-                  </TableHead>
+                  {visibleColumns.cost && (
+                    <TableHead className="hidden xl:table-cell max-w-[90px]">Utilidad</TableHead>
+                  )}
+                  {visibleColumns.category && (
+                    <TableHead className="hidden md:table-cell max-w-[120px]">
+                      <button
+                        onClick={() => handleSort('category')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                        title="Ordenar por categoría"
+                      >
+                        Categoría
+                        {getSortIcon('category')}
+                      </button>
+                    </TableHead>
+                  )}
                   <TableHead className="max-w-[80px]">
                     <button
                       onClick={() => handleSort('stock')}
@@ -1724,7 +1747,9 @@ export default function Products() {
                       {getSortIcon('stock')}
                     </button>
                   </TableHead>
-                  <TableHead className="hidden lg:table-cell max-w-[110px]">Vencimiento</TableHead>
+                  {visibleColumns.expiration && (
+                    <TableHead className="hidden lg:table-cell max-w-[110px]">Vencimiento</TableHead>
+                  )}
                   <TableHead className="text-right max-w-[100px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1748,39 +1773,47 @@ export default function Products() {
                             )}
                           </button>
                         </TableCell>
-                        <TableCell className="w-12">
-                          {product.imageUrl ? (
-                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
-                              <img
-                                src={product.imageUrl}
-                                alt={product.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                              <Package className="w-5 h-5 text-gray-400" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="max-w-[100px]">
-                          <span className="font-mono text-xs text-primary-600 truncate block" title={product.sku || ''}>
-                            {product.sku || '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell max-w-[100px]">
-                          <span className="font-mono text-xs text-gray-500 truncate block" title={product.code || ''}>
-                            {product.code || '-'}
-                          </span>
-                        </TableCell>
+                        {visibleColumns.image && (
+                          <TableCell className="w-12">
+                            {product.imageUrl ? (
+                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
+                                <img
+                                  src={product.imageUrl}
+                                  alt={product.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                                <Package className="w-5 h-5 text-gray-400" />
+                              </div>
+                            )}
+                          </TableCell>
+                        )}
+                        {visibleColumns.sku && (
+                          <TableCell className="max-w-[100px]">
+                            <span className="font-mono text-xs text-primary-600 truncate block" title={product.sku || ''}>
+                              {product.sku || '-'}
+                            </span>
+                          </TableCell>
+                        )}
+                        {visibleColumns.code && (
+                          <TableCell className="hidden md:table-cell max-w-[100px]">
+                            <span className="font-mono text-xs text-gray-500 truncate block" title={product.code || ''}>
+                              {product.code || '-'}
+                            </span>
+                          </TableCell>
+                        )}
                         <TableCell className="min-w-[150px] max-w-[200px]">
                           <p className="text-sm font-medium truncate" title={product.name}>{product.name}</p>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell max-w-[150px]">
-                          <p className="text-xs text-gray-600 truncate" title={product.description || '-'}>
-                            {product.description || '-'}
-                          </p>
-                        </TableCell>
+                        {visibleColumns.description && (
+                          <TableCell className="hidden lg:table-cell max-w-[150px]">
+                            <p className="text-xs text-gray-600 truncate" title={product.description || '-'}>
+                              {product.description || '-'}
+                            </p>
+                          </TableCell>
+                        )}
                         <TableCell className="max-w-[100px]">
                           {product.hasVariants ? (
                             <div>
@@ -1794,29 +1827,33 @@ export default function Products() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className="hidden xl:table-cell max-w-[90px]">
-                          {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
-                            <div>
-                              <span className="text-sm font-semibold text-green-600 truncate block">
-                                {formatCurrency(product.price - product.cost)}
+                        {visibleColumns.cost && (
+                          <TableCell className="hidden xl:table-cell max-w-[90px]">
+                            {!product.hasVariants && product.cost !== undefined && product.cost !== null ? (
+                              <div>
+                                <span className="text-sm font-semibold text-green-600 truncate block">
+                                  {formatCurrency(product.price - product.cost)}
+                                </span>
+                                <p className="text-xs text-gray-500">
+                                  {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {visibleColumns.category && (
+                          <TableCell className="hidden md:table-cell max-w-[120px]">
+                            {product.category ? (
+                              <span className="text-xs text-gray-700 truncate block" title={getCategoryPath(categories, product.category)}>
+                                {getCategoryPath(categories, product.category) || product.category}
                               </span>
-                              <p className="text-xs text-gray-500">
-                                {product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'}
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell max-w-[120px]">
-                          {product.category ? (
-                            <span className="text-xs text-gray-700 truncate block" title={getCategoryPath(categories, product.category)}>
-                              {getCategoryPath(categories, product.category) || product.category}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
-                        </TableCell>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell className="max-w-[80px]">
                           <div className="flex items-center space-x-1">
                             {/* Botón de expandir/contraer solo si hay almacenes */}
@@ -1858,30 +1895,32 @@ export default function Products() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell max-w-[110px]">
-                          {product.trackExpiration && product.expirationDate ? (() => {
-                            const expStatus = getExpirationStatus(product.expirationDate)
-                            const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
-                            const formattedDate = expDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        {visibleColumns.expiration && (
+                          <TableCell className="hidden lg:table-cell max-w-[110px]">
+                            {product.trackExpiration && product.expirationDate ? (() => {
+                              const expStatus = getExpirationStatus(product.expirationDate)
+                              const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
+                              const formattedDate = expDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-                            return (
-                              <div className="flex flex-col space-y-1">
-                                <Badge
-                                  variant={expStatus.status === 'expired' ? 'danger' : expStatus.status === 'warning' ? 'warning' : 'success'}
-                                  className="text-xs truncate"
-                                >
-                                  {expStatus.status === 'expired'
-                                    ? `${expStatus.days}d`
-                                    : `${expStatus.days}d`
-                                  }
-                                </Badge>
-                                <span className="text-xs text-gray-500 truncate">{formattedDate}</span>
-                              </div>
-                            )
-                          })() : (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
-                        </TableCell>
+                              return (
+                                <div className="flex flex-col space-y-1">
+                                  <Badge
+                                    variant={expStatus.status === 'expired' ? 'danger' : expStatus.status === 'warning' ? 'warning' : 'success'}
+                                    className="text-xs truncate"
+                                  >
+                                    {expStatus.status === 'expired'
+                                      ? `${expStatus.days}d`
+                                      : `${expStatus.days}d`
+                                    }
+                                  </Badge>
+                                  <span className="text-xs text-gray-500 truncate">{formattedDate}</span>
+                                </div>
+                              )
+                            })() : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell className="max-w-[100px]">
                           <div className="flex items-center justify-end space-x-1">
                             <button

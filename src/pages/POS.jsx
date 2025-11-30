@@ -924,11 +924,15 @@ export default function POS() {
     // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT)
     if (documentType === 'boleta' && amounts.total > 700) {
       if (!customerData.documentNumber) {
-        toast.error('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren el DNI del cliente')
+        toast.error('Por normativa SUNAT, las boletas mayores a S/ 700.00 requieren documento del cliente')
         return
       }
       if (customerData.documentType === ID_TYPES.DNI && customerData.documentNumber.length !== 8) {
         toast.error('El DNI debe tener 8 dígitos')
+        return
+      }
+      if (customerData.documentType === ID_TYPES.CE && customerData.documentNumber.length < 9) {
+        toast.error('El Carnet de Extranjería debe tener al menos 9 caracteres')
         return
       }
       if (!customerData.name || customerData.name.trim() === '') {
@@ -948,6 +952,11 @@ export default function POS() {
       } else if (customerData.documentType === ID_TYPES.DNI) {
         if (customerData.documentNumber.length !== 8) {
           toast.error('El DNI debe tener 8 dígitos')
+          return
+        }
+      } else if (customerData.documentType === ID_TYPES.CE) {
+        if (customerData.documentNumber.length < 9) {
+          toast.error('El Carnet de Extranjería debe tener al menos 9 caracteres')
           return
         }
       }
@@ -1906,24 +1915,27 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         >
                           <option value={ID_TYPES.DNI}>DNI</option>
                           <option value={ID_TYPES.RUC}>RUC</option>
+                          <option value={ID_TYPES.CE}>Carnet de Extranjería</option>
                         </select>
                       </div>
 
                       {/* Campo de documento con botón de búsqueda */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {customerData.documentType === ID_TYPES.RUC ? 'RUC' : 'DNI'}
+                          {customerData.documentType === ID_TYPES.RUC ? 'RUC' : customerData.documentType === ID_TYPES.CE ? 'CE' : 'DNI'}
                         </label>
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            maxLength={customerData.documentType === ID_TYPES.RUC ? 11 : 8}
+                            maxLength={customerData.documentType === ID_TYPES.RUC ? 11 : customerData.documentType === ID_TYPES.CE ? 12 : 8}
                             value={customerData.documentNumber}
                             onChange={e => setCustomerData({
                               ...customerData,
-                              documentNumber: e.target.value.replace(/\D/g, '')
+                              documentNumber: customerData.documentType === ID_TYPES.CE
+                                ? e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+                                : e.target.value.replace(/\D/g, '')
                             })}
-                            placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789' : '12345678'}
+                            placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789' : customerData.documentType === ID_TYPES.CE ? 'CE123456789' : '12345678'}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           />
                           <Button
@@ -1932,7 +1944,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             size="sm"
                             onClick={handleLookupDocument}
                             disabled={isLookingUp || !customerData.documentNumber ||
-                              (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 : customerData.documentNumber.length !== 8)}
+                              (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 :
+                               customerData.documentType === ID_TYPES.CE ? customerData.documentNumber.length < 9 :
+                               customerData.documentNumber.length !== 8)}
                             className="flex-shrink-0"
                           >
                             {isLookingUp ? (
