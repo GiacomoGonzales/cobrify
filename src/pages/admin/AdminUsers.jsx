@@ -147,9 +147,12 @@ export default function AdminUsers() {
           status = 'expired'
         }
 
-        // Determinar método de emisión basado en enabled o credenciales existentes
+        // Determinar método de emisión
+        // Prioridad: emissionConfig.method > qpse/sunat enabled > credenciales existentes
         let emissionMethod = 'none'
-        if (business.qpse?.enabled || business.qpse?.usuario) {
+        if (business.emissionConfig?.method) {
+          emissionMethod = business.emissionConfig.method
+        } else if (business.qpse?.enabled || business.qpse?.usuario) {
           emissionMethod = 'qpse'
         } else if (business.sunat?.enabled || business.sunat?.solUser) {
           emissionMethod = 'sunat_direct'
@@ -308,9 +311,12 @@ export default function AdminUsers() {
         const businessData = businessSnap.data()
         console.log('📋 Datos del negocio cargados:', businessData)
 
-        // Determinar método de emisión basado en enabled o credenciales existentes
+        // Determinar método de emisión
+        // Prioridad: emissionConfig.method > qpse/sunat enabled > credenciales existentes
         let method = 'none'
-        if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
+        if (businessData.emissionConfig?.method) {
+          method = businessData.emissionConfig.method
+        } else if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
           method = 'qpse'
         } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
           method = 'sunat_direct'
@@ -318,21 +324,26 @@ export default function AdminUsers() {
           method = businessData.emissionMethod
         }
 
+        // Obtener datos de qpse/sunat (puede estar en emissionConfig o directamente)
+        const qpseData = businessData.emissionConfig?.qpse || businessData.qpse || {}
+        const sunatData = businessData.emissionConfig?.sunat || businessData.sunat || {}
+
         console.log('📋 Método detectado:', method)
-        console.log('📋 QPse data:', businessData.qpse)
-        console.log('📋 SUNAT data:', businessData.sunat)
+        console.log('📋 emissionConfig:', businessData.emissionConfig)
+        console.log('📋 QPse data:', qpseData)
+        console.log('📋 SUNAT data:', sunatData)
 
         setSunatForm({
           emissionMethod: method,
           // QPse
-          qpseUsuario: businessData.qpse?.usuario || '',
-          qpsePassword: businessData.qpse?.password || '',
-          qpseEnvironment: businessData.qpse?.environment || 'demo',
+          qpseUsuario: qpseData.usuario || '',
+          qpsePassword: qpseData.password || '',
+          qpseEnvironment: qpseData.environment || 'demo',
           // SUNAT Directo
-          solUser: businessData.sunat?.solUser || '',
-          solPassword: businessData.sunat?.solPassword || '',
-          certificatePassword: businessData.sunat?.certificatePassword || '',
-          sunatEnvironment: businessData.sunat?.environment || 'beta'
+          solUser: sunatData.solUser || '',
+          solPassword: sunatData.solPassword || '',
+          certificatePassword: sunatData.certificatePassword || '',
+          sunatEnvironment: sunatData.environment || 'beta'
         })
       } else {
         console.warn('⚠️ No se encontró documento de negocio para:', user.id)
@@ -350,38 +361,50 @@ export default function AdminUsers() {
     try {
       const businessRef = doc(db, 'businesses', sunatUserToEdit.id)
 
+      // Primero obtener los datos actuales para preservar taxConfig
+      const currentDoc = await getDoc(businessRef)
+      const currentData = currentDoc.exists() ? currentDoc.data() : {}
+      const currentEmissionConfig = currentData.emissionConfig || {}
+
       const updateData = {
-        emissionMethod: sunatForm.emissionMethod,
         updatedAt: Timestamp.now()
       }
 
+      // Construir emissionConfig
+      const emissionConfig = {
+        method: sunatForm.emissionMethod,
+        taxConfig: currentEmissionConfig.taxConfig || { igvRate: 0.18, includeIgv: true }
+      }
+
       if (sunatForm.emissionMethod === 'qpse') {
-        updateData.qpse = {
+        emissionConfig.qpse = {
           enabled: true,
           usuario: sunatForm.qpseUsuario,
           password: sunatForm.qpsePassword,
           environment: sunatForm.qpseEnvironment,
-          firmasDisponibles: 500,
-          firmasUsadas: 0
+          firmasDisponibles: currentEmissionConfig.qpse?.firmasDisponibles || 500,
+          firmasUsadas: currentEmissionConfig.qpse?.firmasUsadas || 0
         }
-        // Desactivar SUNAT directo si estaba activo
-        updateData['sunat.enabled'] = false
+        emissionConfig.sunat = { enabled: false }
       } else if (sunatForm.emissionMethod === 'sunat_direct') {
-        updateData.sunat = {
+        emissionConfig.sunat = {
           enabled: true,
           solUser: sunatForm.solUser,
           solPassword: sunatForm.solPassword,
           certificatePassword: sunatForm.certificatePassword,
           environment: sunatForm.sunatEnvironment,
-          homologated: sunatForm.sunatEnvironment === 'produccion'
+          homologated: sunatForm.sunatEnvironment === 'produccion',
+          // Preservar certificado si existe
+          certificateName: currentEmissionConfig.sunat?.certificateName || '',
+          certificateData: currentEmissionConfig.sunat?.certificateData || null
         }
-        // Desactivar QPse si estaba activo
-        updateData['qpse.enabled'] = false
+        emissionConfig.qpse = { enabled: false }
       } else {
-        // Sin configuración - desactivar ambos
-        updateData['qpse.enabled'] = false
-        updateData['sunat.enabled'] = false
+        emissionConfig.qpse = { enabled: false }
+        emissionConfig.sunat = { enabled: false }
       }
+
+      updateData.emissionConfig = emissionConfig
 
       await updateDoc(businessRef, updateData)
 
@@ -865,6 +888,22 @@ export default function AdminUsers() {
                 >
                   <Settings className="w-5 h-5" />
                   Configurar SUNAT
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const businessRef = doc(db, 'businesses', selectedUser.id)
+                    const snap = await getDoc(businessRef)
+                    if (snap.exists()) {
+                      console.log('🔍 RAW DATA businesses/' + selectedUser.id + ':', snap.data())
+                      alert('Datos en consola (F12). qpse: ' + JSON.stringify(snap.data().qpse) + '\n\nsunat: ' + JSON.stringify(snap.data().sunat))
+                    } else {
+                      alert('No existe documento en businesses/' + selectedUser.id)
+                    }
+                  }}
+                  className="px-3 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-xs"
+                >
+                  Debug
                 </button>
 
                 {selectedUser.status !== 'suspended' ? (
