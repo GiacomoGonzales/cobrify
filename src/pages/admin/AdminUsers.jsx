@@ -73,7 +73,9 @@ export default function AdminUsers() {
     solUser: '',
     solPassword: '',
     certificatePassword: '',
-    sunatEnvironment: 'beta'
+    certificateName: '',
+    sunatEnvironment: 'beta',
+    homologated: false
   })
   const [showPasswords, setShowPasswords] = useState({
     qpse: false,
@@ -343,7 +345,9 @@ export default function AdminUsers() {
           solUser: sunatData.solUser || '',
           solPassword: sunatData.solPassword || '',
           certificatePassword: sunatData.certificatePassword || '',
-          sunatEnvironment: sunatData.environment || 'beta'
+          certificateName: sunatData.certificateName || '',
+          sunatEnvironment: sunatData.environment || 'beta',
+          homologated: sunatData.homologated || false
         })
       } else {
         console.warn('⚠️ No se encontró documento de negocio para:', user.id)
@@ -1128,9 +1132,34 @@ export default function AdminUsers() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-blue-600">
-                    Nota: El certificado digital (.pfx) debe ser subido por el usuario desde su panel de Configuración.
-                  </p>
+                  {/* Certificado Digital */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Certificado Digital (.pfx)
+                    </label>
+                    {sunatForm.certificateName ? (
+                      <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <FileKey className="w-5 h-5 text-green-600" />
+                        <span className="text-sm text-green-700 font-medium">{sunatForm.certificateName}</span>
+                        <CheckCircle className="w-4 h-4 text-green-600 ml-auto" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                        <span className="text-sm text-yellow-700">Sin certificado - El usuario debe subirlo desde su Configuración</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Estado de homologación */}
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Estado:</span>
+                    {sunatForm.homologated ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
+                    ) : (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
+                    )}
+                  </div>
                 </div>
               )}
 
