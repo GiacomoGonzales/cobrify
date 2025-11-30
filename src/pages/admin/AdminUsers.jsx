@@ -25,7 +25,12 @@ import {
   Edit2,
   Trash2,
   UserPlus,
-  Shield
+  Shield,
+  Settings,
+  Key,
+  FileKey,
+  Save,
+  Loader2
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -53,6 +58,28 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
   const [actionMenuUser, setActionMenuUser] = useState(null)
+
+  // Estados para modal de configuración SUNAT
+  const [showSunatModal, setShowSunatModal] = useState(false)
+  const [sunatUserToEdit, setSunatUserToEdit] = useState(null)
+  const [savingSunat, setSavingSunat] = useState(false)
+  const [sunatForm, setSunatForm] = useState({
+    emissionMethod: 'none',
+    // QPse
+    qpseUsuario: '',
+    qpsePassword: '',
+    qpseEnvironment: 'demo',
+    // SUNAT Directo
+    solUser: '',
+    solPassword: '',
+    certificatePassword: '',
+    sunatEnvironment: 'beta'
+  })
+  const [showPasswords, setShowPasswords] = useState({
+    qpse: false,
+    sol: false,
+    cert: false
+  })
 
   useEffect(() => {
     loadUsers()
@@ -243,6 +270,122 @@ export default function AdminUsers() {
     a.href = url
     a.download = `usuarios_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
+  }
+
+  // Abrir modal de configuración SUNAT
+  async function openSunatConfig(user) {
+    setSunatUserToEdit(user)
+    setShowSunatModal(true)
+
+    // Cargar configuración actual del negocio
+    try {
+      const businessDoc = await getDocs(collection(db, 'businesses'))
+      const businessData = businessDoc.docs.find(d => d.id === user.id)?.data()
+
+      if (businessData) {
+        setSunatForm({
+          emissionMethod: businessData.emissionMethod || 'none',
+          // QPse
+          qpseUsuario: businessData.qpse?.usuario || '',
+          qpsePassword: businessData.qpse?.password || '',
+          qpseEnvironment: businessData.qpse?.environment || 'demo',
+          // SUNAT Directo
+          solUser: businessData.sunat?.solUser || '',
+          solPassword: businessData.sunat?.solPassword || '',
+          certificatePassword: businessData.sunat?.certificatePassword || '',
+          sunatEnvironment: businessData.sunat?.environment || 'beta'
+        })
+      } else {
+        // Reset form
+        setSunatForm({
+          emissionMethod: 'none',
+          qpseUsuario: '',
+          qpsePassword: '',
+          qpseEnvironment: 'demo',
+          solUser: '',
+          solPassword: '',
+          certificatePassword: '',
+          sunatEnvironment: 'beta'
+        })
+      }
+    } catch (error) {
+      console.error('Error loading SUNAT config:', error)
+    }
+  }
+
+  // Guardar configuración SUNAT
+  async function saveSunatConfig() {
+    if (!sunatUserToEdit) return
+
+    setSavingSunat(true)
+    try {
+      const businessRef = doc(db, 'businesses', sunatUserToEdit.id)
+
+      const updateData = {
+        emissionMethod: sunatForm.emissionMethod,
+        updatedAt: Timestamp.now()
+      }
+
+      if (sunatForm.emissionMethod === 'qpse') {
+        updateData.qpse = {
+          enabled: true,
+          usuario: sunatForm.qpseUsuario,
+          password: sunatForm.qpsePassword,
+          environment: sunatForm.qpseEnvironment,
+          firmasDisponibles: 500,
+          firmasUsadas: 0
+        }
+        // Desactivar SUNAT directo si estaba activo
+        updateData['sunat.enabled'] = false
+      } else if (sunatForm.emissionMethod === 'sunat_direct') {
+        updateData.sunat = {
+          enabled: true,
+          solUser: sunatForm.solUser,
+          solPassword: sunatForm.solPassword,
+          certificatePassword: sunatForm.certificatePassword,
+          environment: sunatForm.sunatEnvironment,
+          homologated: sunatForm.sunatEnvironment === 'produccion'
+        }
+        // Desactivar QPse si estaba activo
+        updateData['qpse.enabled'] = false
+      } else {
+        // Sin configuración - desactivar ambos
+        updateData['qpse.enabled'] = false
+        updateData['sunat.enabled'] = false
+      }
+
+      await updateDoc(businessRef, updateData)
+
+      // Actualizar también el plan del usuario si cambió el método
+      if (sunatForm.emissionMethod === 'qpse') {
+        // Verificar si tiene plan qpse, si no asignar uno
+        const currentPlan = users.find(u => u.id === sunatUserToEdit.id)?.plan
+        if (!currentPlan?.includes('qpse')) {
+          await updateDoc(doc(db, 'subscriptions', sunatUserToEdit.id), {
+            plan: 'qpse_1_month',
+            limits: PLANS['qpse_1_month'].limits
+          })
+        }
+      } else if (sunatForm.emissionMethod === 'sunat_direct') {
+        const currentPlan = users.find(u => u.id === sunatUserToEdit.id)?.plan
+        if (!currentPlan?.includes('sunat_direct')) {
+          await updateDoc(doc(db, 'subscriptions', sunatUserToEdit.id), {
+            plan: 'sunat_direct_1_month',
+            limits: PLANS['sunat_direct_1_month'].limits
+          })
+        }
+      }
+
+      setShowSunatModal(false)
+      setSunatUserToEdit(null)
+      loadUsers()
+      alert('Configuración guardada correctamente')
+    } catch (error) {
+      console.error('Error saving SUNAT config:', error)
+      alert('Error al guardar la configuración')
+    } finally {
+      setSavingSunat(false)
+    }
   }
 
   function formatDate(date) {
@@ -684,7 +827,17 @@ export default function AdminUsers() {
               )}
 
               {/* Actions */}
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => {
+                    openSunatConfig(selectedUser)
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200"
+                >
+                  <Settings className="w-5 h-5" />
+                  Configurar SUNAT
+                </button>
+
                 {selectedUser.status !== 'suspended' ? (
                   <button
                     onClick={() => {
@@ -694,7 +847,7 @@ export default function AdminUsers() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
                   >
                     <Ban className="w-5 h-5" />
-                    Suspender cuenta
+                    Suspender
                   </button>
                 ) : (
                   <button
@@ -705,7 +858,7 @@ export default function AdminUsers() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
                   >
                     <CheckCircle className="w-5 h-5" />
-                    Reactivar cuenta
+                    Reactivar
                   </button>
                 )}
 
@@ -716,7 +869,7 @@ export default function AdminUsers() {
                   className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200"
                 >
                   <Mail className="w-5 h-5" />
-                  Enviar email
+                  Email
                 </button>
               </div>
             </div>
@@ -730,6 +883,221 @@ export default function AdminUsers() {
           className="fixed inset-0 z-0"
           onClick={() => setActionMenuUser(null)}
         />
+      )}
+
+      {/* Modal de Configuración SUNAT */}
+      {showSunatModal && sunatUserToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Configurar Emisión Electrónica</h2>
+                <p className="text-sm text-gray-500">{sunatUserToEdit.businessName}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSunatModal(false)
+                  setSunatUserToEdit(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Selector de método */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Método de Emisión
+                </label>
+                <select
+                  value={sunatForm.emissionMethod}
+                  onChange={e => setSunatForm({ ...sunatForm, emissionMethod: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="none">Sin configurar</option>
+                  <option value="qpse">QPse (500 docs/mes)</option>
+                  <option value="sunat_direct">SUNAT Directo (Ilimitado)</option>
+                </select>
+              </div>
+
+              {/* Configuración QPse */}
+              {sunatForm.emissionMethod === 'qpse' && (
+                <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 space-y-4">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <FileKey className="w-5 h-5" />
+                    <span className="font-medium">Configuración QPse</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ambiente
+                    </label>
+                    <select
+                      value={sunatForm.qpseEnvironment}
+                      onChange={e => setSunatForm({ ...sunatForm, qpseEnvironment: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="demo">Demo (Pruebas)</option>
+                      <option value="produccion">Producción</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Usuario QPse
+                    </label>
+                    <input
+                      type="text"
+                      value={sunatForm.qpseUsuario}
+                      onChange={e => setSunatForm({ ...sunatForm, qpseUsuario: e.target.value })}
+                      placeholder="usuario@empresa.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña QPse
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords.qpse ? 'text' : 'password'}
+                        value={sunatForm.qpsePassword}
+                        onChange={e => setSunatForm({ ...sunatForm, qpsePassword: e.target.value })}
+                        placeholder="••••••••"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords({ ...showPasswords, qpse: !showPasswords.qpse })}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Configuración SUNAT Directo */}
+              {sunatForm.emissionMethod === 'sunat_direct' && (
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 space-y-4">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Shield className="w-5 h-5" />
+                    <span className="font-medium">Configuración SUNAT Directo</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ambiente
+                    </label>
+                    <select
+                      value={sunatForm.sunatEnvironment}
+                      onChange={e => setSunatForm({ ...sunatForm, sunatEnvironment: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="beta">Beta (Pruebas)</option>
+                      <option value="produccion">Producción</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Usuario SOL
+                    </label>
+                    <input
+                      type="text"
+                      value={sunatForm.solUser}
+                      onChange={e => setSunatForm({ ...sunatForm, solUser: e.target.value })}
+                      placeholder="MODDATOS"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Clave SOL
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords.sol ? 'text' : 'password'}
+                        value={sunatForm.solPassword}
+                        onChange={e => setSunatForm({ ...sunatForm, solPassword: e.target.value })}
+                        placeholder="••••••••"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords({ ...showPasswords, sol: !showPasswords.sol })}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña del Certificado
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords.cert ? 'text' : 'password'}
+                        value={sunatForm.certificatePassword}
+                        onChange={e => setSunatForm({ ...sunatForm, certificatePassword: e.target.value })}
+                        placeholder="••••••••"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords({ ...showPasswords, cert: !showPasswords.cert })}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-blue-600">
+                    Nota: El certificado digital (.pfx) debe ser subido por el usuario desde su panel de Configuración.
+                  </p>
+                </div>
+              )}
+
+              {/* Botones */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowSunatModal(false)
+                    setSunatUserToEdit(null)
+                  }}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveSunatConfig}
+                  disabled={savingSunat}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {savingSunat ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Guardar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
