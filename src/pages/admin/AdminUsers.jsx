@@ -134,7 +134,7 @@ export default function AdminUsers() {
           createdAt,
           periodEnd,
           usage: data.usage?.invoicesThisMonth || 0,
-          limit: PLANS[data.plan]?.invoiceLimit || 0,
+          limit: PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0, // -1 = ilimitado
           accessBlocked: data.accessBlocked || false,
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
           subUsersCount: subUsersCountMap[doc.id] || 0,
@@ -233,7 +233,7 @@ export default function AdminUsers() {
       STATUS_LABELS[u.status],
       u.createdAt?.toLocaleDateString() || 'N/A',
       u.usage,
-      u.limit || 'Ilimitado'
+      u.limit === -1 || u.limit === 0 ? 'Ilimitado' : u.limit
     ])
 
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
@@ -475,17 +475,17 @@ export default function AdminUsers() {
                         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
                           <div
                             className={`h-full rounded-full ${
-                              user.limit && user.usage / user.limit > 0.9
+                              user.limit > 0 && user.usage / user.limit > 0.9
                                 ? 'bg-red-500'
-                                : user.limit && user.usage / user.limit > 0.7
+                                : user.limit > 0 && user.usage / user.limit > 0.7
                                   ? 'bg-yellow-500'
                                   : 'bg-green-500'
                             }`}
-                            style={{ width: user.limit ? `${Math.min((user.usage / user.limit) * 100, 100)}%` : '10%' }}
+                            style={{ width: user.limit > 0 ? `${Math.min((user.usage / user.limit) * 100, 100)}%` : '10%' }}
                           />
                         </div>
                         <span className="text-xs text-gray-500">
-                          {user.usage}/{user.limit || '∞'}
+                          {user.usage}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
                         </span>
                       </div>
                     </td>
@@ -641,19 +641,19 @@ export default function AdminUsers() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-500">Uso este mes</span>
                   <span className="font-medium">
-                    {selectedUser.usage} / {selectedUser.limit || '∞'} documentos
+                    {selectedUser.usage} / {selectedUser.limit === -1 || selectedUser.limit === 0 ? '∞' : selectedUser.limit} documentos
                   </span>
                 </div>
                 <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full ${
-                      selectedUser.limit && selectedUser.usage / selectedUser.limit > 0.9
+                      selectedUser.limit > 0 && selectedUser.usage / selectedUser.limit > 0.9
                         ? 'bg-red-500'
-                        : selectedUser.limit && selectedUser.usage / selectedUser.limit > 0.7
+                        : selectedUser.limit > 0 && selectedUser.usage / selectedUser.limit > 0.7
                           ? 'bg-yellow-500'
                           : 'bg-green-500'
                     }`}
-                    style={{ width: selectedUser.limit ? `${Math.min((selectedUser.usage / selectedUser.limit) * 100, 100)}%` : '5%' }}
+                    style={{ width: selectedUser.limit > 0 ? `${Math.min((selectedUser.usage / selectedUser.limit) * 100, 100)}%` : '5%' }}
                   />
                 </div>
               </div>
