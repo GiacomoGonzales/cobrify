@@ -298,8 +298,22 @@ export default function AdminUsers() {
         const businessData = businessSnap.data()
         console.log('📋 Datos del negocio cargados:', businessData)
 
+        // Determinar método de emisión basado en enabled
+        let method = 'none'
+        if (businessData.qpse?.enabled) {
+          method = 'qpse'
+        } else if (businessData.sunat?.enabled) {
+          method = 'sunat_direct'
+        } else if (businessData.emissionMethod) {
+          method = businessData.emissionMethod
+        }
+
+        console.log('📋 Método detectado:', method)
+        console.log('📋 QPse data:', businessData.qpse)
+        console.log('📋 SUNAT data:', businessData.sunat)
+
         setSunatForm({
-          emissionMethod: businessData.emissionMethod || 'none',
+          emissionMethod: method,
           // QPse
           qpseUsuario: businessData.qpse?.usuario || '',
           qpsePassword: businessData.qpse?.password || '',
