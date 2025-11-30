@@ -20,7 +20,8 @@ import {
   connectPrinter,
   savePrinterConfig,
   getPrinterConfig,
-  testPrinter
+  testPrinter,
+  getConnectionType
 } from '@/services/thermalPrinterService'
 
 export default function Settings() {
@@ -132,6 +133,10 @@ export default function Settings() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [showManualConnect, setShowManualConnect] = useState(false)
+  const [showWifiConnect, setShowWifiConnect] = useState(false) // Para mostrar formulario WiFi
+  const [wifiIp, setWifiIp] = useState('')
+  const [wifiPort, setWifiPort] = useState('9100')
+  const [wifiName, setWifiName] = useState('')
 
   // Estado para búsqueda de RUC
   const [isLookingUpRuc, setIsLookingUpRuc] = useState(false)
@@ -861,6 +866,63 @@ export default function Settings() {
     setShowManualConnect(false)
     setManualAddress('')
     setManualName('')
+  }
+
+  // Conectar impresora WiFi/LAN
+  const handleWifiConnect = async () => {
+    if (!wifiIp.trim()) {
+      toast.error('Ingresa la dirección IP de la impresora')
+      return
+    }
+
+    // Validar formato de IP
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+    if (!ipRegex.test(wifiIp.trim())) {
+      toast.error('Formato de IP inválido. Usa el formato XXX.XXX.XXX.XXX')
+      return
+    }
+
+    // Validar puerto
+    const port = parseInt(wifiPort, 10)
+    if (isNaN(port) || port < 1 || port > 65535) {
+      toast.error('Puerto inválido. Debe ser un número entre 1 y 65535')
+      return
+    }
+
+    setIsConnecting(true)
+    try {
+      // Construir dirección con puerto
+      const address = `${wifiIp.trim()}:${port}`
+      const result = await connectPrinter(address)
+
+      if (result.success) {
+        // Guardar configuración
+        const newConfig = {
+          enabled: true,
+          address: address,
+          name: wifiName.trim() || 'Impresora WiFi',
+          type: 'wifi',
+          paperWidth: printerConfig.paperWidth || 58
+        }
+        setPrinterConfig(newConfig)
+
+        // Guardar en Firestore
+        await savePrinterConfig(getBusinessId(), newConfig)
+
+        toast.success('Impresora WiFi conectada exitosamente')
+        setShowWifiConnect(false)
+        setWifiIp('')
+        setWifiPort('9100')
+        setWifiName('')
+      } else {
+        toast.error(result.error || 'Error al conectar impresora WiFi')
+      }
+    } catch (error) {
+      console.error('Error connecting WiFi printer:', error)
+      toast.error('Error al conectar impresora WiFi')
+    } finally {
+      setIsConnecting(false)
+    }
   }
 
   if (isLoading) {
@@ -2249,11 +2311,12 @@ export default function Settings() {
                 {/* Escanear impresoras */}
                 {(!printerConfig.enabled || !printerConfig.address) && (
                   <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Opciones de conexión */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <Button
                         onClick={handleScanPrinters}
                         disabled={isScanning}
-                        className="flex-1 sm:flex-initial"
+                        className="flex-1"
                       >
                         {isScanning ? (
                           <>
@@ -2263,26 +2326,117 @@ export default function Settings() {
                         ) : (
                           <>
                             <Printer className="w-4 h-4 mr-2" />
-                            Buscar Impresoras Bluetooth
+                            Bluetooth
                           </>
                         )}
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => setShowManualConnect(!showManualConnect)}
-                        className="flex-1 sm:flex-initial"
+                        onClick={() => {
+                          setShowManualConnect(!showManualConnect)
+                          setShowWifiConnect(false)
+                        }}
+                        className="flex-1"
                       >
-                        {showManualConnect ? 'Cancelar' : 'Conexión Manual'}
+                        {showManualConnect ? 'Cancelar' : 'MAC Manual'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowWifiConnect(!showWifiConnect)
+                          setShowManualConnect(false)
+                        }}
+                        className="flex-1 bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+                      >
+                        {showWifiConnect ? 'Cancelar' : '📶 WiFi/LAN'}
                       </Button>
                     </div>
+
                     <p className="text-sm text-gray-500">
                       {showManualConnect
-                        ? 'Ingresa la dirección MAC de tu impresora si ya está emparejada con tu celular'
-                        : 'Asegúrate de que tu impresora esté encendida y en modo de emparejamiento'
+                        ? 'Ingresa la dirección MAC de tu impresora Bluetooth'
+                        : showWifiConnect
+                        ? 'Conecta tu impresora térmica por red WiFi/LAN'
+                        : 'Selecciona el método de conexión para tu impresora térmica'
                       }
                     </p>
 
-                    {/* Formulario de conexión manual */}
+                    {/* Formulario de conexión WiFi/LAN */}
+                    {showWifiConnect && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-4">
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
+                            <Info className="w-4 h-4 text-green-600" />
+                          </div>
+                          <div className="text-sm text-green-800">
+                            <p className="font-semibold mb-1">Conexión WiFi/LAN</p>
+                            <p>Tu impresora debe estar conectada a la misma red que tu celular. Las impresoras térmicas generalmente usan el puerto 9100.</p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Dirección IP de la impresora *
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="192.168.1.100"
+                            value={wifiIp}
+                            onChange={(e) => setWifiIp(e.target.value)}
+                            className="font-mono"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Puedes encontrar la IP en la configuración de tu impresora o imprimiendo una página de prueba
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Puerto (por defecto: 9100)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="9100"
+                            value={wifiPort}
+                            onChange={(e) => setWifiPort(e.target.value.replace(/\D/g, ''))}
+                            className="font-mono w-32"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre de la impresora (opcional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Impresora Cocina"
+                            value={wifiName}
+                            onChange={(e) => setWifiName(e.target.value)}
+                          />
+                        </div>
+                        <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                          <p className="text-xs text-yellow-800">
+                            <strong>Cómo encontrar la IP de tu impresora:</strong><br />
+                            1. Mantén presionado el botón FEED de la impresora al encenderla<br />
+                            2. Se imprimirá una página de autotest con la IP<br />
+                            3. O revisa la configuración de red de la impresora
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleWifiConnect}
+                          disabled={isConnecting || !wifiIp.trim()}
+                          className="w-full bg-green-600 hover:bg-green-700"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Conectando...
+                            </>
+                          ) : (
+                            '📶 Conectar via WiFi'
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Formulario de conexión manual Bluetooth */}
                     {showManualConnect && (
                       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
                         <div>
@@ -2331,7 +2485,7 @@ export default function Settings() {
                               Conectando...
                             </>
                           ) : (
-                            'Conectar Impresora'
+                            'Conectar Impresora Bluetooth'
                           )}
                         </Button>
                       </div>

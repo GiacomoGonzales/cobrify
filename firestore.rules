@@ -35,16 +35,52 @@ service cloud.firestore {
     match /subscriptions/{userId} {
       // Users can read their own subscription, admins can read all
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      // Resellers pueden leer suscripciones de clientes que crearon
+      allow read: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
+      // Resellers pueden leer por query de sus clientes (email match)
+      allow read: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/resellers/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/resellers/$(request.auth.uid)).data.email == request.auth.token.email;
       // Users can create their own subscription (for trial), admins can modify any
       allow create: if isAuthenticated() && isOwner(userId);
+      // Resellers pueden crear suscripciones para sus clientes
+      allow create: if isAuthenticated() && request.resource.data.resellerId == request.auth.uid;
       // Only admins can update/delete subscriptions
       allow update, delete: if isAdmin();
+      // Resellers pueden actualizar suscripciones de sus clientes
+      allow update: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
     }
 
     // Admins collection (lista de UIDs de administradores)
     match /admins/{userId} {
       allow read: if isAuthenticated();
       allow write: if false; // Solo se gestiona manualmente desde consola Firebase
+    }
+
+    // Config collection (configuración del sistema)
+    match /config/{configId} {
+      // Solo admins pueden leer/escribir configuración del sistema
+      allow read, write: if isAdmin();
+    }
+
+    // Resellers collection
+    match /resellers/{resellerId} {
+      // Resellers pueden leer/escribir sus propios datos (por UID)
+      allow read, write: if isAuthenticated() && isOwner(resellerId);
+      // Usuarios autenticados pueden buscar si son resellers (por email)
+      allow read: if isAuthenticated() && resource.data.email == request.auth.token.email;
+      // Admins pueden leer/escribir cualquier reseller
+      allow read, write: if isAdmin();
+    }
+
+    // Reseller Transactions collection
+    match /resellerTransactions/{transactionId} {
+      // Resellers pueden leer sus transacciones
+      allow read: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
+      // Resellers pueden crear transacciones (solo sus propias)
+      allow create: if isAuthenticated() && request.resource.data.resellerId == request.auth.uid;
+      // Admins pueden leer/escribir cualquier transacción
+      allow read, write: if isAdmin();
     }
 
     // Users collection (para gestión de usuarios y permisos)

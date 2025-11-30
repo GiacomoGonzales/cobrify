@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
@@ -17,6 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false) // Super admin (giiacomo@gmail.com)
   const [isBusinessOwner, setIsBusinessOwner] = useState(false) // Admin del negocio
+  const [isReseller, setIsReseller] = useState(false) // Reseller
+  const [resellerData, setResellerData] = useState(null) // Datos del reseller
   const [subscription, setSubscription] = useState(null)
   const [hasAccess, setHasAccess] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
@@ -60,6 +62,44 @@ export const AuthProvider = ({ children }) => {
             superAdminStatus = false
           }
           setIsAdmin(superAdminStatus)
+
+          // Verificar si es RESELLER (buscar por UID o por email)
+          let resellerStatus = false
+          let resellerDocId = null
+          if (!superAdminStatus) {
+            try {
+              // Primero buscar por UID
+              const resellerRef = doc(db, 'resellers', firebaseUser.uid)
+              let resellerDoc = await getDoc(resellerRef)
+
+              if (resellerDoc.exists()) {
+                resellerDocId = firebaseUser.uid
+              } else {
+                // Si no existe por UID, buscar por email
+                const resellersQuery = query(
+                  collection(db, 'resellers'),
+                  where('email', '==', firebaseUser.email)
+                )
+                const resellersSnapshot = await getDocs(resellersQuery)
+                if (!resellersSnapshot.empty) {
+                  resellerDoc = resellersSnapshot.docs[0]
+                  resellerDocId = resellerDoc.id
+                }
+              }
+
+              if (resellerDoc && resellerDoc.exists()) {
+                const data = resellerDoc.data()
+                if (data.isActive !== false) {
+                  resellerStatus = true
+                  setResellerData({ ...data, docId: resellerDocId })
+                  console.log('🤝 Usuario es Reseller:', data.companyName)
+                }
+              }
+            } catch (error) {
+              console.error('Error al verificar reseller:', error)
+            }
+          }
+          setIsReseller(resellerStatus)
 
           // Verificar si es BUSINESS OWNER (dueño del negocio)
           let businessOwnerStatus = false
@@ -214,6 +254,8 @@ export const AuthProvider = ({ children }) => {
           setUser(null)
           setIsAuthenticated(false)
           setIsAdmin(false)
+          setIsReseller(false)
+          setResellerData(null)
           setIsBusinessOwner(false)
           setSubscription(null)
           setHasAccess(false)
@@ -272,6 +314,8 @@ export const AuthProvider = ({ children }) => {
       setUser(null)
       setIsAuthenticated(false)
       setIsAdmin(false)
+      setIsReseller(false)
+      setResellerData(null)
       setIsBusinessOwner(false)
       setSubscription(null)
       setHasAccess(false)
@@ -282,6 +326,21 @@ export const AuthProvider = ({ children }) => {
       navigate('/')
     } catch (error) {
       console.error('Error al cerrar sesión:', error)
+    }
+  }
+
+  // Función para refrescar datos del reseller
+  const refreshResellerData = async () => {
+    if (user && isReseller) {
+      try {
+        const resellerRef = doc(db, 'resellers', user.uid)
+        const resellerDoc = await getDoc(resellerRef)
+        if (resellerDoc.exists()) {
+          setResellerData(resellerDoc.data())
+        }
+      } catch (error) {
+        console.error('Error al refrescar datos de reseller:', error)
+      }
     }
   }
 
@@ -339,6 +398,8 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     isAdmin, // Super Admin (giiacomo@gmail.com)
     isBusinessOwner, // Admin del negocio (usuarios registrados)
+    isReseller, // Reseller
+    resellerData, // Datos del reseller
     subscription,
     hasAccess,
     userPermissions,
@@ -350,6 +411,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     refreshSubscription,
+    refreshResellerData, // Función para refrescar datos del reseller
   }
 
   // Verificar si la cuenta está bloqueada

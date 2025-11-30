@@ -30,9 +30,9 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState({
     plans: {},
     notifications: {
-      emailOnNewUser: true,
-      emailOnPayment: true,
-      emailOnExpiring: true,
+      notifyOnNewUser: true,
+      notifyOnPayment: true,
+      notifyOnExpiring: true,
       daysBeforeExpiry: 3
     },
     system: {
@@ -50,17 +50,24 @@ export default function AdminSettings() {
   async function loadSettings() {
     setLoading(true)
     try {
-      const settingsRef = doc(db, 'config', 'adminSettings')
-      const settingsSnap = await getDoc(settingsRef)
+      // Intentar cargar configuración guardada (puede fallar por permisos)
+      try {
+        const settingsRef = doc(db, 'config', 'adminSettings')
+        const settingsSnap = await getDoc(settingsRef)
 
-      if (settingsSnap.exists()) {
-        setSettings(prev => ({ ...prev, ...settingsSnap.data() }))
+        if (settingsSnap.exists()) {
+          setSettings(prev => ({ ...prev, ...settingsSnap.data() }))
+        }
+      } catch (permError) {
+        console.warn('No se pudo cargar config/adminSettings (permisos), usando valores por defecto')
       }
 
-      // Cargar planes actuales
+      // Cargar planes actuales (siempre desde el código)
       setSettings(prev => ({ ...prev, plans: { ...PLANS } }))
     } catch (error) {
       console.error('Error loading settings:', error)
+      // Asegurar que los planes se carguen aunque falle todo lo demás
+      setSettings(prev => ({ ...prev, plans: { ...PLANS } }))
     } finally {
       setLoading(false)
     }
@@ -182,6 +189,8 @@ export default function AdminSettings() {
 }
 
 function PlansSection({ plans }) {
+  const planEntries = Object.entries(plans || {})
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-4 rounded-lg">
@@ -192,8 +201,14 @@ function PlansSection({ plans }) {
         </p>
       </div>
 
+      {planEntries.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
+          <p>Cargando planes...</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Object.entries(plans).map(([key, plan]) => (
+        {planEntries.map(([key, plan]) => (
           <div
             key={key}
             className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow"
@@ -214,29 +229,46 @@ function PlansSection({ plans }) {
                 <span className="text-gray-500 flex items-center gap-2">
                   <DollarSign className="w-4 h-4" /> Precio mensual
                 </span>
-                <span className="font-medium">S/ {plan.pricePerMonth || 0}</span>
+                <span className="font-medium">S/ {plan.pricePerMonth?.toFixed(2) || '0.00'}</span>
               </div>
 
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 flex items-center gap-2">
                   <CreditCard className="w-4 h-4" /> Límite documentos
                 </span>
-                <span className="font-medium">{plan.invoiceLimit || '∞'}</span>
+                <span className="font-medium">
+                  {plan.limits?.maxInvoicesPerMonth === -1 ? '∞ Ilimitado' : (plan.limits?.maxInvoicesPerMonth || '∞')}
+                </span>
               </div>
 
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 flex items-center gap-2">
-                  <Users className="w-4 h-4" /> Sub-usuarios
+                  <Users className="w-4 h-4" /> Multi-usuario
                 </span>
-                <span className="font-medium">{plan.subUsersLimit || 0}</span>
+                <span className={`font-medium ${plan.limits?.multiUser ? 'text-green-600' : 'text-gray-400'}`}>
+                  {plan.limits?.multiUser ? 'Sí' : 'No'}
+                </span>
               </div>
 
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 flex items-center gap-2">
                   <Clock className="w-4 h-4" /> Período
                 </span>
-                <span className="font-medium">{plan.periodMonths || 1} mes(es)</span>
+                <span className="font-medium">
+                  {plan.months === 0 ? '7 días' : plan.months >= 999 ? 'Sin vencimiento' : `${plan.months} mes(es)`}
+                </span>
               </div>
+
+              {plan.category && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 flex items-center gap-2">
+                    <Shield className="w-4 h-4" /> Emisión
+                  </span>
+                  <span className="font-medium">
+                    {plan.category === 'qpse' ? 'QPse' : plan.category === 'sunat_direct' ? 'SUNAT Directo' : plan.category}
+                  </span>
+                </div>
+              )}
             </div>
 
             {plan.features && plan.features.length > 0 && (
@@ -260,6 +292,7 @@ function PlansSection({ plans }) {
           </div>
         ))}
       </div>
+      )}
     </div>
   )
 }
@@ -267,8 +300,15 @@ function PlansSection({ plans }) {
 function NotificationsSection({ settings, onChange }) {
   return (
     <div className="space-y-6 max-w-2xl">
+      <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-4 rounded-lg">
+        <Info className="w-5 h-5 flex-shrink-0" />
+        <p className="text-sm">
+          Estas configuraciones controlan las notificaciones que aparecen en la campanita del panel de administración.
+        </p>
+      </div>
+
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notificaciones por Email</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notificaciones Push (Campanita)</h3>
 
         <div className="space-y-4">
           <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
@@ -276,13 +316,13 @@ function NotificationsSection({ settings, onChange }) {
               <Users className="w-5 h-5 text-indigo-600" />
               <div>
                 <p className="font-medium text-gray-900">Nuevo usuario registrado</p>
-                <p className="text-sm text-gray-500">Recibir email cuando un nuevo usuario se registra</p>
+                <p className="text-sm text-gray-500">Mostrar notificación cuando un nuevo usuario se registra</p>
               </div>
             </div>
             <input
               type="checkbox"
-              checked={settings.emailOnNewUser}
-              onChange={e => onChange('emailOnNewUser', e.target.checked)}
+              checked={settings.notifyOnNewUser !== false}
+              onChange={e => onChange('notifyOnNewUser', e.target.checked)}
               className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
             />
           </label>
@@ -292,13 +332,13 @@ function NotificationsSection({ settings, onChange }) {
               <CreditCard className="w-5 h-5 text-green-600" />
               <div>
                 <p className="font-medium text-gray-900">Nuevo pago recibido</p>
-                <p className="text-sm text-gray-500">Recibir email cuando se registra un pago</p>
+                <p className="text-sm text-gray-500">Mostrar notificación cuando se registra un pago</p>
               </div>
             </div>
             <input
               type="checkbox"
-              checked={settings.emailOnPayment}
-              onChange={e => onChange('emailOnPayment', e.target.checked)}
+              checked={settings.notifyOnPayment !== false}
+              onChange={e => onChange('notifyOnPayment', e.target.checked)}
               className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
             />
           </label>
@@ -308,13 +348,13 @@ function NotificationsSection({ settings, onChange }) {
               <AlertTriangle className="w-5 h-5 text-amber-600" />
               <div>
                 <p className="font-medium text-gray-900">Suscripción por vencer</p>
-                <p className="text-sm text-gray-500">Recibir alertas de suscripciones próximas a vencer</p>
+                <p className="text-sm text-gray-500">Mostrar alertas de suscripciones próximas a vencer</p>
               </div>
             </div>
             <input
               type="checkbox"
-              checked={settings.emailOnExpiring}
-              onChange={e => onChange('emailOnExpiring', e.target.checked)}
+              checked={settings.notifyOnExpiring !== false}
+              onChange={e => onChange('notifyOnExpiring', e.target.checked)}
               className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
             />
           </label>
@@ -331,12 +371,12 @@ function NotificationsSection({ settings, onChange }) {
               type="number"
               min="1"
               max="30"
-              value={settings.daysBeforeExpiry}
+              value={settings.daysBeforeExpiry || 3}
               onChange={e => onChange('daysBeforeExpiry', parseInt(e.target.value) || 3)}
               className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
             <p className="mt-1 text-sm text-gray-500">
-              Se mostrarán alertas para suscripciones que vencen en los próximos {settings.daysBeforeExpiry} días
+              Se mostrarán alertas para suscripciones que vencen en los próximos {settings.daysBeforeExpiry || 3} días
             </p>
           </label>
         </div>

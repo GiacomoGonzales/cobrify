@@ -1,5 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { prepareLogoForPrinting } from './imageProcessingService';
@@ -9,9 +9,13 @@ import { prepareLogoForPrinting } from './imageProcessingService';
  * Soporta impresión de tickets, comandas de cocina y precuentas
  */
 
+// Plugin TCP para impresión WiFi/LAN
+const TcpPrinter = registerPlugin('TcpPrinter');
+
 // Estado de la impresora
 let isPrinterConnected = false;
 let connectedPrinterAddress = null;
+let connectionType = 'bluetooth'; // 'bluetooth' o 'wifi'
 
 /**
  * Constantes de formato según ancho de papel
@@ -161,10 +165,38 @@ export const scanPrinters = async () => {
 };
 
 /**
- * Conectar a una impresora
- * @param {string} address - Dirección MAC o IP de la impresora
- * @returns {Promise<Object>} Resultado de la conexión
+ * Detectar si una dirección es IP o MAC
+ * @param {string} address - Dirección a verificar
+ * @returns {'wifi' | 'bluetooth'} Tipo de conexión
  */
+const detectConnectionType = (address) => {
+  // Patrón de IP: xxx.xxx.xxx.xxx o xxx.xxx.xxx.xxx:port
+  const ipPattern = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
+  // Patrón de MAC: XX:XX:XX:XX:XX:XX
+  const macPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
+
+  if (ipPattern.test(address)) {
+    return 'wifi';
+  } else if (macPattern.test(address)) {
+    return 'bluetooth';
+  }
+  // Por defecto, asumir bluetooth para mantener compatibilidad
+  return 'bluetooth';
+};
+
+/**
+ * Parsear dirección IP y puerto
+ * @param {string} address - Dirección IP con o sin puerto
+ * @returns {{ ip: string, port: number }}
+ */
+const parseIpAddress = (address) => {
+  if (address.includes(':')) {
+    const [ip, port] = address.split(':');
+    return { ip, port: parseInt(port, 10) };
+  }
+  return { ip: address, port: 9100 }; // Puerto por defecto para impresoras térmicas
+};
+
 /**
  * Desconectar impresora
  */
@@ -177,9 +209,17 @@ export const disconnectPrinter = async () => {
 
   try {
     console.log('🔌 Desconectando impresora...');
-    await CapacitorThermalPrinter.disconnect();
+
+    // Desconectar según el tipo de conexión actual
+    if (connectionType === 'wifi') {
+      await TcpPrinter.disconnect();
+    } else {
+      await CapacitorThermalPrinter.disconnect();
+    }
+
     isPrinterConnected = false;
     connectedPrinterAddress = null;
+    connectionType = 'bluetooth';
     console.log('✅ Impresora desconectada');
     return { success: true };
   } catch (error) {
@@ -187,6 +227,7 @@ export const disconnectPrinter = async () => {
     // Marcar como desconectado de todos modos
     isPrinterConnected = false;
     connectedPrinterAddress = null;
+    connectionType = 'bluetooth';
     return { success: false, error: error.message };
   }
 };
@@ -202,6 +243,10 @@ export const connectPrinter = async (address) => {
     return { success: false, error: 'Solo disponible en app móvil' };
   }
 
+  // Detectar tipo de conexión
+  const detectedType = detectConnectionType(address);
+  console.log('🔍 Tipo de conexión detectado:', detectedType);
+
   try {
     // Primero intentar desconectar cualquier conexión anterior
     console.log('🔄 Desconectando conexión anterior (si existe)...');
@@ -210,23 +255,46 @@ export const connectPrinter = async (address) => {
     // Pequeña espera para asegurar que la desconexión se complete
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    console.log('🔄 Llamando a CapacitorThermalPrinter.connect()...');
-    const result = await CapacitorThermalPrinter.connect({ address });
-    console.log('📋 Resultado de connect():', result);
+    if (detectedType === 'wifi') {
+      // Conexión WiFi/LAN via TCP
+      console.log('📶 Conectando via WiFi/LAN...');
+      const { ip, port } = parseIpAddress(address);
+      console.log(`📍 IP: ${ip}, Puerto: ${port}`);
 
-    // Solo marcar como conectado si el resultado no es null
-    if (result !== null && result !== undefined) {
-      isPrinterConnected = true;
-      connectedPrinterAddress = address;
-      console.log('✅ Printer connected:', address);
-      console.log('✅ isPrinterConnected:', isPrinterConnected);
-      console.log('✅ connectedPrinterAddress:', connectedPrinterAddress);
-      return { success: true, address };
+      const result = await TcpPrinter.connect({ ip, port });
+      console.log('📋 Resultado de conexión WiFi:', result);
+
+      if (result && result.success) {
+        isPrinterConnected = true;
+        connectedPrinterAddress = address;
+        connectionType = 'wifi';
+        console.log('✅ Impresora WiFi conectada:', address);
+        return { success: true, address, type: 'wifi' };
+      } else {
+        console.error('❌ Conexión WiFi falló');
+        return { success: false, error: 'No se pudo conectar a la impresora WiFi' };
+      }
     } else {
-      console.error('❌ Conexión falló - resultado null');
-      isPrinterConnected = false;
-      connectedPrinterAddress = null;
-      return { success: false, error: 'No se pudo conectar a la impresora' };
+      // Conexión Bluetooth (comportamiento original)
+      console.log('🔵 Conectando via Bluetooth...');
+      const result = await CapacitorThermalPrinter.connect({ address });
+      console.log('📋 Resultado de connect():', result);
+
+      // Solo marcar como conectado si el resultado no es null
+      if (result !== null && result !== undefined) {
+        isPrinterConnected = true;
+        connectedPrinterAddress = address;
+        connectionType = 'bluetooth';
+        console.log('✅ Printer connected:', address);
+        console.log('✅ isPrinterConnected:', isPrinterConnected);
+        console.log('✅ connectedPrinterAddress:', connectedPrinterAddress);
+        return { success: true, address, type: 'bluetooth' };
+      } else {
+        console.error('❌ Conexión falló - resultado null');
+        isPrinterConnected = false;
+        connectedPrinterAddress = null;
+        return { success: false, error: 'No se pudo conectar a la impresora' };
+      }
     }
   } catch (error) {
     console.error('❌ Error connecting to printer:', error);
@@ -235,9 +303,15 @@ export const connectPrinter = async (address) => {
 
     isPrinterConnected = false;
     connectedPrinterAddress = null;
+    connectionType = 'bluetooth';
     return { success: false, error: error.message || 'Error al conectar' };
   }
 };
+
+/**
+ * Obtener el tipo de conexión actual
+ */
+export const getConnectionType = () => connectionType;
 
 /**
  * Verificar si hay impresora conectada
@@ -342,6 +416,15 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
   if (!isNative || !isPrinterConnected) {
     return { success: false, error: 'Printer not connected' };
   }
+
+  // Si es conexión WiFi, usar la función específica para WiFi
+  if (connectionType === 'wifi') {
+    console.log('📶 Usando impresión WiFi para ticket...');
+    return await printWifiTicket(invoice, business, paperWidth);
+  }
+
+  // Bluetooth - comportamiento original
+  console.log('🔵 Usando impresión Bluetooth para ticket...');
 
   try {
     const format = getFormat(paperWidth);
@@ -995,6 +1078,7 @@ export const testPrinter = async (paperWidth = 58) => {
   console.log('🖨️ testPrinter - Iniciando prueba de impresión');
   console.log('📱 Plataforma nativa:', isNative);
   console.log('🔌 Impresora conectada:', isPrinterConnected);
+  console.log('📶 Tipo de conexión:', connectionType);
   console.log('📏 Ancho de papel:', paperWidth, 'mm');
 
   if (!isNative) {
@@ -1012,6 +1096,22 @@ export const testPrinter = async (paperWidth = 58) => {
     const format = getFormat(paperWidth);
     console.log('📐 Formato seleccionado:', format);
 
+    // Si es WiFi, usar el plugin TCP
+    if (connectionType === 'wifi') {
+      console.log('📶 Usando impresión WiFi...');
+      const result = await TcpPrinter.printTest({ paperWidth });
+      console.log('📋 Resultado de impresión WiFi:', result);
+
+      if (result && result.success) {
+        console.log('🎉 Impresión de prueba WiFi completada exitosamente');
+        return { success: true };
+      } else {
+        return { success: false, error: 'Error al imprimir via WiFi' };
+      }
+    }
+
+    // Bluetooth - comportamiento original
+    console.log('🔵 Usando impresión Bluetooth...');
     console.log('🔄 Preparando comandos de impresión...');
 
     // Mostrar ancho configurado
@@ -1135,3 +1235,301 @@ export const testPrinterWithLogo = async (logoUrl, paperWidth = 58) => {
     return { success: false, error: error.message };
   }
 };
+
+// ============================================
+// FUNCIONES PARA IMPRESIÓN WIFI/LAN (ESC/POS)
+// ============================================
+
+/**
+ * Clase para construir comandos ESC/POS para impresión WiFi
+ */
+class EscPosBuilder {
+  constructor() {
+    this.commands = [];
+  }
+
+  // Comandos ESC/POS básicos
+  static ESC = 0x1B;
+  static GS = 0x1D;
+  static LF = 0x0A;
+
+  // Inicializar impresora
+  init() {
+    this.commands.push(EscPosBuilder.ESC, 0x40); // ESC @
+    return this;
+  }
+
+  // Alineación
+  alignLeft() {
+    this.commands.push(EscPosBuilder.ESC, 0x61, 0x00);
+    return this;
+  }
+
+  alignCenter() {
+    this.commands.push(EscPosBuilder.ESC, 0x61, 0x01);
+    return this;
+  }
+
+  alignRight() {
+    this.commands.push(EscPosBuilder.ESC, 0x61, 0x02);
+    return this;
+  }
+
+  // Negrita
+  bold(on = true) {
+    this.commands.push(EscPosBuilder.ESC, 0x45, on ? 0x01 : 0x00);
+    return this;
+  }
+
+  // Subrayado
+  underline(on = true) {
+    this.commands.push(EscPosBuilder.ESC, 0x2D, on ? 0x01 : 0x00);
+    return this;
+  }
+
+  // Doble ancho
+  doubleWidth(on = true) {
+    this.commands.push(EscPosBuilder.ESC, 0x21, on ? 0x20 : 0x00);
+    return this;
+  }
+
+  // Doble alto
+  doubleHeight(on = true) {
+    this.commands.push(EscPosBuilder.ESC, 0x21, on ? 0x10 : 0x00);
+    return this;
+  }
+
+  // Limpiar formato
+  clearFormatting() {
+    this.commands.push(EscPosBuilder.ESC, 0x21, 0x00);
+    return this;
+  }
+
+  // Texto
+  text(str) {
+    // Convertir caracteres especiales españoles
+    const converted = convertSpanishText(str);
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(converted);
+    this.commands.push(...bytes);
+    return this;
+  }
+
+  // Nueva línea
+  newLine(count = 1) {
+    for (let i = 0; i < count; i++) {
+      this.commands.push(EscPosBuilder.LF);
+    }
+    return this;
+  }
+
+  // Alimentar papel
+  feed(lines = 3) {
+    this.commands.push(EscPosBuilder.ESC, 0x64, lines);
+    return this;
+  }
+
+  // Cortar papel
+  cut(partial = false) {
+    this.commands.push(EscPosBuilder.GS, 0x56, partial ? 0x01 : 0x00);
+    return this;
+  }
+
+  // Código QR
+  qr(data, size = 6) {
+    // Modelo QR
+    this.commands.push(EscPosBuilder.GS, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00);
+    // Tamaño del módulo
+    this.commands.push(EscPosBuilder.GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, size);
+    // Nivel de corrección de errores (L)
+    this.commands.push(EscPosBuilder.GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x30);
+    // Almacenar datos
+    const dataBytes = new TextEncoder().encode(data);
+    const len = dataBytes.length + 3;
+    const pL = len % 256;
+    const pH = Math.floor(len / 256);
+    this.commands.push(EscPosBuilder.GS, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30, ...dataBytes);
+    // Imprimir QR
+    this.commands.push(EscPosBuilder.GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30);
+    return this;
+  }
+
+  // Obtener bytes para enviar
+  build() {
+    return new Uint8Array(this.commands);
+  }
+
+  // Obtener como base64
+  toBase64() {
+    const bytes = this.build();
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+}
+
+/**
+ * Imprimir ticket vía WiFi usando comandos ESC/POS
+ */
+export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
+  if (connectionType !== 'wifi' || !isPrinterConnected) {
+    return { success: false, error: 'No hay conexión WiFi activa' };
+  }
+
+  try {
+    const format = getFormat(paperWidth);
+    const builder = new EscPosBuilder();
+
+    // Determinar tipo de documento
+    const docType = invoice.documentType || invoice.type || 'boleta';
+    const isInvoice = docType === 'factura' || docType === 'invoice';
+    const isNotaVenta = docType === 'nota_venta';
+    const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
+
+    // Construir ticket
+    builder.init()
+      .alignCenter()
+      .bold(true)
+      .text(business.tradeName || business.name || 'MI EMPRESA')
+      .newLine()
+      .bold(false);
+
+    // RUC
+    if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
+      builder.text(`RUC: ${business.ruc || '00000000000'}`).newLine();
+    }
+
+    // Dirección
+    builder.text(business.address || 'Direccion no configurada').newLine();
+
+    // Teléfono
+    if (business.phone) {
+      builder.text(`Tel: ${business.phone}`).newLine();
+    }
+
+    builder.newLine()
+      .bold(true)
+      .text(tipoComprobante)
+      .newLine()
+      .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}`)
+      .newLine()
+      .bold(false)
+      .text(format.separator)
+      .newLine();
+
+    // Fecha y hora
+    const invoiceDate = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || new Date());
+    builder.alignLeft()
+      .text(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}`)
+      .newLine()
+      .text(`Hora: ${invoiceDate.toLocaleTimeString('es-PE')}`)
+      .newLine();
+
+    // Datos del cliente
+    builder.bold(true)
+      .text('DATOS DEL CLIENTE')
+      .newLine()
+      .bold(false);
+
+    if (isInvoice) {
+      builder.text(`RUC: ${invoice.customer?.documentNumber || '-'}`).newLine()
+        .text(`Razon Social: ${invoice.customer?.businessName || '-'}`).newLine();
+    } else {
+      builder.text(`DNI: ${invoice.customer?.documentNumber || '-'}`).newLine()
+        .text(`Nombre: ${invoice.customer?.name || 'Cliente'}`).newLine();
+    }
+
+    builder.text(format.separator).newLine()
+      .bold(true)
+      .text('DETALLE')
+      .newLine()
+      .bold(false);
+
+    // Items
+    for (const item of invoice.items) {
+      const itemName = item.description || item.name || '';
+      const unitPrice = item.unitPrice || item.price || 0;
+      const itemTotal = item.total || item.subtotal || (unitPrice * item.quantity);
+
+      builder.text(itemName).newLine()
+        .text(`${item.quantity} x S/ ${unitPrice.toFixed(2)}`)
+        .text(`  S/ ${itemTotal.toFixed(2)}`)
+        .newLine();
+    }
+
+    builder.text(format.separator).newLine()
+      .alignRight();
+
+    // Totales
+    if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
+      builder.text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
+        .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
+    }
+
+    builder.bold(true)
+      .text(`TOTAL: S/ ${(invoice.total || 0).toFixed(2)}`)
+      .newLine()
+      .bold(false);
+
+    // Footer
+    builder.alignCenter()
+      .text(format.separator)
+      .newLine();
+
+    if (isNotaVenta) {
+      builder.bold(true)
+        .text('DOCUMENTO NO VALIDO PARA')
+        .newLine()
+        .text('FINES TRIBUTARIOS')
+        .newLine()
+        .bold(false);
+    } else {
+      builder.text('REPRESENTACION IMPRESA DE LA')
+        .newLine()
+        .text(tipoComprobante)
+        .newLine();
+
+      // QR Code (si hay datos)
+      if (business.ruc && invoice.series) {
+        const tipoDoc = isInvoice ? '01' : '03';
+        const fecha = invoiceDate.toISOString().split('T')[0];
+        const docCliente = isInvoice ? '6' : '1';
+        const numDocCliente = invoice.customer?.documentNumber || '';
+        const qrData = `${business.ruc}|${tipoDoc}|${invoice.series}|${invoice.correlativeNumber || invoice.number}|${(invoice.tax || 0).toFixed(2)}|${(invoice.total || 0).toFixed(2)}|${fecha}|${docCliente}|${numDocCliente}`;
+
+        builder.qr(qrData);
+      }
+
+      builder.text('Consulte su comprobante en:').newLine()
+        .text('www.sunat.gob.pe').newLine();
+    }
+
+    builder.bold(true)
+      .text('!Gracias por su preferencia!')
+      .newLine()
+      .bold(false)
+      .feed(3)
+      .cut();
+
+    // Enviar a impresora
+    const base64Data = builder.toBase64();
+    const result = await TcpPrinter.print({ data: base64Data });
+
+    if (result && result.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: 'Error al imprimir via WiFi' };
+    }
+
+  } catch (error) {
+    console.error('Error printing WiFi ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Exportar el builder para uso externo si se necesita
+ */
+export { EscPosBuilder };

@@ -18,6 +18,7 @@ import {
   UserCog,
   ClipboardList,
   History,
+  Building2,
   // Iconos para modo restaurante
   UtensilsCrossed,
   Grid3x3,
@@ -31,7 +32,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin, isBusinessOwner, isDemoMode, hasPageAccess, businessMode, businessSettings } = useAppContext()
+  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings } = useAppContext()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
@@ -280,6 +281,14 @@ function Sidebar() {
       pageId: 'users',
     },
     {
+      path: '/reseller/dashboard',
+      icon: Building2,
+      label: 'Panel Reseller',
+      resellerOnly: true, // Solo para resellers
+      isExternalPath: true, // No usar getPath, es ruta absoluta
+      pageId: null,
+    },
+    {
       path: '/admin/dashboard',
       icon: Shield,
       label: 'Panel Admin',
@@ -320,8 +329,11 @@ function Sidebar() {
     // Si es solo para business owner y el usuario no lo es (o es super admin), no mostrar
     if (item.businessOwnerOnly && (!isBusinessOwner || isAdmin)) return false
 
-    // Si estamos en modo demo, mostrar todo
-    if (isDemoMode) return true
+    // Si es solo para reseller y el usuario no es reseller, no mostrar
+    if (item.resellerOnly && !isReseller) return false
+
+    // Si estamos en modo demo, mostrar todo excepto reseller
+    if (isDemoMode && !item.resellerOnly) return true
 
     // Si no tiene pageId, permitir acceso
     if (!item.pageId) return true
@@ -392,10 +404,11 @@ function Sidebar() {
         {/* Separador */}
         <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
           {filteredAdditionalItems.map(item => {
+            const itemPath = item.isExternalPath ? item.path : getPath(item.path)
             return (
               <NavLink
                 key={item.path}
-                to={getPath(item.path)}
+                to={itemPath}
                 onClick={() => setMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
@@ -416,6 +429,11 @@ function Sidebar() {
                     {item.adminOnly && (
                       <span className="ml-auto text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
                         Admin
+                      </span>
+                    )}
+                    {item.resellerOnly && (
+                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                        Reseller
                       </span>
                     )}
                   </>

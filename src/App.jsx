@@ -31,6 +31,14 @@ import AdminUsers from './pages/admin/AdminUsers'
 import AdminPayments from './pages/admin/AdminPayments'
 import AdminAnalytics from './pages/admin/AdminAnalytics'
 import AdminSettings from './pages/admin/AdminSettings'
+import AdminResellers from './pages/admin/AdminResellers'
+// Reseller pages
+import ResellerLayout from './layouts/ResellerLayout'
+import ResellerDashboard from './pages/reseller/ResellerDashboard'
+import ResellerClients from './pages/reseller/ResellerClients'
+import CreateResellerClient from './pages/reseller/CreateResellerClient'
+import ResellerBalance from './pages/reseller/ResellerBalance'
+import ResellerSettings from './pages/reseller/ResellerSettings'
 import Users from './pages/Users'
 import BusinessManagement from './pages/BusinessManagement'
 import GetMyUID from './pages/GetMyUID'
@@ -189,9 +197,20 @@ function App() {
               <Route index element={<AdminDashboard />} />
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route path="resellers" element={<AdminResellers />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="settings" element={<AdminSettings />} />
+            </Route>
+
+            {/* Panel de Resellers */}
+            <Route path="/reseller" element={<ResellerLayout />}>
+              <Route index element={<ResellerDashboard />} />
+              <Route path="dashboard" element={<ResellerDashboard />} />
+              <Route path="clients" element={<ResellerClients />} />
+              <Route path="clients/new" element={<CreateResellerClient />} />
+              <Route path="balance" element={<ResellerBalance />} />
+              <Route path="settings" element={<ResellerSettings />} />
             </Route>
 
             {/* Ruta 404 */}

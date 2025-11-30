@@ -63,6 +63,7 @@ export default function AdminUsers() {
   const [showSunatModal, setShowSunatModal] = useState(false)
   const [sunatUserToEdit, setSunatUserToEdit] = useState(null)
   const [savingSunat, setSavingSunat] = useState(false)
+  const [loadingSunatConfig, setLoadingSunatConfig] = useState(false)
   const [sunatForm, setSunatForm] = useState({
     emissionMethod: 'none',
     // QPse
@@ -75,7 +76,9 @@ export default function AdminUsers() {
     certificatePassword: '',
     certificateName: '',
     sunatEnvironment: 'beta',
-    homologated: false
+    // Configuración tributaria
+    igvExempt: false,
+    igvRate: 18
   })
   const [showPasswords, setShowPasswords] = useState({
     qpse: false,
@@ -295,18 +298,7 @@ export default function AdminUsers() {
   async function openSunatConfig(user) {
     setSunatUserToEdit(user)
     setShowSunatModal(true)
-
-    // Reset form primero
-    setSunatForm({
-      emissionMethod: 'none',
-      qpseUsuario: '',
-      qpsePassword: '',
-      qpseEnvironment: 'demo',
-      solUser: '',
-      solPassword: '',
-      certificatePassword: '',
-      sunatEnvironment: 'beta'
-    })
+    setLoadingSunatConfig(true)
 
     // Cargar configuración actual del negocio
     try {
@@ -337,6 +329,7 @@ export default function AdminUsers() {
         // Obtener datos de qpse/sunat (prioridad: raíz > emissionConfig)
         const qpseData = businessData.qpse || businessData.emissionConfig?.qpse || {}
         const sunatData = businessData.sunat || businessData.emissionConfig?.sunat || {}
+        const taxConfig = businessData.emissionConfig?.taxConfig || businessData.taxConfig || {}
 
         console.log('📋 Método detectado:', method)
         console.log('📋 emissionConfig:', businessData.emissionConfig)
@@ -367,13 +360,45 @@ export default function AdminUsers() {
           certificatePassword: sunatData.certificatePassword || '',
           certificateName: sunatData.certificateName || '',
           sunatEnvironment: normalizeSunatEnv(sunatData.environment),
-          homologated: sunatData.homologated || false
+          // Configuración tributaria
+          igvExempt: taxConfig.igvExempt || false,
+          igvRate: taxConfig.igvRate || 18
         })
       } else {
         console.warn('⚠️ No se encontró documento de negocio para:', user.id)
+        // Valores por defecto si no existe el negocio
+        setSunatForm({
+          emissionMethod: 'none',
+          qpseUsuario: '',
+          qpsePassword: '',
+          qpseEnvironment: 'demo',
+          solUser: '',
+          solPassword: '',
+          certificatePassword: '',
+          certificateName: '',
+          sunatEnvironment: 'beta',
+          igvExempt: false,
+          igvRate: 18
+        })
       }
     } catch (error) {
       console.error('Error loading SUNAT config:', error)
+      // Valores por defecto en caso de error
+      setSunatForm({
+        emissionMethod: 'none',
+        qpseUsuario: '',
+        qpsePassword: '',
+        qpseEnvironment: 'demo',
+        solUser: '',
+        solPassword: '',
+        certificatePassword: '',
+        certificateName: '',
+        sunatEnvironment: 'beta',
+        igvExempt: false,
+        igvRate: 18
+      })
+    } finally {
+      setLoadingSunatConfig(false)
     }
   }
 
@@ -397,7 +422,11 @@ export default function AdminUsers() {
       // Construir emissionConfig
       const emissionConfig = {
         method: sunatForm.emissionMethod,
-        taxConfig: currentEmissionConfig.taxConfig || { igvRate: 0.18, includeIgv: true }
+        taxConfig: {
+          igvExempt: sunatForm.igvExempt,
+          igvRate: sunatForm.igvRate,
+          includeIgv: !sunatForm.igvExempt
+        }
       }
 
       if (sunatForm.emissionMethod === 'qpse') {
@@ -914,22 +943,6 @@ export default function AdminUsers() {
                   Configurar SUNAT
                 </button>
 
-                <button
-                  onClick={async () => {
-                    const businessRef = doc(db, 'businesses', selectedUser.id)
-                    const snap = await getDoc(businessRef)
-                    if (snap.exists()) {
-                      console.log('🔍 RAW DATA businesses/' + selectedUser.id + ':', snap.data())
-                      alert('Datos en consola (F12). qpse: ' + JSON.stringify(snap.data().qpse) + '\n\nsunat: ' + JSON.stringify(snap.data().sunat))
-                    } else {
-                      alert('No existe documento en businesses/' + selectedUser.id)
-                    }
-                  }}
-                  className="px-3 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-xs"
-                >
-                  Debug
-                </button>
-
                 {selectedUser.status !== 'suspended' ? (
                   <button
                     onClick={() => {
@@ -998,6 +1011,61 @@ export default function AdminUsers() {
             </div>
 
             <div className="p-6 space-y-6">
+              {/* Loading state */}
+              {loadingSunatConfig ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+                  <p className="text-gray-500">Cargando configuración...</p>
+                </div>
+              ) : (
+              <>
+              {/* Configuración Tributaria */}
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200 space-y-4">
+                <div className="flex items-center gap-2 text-green-700">
+                  <CreditCard className="w-5 h-5" />
+                  <span className="font-medium">Configuración Tributaria</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Exonerado de IGV</label>
+                    <p className="text-xs text-gray-500">Marcar si la empresa está exonerada del IGV</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sunatForm.igvExempt}
+                      onChange={e => setSunatForm({ ...sunatForm, igvExempt: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                  </label>
+                </div>
+
+                {sunatForm.igvExempt && (
+                  <div className="flex items-center gap-2 p-2 bg-green-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-green-700 font-medium">Esta empresa NO cobra IGV en sus ventas</span>
+                  </div>
+                )}
+
+                {!sunatForm.igvExempt && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tasa de IGV (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={sunatForm.igvRate}
+                      onChange={e => setSunatForm({ ...sunatForm, igvRate: parseFloat(e.target.value) || 18 })}
+                      min="0"
+                      max="100"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Selector de método */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1069,6 +1137,16 @@ export default function AdminUsers() {
                         <Key className="w-4 h-4" />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Estado de homologación QPse - derivado del ambiente */}
+                  <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm text-gray-600">Estado:</span>
+                    {sunatForm.qpseEnvironment === 'produccion' ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
+                    ) : (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
+                    )}
                   </div>
                 </div>
               )}
@@ -1171,10 +1249,10 @@ export default function AdminUsers() {
                     )}
                   </div>
 
-                  {/* Estado de homologación */}
+                  {/* Estado de homologación - derivado del ambiente */}
                   <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm text-gray-600">Estado:</span>
-                    {sunatForm.homologated ? (
+                    {sunatForm.sunatEnvironment === 'produccion' ? (
                       <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
                     ) : (
                       <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
@@ -1212,6 +1290,8 @@ export default function AdminUsers() {
                   )}
                 </button>
               </div>
+              </>
+              )}
             </div>
           </div>
         </div>

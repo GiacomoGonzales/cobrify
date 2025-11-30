@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   Bell,
-  Search
+  Search,
+  Building2
 } from 'lucide-react'
 
 const navItems = [
@@ -29,6 +30,12 @@ const navItems = [
     icon: Users,
     label: 'Usuarios',
     description: 'Gestión de cuentas'
+  },
+  {
+    path: '/app/admin/resellers',
+    icon: Building2,
+    label: 'Resellers',
+    description: 'Red de revendedores'
   },
   {
     path: '/app/admin/payments',

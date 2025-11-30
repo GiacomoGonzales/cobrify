@@ -319,8 +319,21 @@ export async function getAnalyticsData() {
         if (!businessSnapshot.empty) {
           const businessData = businessSnapshot.docs[0].data()
 
-          // Método de emisión
-          const method = businessData.emissionMethod || 'none'
+          // Método de emisión - detectar de múltiples fuentes
+          let method = 'none'
+          if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
+            method = 'qpse'
+          } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
+            method = 'sunat_direct'
+          } else if (businessData.emissionConfig?.method && businessData.emissionConfig.method !== 'none') {
+            method = businessData.emissionConfig.method
+          } else if (businessData.emissionConfig?.qpse?.enabled || businessData.emissionConfig?.qpse?.usuario) {
+            method = 'qpse'
+          } else if (businessData.emissionConfig?.sunat?.enabled || businessData.emissionConfig?.sunat?.solUser) {
+            method = 'sunat_direct'
+          } else if (businessData.emissionMethod) {
+            method = businessData.emissionMethod
+          }
           emissionMethods[method] = (emissionMethods[method] || 0) + 1
 
           // Modo de negocio
