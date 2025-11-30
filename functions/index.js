@@ -185,12 +185,20 @@ export const sendInvoiceToSunat = onRequest(
           }
 
           // Validar estado: rechazar si ya está en proceso de envío
+          // Pero permitir reintento si lleva más de 2 minutos (timeout)
           if (data.sunatStatus === 'sending') {
-            throw new Error('ALREADY_SENDING')
+            const sendingStartedAt = data.sunatSendingStartedAt?.toDate?.() || data.sunatSendingStartedAt
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
+
+            if (sendingStartedAt && sendingStartedAt > twoMinutesAgo) {
+              throw new Error('ALREADY_SENDING')
+            }
+            // Si lleva más de 2 minutos, permitir reintento (el anterior probablemente falló)
+            console.log('⚠️ Documento estaba en "sending" por más de 2 min, permitiendo reintento')
           }
 
-          // Validar estado: permitir reenvío si está pendiente, rechazada o firmada (no enviada)
-          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
+          // Validar estado: permitir reenvío si está pendiente, rechazada, firmada o sending (con timeout)
+          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED', 'sending']
           if (!allowedStatuses.includes(data.sunatStatus)) {
             throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
           }
@@ -346,11 +354,13 @@ export const sendInvoiceToSunat = onRequest(
 
       if (!emissionResult.success) {
         // Actualizar factura con error
+        // IMPORTANTE: El mensaje de error de SUNAT puede venir en 'error' (excepciones) o 'description' (rechazos)
+        const errorMessage = emissionResult.error || emissionResult.description || 'Error al emitir comprobante'
         await invoiceRef.update({
           sunatStatus: 'rejected',
           sunatResponse: {
-            code: 'ERROR',
-            description: emissionResult.error || 'Error al emitir comprobante',
+            code: emissionResult.responseCode || 'ERROR',
+            description: errorMessage,
             observations: [],
             error: true,
             method: emissionResult.method
@@ -360,13 +370,35 @@ export const sendInvoiceToSunat = onRequest(
         })
 
         res.status(500).json({
-          error: emissionResult.error || 'Error al emitir comprobante',
+          error: errorMessage,
           method: emissionResult.method
         })
         return
       }
 
       // 4. Actualizar estado en Firestore
+      // Código 1033 = "El comprobante fue registrado previamente"
+      // IMPORTANTE: Solo tratar como aceptado si el documento ya fue enviado antes desde ESTE sistema
+      // Si es numeración duplicada de OTRO sistema, NO debe aceptarse automáticamente
+      const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
+        (emissionResult.description && emissionResult.description.includes('registrado previamente'))
+
+      if (isAlreadyRegistered) {
+        // Verificar si este documento ya fue enviado antes desde nuestro sistema
+        const previouslySent = invoiceData.sunatSentAt && invoiceData.sunatStatus !== 'pending'
+        const hadPreviousTicket = invoiceData.sunatResponse?.ticket || invoiceData.sunatResponse?.cdrUrl
+
+        if (previouslySent || hadPreviousTicket) {
+          // Es un reintento de un documento que ya enviamos → Tratar como aceptado
+          console.log('📋 Código 1033: Documento ya enviado antes desde este sistema - tratando como aceptado')
+          emissionResult.accepted = true
+        } else {
+          // Es numeración duplicada de OTRO sistema → Mantener como rechazado
+          console.log('⚠️ Código 1033: Numeración duplicada de otro sistema - mantener como rechazado')
+          emissionResult.description = 'El número de documento ya existe en SUNAT (posible numeración duplicada de otro sistema). Debe usar una serie/número diferente.'
+        }
+      }
+
       // Si es PENDING_MANUAL (firmado pero no enviado), guardamos como "signed"
       const isPendingManual = emissionResult.pendingManual === true
       const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
@@ -614,12 +646,19 @@ export const sendCreditNoteToSunat = onRequest(
           }
 
           // Validar estado: rechazar si ya está en proceso de envío
+          // Pero permitir reintento si lleva más de 2 minutos (timeout)
           if (data.sunatStatus === 'sending') {
-            throw new Error('ALREADY_SENDING')
+            const sendingStartedAt = data.sunatSendingStartedAt?.toDate?.() || data.sunatSendingStartedAt
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
+
+            if (sendingStartedAt && sendingStartedAt > twoMinutesAgo) {
+              throw new Error('ALREADY_SENDING')
+            }
+            console.log('⚠️ Documento estaba en "sending" por más de 2 min, permitiendo reintento')
           }
 
-          // Validar estado: permitir envío si está pendiente, rechazada o firmada
-          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED']
+          // Validar estado: permitir envío si está pendiente, rechazada, firmada o sending (con timeout)
+          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED', 'sending']
           if (!allowedStatuses.includes(data.sunatStatus)) {
             throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
           }
@@ -793,6 +832,27 @@ export const sendCreditNoteToSunat = onRequest(
       }
 
       // 5. Actualizar estado en Firestore
+      // Código 1033 = "El comprobante fue registrado previamente"
+      // IMPORTANTE: Solo tratar como aceptado si el documento ya fue enviado antes desde ESTE sistema
+      const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
+        (emissionResult.description && emissionResult.description.includes('registrado previamente'))
+
+      if (isAlreadyRegistered) {
+        // Verificar si este documento ya fue enviado antes desde nuestro sistema
+        const previouslySent = creditNoteData.sunatSentAt && creditNoteData.sunatStatus !== 'pending'
+        const hadPreviousTicket = creditNoteData.sunatResponse?.ticket || creditNoteData.sunatResponse?.cdrUrl
+
+        if (previouslySent || hadPreviousTicket) {
+          // Es un reintento de un documento que ya enviamos → Tratar como aceptado
+          console.log('📋 Código 1033: NC ya enviada antes desde este sistema - tratando como aceptada')
+          emissionResult.accepted = true
+        } else {
+          // Es numeración duplicada de OTRO sistema → Mantener como rechazado
+          console.log('⚠️ Código 1033: Numeración duplicada de otro sistema - mantener como rechazado')
+          emissionResult.description = 'El número de NC ya existe en SUNAT (posible numeración duplicada de otro sistema). Debe usar una serie/número diferente.'
+        }
+      }
+
       const isPendingManual = emissionResult.pendingManual === true
       const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
 

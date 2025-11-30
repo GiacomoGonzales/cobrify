@@ -107,11 +107,31 @@ async function createZipWithXML(xmlContent, fileName) {
 }
 
 /**
+ * Escapa caracteres especiales para XML
+ */
+function escapeXml(str) {
+  if (!str) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+/**
  * Crea SOAP envelope para envío a SUNAT
  */
 function createSoapEnvelope(fileName, zipBase64, ruc, solUser, solPassword) {
   // Usuario completo para SOL: RUC + Usuario
   const fullUser = `${ruc}${solUser}`
+
+  // Log para debugging (sin mostrar contraseña completa)
+  console.log(`🔑 Credenciales SOL: usuario=${fullUser}, password=${solPassword ? `***${solPassword.slice(-3)}` : 'NO DEFINIDA'}`)
+
+  // Escapar caracteres especiales en credenciales
+  const escapedUser = escapeXml(fullUser)
+  const escapedPassword = escapeXml(solPassword)
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -120,8 +140,8 @@ function createSoapEnvelope(fileName, zipBase64, ruc, solUser, solPassword) {
   <soapenv:Header>
     <wsse:Security>
       <wsse:UsernameToken>
-        <wsse:Username>${fullUser}</wsse:Username>
-        <wsse:Password>${solPassword}</wsse:Password>
+        <wsse:Username>${escapedUser}</wsse:Username>
+        <wsse:Password>${escapedPassword}</wsse:Password>
       </wsse:UsernameToken>
     </wsse:Security>
   </soapenv:Header>
@@ -202,11 +222,34 @@ async function parseSunatResponse(soapResponse) {
       const cdr = parser.parse(cdrXML)
 
       // Extraer información del CDR
+      // El código de respuesta principal
       const responseCode = cdr.ApplicationResponse?.['cbc:ResponseCode'] || '0'
-      const description = cdr.ApplicationResponse?.['cbc:Note'] || 'Aceptado por SUNAT'
+
+      // El mensaje puede estar en diferentes lugares:
+      // 1. cbc:Note - mensaje general
+      // 2. cac:DocumentResponse > cac:Response > cbc:Description - mensaje específico de error
+      let description = cdr.ApplicationResponse?.['cbc:Note']
+
+      // Buscar en DocumentResponse para obtener mensaje más específico
+      const docResponse = cdr.ApplicationResponse?.['cac:DocumentResponse']
+      if (docResponse) {
+        const response = docResponse['cac:Response']
+        if (response?.['cbc:Description']) {
+          description = response['cbc:Description']
+        }
+      }
+
+      // Si aún no hay descripción, usar default según el código
+      if (!description) {
+        description = responseCode === '0' || responseCode === 0
+          ? 'Aceptado por SUNAT'
+          : `Rechazado por SUNAT (código ${responseCode})`
+      }
 
       // Código 0 = Aceptado
       const accepted = responseCode === '0' || responseCode === 0
+
+      console.log(`📋 CDR parseado: code=${responseCode}, accepted=${accepted}, description=${description}`)
 
       return {
         accepted,

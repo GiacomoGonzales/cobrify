@@ -176,7 +176,7 @@ async function emitViaSunatDirect(invoiceData, businessData) {
       success: sunatResponse.accepted,
       method: 'sunat_direct',
       accepted: sunatResponse.accepted,
-      responseCode: sunatResponse.responseCode,
+      responseCode: sunatResponse.code || sunatResponse.responseCode, // sunatClient retorna 'code'
       description: sunatResponse.description,
       notes: sunatResponse.notes,
       cdrData: sunatResponse.cdrData,
@@ -465,7 +465,7 @@ async function emitCreditNoteViaSunatDirect(creditNoteData, businessData) {
       success: sunatResponse.accepted,
       method: 'sunat_direct',
       accepted: sunatResponse.accepted,
-      responseCode: sunatResponse.responseCode,
+      responseCode: sunatResponse.code || sunatResponse.responseCode, // sunatClient retorna 'code'
       description: sunatResponse.description,
       notes: sunatResponse.notes,
       cdrData: sunatResponse.cdrData,
