@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   collection,
   getDocs,
@@ -31,10 +32,19 @@ import {
   Loader2,
   UserPlus,
   DollarSign,
-  TrendingUp
+  TrendingUp,
+  AlertTriangle,
+  UserCheck
 } from 'lucide-react'
 
+// URL de las Cloud Functions (Cloud Run)
+const FUNCTIONS_BASE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
+// URLs específicas de Cloud Run (2nd Gen)
+const GET_USER_URL = 'https://getuserbyemail-tb5ph5ddsq-uc.a.run.app'
+const CREATE_RESELLER_URL = 'https://createreseller-tb5ph5ddsq-uc.a.run.app'
+
 export default function AdminResellers() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [resellers, setResellers] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -42,6 +52,11 @@ export default function AdminResellers() {
   const [showDepositModal, setShowDepositModal] = useState(false)
   const [selectedReseller, setSelectedReseller] = useState(null)
   const [saving, setSaving] = useState(false)
+
+  // Estados para buscar usuario por email
+  const [searchingUser, setSearchingUser] = useState(false)
+  const [foundUser, setFoundUser] = useState(null)
+  const [userSearchError, setUserSearchError] = useState('')
 
   const [formData, setFormData] = useState({
     email: '',
@@ -94,6 +109,8 @@ export default function AdminResellers() {
 
   function openCreateModal() {
     setSelectedReseller(null)
+    setFoundUser(null)
+    setUserSearchError('')
     setFormData({
       email: '',
       companyName: '',
@@ -105,6 +122,54 @@ export default function AdminResellers() {
       isActive: true
     })
     setShowModal(true)
+  }
+
+  // Buscar usuario existente por email
+  async function searchUserByEmail() {
+    if (!formData.email || !formData.email.includes('@')) {
+      setUserSearchError('Ingresa un email válido')
+      return
+    }
+
+    setSearchingUser(true)
+    setUserSearchError('')
+    setFoundUser(null)
+
+    try {
+      const response = await fetch(GET_USER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          adminUid: user?.uid
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        if (data.isAlreadyReseller) {
+          setUserSearchError('Este usuario ya es reseller')
+          return
+        }
+
+        setFoundUser(data)
+        // Auto-llenar datos si tiene suscripción
+        if (data.subscription?.businessName) {
+          setFormData(prev => ({
+            ...prev,
+            companyName: data.subscription.businessName
+          }))
+        }
+      } else {
+        setUserSearchError(data.error || 'Usuario no encontrado')
+      }
+    } catch (error) {
+      console.error('Error searching user:', error)
+      setUserSearchError('Error al buscar usuario')
+    } finally {
+      setSearchingUser(false)
+    }
   }
 
   function openEditModal(reseller) {
@@ -130,8 +195,14 @@ export default function AdminResellers() {
   }
 
   async function saveReseller() {
-    if (!formData.email || !formData.companyName) {
-      alert('Email y nombre de empresa son requeridos')
+    if (!formData.companyName) {
+      alert('El nombre de empresa es requerido')
+      return
+    }
+
+    // Para crear nuevo, necesitamos haber encontrado el usuario
+    if (!selectedReseller && !foundUser) {
+      alert('Primero busca y verifica el usuario por email')
       return
     }
 
@@ -145,24 +216,42 @@ export default function AdminResellers() {
         contactName: formData.contactName,
         discount: formData.discount / 100,
         balance: parseFloat(formData.balance) || 0,
-        isActive: formData.isActive,
-        updatedAt: Timestamp.now()
+        isActive: formData.isActive
       }
 
       if (selectedReseller) {
-        // Actualizar
-        await updateDoc(doc(db, 'resellers', selectedReseller.id), resellerData)
+        // Actualizar reseller existente
+        await updateDoc(doc(db, 'resellers', selectedReseller.id), {
+          ...resellerData,
+          updatedAt: Timestamp.now()
+        })
+        setShowModal(false)
+        loadResellers()
       } else {
-        // Crear nuevo - El ID debe ser el UID del usuario en Firebase Auth
-        // Por ahora usamos el email como referencia temporal
-        const resellerId = formData.email.replace(/[^a-zA-Z0-9]/g, '_')
-        resellerData.createdAt = Timestamp.now()
-        resellerData.totalSpent = 0
-        await setDoc(doc(db, 'resellers', resellerId), resellerData)
-      }
+        // Crear nuevo usando Cloud Function (con UID real)
+        const response = await fetch(CREATE_RESELLER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminUid: user?.uid,
+            resellerData: {
+              uid: foundUser.user.uid,
+              ...resellerData,
+              totalSpent: 0
+            }
+          })
+        })
 
-      setShowModal(false)
-      loadResellers()
+        const data = await response.json()
+
+        if (data.success) {
+          setShowModal(false)
+          setFoundUser(null)
+          loadResellers()
+        } else {
+          alert('Error al crear reseller: ' + data.error)
+        }
+      }
     } catch (error) {
       console.error('Error saving reseller:', error)
       alert('Error al guardar: ' + error.message)
@@ -451,110 +540,210 @@ export default function AdminResellers() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="reseller@empresa.com"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de Empresa *</label>
-                  <input
-                    type="text"
-                    value={formData.companyName}
-                    onChange={e => setFormData({ ...formData, companyName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Mi Empresa SAC"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">RUC</label>
-                  <input
-                    type="text"
-                    value={formData.ruc}
-                    onChange={e => setFormData({ ...formData, ruc: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="20123456789"
-                    maxLength={11}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="987654321"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de Contacto</label>
-                  <input
-                    type="text"
-                    value={formData.contactName}
-                    onChange={e => setFormData({ ...formData, contactName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Juan Pérez"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
-                  <input
-                    type="number"
-                    value={formData.discount}
-                    onChange={e => setFormData({ ...formData, discount: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    min="0"
-                    max="100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Saldo Inicial</label>
-                  <input
-                    type="number"
-                    value={formData.balance}
-                    onChange={e => setFormData({ ...formData, balance: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isActive}
-                      onChange={e => setFormData({ ...formData, isActive: e.target.checked })}
-                      className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm font-medium text-gray-700">Reseller activo</span>
+              {/* Paso 1: Buscar usuario (solo para crear nuevo) */}
+              {!selectedReseller && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Paso 1: Buscar usuario existente por email *
                   </label>
-                </div>
-              </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={e => {
+                        setFormData({ ...formData, email: e.target.value })
+                        setFoundUser(null)
+                        setUserSearchError('')
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="usuario@ejemplo.com"
+                      disabled={foundUser}
+                    />
+                    <button
+                      onClick={searchUserByEmail}
+                      disabled={searchingUser || foundUser}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {searchingUser ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                      Buscar
+                    </button>
+                  </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-800">
-                  <strong>Nota:</strong> El reseller debe registrarse con este email para acceder al panel.
-                  Después de registrarse, actualiza el ID del documento con su UID de Firebase.
-                </p>
-              </div>
+                  {/* Error de búsqueda */}
+                  {userSearchError && (
+                    <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-lg">
+                      <AlertTriangle className="w-4 h-4" />
+                      {userSearchError}
+                    </div>
+                  )}
+
+                  {/* Usuario encontrado */}
+                  {foundUser && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="bg-green-100 p-2 rounded-full">
+                          <UserCheck className="w-5 h-5 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-green-800">Usuario encontrado</p>
+                          <p className="text-sm text-green-700">{foundUser.user.email}</p>
+                          <p className="text-xs text-green-600 mt-1">UID: {foundUser.user.uid}</p>
+                          {foundUser.subscription && (
+                            <div className="mt-2 text-xs text-green-700">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-200 rounded-full">
+                                Plan: {foundUser.subscription.plan} • {foundUser.subscription.status}
+                              </span>
+                              {foundUser.subscription.businessName && (
+                                <p className="mt-1">Negocio: {foundUser.subscription.businessName}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setFoundUser(null)
+                            setFormData({ ...formData, email: '', companyName: '' })
+                          }}
+                          className="text-green-600 hover:text-green-800"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Paso 2: Datos del reseller (visible cuando hay usuario o es edición) */}
+              {(foundUser || selectedReseller) && (
+                <>
+                  <div className="border-t border-gray-200 pt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-3">
+                      {selectedReseller ? 'Datos del Reseller' : 'Paso 2: Datos del Reseller'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedReseller && (
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={formData.email}
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
+                        />
+                      </div>
+                    )}
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de Empresa *</label>
+                      <input
+                        type="text"
+                        value={formData.companyName}
+                        onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Mi Empresa SAC"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">RUC</label>
+                      <input
+                        type="text"
+                        value={formData.ruc}
+                        onChange={e => setFormData({ ...formData, ruc: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="20123456789"
+                        maxLength={11}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="987654321"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de Contacto</label>
+                      <input
+                        type="text"
+                        value={formData.contactName}
+                        onChange={e => setFormData({ ...formData, contactName: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Juan Pérez"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
+                      <input
+                        type="number"
+                        value={formData.discount}
+                        onChange={e => setFormData({ ...formData, discount: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        min="0"
+                        max="100"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">% de descuento en suscripciones</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Saldo Inicial</label>
+                      <input
+                        type="number"
+                        value={formData.balance}
+                        onChange={e => setFormData({ ...formData, balance: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.isActive}
+                          onChange={e => setFormData({ ...formData, isActive: e.target.checked })}
+                          className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Reseller activo</span>
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Información */}
+              {!selectedReseller && !foundUser && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>¿Cómo funciona?</strong><br />
+                    1. Busca un usuario existente por su email<br />
+                    2. El usuario debe tener una cuenta activa en Cobrify<br />
+                    3. Al agregarlo como reseller, podrá acceder al panel de revendedores
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false)
+                    setFoundUser(null)
+                    setUserSearchError('')
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={saveReseller}
-                  disabled={saving}
+                  disabled={saving || (!selectedReseller && !foundUser)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {saving ? (
@@ -565,7 +754,7 @@ export default function AdminResellers() {
                   ) : (
                     <>
                       <Save className="w-4 h-4" />
-                      Guardar
+                      {selectedReseller ? 'Guardar Cambios' : 'Crear Reseller'}
                     </>
                   )}
                 </button>

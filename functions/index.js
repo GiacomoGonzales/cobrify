@@ -1192,6 +1192,184 @@ export const initializeUsageCounters = onRequest(
 )
 
 // ========================================
+// ADMIN - Funciones administrativas
+// ========================================
+
+/**
+ * Cloud Function HTTP: Obtener UID de usuario por email
+ * Solo para admins - usado al crear resellers
+ */
+export const getUserByEmail = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 30,
+    memory: '256MiB',
+    invoker: 'public',
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    // Handle preflight
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      const { email, adminUid } = req.body
+
+      if (!email) {
+        res.status(400).json({ success: false, error: 'Email es requerido' })
+        return
+      }
+
+      // Verificar que quien llama es admin
+      if (adminUid) {
+        const adminDoc = await db.collection('admins').doc(adminUid).get()
+        if (!adminDoc.exists) {
+          res.status(403).json({ success: false, error: 'No autorizado' })
+          return
+        }
+      }
+
+      // Buscar usuario por email
+      const userRecord = await auth.getUserByEmail(email)
+
+      // Verificar si tiene suscripción activa
+      const subscriptionDoc = await db.collection('subscriptions').doc(userRecord.uid).get()
+      let subscription = null
+      if (subscriptionDoc.exists) {
+        const subData = subscriptionDoc.data()
+        subscription = {
+          status: subData.status,
+          plan: subData.plan,
+          businessName: subData.businessName,
+          accessBlocked: subData.accessBlocked || false
+        }
+      }
+
+      // Verificar si ya es reseller
+      const resellerDoc = await db.collection('resellers').doc(userRecord.uid).get()
+      const isAlreadyReseller = resellerDoc.exists
+
+      res.status(200).json({
+        success: true,
+        user: {
+          uid: userRecord.uid,
+          email: userRecord.email,
+          displayName: userRecord.displayName || null,
+          createdAt: userRecord.metadata.creationTime
+        },
+        subscription,
+        isAlreadyReseller
+      })
+
+    } catch (error) {
+      console.error('Error getting user by email:', error)
+
+      if (error.code === 'auth/user-not-found') {
+        res.status(404).json({
+          success: false,
+          error: 'Usuario no encontrado con ese email'
+        })
+        return
+      }
+
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+/**
+ * Cloud Function HTTP: Crear o actualizar reseller
+ * Crea el documento con el UID correcto
+ */
+export const createReseller = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 30,
+    memory: '256MiB',
+    invoker: 'public',
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    // Handle preflight
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      const { adminUid, resellerData } = req.body
+
+      if (!resellerData || !resellerData.uid) {
+        res.status(400).json({ success: false, error: 'Datos del reseller incompletos' })
+        return
+      }
+
+      // Verificar que quien llama es admin
+      if (adminUid) {
+        const adminDoc = await db.collection('admins').doc(adminUid).get()
+        if (!adminDoc.exists) {
+          res.status(403).json({ success: false, error: 'No autorizado' })
+          return
+        }
+      }
+
+      const { uid, ...data } = resellerData
+
+      // Verificar si ya existe
+      const existingDoc = await db.collection('resellers').doc(uid).get()
+      const isNew = !existingDoc.exists
+
+      // Crear/actualizar documento con el UID como ID
+      await db.collection('resellers').doc(uid).set({
+        ...data,
+        createdAt: isNew ? FieldValue.serverTimestamp() : existingDoc.data().createdAt,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true })
+
+      // También actualizar el rol en la suscripción si existe
+      const subscriptionRef = db.collection('subscriptions').doc(uid)
+      const subscriptionDoc = await subscriptionRef.get()
+      if (subscriptionDoc.exists) {
+        await subscriptionRef.update({
+          isReseller: true,
+          resellerSince: isNew ? FieldValue.serverTimestamp() : subscriptionDoc.data().resellerSince || FieldValue.serverTimestamp()
+        })
+      }
+
+      res.status(200).json({
+        success: true,
+        message: isNew ? 'Reseller creado exitosamente' : 'Reseller actualizado exitosamente',
+        resellerId: uid
+      })
+
+    } catch (error) {
+      console.error('Error creating reseller:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+// ========================================
 // PUSH NOTIFICATIONS - Cloud Functions
 // ========================================
 

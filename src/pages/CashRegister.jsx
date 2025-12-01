@@ -96,12 +96,13 @@ export default function CashRegister() {
         setMovements(demoMovements)
 
         // Filtrar facturas del día de hoy
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+
         const todayInvoicesList = (demoData.invoices || []).filter(invoice => {
           const invoiceDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt)
-          invoiceDate.setHours(0, 0, 0, 0)
-          return invoiceDate.getTime() === today.getTime()
+          return invoiceDate >= todayStart && invoiceDate <= todayEnd
         })
         setTodayInvoices(todayInvoicesList)
 
@@ -127,13 +128,29 @@ export default function CashRegister() {
       // Obtener facturas del día
       const invoicesResult = await getInvoices(getBusinessId())
       if (invoicesResult.success) {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+        const now = new Date()
+        const todayYear = now.getFullYear()
+        const todayMonth = now.getMonth()
+        const todayDay = now.getDate()
+
+        console.log('📅 Fecha actual local:', now.toLocaleString('es-PE'))
+        console.log('📅 Año:', todayYear, 'Mes:', todayMonth + 1, 'Día:', todayDay)
+
         const todayInvoicesList = (invoicesResult.data || []).filter(invoice => {
           const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-          invoiceDate.setHours(0, 0, 0, 0)
-          return invoiceDate.getTime() === today.getTime()
+          // Comparar solo año, mes y día en hora local
+          const isSameDay = invoiceDate.getFullYear() === todayYear &&
+                           invoiceDate.getMonth() === todayMonth &&
+                           invoiceDate.getDate() === todayDay
+
+          if (isSameDay) {
+            console.log('✅ Factura del día:', invoice.invoiceNumber, invoiceDate.toLocaleString('es-PE'))
+          }
+
+          return isSameDay
         })
+
+        console.log('📊 Total facturas del día:', todayInvoicesList.length)
         setTodayInvoices(todayInvoicesList)
       }
     } catch (error) {
@@ -408,33 +425,63 @@ export default function CashRegister() {
     })
 
     // Recorrer cada factura válida y sumar por método de pago
+    console.log('💰 Calculando totales de', validInvoices.length, 'facturas válidas')
     validInvoices.forEach(invoice => {
       // Si la factura tiene múltiples métodos de pago (array payments)
       if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
-        // Sumar cada pago al método correspondiente
-        invoice.payments.forEach(payment => {
-          const amount = parseFloat(payment.amount) || 0
-          switch (payment.method) {
+        const invoiceTotal = parseFloat(invoice.total) || 0
+        const totalPaid = invoice.payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+
+        console.log('📄 Factura con payments[]:', invoice.invoiceNumber || invoice.id, 'Total Factura:', invoiceTotal, 'Total Pagado:', totalPaid, 'Payments:', JSON.stringify(invoice.payments))
+
+        // Si hay un solo método de pago, usar el TOTAL DE LA FACTURA (no el monto pagado que puede incluir vuelto)
+        if (invoice.payments.length === 1) {
+          const method = invoice.payments[0].method
+          switch (method) {
             case 'Efectivo':
-              salesCash += amount
+              salesCash += invoiceTotal
               break
             case 'Tarjeta':
-              salesCard += amount
+              salesCard += invoiceTotal
               break
             case 'Transferencia':
-              salesTransfer += amount
+              salesTransfer += invoiceTotal
               break
             case 'Yape':
-              salesYape += amount
+              salesYape += invoiceTotal
               break
             case 'Plin':
-              salesPlin += amount
+              salesPlin += invoiceTotal
               break
           }
-        })
+        } else {
+          // Múltiples métodos de pago: usar los montos reales de cada pago
+          // (en pagos mixtos el usuario ingresa montos exactos, no hay vuelto por método)
+          invoice.payments.forEach(payment => {
+            const amount = parseFloat(payment.amount) || 0
+            switch (payment.method) {
+              case 'Efectivo':
+                salesCash += amount
+                break
+              case 'Tarjeta':
+                salesCard += amount
+                break
+              case 'Transferencia':
+                salesTransfer += amount
+                break
+              case 'Yape':
+                salesYape += amount
+                break
+              case 'Plin':
+                salesPlin += amount
+                break
+            }
+          })
+        }
       } else {
         // Facturas antiguas sin array payments - usar paymentMethod y sumar el total completo
         const total = invoice.total || 0
+        console.log('📄 Factura simple:', invoice.invoiceNumber || invoice.id, 'Total:', total, 'Método:', invoice.paymentMethod)
         switch (invoice.paymentMethod) {
           case 'Efectivo':
             salesCash += total
@@ -454,6 +501,7 @@ export default function CashRegister() {
         }
       }
     })
+    console.log('💵 Totales calculados - Efectivo:', salesCash, 'Tarjeta:', salesCard, 'Yape:', salesYape, 'Plin:', salesPlin, 'Transfer:', salesTransfer)
 
     // Total de ventas (todos los métodos)
     const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin

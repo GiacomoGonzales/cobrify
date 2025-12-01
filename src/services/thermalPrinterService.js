@@ -841,6 +841,7 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
   console.log('🖨️ printKitchenOrder - Iniciando...');
   console.log('📱 Plataforma nativa:', isNative);
   console.log('🔌 isPrinterConnected:', isPrinterConnected);
+  console.log('📶 connectionType:', connectionType);
   console.log('📍 connectedPrinterAddress:', connectedPrinterAddress);
 
   if (!isNative) {
@@ -852,6 +853,15 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
     console.error('❌ Impresora no conectada');
     return { success: false, error: 'Impresora no conectada. Conéctala primero desde Ajustes.' };
   }
+
+  // Si es conexión WiFi, usar función específica
+  if (connectionType === 'wifi') {
+    console.log('📶 Usando impresión WiFi para comanda...');
+    return await printWifiKitchenOrder(order, table, paperWidth);
+  }
+
+  // Bluetooth - comportamiento original
+  console.log('🔵 Usando impresión Bluetooth para comanda...');
 
   try {
     const format = getFormat(paperWidth);
@@ -943,6 +953,15 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
   if (!isNative || !isPrinterConnected) {
     return { success: false, error: 'Printer not connected' };
   }
+
+  // Si es conexión WiFi, usar función específica
+  if (connectionType === 'wifi') {
+    console.log('📶 Usando impresión WiFi para precuenta...');
+    return await printWifiPreBill(order, table, business, taxConfig, paperWidth);
+  }
+
+  // Bluetooth - comportamiento original
+  console.log('🔵 Usando impresión Bluetooth para precuenta...');
 
   try {
     const format = getFormat(paperWidth);
@@ -1525,6 +1544,217 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 
   } catch (error) {
     console.error('Error printing WiFi ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Imprimir comanda de cocina vía WiFi
+ */
+const printWifiKitchenOrder = async (order, table = null, paperWidth = 58) => {
+  try {
+    const format = getFormat(paperWidth);
+    const builder = new EscPosBuilder();
+
+    builder.init()
+      .alignCenter()
+      .doubleWidth(true)
+      .bold(true)
+      .text('*** COMANDA ***')
+      .newLine()
+      .doubleWidth(false)
+      .bold(false)
+      .text(format.separator)
+      .newLine()
+      .alignLeft()
+      .bold(true)
+      .text(`Fecha: ${new Date().toLocaleString('es-PE')}`)
+      .newLine();
+
+    if (table) {
+      builder.text(`Mesa: ${table.number}`)
+        .newLine()
+        .text(`Mozo: ${table.waiter || 'N/A'}`)
+        .newLine();
+    }
+
+    builder.text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
+      .newLine()
+      .bold(false)
+      .text(format.separator)
+      .newLine();
+
+    // Items
+    for (const item of order.items || []) {
+      builder.bold(true)
+        .text(`${item.quantity}x ${item.name}`)
+        .newLine()
+        .bold(false);
+
+      // Modificadores
+      if (item.modifiers && item.modifiers.length > 0) {
+        builder.text('  *** MODIFICADORES ***').newLine();
+        for (const modifier of item.modifiers) {
+          builder.text(`  * ${modifier.modifierName}:`).newLine();
+          for (const option of modifier.options) {
+            let optionText = `    -> ${option.optionName}`;
+            if (option.priceAdjustment > 0) {
+              optionText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+            }
+            builder.text(optionText).newLine();
+          }
+        }
+      }
+
+      if (item.notes) {
+        builder.text(`  Nota: ${item.notes}`).newLine();
+      }
+      builder.newLine();
+    }
+
+    builder.text(format.separator)
+      .newLine()
+      .feed(2)
+      .cut();
+
+    const base64Data = builder.toBase64();
+    const result = await TcpPrinter.print({ data: base64Data });
+
+    if (result && result.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: 'Error al imprimir comanda via WiFi' };
+    }
+  } catch (error) {
+    console.error('Error printing WiFi kitchen order:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Imprimir precuenta vía WiFi
+ */
+const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
+  try {
+    const format = getFormat(paperWidth);
+    const builder = new EscPosBuilder();
+
+    // Calcular totales
+    let subtotal, tax, total;
+    total = order.total || 0;
+
+    if (taxConfig.igvExempt) {
+      subtotal = total;
+      tax = 0;
+    } else {
+      const igvRate = taxConfig.igvRate || 18;
+      const igvMultiplier = 1 + (igvRate / 100);
+      subtotal = total / igvMultiplier;
+      tax = total - subtotal;
+    }
+
+    builder.init()
+      .alignCenter()
+      .doubleWidth(true)
+      .text(business.tradeName || 'RESTAURANTE')
+      .newLine()
+      .doubleWidth(false)
+      .text(business.address || '')
+      .newLine()
+      .text(business.phone || '')
+      .newLine()
+      .bold(true)
+      .doubleWidth(true)
+      .text('PRECUENTA')
+      .newLine()
+      .doubleWidth(false)
+      .bold(false)
+      .text(format.separator)
+      .newLine();
+
+    // Información
+    builder.alignLeft()
+      .text(`Fecha: ${new Date().toLocaleString('es-PE')}`)
+      .newLine()
+      .text(`Mesa: ${table.number}`)
+      .newLine()
+      .text(`Mozo: ${table.waiter || 'N/A'}`)
+      .newLine()
+      .text(`Orden: #${order.orderNumber || order.id?.slice(-6)}`)
+      .newLine()
+      .text(format.halfSeparator)
+      .newLine();
+
+    // Items
+    for (const item of order.items || []) {
+      const itemTotal = item.total || (item.price * item.quantity);
+      builder.text(`${item.quantity}x ${item.name}`)
+        .newLine()
+        .text(`   S/ ${itemTotal.toFixed(2)}`)
+        .newLine();
+
+      if (item.modifiers && item.modifiers.length > 0) {
+        for (const modifier of item.modifiers) {
+          for (const option of modifier.options) {
+            if (option.priceAdjustment > 0) {
+              builder.text(`   + ${option.optionName}: S/${option.priceAdjustment.toFixed(2)}`)
+                .newLine();
+            }
+          }
+        }
+      }
+
+      if (item.notes) {
+        builder.text(`   * ${item.notes}`).newLine();
+      }
+    }
+
+    builder.text(format.halfSeparator).newLine()
+      .alignRight();
+
+    // Totales
+    if (!taxConfig.igvExempt) {
+      builder.text(`Subtotal: S/ ${subtotal.toFixed(2)}`).newLine()
+        .text(`IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}`).newLine();
+    } else {
+      builder.text('*** Exonerado de IGV ***').newLine();
+    }
+
+    builder.bold(true)
+      .doubleWidth(true)
+      .text(`TOTAL: S/ ${total.toFixed(2)}`)
+      .newLine()
+      .doubleWidth(false)
+      .bold(false);
+
+    // Pie
+    builder.alignCenter()
+      .text(format.separator)
+      .newLine()
+      .bold(true)
+      .text('*** PRECUENTA ***')
+      .newLine()
+      .bold(false)
+      .text('No valido como comprobante')
+      .newLine()
+      .text('Solicite su factura o boleta')
+      .newLine()
+      .newLine()
+      .text('Gracias por su preferencia')
+      .newLine()
+      .feed(2)
+      .cut();
+
+    const base64Data = builder.toBase64();
+    const result = await TcpPrinter.print({ data: base64Data });
+
+    if (result && result.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: 'Error al imprimir precuenta via WiFi' };
+    }
+  } catch (error) {
+    console.error('Error printing WiFi pre-bill:', error);
     return { success: false, error: error.message };
   }
 };

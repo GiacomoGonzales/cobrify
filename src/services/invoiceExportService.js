@@ -3,6 +3,26 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 /**
+ * Helper para formatear los métodos de pago de una factura
+ * Si hay múltiples pagos, muestra el detalle de cada uno
+ */
+const formatPaymentMethods = (invoice) => {
+  if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+    if (invoice.payments.length === 1) {
+      // Un solo método de pago
+      return invoice.payments[0].method || 'Efectivo';
+    } else {
+      // Múltiples métodos de pago - mostrar detalle
+      return invoice.payments
+        .map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`)
+        .join(' + ');
+    }
+  }
+  // Fallback para facturas antiguas
+  return invoice.paymentMethod || 'Efectivo';
+};
+
+/**
  * Generar reporte de facturas en Excel
  */
 export const generateInvoicesExcel = (invoices, filters, businessData) => {
@@ -91,7 +111,7 @@ export const generateInvoicesExcel = (invoices, filters, businessData) => {
       invoice.tax || 0,
       invoice.total || 0,
       statusNames[invoice.status] || invoice.status || 'N/A',
-      paymentMethodNames[invoice.paymentMethod] || invoice.paymentMethod || 'N/A'
+      formatPaymentMethods(invoice)
     ]);
   });
 
@@ -128,7 +148,7 @@ export const generateInvoicesExcel = (invoices, filters, businessData) => {
     { width: 10 },  // IGV
     { width: 12 },  // Total
     { width: 15 },  // Estado
-    { width: 18 },  // Método de Pago
+    { width: 40 },  // Método de Pago (más ancho para pagos mixtos)
   ];
 
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Comprobantes');

@@ -22,6 +22,26 @@ const getDateFromTimestamp = (timestamp) => {
 };
 
 /**
+ * Helper para formatear los métodos de pago de una factura
+ * Si hay múltiples pagos, muestra el detalle de cada uno
+ */
+const formatPaymentMethods = (invoice) => {
+  if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+    if (invoice.payments.length === 1) {
+      // Un solo método de pago
+      return invoice.payments[0].method || 'Efectivo';
+    } else {
+      // Múltiples métodos de pago - mostrar detalle
+      return invoice.payments
+        .map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`)
+        .join(' + ');
+    }
+  }
+  // Fallback para facturas antiguas
+  return invoice.paymentMethod || 'Efectivo';
+};
+
+/**
  * Generar reporte de cierre de caja en Excel
  */
 export const generateCashReportExcel = (sessionData, movements, invoices, businessData) => {
@@ -80,7 +100,7 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
         invoice.number || 'N/A',
         invoice.type || 'N/A',
         invoice.customerName || 'Cliente General',
-        invoice.paymentMethod || 'Efectivo',
+        formatPaymentMethods(invoice),
         invoice.total || 0,
         invoiceDate ? format(invoiceDate, 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A'
       ]);
@@ -91,7 +111,7 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
       { width: 20 },
       { width: 15 },
       { width: 30 },
-      { width: 20 },
+      { width: 40 },  // Más ancho para mostrar pagos mixtos
       { width: 15 },
       { width: 20 }
     ];
@@ -241,7 +261,7 @@ export const generateCashReportPDF = (sessionData, movements, invoices, business
       invoice.number || 'N/A',
       invoice.type || 'N/A',
       invoice.customerName || 'Cliente General',
-      invoice.paymentMethod || 'Efectivo',
+      formatPaymentMethods(invoice),
       `S/ ${(invoice.total || 0).toFixed(2)}`,
     ]);
 

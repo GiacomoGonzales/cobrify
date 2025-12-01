@@ -164,10 +164,10 @@ export default function GetMyUID() {
                   Ahora puedes acceder al panel de gestión de usuarios.
                 </p>
                 <a
-                  href="/admin/users"
+                  href="/app/admin/dashboard"
                   className="inline-block px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
                 >
-                  Ir a Gestión de Usuarios →
+                  Ir al Panel de Admin →
                 </a>
               </div>
             )}
