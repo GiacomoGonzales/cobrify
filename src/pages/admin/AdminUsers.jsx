@@ -93,7 +93,8 @@ export default function AdminUsers() {
   const [featuresUserToEdit, setFeaturesUserToEdit] = useState(null)
   const [savingFeatures, setSavingFeatures] = useState(false)
   const [featuresForm, setFeaturesForm] = useState({
-    productImages: false
+    productImages: false,
+    hidePaymentMethods: false
   })
 
   useEffect(() => {
@@ -508,7 +509,8 @@ export default function AdminUsers() {
   function openFeaturesModal(user) {
     setFeaturesUserToEdit(user)
     setFeaturesForm({
-      productImages: user.features?.productImages || false
+      productImages: user.features?.productImages || false,
+      hidePaymentMethods: user.features?.hidePaymentMethods || false
     })
     setShowFeaturesModal(true)
   }
@@ -1395,9 +1397,34 @@ export default function AdminUsers() {
                 )}
               </div>
 
-              {/* Placeholder para futuros features */}
-              <div className="text-center py-4 text-gray-400 text-sm border border-dashed border-gray-300 rounded-lg">
-                Más features próximamente...
+              {/* Feature: Ocultar métodos de pago */}
+              <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">Ocultar métodos de pago</h3>
+                      <p className="text-xs text-gray-500">Solo efectivo en POS (oculta selector)</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={featuresForm.hidePaymentMethods}
+                      onChange={e => setFeaturesForm({ ...featuresForm, hidePaymentMethods: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                  </label>
+                </div>
+                {featuresForm.hidePaymentMethods && (
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-orange-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-orange-600" />
+                    <span className="text-sm text-orange-700 font-medium">Todas las ventas serán en Efectivo</span>
+                  </div>
+                )}
               </div>
 
               {/* Botones */}

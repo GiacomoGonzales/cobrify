@@ -105,7 +105,7 @@ const getAllSubcategoryIds = (categories, parentId) => {
 }
 
 export default function POS() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -965,21 +965,36 @@ export default function POS() {
     // Detectar si es venta al crédito (pago parcial habilitado con monto 0)
     const isCreditSale = enablePartialPayment && amountToPay === 0
 
+    // Si hidePaymentMethods está activo, usar efectivo automáticamente
+    const isHidePaymentMethods = hasFeature('hidePaymentMethods')
+
     // Validar que se haya cubierto el monto a pagar (total o parcial)
     // EXCEPCIÓN: Si es venta al crédito, no requiere pago inmediato
-    if (!isCreditSale && totalPaid < amountToPay) {
+    // EXCEPCIÓN: Si hidePaymentMethods está activo, se asume pago completo en efectivo
+    if (!isCreditSale && !isHidePaymentMethods && totalPaid < amountToPay) {
       toast.error(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
 
-    // Construir array de pagos - filtrar pagos válidos
-    const allPayments = payments
-      .filter(p => p.method && parseFloat(p.amount) > 0)
-      .map(p => ({
-        method: PAYMENT_METHODS[p.method],
-        methodKey: p.method,
-        amount: parseFloat(p.amount)
-      }))
+    // Construir array de pagos
+    let allPayments
+    if (isHidePaymentMethods) {
+      // Si hidePaymentMethods está activo, crear pago automático en efectivo
+      allPayments = [{
+        method: 'Efectivo',
+        methodKey: 'CASH',
+        amount: amountToPay
+      }]
+    } else {
+      // Filtrar pagos válidos del formulario
+      allPayments = payments
+        .filter(p => p.method && parseFloat(p.amount) > 0)
+        .map(p => ({
+          method: PAYMENT_METHODS[p.method],
+          methodKey: p.method,
+          amount: parseFloat(p.amount)
+        }))
+    }
 
     // Validar que haya al menos un método de pago
     // EXCEPCIÓN: Si es venta al crédito, no requiere método de pago
@@ -2714,6 +2729,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <strong>Saldo pendiente:</strong> {formatCurrency(amounts.total)}
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  ) : hasFeature('hidePaymentMethods') ? (
+                    /* Si hidePaymentMethods está activo, mostrar solo pago en efectivo sin selector */
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-green-800">Pago en Efectivo</span>
+                        <span className="text-lg font-bold text-green-700">{formatCurrency(amountToPay)}</span>
                       </div>
                     </div>
                   ) : (
