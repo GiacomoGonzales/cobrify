@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { loginWithEmail, logout as logoutService, onAuthChange } from '@/services/authService'
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
@@ -26,6 +26,7 @@ export const AuthProvider = ({ children }) => {
   const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant'
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
+  const [subscriptionOwnerId, setSubscriptionOwnerId] = useState(null) // ID del owner para escuchar cambios en suscripción
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -190,6 +191,7 @@ export const AuthProvider = ({ children }) => {
             }
 
             setSubscription(userSubscription)
+            setSubscriptionOwnerId(ownerIdForSubscription) // Guardar el ownerId para el listener en tiempo real
 
             // Cargar features del usuario
             if (userSubscription?.features) {
@@ -206,6 +208,7 @@ export const AuthProvider = ({ children }) => {
             // Si es admin o business owner, darle acceso aunque falle la suscripción
             setHasAccess(superAdminStatus || businessOwnerStatus)
             setSubscription(null)
+            setSubscriptionOwnerId(null)
           }
 
           // Cargar configuración del negocio (businessMode y settings completos)
@@ -272,6 +275,7 @@ export const AuthProvider = ({ children }) => {
           setBusinessMode('retail')
           setBusinessSettings(null)
           setUserFeatures({ productImages: false })
+          setSubscriptionOwnerId(null)
         }
       } catch (error) {
         console.error('Error en AuthContext:', error)
@@ -287,6 +291,38 @@ export const AuthProvider = ({ children }) => {
       clearTimeout(safetyTimeout)
     }
   }, [])
+
+  // Listener en tiempo real para cambios en la suscripción (features)
+  useEffect(() => {
+    if (!subscriptionOwnerId) return
+
+    console.log('🔔 Iniciando listener en tiempo real para suscripción de:', subscriptionOwnerId)
+
+    const subscriptionRef = doc(db, 'subscriptions', subscriptionOwnerId)
+    const unsubscribeSnapshot = onSnapshot(subscriptionRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const subscriptionData = docSnapshot.data()
+        console.log('🔄 Suscripción actualizada en tiempo real:', subscriptionData.features)
+
+        // Actualizar features en tiempo real
+        if (subscriptionData.features) {
+          setUserFeatures(subscriptionData.features)
+        } else {
+          setUserFeatures({ productImages: false })
+        }
+
+        // Actualizar la suscripción completa
+        setSubscription(subscriptionData)
+      }
+    }, (error) => {
+      console.error('Error en listener de suscripción:', error)
+    })
+
+    return () => {
+      console.log('🔕 Limpiando listener de suscripción')
+      unsubscribeSnapshot()
+    }
+  }, [subscriptionOwnerId])
 
   const login = async (email, password) => {
     try {
