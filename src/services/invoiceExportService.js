@@ -80,6 +80,7 @@ export const generateInvoicesExcel = (invoices, filters, businessData) => {
     const typeNames = {
       'factura': 'Factura',
       'boleta': 'Boleta',
+      'nota_venta': 'Nota de Venta',
       'nota-credito': 'Nota de Crédito',
       'nota-debito': 'Nota de Débito'
     };
@@ -87,28 +88,30 @@ export const generateInvoicesExcel = (invoices, filters, businessData) => {
     const statusNames = {
       'draft': 'Borrador',
       'pending': 'Pendiente',
+      'paid': 'Pagado',
       'sent': 'Enviada',
       'accepted': 'Aceptada',
       'rejected': 'Rechazada',
       'cancelled': 'Anulada'
     };
 
-    const paymentMethodNames = {
-      'cash': 'Efectivo',
-      'card': 'Tarjeta',
-      'transfer': 'Transferencia',
-      'yape': 'Yape',
-      'plin': 'Plin'
-    };
+    // Obtener tipo de documento (puede estar en documentType o type)
+    const docType = invoice.documentType || invoice.type || 'N/A';
+
+    // Obtener nombre del cliente (puede estar en customer.name o customerName)
+    const customerName = invoice.customer?.name || invoice.customer?.businessName || invoice.customerName || 'Cliente General';
+
+    // Obtener RUC/DNI del cliente (puede estar en customer.documentNumber o customerDocumentNumber)
+    const customerDoc = invoice.customer?.documentNumber || invoice.customerDocumentNumber || 'N/A';
 
     invoiceData.push([
       invoice.createdAt ? format(invoice.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A',
-      typeNames[invoice.type] || invoice.type || 'N/A',
+      typeNames[docType] || docType || 'N/A',
       invoice.number || 'N/A',
-      invoice.customerName || 'Cliente General',
-      invoice.customerDocumentNumber || 'N/A',
+      customerName,
+      customerDoc,
       invoice.subtotal || 0,
-      invoice.tax || 0,
+      invoice.igv || invoice.tax || 0,
       invoice.total || 0,
       statusNames[invoice.status] || invoice.status || 'N/A',
       formatPaymentMethods(invoice)
@@ -117,7 +120,7 @@ export const generateInvoicesExcel = (invoices, filters, businessData) => {
 
   // Agregar totales al final
   const subtotalSum = invoices.reduce((sum, inv) => sum + (inv.subtotal || 0), 0);
-  const taxSum = invoices.reduce((sum, inv) => sum + (inv.tax || 0), 0);
+  const taxSum = invoices.reduce((sum, inv) => sum + (inv.igv || inv.tax || 0), 0);
   const totalSum = invoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
 
   invoiceData.push(['']);
