@@ -26,6 +26,7 @@ import {
   Truck,
   ArrowRightCircle,
   Receipt,
+  Code,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -1313,6 +1314,32 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <Download className="w-4 h-4 text-green-600" />
                     <span>Descargar PDF</span>
                   </button>
+
+                  {/* Descargar XML - Para facturas, boletas, notas de crédito y débito (comprobantes con validez fiscal) */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' ||
+                    invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') && (
+                    <button
+                      onClick={async () => {
+                        setOpenMenuId(null)
+                        try {
+                          const result = await prepareInvoiceXML(invoice, companySettings)
+                          if (result.success) {
+                            await downloadCompressedXML(result.xml, result.fileName)
+                            toast.success('XML descargado exitosamente')
+                          } else {
+                            toast.error(result.error || 'Error al generar el XML')
+                          }
+                        } catch (error) {
+                          console.error('Error al generar XML:', error)
+                          toast.error('Error al generar el XML')
+                        }
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <Code className="w-4 h-4 text-blue-600" />
+                      <span>Descargar XML</span>
+                    </button>
+                  )}
 
                   {/* Registrar Pago - Solo para notas de venta con saldo pendiente */}
                   {invoice.documentType === 'nota_venta' &&
