@@ -64,6 +64,7 @@ import SplashScreen from './components/SplashScreen'
 import DispatchGuides from './pages/DispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
+import Expenses from './pages/Expenses'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -111,6 +112,7 @@ function App() {
               <Route path="compras/migrar" element={<MigratePurchases />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
               <Route path="configuracion" element={<Settings />} />
               {/* Rutas de modo restaurante en demo */}
               <Route path="mesas" element={<Tables />} />
@@ -138,6 +140,7 @@ function App() {
               <Route path="productos" element={<Products />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
@@ -174,6 +177,7 @@ function App() {
               <Route path="compras/migrar" element={<MigratePurchases />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />

@@ -13,6 +13,12 @@ import {
   PieChart,
   ArrowUpRight,
   ArrowDownRight,
+  Receipt,
+  TrendingDown,
+  Zap,
+  Truck,
+  Wrench,
+  Building,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -28,6 +34,8 @@ import {
   exportProductsReport,
   exportCustomersReport,
 } from '@/services/reportExportService'
+import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
+import * as XLSX from 'xlsx'
 import {
   BarChart,
   Bar,
@@ -49,14 +57,15 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export default function Reports() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature } = useAppContext()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [recipes, setRecipes] = useState([])
+  const [expenses, setExpenses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all
-  const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers
+  const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
 
   useEffect(() => {
     loadData()
@@ -73,6 +82,7 @@ export default function Reports() {
         setCustomers(demoData.customers || [])
         setProducts(demoData.products || [])
         setRecipes([]) // En demo no hay recetas por ahora
+        setExpenses([]) // En demo no hay gastos por ahora
         setIsLoading(false)
         return
       }
@@ -95,6 +105,17 @@ export default function Reports() {
       }
       if (recipesResult.success) {
         setRecipes(recipesResult.data || [])
+      }
+
+      // Cargar gastos solo si tiene el feature habilitado
+      if (hasFeature && hasFeature('expenseManagement')) {
+        try {
+          const expensesData = await getExpenses(getBusinessId())
+          setExpenses(expensesData || [])
+        } catch (error) {
+          console.error('Error al cargar gastos:', error)
+          setExpenses([])
+        }
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -580,6 +601,213 @@ export default function Reports() {
     }))
   }, [topProducts])
 
+  // ========== CÁLCULOS DE GASTOS ==========
+
+  // Filtrar gastos por rango de fecha
+  const filteredExpenses = useMemo(() => {
+    const now = new Date()
+    const filterDate = new Date()
+
+    switch (dateRange) {
+      case 'week':
+        filterDate.setDate(now.getDate() - 7)
+        break
+      case 'month':
+        filterDate.setMonth(now.getMonth() - 1)
+        break
+      case 'quarter':
+        filterDate.setMonth(now.getMonth() - 3)
+        break
+      case 'year':
+        filterDate.setFullYear(now.getFullYear() - 1)
+        break
+      case 'all':
+        return expenses
+      default:
+        return expenses
+    }
+
+    return expenses.filter(expense => {
+      if (!expense.date) return false
+      const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
+      return expenseDate >= filterDate
+    })
+  }, [expenses, dateRange])
+
+  // Estadísticas de gastos
+  const expenseStats = useMemo(() => {
+    const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
+
+    // Por categoría
+    const byCategory = filteredExpenses.reduce((acc, expense) => {
+      const cat = expense.category || 'otros'
+      if (!acc[cat]) {
+        acc[cat] = { total: 0, count: 0 }
+      }
+      acc[cat].total += expense.amount || 0
+      acc[cat].count += 1
+      return acc
+    }, {})
+
+    // Por método de pago
+    const byPaymentMethod = filteredExpenses.reduce((acc, expense) => {
+      const method = expense.paymentMethod || 'efectivo'
+      if (!acc[method]) {
+        acc[method] = { total: 0, count: 0 }
+      }
+      acc[method].total += expense.amount || 0
+      acc[method].count += 1
+      return acc
+    }, {})
+
+    return {
+      total: totalExpenses,
+      count: filteredExpenses.length,
+      byCategory,
+      byPaymentMethod,
+      avgExpense: filteredExpenses.length > 0 ? totalExpenses / filteredExpenses.length : 0
+    }
+  }, [filteredExpenses])
+
+  // Datos para gráfico de gastos por categoría
+  const expensesByCategoryData = useMemo(() => {
+    return Object.entries(expenseStats.byCategory).map(([catId, data], index) => {
+      const category = EXPENSE_CATEGORIES.find(c => c.id === catId)
+      return {
+        name: category?.name || catId,
+        value: data.total,
+        count: data.count,
+        color: COLORS[index % COLORS.length]
+      }
+    }).sort((a, b) => b.value - a.value)
+  }, [expenseStats.byCategory])
+
+  // Gastos por período (para gráfico de tendencia)
+  const expensesByPeriod = useMemo(() => {
+    const now = new Date()
+    let periodsData = {}
+    let groupBy = 'month'
+
+    if (dateRange === 'week') {
+      groupBy = 'day'
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+          gastos: 0,
+          count: 0,
+        }
+      }
+    } else if (dateRange === 'month') {
+      groupBy = 'day'
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+          gastos: 0,
+          count: 0,
+        }
+      }
+    } else if (dateRange === 'quarter') {
+      groupBy = 'month'
+      for (let i = 2; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          gastos: 0,
+          count: 0,
+        }
+      }
+    } else if (dateRange === 'year') {
+      groupBy = 'month'
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        periodsData[key] = {
+          period: date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+          gastos: 0,
+          count: 0,
+        }
+      }
+    } else {
+      groupBy = 'month'
+      filteredExpenses.forEach(expense => {
+        if (!expense.date) return
+        const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
+        const key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`
+        if (!periodsData[key]) {
+          periodsData[key] = {
+            period: expenseDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+            gastos: 0,
+            count: 0,
+          }
+        }
+      })
+    }
+
+    filteredExpenses.forEach(expense => {
+      if (!expense.date) return
+      const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
+
+      let key
+      if (groupBy === 'day') {
+        key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}-${String(expenseDate.getDate()).padStart(2, '0')}`
+      } else {
+        key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`
+      }
+
+      if (periodsData[key]) {
+        periodsData[key].gastos = Number((periodsData[key].gastos + (expense.amount || 0)).toFixed(2))
+        periodsData[key].count += 1
+      }
+    })
+
+    return Object.entries(periodsData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value)
+  }, [filteredExpenses, dateRange])
+
+  // Función para exportar reporte de gastos
+  const exportExpensesReport = () => {
+    const data = filteredExpenses.map(e => ({
+      'Fecha': e.date instanceof Date ? e.date.toLocaleDateString('es-PE') : new Date(e.date).toLocaleDateString('es-PE'),
+      'Descripción': e.description || '',
+      'Categoría': EXPENSE_CATEGORIES.find(c => c.id === e.category)?.name || e.category,
+      'Proveedor': e.supplier || '-',
+      'Referencia': e.reference || '-',
+      'Método de Pago': e.paymentMethod || 'Efectivo',
+      'Monto': e.amount || 0
+    }))
+
+    // Agregar fila de total
+    data.push({
+      'Fecha': '',
+      'Descripción': 'TOTAL',
+      'Categoría': '',
+      'Proveedor': '',
+      'Referencia': '',
+      'Método de Pago': '',
+      'Monto': expenseStats.total
+    })
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Gastos')
+
+    const dateRangeText = {
+      week: 'ultima_semana',
+      month: 'ultimo_mes',
+      quarter: 'ultimo_trimestre',
+      year: 'ultimo_año',
+      all: 'todo'
+    }[dateRange] || 'periodo'
+
+    XLSX.writeFile(wb, `reporte_gastos_${dateRangeText}.xlsx`)
+  }
+
   // Custom tooltip para los gráficos
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -692,6 +920,20 @@ export default function Reports() {
           <Users className="w-4 h-4 inline-block mr-2" />
           Vendedores
         </button>
+        {/* Tab de Gastos - solo visible si tiene el feature */}
+        {hasFeature && hasFeature('expenseManagement') && (
+          <button
+            onClick={() => setSelectedReport('expenses')}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+              selectedReport === 'expenses'
+                ? 'bg-red-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Receipt className="w-4 h-4 inline-block mr-2" />
+            Gastos
+          </button>
+        )}
       </div>
 
       {/* Resumen General */}
@@ -1586,6 +1828,276 @@ export default function Reports() {
                   </TableBody>
                 </Table>
               </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Reporte de Gastos */}
+      {selectedReport === 'expenses' && (
+        <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={exportExpensesReport}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Gastos (Excel)
+            </button>
+          </div>
+
+          {/* KPIs de Gastos */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Gastos</p>
+                    <p className="text-2xl font-bold text-red-600 mt-2">
+                      {formatCurrency(expenseStats.total)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {expenseStats.count} registros
+                    </p>
+                  </div>
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <TrendingDown className="w-6 h-6 text-red-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Promedio por Gasto</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">
+                      {formatCurrency(expenseStats.avgExpense)}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-orange-100 rounded-lg">
+                    <Receipt className="w-6 h-6 text-orange-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Servicios</p>
+                    <p className="text-2xl font-bold text-yellow-600 mt-2">
+                      {formatCurrency(expenseStats.byCategory.servicios?.total || 0)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {expenseStats.byCategory.servicios?.count || 0} registros
+                    </p>
+                  </div>
+                  <div className="p-3 bg-yellow-100 rounded-lg">
+                    <Zap className="w-6 h-6 text-yellow-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Proveedores</p>
+                    <p className="text-2xl font-bold text-blue-600 mt-2">
+                      {formatCurrency(expenseStats.byCategory.proveedores?.total || 0)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {expenseStats.byCategory.proveedores?.count || 0} registros
+                    </p>
+                  </div>
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <Truck className="w-6 h-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Gráficos de Gastos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de Tendencia de Gastos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Tendencia de Gastos
+                  {dateRange === 'week' && ' (Última Semana)'}
+                  {dateRange === 'month' && ' (Último Mes)'}
+                  {dateRange === 'quarter' && ' (Último Trimestre)'}
+                  {dateRange === 'year' && ' (Último Año)'}
+                  {dateRange === 'all' && ' (Todo el Período)'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={expensesByPeriod}>
+                    <defs>
+                      <linearGradient id="colorGastos" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value)}
+                      labelFormatter={(label) => `Período: ${label}`}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="gastos"
+                      stroke="#ef4444"
+                      fillOpacity={1}
+                      fill="url(#colorGastos)"
+                      name="Gastos"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Gastos por Categoría */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución por Categoría</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {expensesByCategoryData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RePieChart>
+                      <Pie
+                        data={expensesByCategoryData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {expensesByCategoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[300px] text-gray-500">
+                    <p>No hay datos de gastos disponibles</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Resumen por Categoría */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumen por Categoría</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {expensesByCategoryData.map((cat, index) => (
+                  <div
+                    key={cat.name}
+                    className="p-4 rounded-lg border border-gray-200 bg-gradient-to-br from-white to-gray-50"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-gray-600">{cat.name}</p>
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: cat.color }}
+                      />
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatCurrency(cat.value)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {cat.count} {cat.count === 1 ? 'registro' : 'registros'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de Últimos Gastos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Últimos Gastos Registrados</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead>Categoría</TableHead>
+                      <TableHead>Proveedor</TableHead>
+                      <TableHead>Método</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredExpenses.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                          No hay gastos registrados en este período
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredExpenses.slice(0, 20).map(expense => {
+                        const category = EXPENSE_CATEGORIES.find(c => c.id === expense.category)
+                        return (
+                          <TableRow key={expense.id}>
+                            <TableCell>
+                              {expense.date instanceof Date
+                                ? expense.date.toLocaleDateString('es-PE')
+                                : new Date(expense.date).toLocaleDateString('es-PE')
+                              }
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium">{expense.description}</p>
+                              {expense.reference && (
+                                <p className="text-xs text-gray-500">Ref: {expense.reference}</p>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="default">
+                                {category?.name || expense.category}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{expense.supplier || '-'}</TableCell>
+                            <TableCell>
+                              <span className="text-sm capitalize">{expense.paymentMethod || 'Efectivo'}</span>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-red-600">
+                              {formatCurrency(expense.amount)}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredExpenses.length > 20 && (
+                <p className="text-center text-sm text-gray-500 mt-4">
+                  Mostrando 20 de {filteredExpenses.length} gastos. Descarga el Excel para ver todos.
+                </p>
+              )}
             </CardContent>
           </Card>
         </>

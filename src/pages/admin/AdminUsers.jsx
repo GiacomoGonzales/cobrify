@@ -35,7 +35,8 @@ import {
   Loader2,
   Image,
   Sparkles,
-  DollarSign
+  DollarSign,
+  Receipt
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -98,7 +99,8 @@ export default function AdminUsers() {
   const [savingFeatures, setSavingFeatures] = useState(false)
   const [featuresForm, setFeaturesForm] = useState({
     productImages: false,
-    hidePaymentMethods: false
+    hidePaymentMethods: false,
+    expenseManagement: false
   })
 
   // Estados para modal de pagos y planes
@@ -530,7 +532,8 @@ export default function AdminUsers() {
     setFeaturesUserToEdit(user)
     setFeaturesForm({
       productImages: user.features?.productImages || false,
-      hidePaymentMethods: user.features?.hidePaymentMethods || false
+      hidePaymentMethods: user.features?.hidePaymentMethods || false,
+      expenseManagement: user.features?.expenseManagement || false
     })
     setShowFeaturesModal(true)
   }
@@ -1561,6 +1564,36 @@ export default function AdminUsers() {
                   <div className="mt-3 flex items-center gap-2 p-2 bg-orange-100 rounded-lg">
                     <CheckCircle className="w-4 h-4 text-orange-600" />
                     <span className="text-sm text-orange-700 font-medium">Todas las ventas serán en Efectivo</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Feature: Gestión de Gastos */}
+              <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                      <Receipt className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">Gestión de Gastos</h3>
+                      <p className="text-xs text-gray-500">Registro y reportes de gastos del negocio</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={featuresForm.expenseManagement}
+                      onChange={e => setFeaturesForm({ ...featuresForm, expenseManagement: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                  </label>
+                </div>
+                {featuresForm.expenseManagement && (
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-red-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-sm text-red-700 font-medium">Acceso a Gastos y Reportes de Gastos</span>
                   </div>
                 )}
               </div>

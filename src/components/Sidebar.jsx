@@ -19,6 +19,7 @@ import {
   ClipboardList,
   History,
   Building2,
+  Receipt,
   // Iconos para modo restaurante
   UtensilsCrossed,
   Grid3x3,
@@ -32,7 +33,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
-  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings } = useAppContext()
+  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
@@ -154,6 +155,13 @@ function Sidebar() {
       pageId: 'reports',
     },
     {
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      requiresFeature: 'expenseManagement', // Solo visible si tiene el feature
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -249,6 +257,13 @@ function Sidebar() {
       pageId: 'reports',
     },
     {
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      requiresFeature: 'expenseManagement', // Solo visible si tiene el feature
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -305,11 +320,20 @@ function Sidebar() {
       if (!dispatchGuidesEnabled && !isDemoMode) return false
     }
 
+    // Si requiere un feature específico, verificar que lo tenga
+    if (item.requiresFeature) {
+      const featureEnabled = hasFeature && hasFeature(item.requiresFeature)
+      if (!featureEnabled && !isDemoMode) return false
+    }
+
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true
 
-    // Si es admin o business owner, mostrar todo
-    if (isAdmin || isBusinessOwner) return true
+    // Si es admin o business owner, mostrar todo (excepto features, ya se validó arriba)
+    if (isAdmin || isBusinessOwner) {
+      // Para features, ya se validó arriba, así que si llegó aquí es que lo tiene
+      return true
+    }
 
     // Si no tiene pageId, permitir acceso (sin restricción)
     if (!item.pageId) return true
