@@ -619,7 +619,15 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // ========== Fecha y Hora (ticket-section) ==========
     // Formatear fecha y hora de manera compatible con impresoras térmicas
-    const invoiceDate = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date());
+    // Priorizar emissionDate (string YYYY-MM-DD) para evitar problemas de zona horaria
+    let invoiceDate;
+    if (invoice.emissionDate && typeof invoice.emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(invoice.emissionDate)) {
+      // Parsear emissionDate como fecha local (no UTC) para Lima, Perú
+      const [year, month, day] = invoice.emissionDate.split('-').map(Number);
+      invoiceDate = new Date(year, month - 1, day, 12, 0, 0);
+    } else {
+      invoiceDate = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date());
+    }
     const createdDate = new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date());
 
     // Formatear hora en 24h para evitar problemas con "p.m." / "a.m."
@@ -718,7 +726,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     if (!qrData && business.ruc && invoice.series && !isNotaVenta) {
       // Formato QR SUNAT: RUC|Tipo|Serie|Numero|IGV|Total|Fecha|TipoDoc|NumDoc
       const tipoDoc = isInvoice ? '01' : '03'; // 01=Factura, 03=Boleta
-      const fecha = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toISOString().split('T')[0];
+      // Usar emissionDate primero para evitar problemas de zona horaria
+      let fecha;
+      if (invoice.emissionDate && typeof invoice.emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(invoice.emissionDate)) {
+        fecha = invoice.emissionDate;
+      } else {
+        fecha = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toISOString().split('T')[0];
+      }
       const docCliente = isInvoice ? '6' : '1'; // 6=RUC, 1=DNI
       const numDocCliente = invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '';
 
@@ -1439,11 +1453,19 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       .newLine();
 
     // Fecha y hora
-    const invoiceDate = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || new Date());
+    // Priorizar emissionDate para evitar problemas de zona horaria en Lima
+    let invoiceDate;
+    if (invoice.emissionDate && typeof invoice.emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(invoice.emissionDate)) {
+      const [year, month, day] = invoice.emissionDate.split('-').map(Number);
+      invoiceDate = new Date(year, month - 1, day, 12, 0, 0);
+    } else {
+      invoiceDate = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || new Date());
+    }
+    const createdDate = new Date(invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date());
     builder.alignLeft()
       .text(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}`)
       .newLine()
-      .text(`Hora: ${invoiceDate.toLocaleTimeString('es-PE')}`)
+      .text(`Hora: ${createdDate.toLocaleTimeString('es-PE')}`)
       .newLine();
 
     // Datos del cliente
