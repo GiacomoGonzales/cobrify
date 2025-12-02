@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion } from 'firebase/firestore'
 import { PLANS, updateUserFeatures } from '@/services/subscriptionService'
+import UserDetailsModal from '@/components/admin/UserDetailsModal'
+import { useToast } from '@/contexts/ToastContext'
 import {
   Users,
   Search,
@@ -32,7 +34,8 @@ import {
   Save,
   Loader2,
   Image,
-  Sparkles
+  Sparkles,
+  DollarSign
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -50,6 +53,7 @@ const STATUS_LABELS = {
 }
 
 export default function AdminUsers() {
+  const toast = useToast()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -96,6 +100,12 @@ export default function AdminUsers() {
     productImages: false,
     hidePaymentMethods: false
   })
+
+  // Estados para modal de pagos y planes
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showPlanModal, setShowPlanModal] = useState(false)
+  const [paymentUserToEdit, setPaymentUserToEdit] = useState(null)
+  const [processingPayment, setProcessingPayment] = useState(false)
 
   useEffect(() => {
     loadUsers()
@@ -182,6 +192,7 @@ export default function AdminUsers() {
 
         usersData.push({
           id: doc.id,
+          userId: doc.id, // Alias para compatibilidad con UserDetailsModal
           email: data.email || 'N/A',
           businessName: business.razonSocial || business.businessName || data.businessName || 'Sin nombre',
           ruc: business.ruc || data.ruc || null,
@@ -193,7 +204,16 @@ export default function AdminUsers() {
           status,
           createdAt,
           periodEnd,
-          usage: data.usage?.invoicesThisMonth || 0,
+          // Campos adicionales para UserDetailsModal
+          currentPeriodEnd: data.currentPeriodEnd,
+          currentPeriodStart: data.currentPeriodStart,
+          lastCounterReset: data.lastCounterReset,
+          monthlyPrice: PLANS[data.plan]?.pricePerMonth || 0,
+          limits: data.limits || PLANS[data.plan]?.limits || {},
+          usage: data.usage || { invoicesThisMonth: 0 },
+          paymentHistory: data.paymentHistory || [],
+          blockReason: data.blockReason || null,
+          // Campos originales
           limit: PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0, // -1 = ilimitado
           accessBlocked: data.accessBlocked || false,
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
@@ -293,7 +313,7 @@ export default function AdminUsers() {
       PLANS[u.plan]?.name || u.plan,
       STATUS_LABELS[u.status],
       u.createdAt?.toLocaleDateString() || 'N/A',
-      u.usage,
+      u.usage?.invoicesThisMonth || 0,
       u.limit === -1 || u.limit === 0 ? 'Ilimitado' : u.limit
     ])
 
@@ -348,10 +368,10 @@ export default function AdminUsers() {
         console.log('📋 QPse data:', qpseData)
         console.log('📋 SUNAT data:', sunatData)
 
-        // Normalizar environment (production -> produccion, beta -> beta)
+        // Normalizar environment (produccion -> production para QPse)
         const normalizeEnv = (env) => {
-          if (env === 'production') return 'produccion'
-          if (env === 'produccion') return 'produccion'
+          if (env === 'production') return 'production'
+          if (env === 'produccion') return 'production'
           return env || 'demo'
         }
 
@@ -532,6 +552,108 @@ export default function AdminUsers() {
     } finally {
       setSavingFeatures(false)
     }
+  }
+
+  // Función para registrar pago
+  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null) {
+    setProcessingPayment(true)
+    try {
+      const plan = PLANS[planKey]
+      if (!plan) {
+        toast.error('Plan no válido')
+        return
+      }
+
+      const subscriptionRef = doc(db, 'subscriptions', userId)
+      const subscriptionDoc = await getDoc(subscriptionRef)
+      const currentData = subscriptionDoc.exists() ? subscriptionDoc.data() : {}
+
+      // Calcular nueva fecha de vencimiento
+      let newEndDate
+      if (customEndDate) {
+        // Usar fecha personalizada
+        newEndDate = new Date(customEndDate)
+      } else {
+        // Calcular desde la fecha actual o desde el vencimiento actual si aún no venció
+        const currentEnd = currentData.currentPeriodEnd?.toDate?.() || new Date()
+        const baseDate = currentEnd > new Date() ? currentEnd : new Date()
+        newEndDate = new Date(baseDate)
+        newEndDate.setMonth(newEndDate.getMonth() + plan.months)
+      }
+
+      // Crear registro de pago
+      const paymentRecord = {
+        date: Timestamp.now(),
+        amount: parseFloat(amount),
+        method: method,
+        plan: planKey,
+        planName: plan.name,
+        months: plan.months,
+        status: 'completed',
+        registeredBy: 'admin'
+      }
+
+      // Actualizar suscripción
+      await updateDoc(subscriptionRef, {
+        plan: planKey,
+        status: 'active',
+        currentPeriodStart: Timestamp.now(),
+        currentPeriodEnd: Timestamp.fromDate(newEndDate),
+        limits: plan.limits,
+        paymentHistory: arrayUnion(paymentRecord),
+        updatedAt: Timestamp.now()
+      })
+
+      toast.success(`Pago registrado. Nuevo vencimiento: ${newEndDate.toLocaleDateString('es-PE')}`)
+      setShowPaymentModal(false)
+      setPaymentUserToEdit(null)
+      loadUsers()
+    } catch (error) {
+      console.error('Error al registrar pago:', error)
+      toast.error('Error al registrar el pago')
+    } finally {
+      setProcessingPayment(false)
+    }
+  }
+
+  // Función para cambiar plan
+  async function handleChangePlan(userId, newPlanKey) {
+    try {
+      const plan = PLANS[newPlanKey]
+      if (!plan) {
+        toast.error('Plan no válido')
+        return
+      }
+
+      const subscriptionRef = doc(db, 'subscriptions', userId)
+      await updateDoc(subscriptionRef, {
+        plan: newPlanKey,
+        limits: plan.limits,
+        updatedAt: Timestamp.now()
+      })
+
+      toast.success(`Plan cambiado a ${plan.name}`)
+      setShowPlanModal(false)
+      setPaymentUserToEdit(null)
+      loadUsers()
+    } catch (error) {
+      console.error('Error al cambiar plan:', error)
+      toast.error('Error al cambiar el plan')
+    }
+  }
+
+  // Función para abrir modal de pago
+  function openPaymentModal(user) {
+    setPaymentUserToEdit(user)
+    setShowPaymentModal(true)
+    setSelectedUser(null)
+  }
+
+  // Función para abrir modal de cambio de plan
+  function openPlanModal(user) {
+    setPaymentUserToEdit(user)
+    setShowPlanModal(true)
+    setSelectedUser(null)
   }
 
   function formatDate(date) {
@@ -764,17 +886,17 @@ export default function AdminUsers() {
                         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
                           <div
                             className={`h-full rounded-full ${
-                              user.limit > 0 && user.usage / user.limit > 0.9
+                              user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
                                 ? 'bg-red-500'
-                                : user.limit > 0 && user.usage / user.limit > 0.7
+                                : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
                                   ? 'bg-yellow-500'
                                   : 'bg-green-500'
                             }`}
-                            style={{ width: user.limit > 0 ? `${Math.min((user.usage / user.limit) * 100, 100)}%` : '10%' }}
+                            style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
                           />
                         </div>
                         <span className="text-xs text-gray-500">
-                          {user.usage}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
+                          {user.usage?.invoicesThisMonth || 0}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
                         </span>
                       </div>
                     </td>
@@ -930,19 +1052,19 @@ export default function AdminUsers() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-500">Uso este mes</span>
                   <span className="font-medium">
-                    {selectedUser.usage} / {selectedUser.limit === -1 || selectedUser.limit === 0 ? '∞' : selectedUser.limit} documentos
+                    {selectedUser.usage?.invoicesThisMonth || 0} / {selectedUser.limit === -1 || selectedUser.limit === 0 ? '∞' : selectedUser.limit} documentos
                   </span>
                 </div>
                 <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full ${
-                      selectedUser.limit > 0 && selectedUser.usage / selectedUser.limit > 0.9
+                      selectedUser.limit > 0 && (selectedUser.usage?.invoicesThisMonth || 0) / selectedUser.limit > 0.9
                         ? 'bg-red-500'
-                        : selectedUser.limit > 0 && selectedUser.usage / selectedUser.limit > 0.7
+                        : selectedUser.limit > 0 && (selectedUser.usage?.invoicesThisMonth || 0) / selectedUser.limit > 0.7
                           ? 'bg-yellow-500'
                           : 'bg-green-500'
                     }`}
-                    style={{ width: selectedUser.limit > 0 ? `${Math.min((selectedUser.usage / selectedUser.limit) * 100, 100)}%` : '5%' }}
+                    style={{ width: selectedUser.limit > 0 ? `${Math.min(((selectedUser.usage?.invoicesThisMonth || 0) / selectedUser.limit) * 100, 100)}%` : '5%' }}
                   />
                 </div>
               </div>
@@ -974,6 +1096,22 @@ export default function AdminUsers() {
 
               {/* Actions */}
               <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => openPaymentModal(selectedUser)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                >
+                  <DollarSign className="w-5 h-5" />
+                  Registrar Pago
+                </button>
+
+                <button
+                  onClick={() => openPlanModal(selectedUser)}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                >
+                  <Edit2 className="w-5 h-5" />
+                  Cambiar Plan
+                </button>
+
                 <button
                   onClick={() => {
                     openSunatConfig(selectedUser)
@@ -1145,7 +1283,7 @@ export default function AdminUsers() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
                     >
                       <option value="demo">Demo (Pruebas)</option>
-                      <option value="produccion">Producción</option>
+                      <option value="production">Producción</option>
                     </select>
                   </div>
 
@@ -1187,7 +1325,7 @@ export default function AdminUsers() {
                   {/* Estado de homologación QPse - derivado del ambiente */}
                   <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm text-gray-600">Estado:</span>
-                    {sunatForm.qpseEnvironment === 'produccion' ? (
+                    {sunatForm.qpseEnvironment === 'production' ? (
                       <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
                     ) : (
                       <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
@@ -1459,6 +1597,36 @@ export default function AdminUsers() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Registrar Pago */}
+      {showPaymentModal && paymentUserToEdit && (
+        <UserDetailsModal
+          user={paymentUserToEdit}
+          type="payment"
+          onClose={() => {
+            setShowPaymentModal(false)
+            setPaymentUserToEdit(null)
+          }}
+          onRegisterPayment={handleRegisterPayment}
+          loading={processingPayment}
+          toast={toast}
+        />
+      )}
+
+      {/* Modal de Cambiar Plan */}
+      {showPlanModal && paymentUserToEdit && (
+        <UserDetailsModal
+          user={paymentUserToEdit}
+          type="edit"
+          onClose={() => {
+            setShowPlanModal(false)
+            setPaymentUserToEdit(null)
+          }}
+          onChangePlan={handleChangePlan}
+          loading={processingPayment}
+          toast={toast}
+        />
       )}
     </div>
   )

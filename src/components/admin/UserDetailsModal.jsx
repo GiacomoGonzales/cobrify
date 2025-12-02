@@ -805,7 +805,14 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                onChangePlan(user.userId, selectedPlan);
+                // Usar user.userId si existe, sino user.id (para compatibilidad)
+                const userId = user.userId || user.id;
+                if (!userId) {
+                  console.error('No se encontró userId para cambiar plan');
+                  if (toast) toast.error('Error: No se encontró el ID del usuario');
+                  return;
+                }
+                onChangePlan(userId, selectedPlan);
               }}
               className="space-y-4"
             >
