@@ -1047,6 +1047,7 @@ export default function POS() {
           code: item.code || item.id,
           name: item.name,
           quantity: item.quantity,
+          unit: item.unit || 'UNIDAD',
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
         }))
@@ -1144,6 +1145,7 @@ export default function POS() {
         code: item.code || item.id, // Si no tiene código asignado, usar el ID
         name: item.name,
         quantity: item.quantity,
+        unit: item.unit || 'UNIDAD',
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen

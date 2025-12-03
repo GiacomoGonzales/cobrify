@@ -68,41 +68,10 @@ const numeroALetras = (num) => {
 }
 
 /**
- * Convierte URL de Firebase Storage a URL pública compatible con CORS
- * Firebase Storage requiere ?alt=media para acceso público
- */
-const getPublicFirebaseStorageUrl = (url) => {
-  try {
-    // Si ya tiene alt=media, está lista para usar
-    if (url.includes('?alt=media')) {
-      console.log('✅ URL ya tiene alt=media, usando directamente')
-      return url
-    }
-
-    // Si es una URL de firebasestorage.googleapis.com, asegurar que tenga alt=media
-    if (url.includes('firebasestorage.googleapis.com')) {
-      // Si ya tiene algún query param pero no alt=media
-      if (url.includes('?')) {
-        return `${url}&alt=media`
-      } else {
-        return `${url}?alt=media`
-      }
-    }
-
-    return url
-  } catch (error) {
-    console.error('Error converting URL:', error)
-    return url
-  }
-}
-
-/**
  * Extrae el path de Firebase Storage desde una URL
  */
 const getStoragePathFromUrl = (url) => {
   try {
-    // Extraer path de URL de Firebase Storage
-    // Formato: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{encodedPath}?...
     const match = url.match(/\/o\/(.+?)\?/)
     if (match) {
       const encodedPath = match[1]
@@ -117,23 +86,17 @@ const getStoragePathFromUrl = (url) => {
 
 /**
  * Carga una imagen desde Firebase Storage y la convierte a base64
- * Usa el SDK de Firebase para evitar problemas de CORS
  */
 const loadImageAsBase64 = async (url) => {
   try {
     console.log('🔄 Cargando imagen desde Firebase Storage usando SDK')
-
-    // Extraer el path del storage desde la URL
     const storagePath = getStoragePathFromUrl(url)
 
     if (storagePath) {
       console.log('📁 Path extraído:', storagePath)
-
-      // Usar Firebase SDK para obtener el blob
       const storageRef = ref(storage, storagePath)
       const blob = await getBlob(storageRef)
 
-      // Convertir blob a base64
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onloadend = () => {
@@ -145,7 +108,7 @@ const loadImageAsBase64 = async (url) => {
       })
     }
 
-    // Fallback: intentar con fetch directo si no es una URL de Firebase Storage
+    // Fallback: intentar con fetch directo
     console.log('🔄 Fallback: Intentando fetch directo')
     const response = await fetch(url, {
       mode: 'cors',
@@ -186,11 +149,9 @@ const generateSunatQR = async (invoice, companySettings) => {
                          invoice.customer?.documentType === 'DNI' ? '1' : '0'
     const clientDocNumber = invoice.customer?.documentNumber || '-'
 
-    // Usar emissionDate primero (fecha de emisión seleccionada), luego issueDate, luego createdAt
     const dateSource = invoice.emissionDate || invoice.issueDate || invoice.createdAt
     let invoiceDate = new Date().toLocaleDateString('es-PE')
     if (dateSource) {
-      // Si es un string en formato YYYY-MM-DD, parsearlo directamente
       if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
         const [year, month, day] = dateSource.split('-')
         invoiceDate = `${day}/${month}/${year}`
@@ -229,757 +190,527 @@ const generateSunatQR = async (invoice, companySettings) => {
 }
 
 /**
- * Genera un PDF profesional para factura o boleta según formato SUNAT oficial
- * Diseño moderno y limpio con mejor tipografía y espaciado
+ * Genera un PDF profesional estilo apisunat.com
+ * Diseño limpio con colores neutros (negro/gris)
  */
 export const generateInvoicePDF = async (invoice, companySettings, download = true) => {
-  // Crear documento A4 en orientación vertical (portrait)
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
     format: 'a4'
   })
 
-  // Paleta de colores neutros - solo negros y grises
+  // Paleta de colores - Solo negro y grises
   const BLACK = [0, 0, 0]
-  const DARK_GRAY = [51, 51, 51]      // Gris muy oscuro para títulos
-  const MEDIUM_GRAY = [102, 102, 102] // Gris medio para texto secundario
-  const LIGHT_GRAY = [224, 224, 224]  // Gris claro para fondos
-  const BORDER_GRAY = [189, 189, 189] // Gris para bordes
+  const DARK_GRAY = [60, 60, 60]
+  const MEDIUM_GRAY = [120, 120, 120]
+  const LIGHT_GRAY = [240, 240, 240]
+  const TABLE_HEADER_BG = [245, 245, 245]
+  const BORDER_COLOR = [0, 0, 0]
 
-  // Márgenes y dimensiones - A4 portrait: 595pt x 842pt
+  // Márgenes y dimensiones - A4: 595pt x 842pt
   const MARGIN_LEFT = 40
   const MARGIN_RIGHT = 40
-  const MARGIN_TOP = 40
+  const MARGIN_TOP = 35
   const PAGE_WIDTH = doc.internal.pageSize.getWidth()
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
-  // Coordenada Y actual
   let currentY = MARGIN_TOP
 
-  // ========== 1. ENCABEZADO PRINCIPAL ==========
+  // ========== 1. ENCABEZADO - 3 COLUMNAS ==========
 
-  // Barra superior negra elegante
-  doc.setFillColor(...BLACK)
-  doc.rect(0, 0, PAGE_WIDTH, 5, 'F')
+  const headerHeight = 95
+  const logoMaxWidth = 90 // Ancho máximo del logo
+  const docColumnWidth = 160
+  let actualLogoWidth = 0 // Ancho real del logo después de cargarlo
 
-  currentY += 8
-
-  const headerY = currentY
-
-  // Columna izquierda - Información de la empresa (60%)
-  const leftColumnWidth = CONTENT_WIDTH * 0.60
-  const leftColumnX = MARGIN_LEFT
-
-  // Logo de la empresa si existe - ARRIBA A LA IZQUIERDA
-  let logoHeight = 0
-  let textY = headerY
-
+  // COLUMNA 1: Logo (izquierda)
   if (companySettings?.logoUrl) {
     try {
-      console.log('📸 Intentando cargar logo desde:', companySettings.logoUrl)
-
-      // Agregar un timeout para no bloquear la generación del PDF
       const imgData = await Promise.race([
         loadImageAsBase64(companySettings.logoUrl),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout loading logo')), 5000)
-        )
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
       ])
 
-      // Determinar el formato de la imagen
       let format = 'PNG'
       if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
           companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
         format = 'JPEG'
       }
 
-      // Crear una imagen temporal para obtener dimensiones originales
       const img = new Image()
       img.src = imgData
-
       await new Promise((resolve, reject) => {
         img.onload = resolve
         img.onerror = reject
       })
 
-      // Calcular dimensiones manteniendo la proporción
-      const originalWidth = img.width
-      const originalHeight = img.height
-      const aspectRatio = originalWidth / originalHeight
+      const aspectRatio = img.width / img.height
+      let logoHeight = headerHeight - 10
+      let logoWidth = logoHeight * aspectRatio
 
-      // Altura máxima del logo
-      const maxLogoHeight = 45
-      const maxLogoWidth = 120 // Ancho máximo para logos horizontales
-
-      let logoWidth, calculatedLogoHeight
-
-      if (aspectRatio > 1) {
-        // Logo horizontal (más ancho que alto)
-        logoWidth = Math.min(maxLogoWidth, leftColumnWidth - 10)
-        calculatedLogoHeight = logoWidth / aspectRatio
-
-        // Si la altura calculada excede el máximo, ajustar
-        if (calculatedLogoHeight > maxLogoHeight) {
-          calculatedLogoHeight = maxLogoHeight
-          logoWidth = calculatedLogoHeight * aspectRatio
-        }
-      } else {
-        // Logo vertical o cuadrado (más alto que ancho o igual)
-        calculatedLogoHeight = maxLogoHeight
-        logoWidth = calculatedLogoHeight * aspectRatio
+      if (logoWidth > logoMaxWidth) {
+        logoWidth = logoMaxWidth
+        logoHeight = logoWidth / aspectRatio
       }
 
-      logoHeight = calculatedLogoHeight
-
-      // Logo en la esquina superior izquierda
-      doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textY = headerY + logoHeight + 12 // Texto debajo del logo con más separación
-      console.log('✅ Logo cargado correctamente (dimensiones:', logoWidth, 'x', logoHeight, ')')
+      actualLogoWidth = logoWidth // Guardar el ancho real
+      const logoX = MARGIN_LEFT
+      const logoY = currentY + (headerHeight - logoHeight) / 2
+      doc.addImage(imgData, format, logoX, logoY, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
-      console.warn('⚠️ No se pudo cargar el logo, continuando sin él:', error.message)
-      textY = headerY + 5
-      // Continuar sin el logo - el PDF se generará de todas formas
+      console.warn('⚠️ No se pudo cargar el logo:', error.message)
     }
-  } else {
-    textY = headerY + 5
   }
 
-  // Columna derecha - Recuadro del comprobante (35%)
-  const rightColumnWidth = CONTENT_WIDTH * 0.40
-  const rightColumnX = MARGIN_LEFT + leftColumnWidth
+  // COLUMNA 2: Información de la empresa - justo al lado del logo con pequeño padding
+  const logoPadding = 8 // Pequeño espacio entre logo y texto
+  const infoX = MARGIN_LEFT + (actualLogoWidth > 0 ? actualLogoWidth : 0) + logoPadding
+  const infoColumnWidth = CONTENT_WIDTH - (actualLogoWidth > 0 ? actualLogoWidth : 0) - logoPadding - docColumnWidth - 10
 
-  // Primero procesar el nombre de la empresa para saber cuántas líneas ocupa
-  doc.setFontSize(14)
-  doc.setTextColor(...DARK_GRAY)
+  // Obtener nombre comercial y razón social (en MAYÚSCULAS)
+  // name = Nombre Comercial, businessName = Razón Social
+  const commercialName = (companySettings?.name || companySettings?.businessName || 'EMPRESA SAC').toUpperCase()
+  const legalName = (companySettings?.businessName || '').toUpperCase()
+  const hasLegalName = legalName && legalName !== commercialName
+
+  // Calcular altura total del contenido de empresa para centrar
+  doc.setFontSize(13)
+  const commercialNameLines = doc.splitTextToSize(commercialName, infoColumnWidth)
+  const commercialNameHeight = commercialNameLines.length * 14
+  const legalNameHeight = hasLegalName ? 12 : 0
+  const addressHeight = companySettings?.address ? 20 : 0
+  const totalInfoHeight = commercialNameHeight + legalNameHeight + addressHeight
+
+  // Centrar verticalmente
+  let infoY = currentY + (headerHeight - totalInfoHeight) / 2 + 10
+
+  // Nombre comercial - GRANDE y en negrita (MAYÚSCULAS)
   doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  commercialNameLines.forEach((line, i) => {
+    doc.text(line, infoX, infoY + (i * 14))
+  })
+  infoY += commercialNameLines.length * 14 + 2
 
-  const companyName = companySettings?.businessName || 'EMPRESA SAC'
-  const companyNameLines = doc.splitTextToSize(companyName, leftColumnWidth - 10)
+  // Razón social - más pequeña (MAYÚSCULAS)
+  if (hasLegalName) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    const legalNameLines = doc.splitTextToSize(legalName, infoColumnWidth)
+    doc.text(legalNameLines[0], infoX, infoY)
+    infoY += 11
+  }
 
-  // Contar cuántas líneas de información tenemos
-  let lineCount = companyNameLines.length // Nombre de empresa (puede ser múltiples líneas)
-  if (companySettings?.ruc) lineCount++
-  if (companySettings?.address) lineCount++ // Asumiendo 1 línea
-  if (companySettings?.phone) lineCount++
-  if (companySettings?.email) lineCount++
+  // Dirección - más pequeña (MAYÚSCULAS)
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  if (companySettings?.address) {
+    const addressText = companySettings.address.toUpperCase()
+    const addressLines = doc.splitTextToSize(addressText, infoColumnWidth)
+    addressLines.slice(0, 2).forEach((line, i) => {
+      doc.text(line, infoX, infoY + (i * 10))
+    })
+  }
 
-  // Calcular espaciado entre líneas
-  const lineHeight = 11
-  const totalTextHeight = lineCount * lineHeight
-
-  // Calcular altura del header dinámicamente
-  const minHeaderHeight = 85
-  const requiredHeaderHeight = Math.max(minHeaderHeight, textY - headerY + totalTextHeight + 15)
-  const headerHeight = requiredHeaderHeight
+  // COLUMNA 3: Recuadro del documento (derecha)
+  const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docColumnWidth
+  const docBoxY = currentY
 
   // Recuadro con borde negro
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(2)
-  doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+  doc.setDrawColor(...BORDER_COLOR)
+  doc.setLineWidth(1.5)
+  doc.rect(docBoxX, docBoxY, docColumnWidth, headerHeight)
 
-  // Información de la empresa DEBAJO del logo
-  // Calcular la posición Y final donde debe terminar el texto (parte inferior del recuadro)
-  const bottomY = headerY + headerHeight - 5 // 5pt de margen inferior
+  // Línea separadora después del RUC
+  const rucLineY = docBoxY + 28
+  doc.setLineWidth(0.5)
+  doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
 
-  // Calcular posición inicial del texto
-  let calculatedTextY = bottomY - totalTextHeight + lineHeight
-
-  // Asegurarse de que el texto no se superponga con el logo
-  // textY ya contiene la posición después del logo + separación
-  const minTextY = textY // Esta es la posición mínima (después del logo)
-
-  // Usar la mayor de las dos posiciones para evitar superposición
-  textY = Math.max(minTextY, calculatedTextY)
-
-  // Nombre de la empresa (puede ser múltiples líneas)
-  companyNameLines.forEach((line, index) => {
-    doc.text(line, leftColumnX, textY + (index * lineHeight))
-  })
-  textY += companyNameLines.length * lineHeight
-
-  // RUC de la empresa
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...MEDIUM_GRAY)
-  const ruc = companySettings?.ruc || ''
-  if (ruc) {
-    doc.text(`RUC: ${ruc}`, leftColumnX, textY)
-    textY += lineHeight
-  }
-
-  // Dirección
-  doc.setFontSize(9)
-  if (companySettings?.address) {
-    const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
-    doc.text(addressLines[0], leftColumnX, textY) // Solo primera línea
-    textY += lineHeight
-  }
-
-  // Teléfono
-  if (companySettings?.phone) {
-    doc.setFontSize(9)
-    doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
-    textY += lineHeight
-  }
-
-  // Email
-  if (companySettings?.email) {
-    doc.setFontSize(9)
-    doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
-  }
-
-  // Contenido del recuadro - bien centrado
-  const boxCenterX = rightColumnX + (rightColumnWidth / 2)
-  let boxTextY = headerY + 22
-
-  // Tipo de documento en negro
-  doc.setFontSize(12)
+  // RUC
+  doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  let documentTitle = 'BOLETA DE VENTA ELECTRÓNICA'
+  doc.text(`R.U.C. N° ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 18, { align: 'center' })
+
+  // Tipo de documento (en dos líneas para que quepa en el recuadro)
+  let documentLine1 = 'BOLETA DE VENTA'
+  let documentLine2 = 'ELECTRÓNICA'
   if (invoice.documentType === 'factura') {
-    documentTitle = 'FACTURA ELECTRÓNICA'
+    documentLine1 = 'FACTURA'
+    documentLine2 = 'ELECTRÓNICA'
   } else if (invoice.documentType === 'nota_venta') {
-    documentTitle = 'NOTA DE VENTA'
+    documentLine1 = 'NOTA DE VENTA'
+    documentLine2 = ''
   }
-  const titleLines = doc.splitTextToSize(documentTitle, rightColumnWidth - 20)
-  titleLines.forEach(line => {
-    doc.text(line, boxCenterX, boxTextY, { align: 'center' })
-    boxTextY += 13
-  })
 
-  boxTextY += 6
-
-  // Número de comprobante centrado
-  doc.setFontSize(15)
-  doc.setTextColor(...BLACK)
+  doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.text(invoice.number || 'N/A', boxCenterX, boxTextY, { align: 'center' })
+  const titleY = rucLineY + 20
+  doc.text(documentLine1, docBoxX + docColumnWidth / 2, titleY, { align: 'center' })
+  if (documentLine2) {
+    doc.text(documentLine2, docBoxX + docColumnWidth / 2, titleY + 13, { align: 'center' })
+  }
 
-  currentY = headerY + headerHeight + 20
+  // Número de documento
+  doc.setFontSize(13)
+  const numberY = documentLine2 ? titleY + 30 : titleY + 18
+  doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  // Línea separadora
-  doc.setDrawColor(...LIGHT_GRAY)
-  doc.setLineWidth(1)
-  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+  currentY += headerHeight + 20
 
-  currentY += 20
+  // ========== 2. DATOS DEL CLIENTE ==========
 
-  // ========== 2. INFORMACIÓN DEL CLIENTE Y FECHA ==========
-
-  const infoBoxY = currentY
-  const infoBoxHeight = 65 // Aumentado de 55 a 65 para incluir dirección
-
-  // Fondo suave para la sección
-  doc.setFillColor(...LIGHT_GRAY)
-  doc.roundedRect(MARGIN_LEFT, infoBoxY, CONTENT_WIDTH, infoBoxHeight, 3, 3, 'F')
-
-  // Cliente - Columna izquierda (65%)
-  let clientX = MARGIN_LEFT + 15
-  let clientY = infoBoxY + 14
-
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
-  doc.text('CLIENTE', clientX, clientY)
-  clientY += 12
-
-  doc.setFont('helvetica', 'normal')
+  // Calcular ancho de etiquetas para alinear valores
   doc.setFontSize(9)
-  doc.setTextColor(...DARK_GRAY)
+  doc.setFont('helvetica', 'bold')
 
-  const customerName = invoice.customer?.name || 'CLIENTE GENERAL'
-  doc.text(customerName, clientX, clientY)
-  clientY += 11
+  const labels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:', 'EMISIÓN:', 'MONEDA:', 'FORMA DE PAGO:', 'TIPO DE OPERACIÓN:']
+  let maxLabelWidth = 0
+  labels.forEach(label => {
+    const width = doc.getTextWidth(label)
+    if (width > maxLabelWidth) maxLabelWidth = width
+  })
+  maxLabelWidth += 5 // Padding
 
+  const labelValueGap = 5 // Espacio entre etiqueta y valor
+  const valueX = MARGIN_LEFT + maxLabelWidth + labelValueGap
+
+  // Razón Social
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  doc.text('RAZÓN SOCIAL:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('RAZÓN SOCIAL:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text(invoice.customer?.name || 'CLIENTE GENERAL', valueX, currentY)
+  currentY += 13
+
+  // RUC/DNI
   const docType = invoice.customer?.documentType === 'RUC' ? 'RUC' :
                   invoice.customer?.documentType === 'DNI' ? 'DNI' : 'DOC'
-  const docNumber = invoice.customer?.documentNumber && invoice.customer.documentNumber !== '00000000'
-                    ? invoice.customer.documentNumber
-                    : 'No especificado'
-
-  doc.setFontSize(8)
-  doc.setTextColor(...MEDIUM_GRAY)
-  doc.text(`${docType}: ${docNumber}`, clientX, clientY)
-  clientY += 10
-
-  // Dirección del cliente
-  if (invoice.customer?.address) {
-    const maxAddressWidth = leftColumnWidth - 30
-    const addressLines = doc.splitTextToSize(invoice.customer.address, maxAddressWidth)
-    doc.setFontSize(8)
-    doc.setTextColor(...MEDIUM_GRAY)
-    doc.text(addressLines, clientX, clientY)
-  }
-
-  // Fecha y moneda - Columna derecha (35%)
-  const dateX = MARGIN_LEFT + leftColumnWidth + 15
-  let dateY = infoBoxY + 14
-
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
-  doc.setFontSize(8)
-  doc.text('FECHA DE EMISIÓN', dateX, dateY)
-  dateY += 12
-
+  doc.text(`${docType}:`, MARGIN_LEFT + maxLabelWidth - doc.getTextWidth(`${docType}:`), currentY)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...DARK_GRAY)
+  const docNumber = invoice.customer?.documentNumber && invoice.customer.documentNumber !== '00000000'
+                    ? invoice.customer.documentNumber : '-'
+  doc.text(docNumber, valueX, currentY)
+  currentY += 13
 
-  // Usar emissionDate primero (fecha de emisión seleccionada), luego issueDate, luego createdAt
+  // Dirección
+  doc.setFont('helvetica', 'bold')
+  doc.text('DIRECCIÓN:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('DIRECCIÓN:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  const customerAddress = invoice.customer?.address || '-'
+  const addrLines = doc.splitTextToSize(customerAddress, CONTENT_WIDTH - maxLabelWidth)
+  doc.text(addrLines[0], valueX, currentY)
+  currentY += 15
+
+  // Fecha de emisión
   const pdfDateSource = invoice.emissionDate || invoice.issueDate || invoice.createdAt
   let pdfInvoiceDate = new Date().toLocaleDateString('es-PE')
+  let pdfInvoiceTime = ''
   if (pdfDateSource) {
-    // Si es un string en formato YYYY-MM-DD, parsearlo directamente
     if (typeof pdfDateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pdfDateSource)) {
       const [year, month, day] = pdfDateSource.split('-')
-      pdfInvoiceDate = `${day}/${month}/${year}`
+      pdfInvoiceDate = `${year}-${month}-${day}`
     } else if (pdfDateSource.toDate) {
       const date = pdfDateSource.toDate()
-      pdfInvoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+      pdfInvoiceDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      pdfInvoiceTime = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`
     } else if (pdfDateSource instanceof Date) {
-      const date = pdfDateSource
-      pdfInvoiceDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+      pdfInvoiceDate = `${pdfDateSource.getFullYear()}-${String(pdfDateSource.getMonth() + 1).padStart(2, '0')}-${String(pdfDateSource.getDate()).padStart(2, '0')}`
+      pdfInvoiceTime = `${String(pdfDateSource.getHours()).padStart(2, '0')}:${String(pdfDateSource.getMinutes()).padStart(2, '0')}:${String(pdfDateSource.getSeconds()).padStart(2, '0')}`
     }
   }
 
-  doc.text(pdfInvoiceDate, dateX, dateY)
-  dateY += 11
+  doc.setFont('helvetica', 'bold')
+  doc.text('EMISIÓN:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('EMISIÓN:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`${pdfInvoiceDate}${pdfInvoiceTime ? ' - ' + pdfInvoiceTime : ''}`, valueX, currentY)
+  currentY += 13
 
-  doc.setFontSize(8)
-  doc.setTextColor(...MEDIUM_GRAY)
-  doc.text('Moneda: Soles (PEN)', dateX, dateY)
+  // Moneda
+  doc.setFont('helvetica', 'bold')
+  doc.text('MONEDA:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('MONEDA:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text('SOL (PEN)', valueX, currentY)
+  currentY += 13
 
-  currentY = infoBoxY + infoBoxHeight + 20
+  // Forma de pago
+  const totalPaid = invoice.payments && invoice.payments.length > 0
+    ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
+    : 0
+  const isCreditSale = totalPaid === 0
+  const paymentForm = isCreditSale ? 'CRÉDITO' : 'CONTADO'
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('FORMA DE PAGO:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('FORMA DE PAGO:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text(paymentForm, valueX, currentY)
+  currentY += 13
+
+  // Tipo de operación
+  doc.setFont('helvetica', 'bold')
+  doc.text('TIPO DE OPERACIÓN:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('TIPO DE OPERACIÓN:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text('VENTA INTERNA', valueX, currentY)
+  currentY += 18
 
   // ========== 3. TABLA DE PRODUCTOS ==========
 
   const tableY = currentY
-  const rowHeight = 18 // Más espacio entre filas
+  const headerRowHeight = 22
+  const dataRowHeight = 20
 
-  // Definir anchos de columnas (simplificado)
+  // Definir columnas como en el ejemplo
   const colWidths = {
-    cant: CONTENT_WIDTH * 0.07,
-    cod: CONTENT_WIDTH * 0.18,  // Aumentado de 11% a 18% para códigos largos
-    desc: CONTENT_WIDTH * 0.45,  // Reducido de 52% a 45%
-    pu: CONTENT_WIDTH * 0.13,
-    importe: CONTENT_WIDTH * 0.17
+    cant: CONTENT_WIDTH * 0.15,
+    desc: CONTENT_WIDTH * 0.45,
+    pu: CONTENT_WIDTH * 0.20,
+    total: CONTENT_WIDTH * 0.20
   }
 
-  // Posiciones X de columnas
   let colX = MARGIN_LEFT
   const cols = {
     cant: colX,
-    cod: colX += colWidths.cant,
-    desc: colX += colWidths.cod,
+    desc: colX += colWidths.cant,
     pu: colX += colWidths.desc,
-    importe: colX += colWidths.pu
+    total: colX += colWidths.pu
   }
 
-  // Encabezado de tabla con fondo negro
-  doc.setFillColor(...BLACK)
-  doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, rowHeight, 'F')
+  // Encabezado de tabla con fondo gris oscuro y texto blanco
+  doc.setFillColor(70, 70, 70) // Gris oscuro en lugar de negro
+  doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, headerRowHeight, 'F')
 
   doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255) // Blanco para contraste sobre negro
+  doc.setFont('helvetica', 'normal') // Letra más delgada (normal en vez de bold)
+  doc.setTextColor(255, 255, 255) // Texto blanco
 
-  const headerRowY = tableY + 11
+  const headerRowY = tableY + 14
 
-  doc.text('CANT.', cols.cant + colWidths.cant / 2, headerRowY, { align: 'center' })
-  doc.text('CÓDIGO', cols.cod + colWidths.cod / 2, headerRowY, { align: 'center' })
-  doc.text('DESCRIPCIÓN', cols.desc + 8, headerRowY)
-  doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerRowY, { align: 'center' })
-  doc.text('IMPORTE', cols.importe + colWidths.importe / 2, headerRowY, { align: 'center' })
-
-  // Calcular valores
-  const igvRate = companySettings?.taxConfig?.igvRate || 18
-  const igvMultiplier = igvRate / 100
+  doc.text('CANTIDAD', cols.cant + colWidths.cant / 2, headerRowY, { align: 'center' })
+  doc.text('CÓDIGO y DESCRIPCIÓN', cols.desc + 10, headerRowY)
+  doc.text('PRECIO UNITARIO', cols.pu + colWidths.pu / 2, headerRowY, { align: 'center' })
+  doc.text('PRECIO TOTAL', cols.total + colWidths.total / 2, headerRowY, { align: 'center' })
 
   // Filas de datos
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...DARK_GRAY)
-
-  let dataRowY = tableY + rowHeight + 12
-
+  let dataRowY = tableY + headerRowHeight
   const items = invoice.items || []
-  const minRows = 6
-  const totalRows = Math.max(items.length, minRows)
+  const lineHeight = 11 // Altura de cada línea de texto
+  const minRowHeight = 20 // Altura mínima de fila
+  const rowPadding = 6 // Padding vertical
 
-  for (let i = 0; i < totalRows; i++) {
-    // Fondo alternado
-    if (i % 2 === 0) {
-      doc.setFillColor(250, 250, 250)
-      doc.rect(MARGIN_LEFT, dataRowY - 9, CONTENT_WIDTH, rowHeight, 'F')
-    }
-
-    if (i < items.length) {
-      const item = items[i]
-      // Todo con IGV incluido para que sea más claro para el cliente
-      const precioConIGV = item.unitPrice
-      const importeConIGV = item.quantity * precioConIGV
-
-      doc.setTextColor(...DARK_GRAY)
-      doc.setFont('helvetica', 'bold')
-      // Mostrar cantidad con decimales si tiene decimales, sino entero
-      const quantityText = Number.isInteger(item.quantity)
-        ? item.quantity.toString()
-        : item.quantity.toFixed(3).replace(/\.?0+$/, '') // Quitar ceros trailing
-      const unitText = item.unit && item.allowDecimalQuantity ? ` ${item.unit.toLowerCase()}` : ''
-      doc.text(quantityText + unitText, cols.cant + colWidths.cant / 2, dataRowY, { align: 'center' })
-
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7)
-      doc.setTextColor(...MEDIUM_GRAY)
-      // Mostrar código en múltiples líneas si es necesario
-      const itemCode = item.code || '-'
-      const maxCodeWidth = colWidths.cod - 6 // Dejar margen
-      const codeLines = doc.splitTextToSize(itemCode, maxCodeWidth)
-
-      // Mostrar hasta 2 líneas del código
-      if (codeLines.length === 1) {
-        doc.text(codeLines[0], cols.cod + colWidths.cod / 2, dataRowY, { align: 'center' })
-      } else {
-        // Si hay 2 o más líneas, mostrar las dos primeras
-        doc.text(codeLines[0], cols.cod + colWidths.cod / 2, dataRowY - 3, { align: 'center' })
-        doc.text(codeLines[1] || '', cols.cod + colWidths.cod / 2, dataRowY + 4, { align: 'center' })
-      }
-
-      doc.setFontSize(9)
-      doc.setTextColor(...DARK_GRAY)
-      const descLines = doc.splitTextToSize(item.name, colWidths.desc - 16)
-      doc.text(descLines[0], cols.desc + 8, dataRowY)
-
-      doc.text(`S/ ${precioConIGV.toFixed(2)}`, cols.pu + colWidths.pu / 2, dataRowY, { align: 'center' })
-
-      doc.setFont('helvetica', 'bold')
-      doc.text(`S/ ${importeConIGV.toFixed(2)}`, cols.importe + colWidths.importe / 2, dataRowY, { align: 'center' })
-    }
-
-    dataRowY += rowHeight
+  // Mapeo de códigos de unidad a texto legible
+  const unitLabels = {
+    'UNIDAD': 'UNIDAD',
+    'CAJA': 'CAJA',
+    'KG': 'KG',
+    'LITRO': 'LITRO',
+    'METRO': 'METRO',
+    'HORA': 'HORA',
+    'SERVICIO': 'SERVICIO'
   }
 
-  // Línea final de la tabla
-  doc.setDrawColor(...LIGHT_GRAY)
-  doc.setLineWidth(0.5)
-  doc.line(MARGIN_LEFT, dataRowY - 9, MARGIN_LEFT + CONTENT_WIDTH, dataRowY - 9)
-
-  currentY = dataRowY
-
-  // ========== 4. TOTALES ==========
-
-  currentY += 10
-
-  const totalsBoxWidth = 200
-  const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsBoxWidth
-  let totalsY = currentY
-
-  const igvExempt = companySettings?.taxConfig?.igvExempt || false
-  const labelGravada = igvExempt ? 'EXONERADA' : 'GRAVADA'
-
-  // Subtotal antes de descuento (si hay descuento)
-  if (invoice.discount && invoice.discount > 0) {
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text(`SUBTOTAL:`, totalsX, totalsY)
-    doc.setFont('helvetica', 'bold')
-    const subtotalBeforeDiscount = (invoice.subtotalBeforeDiscount || invoice.subtotal || 0)
-    doc.text(`S/ ${subtotalBeforeDiscount.toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
-    totalsY += 14
-
-    // Descuento
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...MEDIUM_GRAY)
-    doc.text(`DESCUENTO:`, totalsX, totalsY)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`- S/ ${(invoice.discount || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
-    totalsY += 14
-  }
-
-  // Subtotal (después de descuento = base imponible)
-  doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...DARK_GRAY)
-  doc.text(`OP. ${labelGravada}:`, totalsX, totalsY)
-  doc.setFont('helvetica', 'bold')
-  doc.text(`S/ ${(invoice.subtotal || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
-  totalsY += 14
-
-  // IGV
-  doc.setFont('helvetica', 'normal')
-  doc.text(`IGV (${igvRate.toFixed(0)}%):`, totalsX, totalsY)
-  doc.setFont('helvetica', 'bold')
-  doc.text(`S/ ${(invoice.igv || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalsY, { align: 'right' })
-  totalsY += 18
-
-  // Total - destacado con fondo negro - bien centrado verticalmente
-  const totalBoxHeight = 24
-  const totalBoxY = totalsY - 12
-  doc.setFillColor(...BLACK)
-  doc.roundedRect(totalsX - 10, totalBoxY, totalsBoxWidth + 10, totalBoxHeight, 3, 3, 'F')
-
-  // Centrar verticalmente el texto dentro del recuadro
-  const totalTextY = totalBoxY + (totalBoxHeight / 2) + 3.5 // Centrado vertical perfecto
-
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255) // Blanco sobre negro
-  doc.text('TOTAL:', totalsX, totalTextY)
-  doc.setFontSize(14)
-  doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, totalTextY, { align: 'right' })
-
-  currentY = totalsY + 20
-
-  // ========== 4.5. FORMA DE PAGO ==========
-
-  // Calcular total pagado
-  const totalPaid = invoice.payments && invoice.payments.length > 0
-    ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
-    : 0
-
-  // Detectar si es venta al crédito
-  const isCreditSale = totalPaid === 0
-
-  // Mostrar forma de pago
-  const paymentBoxHeight = isCreditSale ? 30 : (invoice.payments && invoice.payments.length > 1 ? 10 + (invoice.payments.length * 7) : 22)
-
-  doc.setDrawColor(...BORDER_GRAY)
-  doc.setLineWidth(0.5)
-  doc.roundedRect(totalsX - 10, currentY, totalsBoxWidth + 10, paymentBoxHeight, 3, 3)
-
-  currentY += 8
-
-  // Título
   doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...DARK_GRAY)
-  doc.text('FORMA DE PAGO', totalsX, currentY)
-  currentY += 8
+  doc.setTextColor(...BLACK)
 
-  if (isCreditSale) {
-    // Venta al crédito
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text('Método:', totalsX, currentY)
-    doc.setFont('helvetica', 'bold')
-    doc.text('AL CRÉDITO', totalsX + totalsBoxWidth, currentY, { align: 'right' })
-    currentY += 7
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const precioConIGV = item.unitPrice || item.price || 0
+    const importeConIGV = item.quantity * precioConIGV
 
-    doc.setFont('helvetica', 'normal')
-    doc.text('Saldo Pendiente:', totalsX, currentY)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 102, 0) // Naranja
-    doc.text(`S/ ${(invoice.total || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
-  } else if (invoice.payments && invoice.payments.length > 0) {
-    // Mostrar métodos de pago múltiples
-    doc.setFontSize(8)
-    invoice.payments.forEach((payment, index) => {
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...DARK_GRAY)
-      doc.text(`${payment.method}:`, totalsX, currentY)
-      doc.setFont('helvetica', 'bold')
-      doc.text(`S/ ${(payment.amount || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
-      currentY += 6
-    })
+    // Descripción (calcular líneas primero para saber altura de fila)
+    const itemDesc = item.name || item.description || ''
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 15)
 
-    // Si hay saldo pendiente, mostrarlo
-    if (totalPaid < invoice.total) {
-      currentY += 2
-      doc.setFont('helvetica', 'normal')
-      doc.text('Saldo Pendiente:', totalsX, currentY)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(255, 102, 0) // Naranja
-      doc.text(`S/ ${(invoice.total - totalPaid).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
-    }
-  } else {
-    // Método de pago simple (compatibilidad con estructura antigua)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text('Método:', totalsX, currentY)
-    doc.setFont('helvetica', 'bold')
-    doc.text(invoice.paymentMethod || 'Efectivo', totalsX + totalsBoxWidth, currentY, { align: 'right' })
-  }
+    // Calcular altura dinámica de la fila según líneas de descripción
+    const descHeight = descLines.length * lineHeight
+    const currentRowHeight = Math.max(minRowHeight, descHeight + rowPadding)
 
-  currentY += 15
-
-  // ========== 4.6. ESTADO DE PAGO (para notas de venta con pagos parciales o completados) ==========
-
-  if (invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
-    // Recuadro con borde discontinuo para la información de pago
-    const isPartial = invoice.paymentStatus === 'partial'
-    doc.setDrawColor(255, 153, 0) // Color naranja para el borde
+    // Solo línea inferior sutil (sin bordes verticales como en el ejemplo)
+    doc.setDrawColor(200, 200, 200) // Gris claro
     doc.setLineWidth(0.5)
-    doc.setLineDash([2, 2]) // Línea discontinua
-    doc.roundedRect(totalsX - 10, currentY, totalsBoxWidth + 10, isPartial ? 45 : 30, 3, 3)
-    doc.setLineDash([]) // Restaurar línea continua
+    doc.line(MARGIN_LEFT, dataRowY + currentRowHeight, MARGIN_LEFT + CONTENT_WIDTH, dataRowY + currentRowHeight)
 
-    currentY += 8
+    const firstLineY = dataRowY + 14
 
-    // Título
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 102, 0) // Naranja
-    doc.text(isPartial ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS', totalsX, currentY)
-    currentY += 8
+    // Cantidad con unidad (usar el código de unidad del producto)
+    const quantityText = Number.isInteger(item.quantity)
+      ? item.quantity.toString()
+      : item.quantity.toFixed(3).replace(/\.?0+$/, '')
+    const unitCode = item.unit || 'UNIDAD'
+    const unitText = unitLabels[unitCode] || unitCode
+    doc.text(`${quantityText} ${unitText}`, cols.cant + colWidths.cant / 2, firstLineY, { align: 'center' })
 
-    // Solo mostrar monto pagado y saldo si es pago parcial
-    if (isPartial) {
-      // Monto pagado
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...DARK_GRAY)
-      doc.text('Monto Pagado:', totalsX, currentY)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(0, 150, 0) // Verde
-      doc.text(`S/ ${(invoice.amountPaid || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
-      currentY += 7
-
-      // Saldo pendiente
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...DARK_GRAY)
-      doc.text('Saldo Pendiente:', totalsX, currentY)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(255, 102, 0) // Naranja
-      doc.text(`S/ ${(invoice.balance || 0).toFixed(2)}`, totalsX + totalsBoxWidth, currentY, { align: 'right' })
-      currentY += 15
-    }
-
-    // Historial de pagos
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text('Historial de Pagos:', MARGIN_LEFT + 10, currentY)
-    currentY += 5
-
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
-    invoice.paymentHistory.forEach((payment) => {
-      const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date)
-      const dateStr = paymentDate.toLocaleDateString('es-PE')
-      const paymentText = `• ${dateStr} - S/ ${payment.amount.toFixed(2)} (${payment.method})`
-      doc.text(paymentText, MARGIN_LEFT + 15, currentY)
-      currentY += 4
+    // Descripción - todas las líneas
+    descLines.forEach((line, lineIndex) => {
+      doc.text(line, cols.desc + 8, firstLineY + (lineIndex * lineHeight))
     })
 
+    // Precio unitario con formato (alineado a la derecha)
+    const puFormatted = precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+    doc.text(puFormatted, cols.pu + colWidths.pu - 10, firstLineY, { align: 'right' })
+
+    // Precio total (alineado a la derecha)
+    const totalFormatted = importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    doc.text(totalFormatted, cols.total + colWidths.total - 10, firstLineY, { align: 'right' })
+
+    dataRowY += currentRowHeight
+  }
+
+  currentY = dataRowY + 8
+
+  // ========== 4. TOTALES (estilo tabla con filas grises intercaladas) ==========
+
+  const totalsWidth = 220
+  const totalsRowHeight = 18
+  const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
+
+  // OP. GRAVADA - Fondo gris claro
+  const igvExempt = companySettings?.taxConfig?.igvExempt || false
+  const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
+
+  doc.setFillColor(245, 245, 245) // Gris muy claro
+  doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'F')
+  doc.setDrawColor(200, 200, 200)
+  doc.setLineWidth(0.5)
+  doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'S')
+
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...BLACK)
+  doc.text(labelGravada, totalsX + totalsWidth - 90, currentY + 12, { align: 'right' })
+  doc.text((invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 12, { align: 'right' })
+  currentY += totalsRowHeight
+
+  // IGV - Sin fondo (blanco)
+  doc.setDrawColor(200, 200, 200)
+  doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'S')
+
+  doc.text('IGV', totalsX + totalsWidth - 90, currentY + 12, { align: 'right' })
+  doc.text((invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 12, { align: 'right' })
+  currentY += totalsRowHeight
+
+  // IMPORTE TOTAL - Fondo gris claro, texto más grande
+  doc.setFillColor(245, 245, 245)
+  doc.setDrawColor(150, 150, 150)
+  doc.setLineWidth(1)
+  doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight + 6, 'FD')
+
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'bold')
+  doc.text('IMPORTE TOTAL (S/)', totalsX + 8, currentY + 15)
+  doc.setFontSize(14)
+  doc.text((invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 15, { align: 'right' })
+
+  currentY += totalsRowHeight + 14
+
+  // ========== 5. CUENTAS BANCARIAS (si existen) ==========
+
+  if (companySettings?.bankAccounts && companySettings.bankAccounts.length > 0) {
+    // Título con fondo gris
+    doc.setFillColor(...TABLE_HEADER_BG)
+    doc.setDrawColor(...BORDER_COLOR)
+    doc.setLineWidth(0.5)
+    doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, 18, 'FD')
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    doc.text('CUENTAS BANCARIAS', MARGIN_LEFT + CONTENT_WIDTH / 2, currentY + 12, { align: 'center' })
+    currentY += 18
+
+    // Contenido
+    const accountsStartY = currentY
+    currentY += 10
+
+    companySettings.bankAccounts.forEach((account) => {
+      doc.setFont('helvetica', 'bold')
+      doc.text(account.bankName || 'Banco', MARGIN_LEFT + 10, currentY)
+      doc.text(account.accountNumber || '', MARGIN_LEFT + CONTENT_WIDTH - 10, currentY, { align: 'right' })
+      currentY += 12
+
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...MEDIUM_GRAY)
+      doc.text(`${account.currency || 'PEN'} (S/)`, MARGIN_LEFT + 10, currentY)
+      if (account.cci) {
+        doc.text(`CCI: ${account.cci}`, MARGIN_LEFT + CONTENT_WIDTH - 10, currentY, { align: 'right' })
+      }
+      doc.setTextColor(...BLACK)
+      currentY += 15
+    })
+
+    // Borde del contenido
+    doc.setDrawColor(...BORDER_COLOR)
+    doc.rect(MARGIN_LEFT, accountsStartY, CONTENT_WIDTH, currentY - accountsStartY + 5)
     currentY += 15
   }
 
-  // ========== 5. IMPORTE EN LETRAS ==========
+  // ========== 6. QR Y HASH ==========
 
-  doc.setFillColor(...LIGHT_GRAY)
-  doc.roundedRect(MARGIN_LEFT, currentY, CONTENT_WIDTH, 20, 3, 3, 'F')
+  currentY += 5
+  const qrSize = 75
+  const qrX = MARGIN_LEFT
 
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...DARK_GRAY)
-
-  const totalEnLetras = numeroALetras(invoice.total || 0)
-  doc.text('SON:', MARGIN_LEFT + 10, currentY + 12)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`${totalEnLetras} SOLES`, MARGIN_LEFT + 30, currentY + 12)
-
-  currentY += 30
-
-  // ========== 6. PIE DE PÁGINA Y QR ==========
-
-  const footerY = currentY
-  const qrSize = 70
-  const qrBoxSize = qrSize + 20
-  const textBoxWidth = CONTENT_WIDTH - qrBoxSize - 10
-  const boxHeight = qrBoxSize // Altura uniforme para ambos recuadros
-
-  let docTypeText = 'BOLETA DE VENTA'
-  if (invoice.documentType === 'factura') {
-    docTypeText = 'FACTURA'
-  } else if (invoice.documentType === 'nota_venta') {
-    docTypeText = 'NOTA DE VENTA'
-  }
-
-  // RECUADRO IZQUIERDO - Texto legal
-  doc.setDrawColor(...BORDER_GRAY)
-  doc.setLineWidth(1)
-  doc.roundedRect(MARGIN_LEFT, footerY, textBoxWidth, boxHeight, 3, 3)
-
-  // Contenido del recuadro de texto
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...MEDIUM_GRAY)
-
-  let footerTextY = footerY + 10
-
-  // Texto específico según el tipo de documento
-  if (invoice.documentType === 'nota_venta') {
-    // Para NOTA DE VENTA: no es un comprobante válido
-    doc.text(docTypeText, MARGIN_LEFT + 8, footerTextY)
-    footerTextY += 10
-
-    doc.setFontSize(6)
-    doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT + 8, footerTextY)
-    footerTextY += 10
-  } else {
-    // Para FACTURA y BOLETA: comprobantes electrónicos válidos
-    const electronicText = ' ELECTRÓNICA'
-    doc.text(`Representación impresa de la ${docTypeText}${electronicText}`, MARGIN_LEFT + 8, footerTextY)
-    footerTextY += 10
-
-    doc.setFontSize(6)
-    doc.text('Autorizado mediante Resolución de Intendencia No 034-005-0005315', MARGIN_LEFT + 8, footerTextY)
-    footerTextY += 10
-  }
-
-  // Hash (dentro del mismo recuadro)
-  if (invoice.documentType !== 'nota_venta' && invoice.sunatHash) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(6)
-    doc.text('Hash: ', MARGIN_LEFT + 8, footerTextY)
-    doc.setFont('helvetica', 'normal')
-    const hashText = doc.splitTextToSize(invoice.sunatHash, textBoxWidth - 20)
-    doc.text(hashText[0], MARGIN_LEFT + 23, footerTextY)
-  }
-
-  // RECUADRO DERECHO - Código QR (solo para facturas y boletas)
   if (invoice.documentType !== 'nota_venta') {
     try {
       const qrImage = await generateSunatQR(invoice, companySettings)
       if (qrImage) {
-        const qrBoxX = MARGIN_LEFT + textBoxWidth + 10
-
-        // Recuadro del QR
-        doc.setDrawColor(...BORDER_GRAY)
-        doc.setLineWidth(1)
-        doc.roundedRect(qrBoxX, footerY, qrBoxSize, boxHeight, 3, 3)
-
-        // QR centrado en el recuadro
-        const qrX = qrBoxX + (qrBoxSize - qrSize) / 2
-        const qrY = footerY + 10
-        doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
-
-        // Etiqueta del QR centrada
-        doc.setFontSize(6)
-        doc.setFont('helvetica', 'bold')
-        doc.setTextColor(...MEDIUM_GRAY)
-        const qrCenterX = qrBoxX + qrBoxSize / 2
-        doc.text('Código QR', qrCenterX, qrY + qrSize + 6, { align: 'center' })
+        doc.addImage(qrImage, 'PNG', qrX, currentY, qrSize, qrSize)
       }
     } catch (error) {
-      console.error('Error agregando QR al PDF:', error)
+      console.error('Error generando QR:', error)
     }
+
+    // Hash y texto de validación
+    const textX = qrX + qrSize + 15
+    let textY = currentY + 20
+
+    if (invoice.sunatHash) {
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...BLACK)
+      doc.text(invoice.sunatHash, textX, textY)
+      textY += 14
+    }
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+
+    let docTypeText = 'BOLETA DE VENTA'
+    if (invoice.documentType === 'factura') {
+      docTypeText = 'FACTURA'
+    }
+
+    doc.text(`Representación Impresa de la ${docTypeText} ELECTRÓNICA. Consultar validez en`, textX, textY)
+    textY += 12
+    doc.setFont('helvetica', 'bold')
+    doc.text('sunat.gob.pe', textX, textY)
+
+  } else {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT, currentY + 15)
   }
 
-  // Guía de remisión si aplica
-  if (invoice.dispatchGuideNumber) {
-    currentY = footerY + qrSize + 20
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text(`Guía de Remisión: ${invoice.dispatchGuideNumber}`, MARGIN_LEFT, currentY)
-  }
+  // ========== 7. PIE DE PÁGINA ==========
+
+  // Línea separadora
+  doc.setDrawColor(...MEDIUM_GRAY)
+  doc.setLineWidth(0.5)
+  doc.line(MARGIN_LEFT, PAGE_HEIGHT - 35, PAGE_WIDTH - MARGIN_RIGHT, PAGE_HEIGHT - 35)
+
+  // Texto del footer
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  doc.text('Documento generado en Cobrify - Sistema de Facturación Electrónica', MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - 22, { align: 'center' })
+  doc.text('Página 1 de 1', PAGE_WIDTH - MARGIN_RIGHT, PAGE_HEIGHT - 22, { align: 'right' })
 
   // ========== GENERAR PDF ==========
 
@@ -992,16 +723,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
     const fileName = `${docTypeName}_${invoice.number.replace(/\//g, '-')}.pdf`
 
-    // Detectar si estamos en una app móvil
     const isNativePlatform = Capacitor.isNativePlatform()
 
     if (isNativePlatform) {
       try {
-        // Guardar en móvil usando Filesystem
         const pdfOutput = doc.output('datauristring')
         const base64Data = pdfOutput.split(',')[1]
 
-        // Crear directorio PDFs si no existe
         const pdfDir = 'PDFs'
         try {
           await Filesystem.mkdir({
@@ -1010,8 +738,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
             recursive: true
           })
         } catch (mkdirError) {
-          // Ignorar error si el directorio ya existe
-          console.log('Directorio ya existe o no se pudo crear:', mkdirError)
+          console.log('Directorio ya existe:', mkdirError)
         }
 
         const result = await Filesystem.writeFile({
@@ -1028,7 +755,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         throw error
       }
     } else {
-      // Guardar en web (descarga normal)
       doc.save(fileName)
     }
   }
