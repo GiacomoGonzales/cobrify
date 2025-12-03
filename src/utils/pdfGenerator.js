@@ -649,35 +649,45 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     currentY += 15
   }
 
-  // ========== 6. QR Y HASH ==========
+  // ========== 6. QR Y HASH (encerrado en recuadro) ==========
 
   currentY += 5
-  const qrSize = 75
-  const qrX = MARGIN_LEFT
+  const qrSize = 70
+  const qrBoxHeight = 85
+  const qrBoxPadding = 8
 
   if (invoice.documentType !== 'nota_venta') {
+    // Dibujar recuadro que encierra QR y texto
+    doc.setDrawColor(...BORDER_COLOR)
+    doc.setLineWidth(1)
+    doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, qrBoxHeight)
+
+    // QR dentro del recuadro
+    const qrX = MARGIN_LEFT + qrBoxPadding
+    const qrY = currentY + (qrBoxHeight - qrSize) / 2
+
     try {
       const qrImage = await generateSunatQR(invoice, companySettings)
       if (qrImage) {
-        doc.addImage(qrImage, 'PNG', qrX, currentY, qrSize, qrSize)
+        doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize)
       }
     } catch (error) {
       console.error('Error generando QR:', error)
     }
 
-    // Hash y texto de validación
+    // Hash y texto de validación (al lado del QR)
     const textX = qrX + qrSize + 15
-    let textY = currentY + 20
+    let textY = currentY + 25
 
     if (invoice.sunatHash) {
       doc.setFontSize(9)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...BLACK)
       doc.text(invoice.sunatHash, textX, textY)
-      textY += 14
+      textY += 16
     }
 
-    doc.setFontSize(9)
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...DARK_GRAY)
 
@@ -686,16 +696,21 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       docTypeText = 'FACTURA'
     }
 
-    doc.text(`Representación Impresa de la ${docTypeText} ELECTRÓNICA. Consultar validez en`, textX, textY)
-    textY += 12
+    doc.text(`Representación Impresa de la ${docTypeText} ELECTRÓNICA.`, textX, textY)
+    textY += 11
+    doc.text('Consultar validez en ', textX, textY)
     doc.setFont('helvetica', 'bold')
-    doc.text('sunat.gob.pe', textX, textY)
+    doc.text('sunat.gob.pe', textX + doc.getTextWidth('Consultar validez en '), textY)
+
+    currentY += qrBoxHeight + 10
 
   } else {
+    // Nota de venta - sin recuadro
     doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
     doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT, currentY + 15)
+    currentY += 25
   }
 
   // ========== 7. PIE DE PÁGINA ==========
