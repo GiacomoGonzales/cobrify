@@ -27,6 +27,9 @@ export default function DemoRestaurantLayout() {
   return (
     <DemoRestaurantProvider>
       <div className="flex flex-col h-screen bg-gray-50" style={{ height: '100dvh' }}>
+        {/* iOS Status Bar - Gradiente moderno */}
+        <div className="ios-status-bar bg-gradient-to-r from-orange-600 to-orange-700 md:hidden flex-shrink-0" />
+
         {/* Demo Mode Banner */}
         <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-sm z-50 flex-shrink-0 md:ml-64">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2">

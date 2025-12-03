@@ -92,7 +92,16 @@
       "WebFetch(domain:www.carlosmayanga.com)",
       "WebFetch(domain:community.greenter.dev)",
       "Bash(git restore:*)",
-      "WebFetch(domain:cpe.sunat.gob.pe)"
+      "WebFetch(domain:cpe.sunat.gob.pe)",
+      "Bash(xcodebuild:*)",
+      "Bash(brew install:*)",
+      "Bash(export PATH=\"/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/3.4.0/bin:$PATH\")",
+      "Bash(ruby:*)",
+      "Bash(gem install:*)",
+      "Bash(sudo xcode-select:*)",
+      "Bash(pod install)",
+      "Bash(open:*)",
+      "Bash(firebase functions:list:*)"
     ],
     "deny": [],
     "ask": []

@@ -81,7 +81,7 @@ export default function AdminLayout() {
   const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 pt-safe">
       {/* Mobile Header */}
       <div className="lg:hidden bg-indigo-900 text-white p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

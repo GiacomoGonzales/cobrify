@@ -142,19 +142,24 @@ export default function MainLayout() {
   // }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
-      {/* Sidebar */}
-      <Sidebar />
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
+      {/* iOS Status Bar - Gradiente moderno */}
+      <div className="ios-status-bar bg-gradient-to-r from-primary-600 via-primary-500 to-blue-500 md:hidden flex-shrink-0" />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden md:ml-64">
-        {/* Navbar - Siempre fijo */}
-        <Navbar />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar />
 
-        {/* Page Content - Solo esta área hace scroll */}
-        <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-          <Outlet />
-        </main>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden md:ml-64">
+          {/* Navbar - Siempre fijo */}
+          <Navbar />
+
+          {/* Page Content - Solo esta área hace scroll */}
+          <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   )

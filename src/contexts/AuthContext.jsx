@@ -260,6 +260,15 @@ export const AuthProvider = ({ children }) => {
             setBusinessMode('retail') // Fallback a retail
             setBusinessSettings(null)
           }
+
+          // Inicializar notificaciones push en móvil (para sesión restaurada)
+          try {
+            console.log('📱 Inicializando notificaciones push para usuario:', firebaseUser.uid)
+            await initializePushNotifications(firebaseUser.uid)
+          } catch (error) {
+            console.error('Error al inicializar notificaciones push:', error)
+            // No bloquear si fallan las notificaciones
+          }
         } else {
           // Usuario no autenticado
           setUser(null)

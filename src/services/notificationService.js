@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { FCM } from '@capacitor-community/fcm';
 import { Capacitor } from '@capacitor/core';
 
 // Tipos de notificaciones
@@ -40,6 +41,7 @@ let listenersRegistered = false;
 // Inicializar notificaciones push para el usuario
 export const initializePushNotifications = async (userId) => {
   const isNative = Capacitor.isNativePlatform();
+  const platform = Capacitor.getPlatform();
 
   if (!isNative) {
     console.log('Push notifications only available on native platforms');
@@ -49,58 +51,56 @@ export const initializePushNotifications = async (userId) => {
   try {
     // 1. Solicitar permisos
     const permissionResult = await PushNotifications.requestPermissions();
+    console.log('📋 Permission result:', permissionResult.receive);
 
     if (permissionResult.receive !== 'granted') {
       console.log('Permission not granted for push notifications');
       return { success: false, error: 'Permission denied' };
     }
 
-    // 2. Registrar listeners solo una vez
+    // 2. Registrar para recibir notificaciones
+    await PushNotifications.register();
+
+    // 3. Obtener el token FCM (funciona en iOS y Android)
+    // En iOS, FCM.getToken() convierte el token APNs a FCM
+    // En Android, devuelve el token FCM directamente
+    const fcmToken = await FCM.getToken();
+    const token = fcmToken.token;
+
+    console.log('✅ Push registration success!');
+    console.log('📱 FCM Token:', token);
+    console.log('📱 Token length:', token?.length);
+    console.log('📱 Platform:', platform);
+    console.log('👤 User ID:', userId);
+
+    // Guardar el token en Firestore asociado al usuario
+    if (userId && token) {
+      const saveResult = await saveFCMToken(userId, token);
+      if (saveResult.success) {
+        console.log('✅ Token guardado exitosamente en Firestore');
+      } else {
+        console.error('❌ Error al guardar token:', saveResult.error);
+      }
+    } else {
+      console.error('❌ No userId or token available');
+    }
+
+    // 4. Registrar listeners solo una vez
     if (!listenersRegistered) {
-      // 3. Escuchar el token FCM
-      PushNotifications.addListener('registration', async (token) => {
-        console.log('✅ Push registration success!');
-        console.log('📱 FCM Token:', token.value);
-        console.log('👤 User ID:', userId);
-
-        // Guardar el token en Firestore asociado al usuario
-        if (userId) {
-          const saveResult = await saveFCMToken(userId, token.value);
-          if (saveResult.success) {
-            console.log('✅ Token guardado exitosamente en Firestore');
-            // Notificación silenciosa - solo log en consola
-          } else {
-            console.error('❌ Error al guardar token:', saveResult.error);
-          }
-        } else {
-          console.error('❌ No userId available to save token');
-        }
-      });
-
-      // 4. Escuchar errores de registro
-      PushNotifications.addListener('registrationError', (error) => {
-        console.error('Error on registration:', error);
-      });
-
-      // 5. Escuchar notificaciones recibidas (app en foreground)
+      // Escuchar notificaciones recibidas (app en foreground)
       PushNotifications.addListener('pushNotificationReceived', (notification) => {
         console.log('Push notification received:', notification);
-        // Mostrar notificación local o actualizar UI
       });
 
-      // 6. Escuchar cuando el usuario toca una notificación
+      // Escuchar cuando el usuario toca una notificación
       PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push notification action performed:', notification);
-        // Navegar a pantalla específica según el tipo
       });
 
       listenersRegistered = true;
     }
 
-    // 3. Registrar para recibir notificaciones (después de configurar listeners)
-    await PushNotifications.register();
-
-    return { success: true };
+    return { success: true, token };
   } catch (error) {
     console.error('Error initializing push notifications:', error);
     return { success: false, error: error.message };
@@ -110,15 +110,18 @@ export const initializePushNotifications = async (userId) => {
 // Guardar token FCM en Firestore
 export const saveFCMToken = async (userId, token) => {
   try {
+    // Detectar plataforma automáticamente
+    const platform = Capacitor.getPlatform(); // 'ios', 'android', o 'web'
+
     const tokenRef = doc(db, 'users', userId, 'fcmTokens', token);
     await setDoc(tokenRef, {
       token,
-      platform: 'android',
+      platform,
       createdAt: serverTimestamp(),
       lastUsed: serverTimestamp()
     }, { merge: true });
 
-    console.log('FCM token saved to Firestore');
+    console.log(`FCM token saved to Firestore (platform: ${platform})`);
     return { success: true };
   } catch (error) {
     console.error('Error saving token to Firestore:', error);

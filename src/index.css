@@ -41,8 +41,23 @@
 
 @layer components {
   /* Safe area padding for mobile devices */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* iOS Status Bar area - solo visible cuando hay safe area */
+  .ios-status-bar {
+    height: env(safe-area-inset-top);
+    min-height: 0;
+  }
+
+  /* Sidebar con safe area para iOS */
+  .sidebar-ios {
+    padding-top: env(safe-area-inset-top);
   }
 
   /* Prevenir overscroll en elementos específicos */

@@ -48,6 +48,21 @@ export async function sendPushNotification(userId, title, body, data = {}) {
           channelId: 'default'
         }
       },
+      apns: {
+        headers: {
+          'apns-priority': '10'
+        },
+        payload: {
+          aps: {
+            alert: {
+              title,
+              body
+            },
+            badge: 1,
+            sound: 'default'
+          }
+        }
+      },
       tokens: tokens
     }
 

@@ -31,16 +31,19 @@ export const onNewSale = onDocumentCreated(
       }
 
       const business = businessDoc.data()
-      const ownerId = business.ownerId
+      // Usar ownerId si existe, sino usar businessId como fallback
+      // (en la mayoría de casos el businessId es el mismo que el ownerId/userId)
+      const ownerId = business.ownerId || businessId
 
       console.log('👤 Owner ID found:', ownerId)
-      console.log('🏢 Business name:', business.name)
+      console.log('🏢 Business name:', business.name || business.businessName)
 
       // Enviar notificación push al dueño
+      const businessName = business.name || business.businessName || 'tu negocio'
       const result = await sendPushNotification(
         ownerId,
         '💰 Nueva Venta Realizada',
-        `Se registró una venta de S/ ${invoice.total.toFixed(2)} en ${business.name}`,
+        `Se registró una venta de S/ ${invoice.total.toFixed(2)} en ${businessName}`,
         {
           type: 'new_sale',
           invoiceId: invoiceId,
