@@ -617,6 +617,35 @@ export default function POS() {
     )
   }
 
+  // Función para establecer cantidad directamente (para productos por peso)
+  const setQuantityDirectly = (itemId, newQuantity) => {
+    const quantity = parseFloat(newQuantity)
+    if (isNaN(quantity) || quantity < 0) return
+
+    setCart(
+      cart
+        .map(item => {
+          const matchId = item.cartId || item.id
+          if (matchId === itemId) {
+            // Verificar stock del almacén seleccionado (solo para productos no personalizados)
+            if (item.stock !== null && !item.isCustom && quantity > 0) {
+              const productData = products.find(p => p.id === item.id)
+              if (productData) {
+                const warehouseStock = getCurrentWarehouseStock(productData)
+                if (quantity > warehouseStock) {
+                  toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
+                  return item
+                }
+              }
+            }
+            return { ...item, quantity: quantity }
+          }
+          return item
+        })
+        .filter(item => item.quantity > 0)
+    )
+  }
+
   const removeFromCart = itemId => {
     setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
   }
@@ -2463,21 +2492,39 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </div>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => updateQuantity(itemId, -1)}
-                                  className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </button>
-                                <span className="w-8 text-center font-semibold text-sm">
-                                  {item.quantity}
-                                </span>
-                                <button
-                                  onClick={() => updateQuantity(itemId, 1)}
-                                  className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </button>
+                                {item.allowDecimalQuantity ? (
+                                  /* Input editable para productos por peso */
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      value={item.quantity}
+                                      onChange={(e) => setQuantityDirectly(itemId, e.target.value)}
+                                      step="0.001"
+                                      min="0.001"
+                                      className="w-20 px-2 py-1 text-sm text-center font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    />
+                                    <span className="text-xs text-gray-500">{item.unit || 'kg'}</span>
+                                  </div>
+                                ) : (
+                                  /* Botones +/- para productos normales */
+                                  <>
+                                    <button
+                                      onClick={() => updateQuantity(itemId, -1)}
+                                      className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="w-8 text-center font-semibold text-sm">
+                                      {item.quantity}
+                                    </span>
+                                    <button
+                                      onClick={() => updateQuantity(itemId, 1)}
+                                      className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
 
                               {/* Precio unitario editable */}

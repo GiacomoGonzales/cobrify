@@ -623,18 +623,26 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       <div className="ticket-section">
         <div className="section-title">DETALLE</div>
         <div className="items-table">
-          {invoice.items?.map((item, index) => (
-            <div key={index} className="item-row">
-              <div className="item-desc">{item.description || item.name}</div>
-              <div className="item-details">
-                <span style={{ whiteSpace: 'normal' }}>{item.quantity} x {formatCurrency(item.price || item.unitPrice)}</span>
-                <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
+          {invoice.items?.map((item, index) => {
+            // Formatear cantidad: con decimales si tiene, sino entero
+            const qtyFormatted = Number.isInteger(item.quantity)
+              ? item.quantity.toString()
+              : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+            const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${item.unit.toLowerCase()}` : '';
+
+            return (
+              <div key={index} className="item-row">
+                <div className="item-desc">{item.description || item.name}</div>
+                <div className="item-details">
+                  <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(item.price || item.unitPrice)}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
+                </div>
+                {item.code && (
+                  <div className="item-code">Código: {item.code}</div>
+                )}
               </div>
-              {item.code && (
-                <div className="item-code">Código: {item.code}</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

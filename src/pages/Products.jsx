@@ -125,6 +125,7 @@ export default function Products() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [noStock, setNoStock] = useState(false)
+  const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [selectedWarehouse, setSelectedWarehouse] = useState('') // Almacén para stock inicial
@@ -272,6 +273,7 @@ export default function Products() {
     }
     setEditingProduct(null)
     setNoStock(false)
+    setAllowDecimalQuantity(false)
     setTrackExpiration(false)
     setHasVariants(false)
     setVariantAttributes([])
@@ -307,6 +309,9 @@ export default function Products() {
     setEditingProduct(product)
     const hasNoStock = product.stock === null || product.stock === undefined
     setNoStock(hasNoStock)
+
+    // Set decimal quantity state (venta por peso)
+    setAllowDecimalQuantity(product.allowDecimalQuantity || false)
 
     // Set expiration tracking state
     const hasExpiration = product.trackExpiration || false
@@ -443,6 +448,7 @@ export default function Products() {
         hasVariants: hasVariants,
         trackExpiration: trackExpiration,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
+        allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
       }
@@ -2296,6 +2302,19 @@ export default function Products() {
                 />
                 <label htmlFor="noStock" className="ml-2 text-sm text-gray-700">
                   No manejar stock (servicios o productos sin control)
+                </label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="allowDecimalQuantity"
+                  checked={allowDecimalQuantity}
+                  onChange={e => setAllowDecimalQuantity(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="allowDecimalQuantity" className="ml-2 text-sm text-gray-700">
+                  Vender por peso (permite cantidades decimales: 1.5 kg, 0.250 kg)
                 </label>
               </div>
 

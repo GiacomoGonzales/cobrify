@@ -624,7 +624,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
       doc.setTextColor(...DARK_GRAY)
       doc.setFont('helvetica', 'bold')
-      doc.text(item.quantity.toFixed(0), cols.cant + colWidths.cant / 2, dataRowY, { align: 'center' })
+      // Mostrar cantidad con decimales si tiene decimales, sino entero
+      const quantityText = Number.isInteger(item.quantity)
+        ? item.quantity.toString()
+        : item.quantity.toFixed(3).replace(/\.?0+$/, '') // Quitar ceros trailing
+      const unitText = item.unit && item.allowDecimalQuantity ? ` ${item.unit.toLowerCase()}` : ''
+      doc.text(quantityText + unitText, cols.cant + colWidths.cant / 2, dataRowY, { align: 'center' })
 
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)

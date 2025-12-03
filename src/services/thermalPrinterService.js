@@ -476,7 +476,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         itemsText += `${itemName}\n`;
 
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
-        const qtyAndPrice = `${item.quantity} X S/ ${unitPrice.toFixed(2)}`;
+        // Formatear cantidad: con decimales si tiene, sino entero
+        const qtyFormatted = Number.isInteger(item.quantity)
+          ? item.quantity.toString()
+          : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+        const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix} X S/ ${unitPrice.toFixed(2)}`;
         const totalStr = `S/ ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
@@ -494,7 +499,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         itemsText += `${itemName}\n`;
 
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
-        const qtyAndPrice = `${item.quantity}x S/ ${unitPrice.toFixed(2)}`;
+        // Formatear cantidad: con decimales si tiene, sino entero
+        const qtyFormatted = Number.isInteger(item.quantity)
+          ? item.quantity.toString()
+          : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+        const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x S/ ${unitPrice.toFixed(2)}`;
         const totalStr = `S/ ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
@@ -1494,8 +1504,14 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       const unitPrice = item.unitPrice || item.price || 0;
       const itemTotal = item.total || item.subtotal || (unitPrice * item.quantity);
 
+      // Formatear cantidad: con decimales si tiene, sino entero
+      const qtyFormatted = Number.isInteger(item.quantity)
+        ? item.quantity.toString()
+        : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+      const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+
       builder.text(itemName).newLine()
-        .text(`${item.quantity} x S/ ${unitPrice.toFixed(2)}`)
+        .text(`${qtyFormatted}${unitSuffix} x S/ ${unitPrice.toFixed(2)}`)
         .text(`  S/ ${itemTotal.toFixed(2)}`)
         .newLine();
     }
