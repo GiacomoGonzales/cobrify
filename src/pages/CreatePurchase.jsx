@@ -774,156 +774,246 @@ export default function CreatePurchase() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
+        <CardContent className="p-0 sm:p-6 overflow-visible">
+          {/* Vista de tabla para desktop */}
+          <div className="hidden md:block">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[35%]">Producto</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Cant.</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[15%]">Costo s/IGV</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[15%]">Costo c/IGV</th>
+                  <th className="text-right text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[15%]">Subtotal</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {purchaseItems.map((item, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    {/* Producto */}
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1">
+                        <div className="relative flex-1" ref={el => productInputRefs.current[index] = el}>
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                            <input
+                              type="text"
+                              placeholder="Buscar producto..."
+                              value={productSearches[index] || item.productName || ''}
+                              onChange={e => {
+                                updateProductSearch(index, e.target.value)
+                                updateItem(index, 'productName', e.target.value)
+                              }}
+                              onFocus={() => {
+                                const newDropdowns = { ...showProductDropdowns }
+                                newDropdowns[index] = true
+                                setShowProductDropdowns(newDropdowns)
+                              }}
+                              className={`w-full pl-7 pr-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                                item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                              }`}
+                            />
+                          </div>
+                          {/* Dropdown de productos */}
+                          {showProductDropdowns[index] && productSearches[index] && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                              {getFilteredProducts(index).length > 0 ? (
+                                getFilteredProducts(index).map(product => (
+                                  <button
+                                    key={product.id}
+                                    onClick={() => selectProduct(index, product)}
+                                    className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                                  >
+                                    <div className="font-medium text-sm text-gray-900">{product.name}</div>
+                                    {product.code && <div className="text-xs text-gray-500">{product.code}</div>}
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-2 text-sm text-gray-500">No encontrado</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openCreateProductModal(index)}
+                          className="p-1.5 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                          title="Crear producto nuevo"
+                        >
+                          <PackagePlus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                    {/* Cantidad */}
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="0"
+                        value={item.quantity}
+                        onChange={e => updateItem(index, 'quantity', e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </td>
+                    {/* Costo Sin IGV */}
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={item.costWithoutIGV || ''}
+                        onChange={e => updateCostWithoutIGV(index, e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </td>
+                    {/* Costo Con IGV */}
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={item.cost || ''}
+                        onChange={e => updateCostWithIGV(index, e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </td>
+                    {/* Subtotal */}
+                    <td className="px-4 py-2 text-right">
+                      <span className="font-semibold text-gray-900">
+                        {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
+                      </span>
+                    </td>
+                    {/* Eliminar */}
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        onClick={() => removeItem(index)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        disabled={purchaseItems.length === 1}
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Vista de lista compacta para móvil */}
+          <div className="md:hidden divide-y divide-gray-200">
             {purchaseItems.map((item, index) => (
-              <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-gray-700">Producto #{index + 1}</span>
+              <div key={index} className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-500">#{index + 1}</span>
                   <button
                     onClick={() => removeItem(index)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-1 text-red-600 hover:bg-red-50 rounded"
                     disabled={purchaseItems.length === 1}
-                    title="Eliminar producto"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* Buscador de Producto */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Producto <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1" ref={el => productInputRefs.current[index] = el}>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Buscar producto por nombre o código..."
-                          value={productSearches[index] || item.productName || ''}
-                          onChange={e => {
-                            updateProductSearch(index, e.target.value)
-                            updateItem(index, 'productName', e.target.value)
-                          }}
-                          onFocus={() => {
-                            const newDropdowns = { ...showProductDropdowns }
-                            newDropdowns[index] = true
-                            setShowProductDropdowns(newDropdowns)
-                          }}
-                          className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                            item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
-                          }`}
-                        />
-                      </div>
-
-                      {/* Dropdown de productos */}
-                      {showProductDropdowns[index] && productSearches[index] && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {/* Lista de productos encontrados */}
-                          {getFilteredProducts(index).length > 0 ? (
-                            getFilteredProducts(index).map(product => (
-                              <button
-                                key={product.id}
-                                onClick={() => selectProduct(index, product)}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
-                              >
-                                <div className="font-medium text-sm text-gray-900">{product.name}</div>
-                                {product.code && (
-                                  <div className="text-xs text-gray-500">Código: {product.code}</div>
-                                )}
-                              </button>
-                            ))
-                          ) : (
-                            <div className="px-4 py-3 text-sm text-gray-500">
-                              No se encontraron productos con ese nombre
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {item.productId && (
-                        <div className="mt-2 text-sm text-green-600">
-                          ✓ Producto seleccionado
-                        </div>
-                      )}
+                {/* Producto */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1" ref={el => productInputRefs.current[`mobile-${index}`] = el}>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Buscar producto..."
+                        value={productSearches[index] || item.productName || ''}
+                        onChange={e => {
+                          updateProductSearch(index, e.target.value)
+                          updateItem(index, 'productName', e.target.value)
+                        }}
+                        onFocus={() => {
+                          const newDropdowns = { ...showProductDropdowns }
+                          newDropdowns[index] = true
+                          setShowProductDropdowns(newDropdowns)
+                        }}
+                        className={`w-full pl-8 pr-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                          item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                        }`}
+                      />
                     </div>
-
-                    {/* Botón crear producto nuevo - siempre visible */}
-                    <button
-                      type="button"
-                      onClick={() => openCreateProductModal(index)}
-                      className="px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2 whitespace-nowrap"
-                      title="Crear producto nuevo"
-                    >
-                      <PackagePlus className="w-4 h-4" />
-                      <span className="hidden sm:inline">Nuevo</span>
-                    </button>
+                    {showProductDropdowns[index] && productSearches[index] && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {getFilteredProducts(index).length > 0 ? (
+                          getFilteredProducts(index).map(product => (
+                            <button
+                              key={product.id}
+                              onClick={() => selectProduct(index, product)}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                            >
+                              <div className="font-medium text-sm">{product.name}</div>
+                              {product.code && <div className="text-xs text-gray-500">{product.code}</div>}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-sm text-gray-500">No encontrado</div>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => openCreateProductModal(index)}
+                    className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    title="Nuevo"
+                  >
+                    <PackagePlus className="w-4 h-4" />
+                  </button>
                 </div>
 
-                {/* Cantidad */}
-                <div>
-                  <Input
-                    label="Cantidad"
-                    type="number"
-                    required
-                    min="0.01"
-                    step="0.01"
-                    placeholder="Ej: 10"
-                    value={item.quantity}
-                    onChange={e => updateItem(index, 'quantity', e.target.value)}
-                  />
-                </div>
-
-                {/* Costos */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Costo Sin IGV */}
+                {/* Cantidad y Costos en una fila */}
+                <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <Input
-                      label="Costo Sin IGV"
+                    <label className="block text-xs text-gray-500 mb-1">Cantidad</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={item.quantity}
+                      onChange={e => updateItem(index, 'quantity', e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">s/IGV</label>
+                    <input
                       type="number"
                       min="0"
                       step="0.01"
-                      placeholder="Ej: 2.54"
                       value={item.costWithoutIGV || ''}
                       onChange={e => updateCostWithoutIGV(index, e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Costo base sin impuesto
-                    </p>
                   </div>
-
-                  {/* Costo Con IGV */}
                   <div>
-                    <Input
-                      label="Costo Con IGV"
+                    <label className="block text-xs text-gray-500 mb-1">c/IGV</label>
+                    <input
                       type="number"
-                      required
                       min="0"
                       step="0.01"
-                      placeholder="Ej: 3.00"
                       value={item.cost || ''}
                       onChange={e => updateCostWithIGV(index, e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Costo final con impuesto (18%)
-                    </p>
                   </div>
                 </div>
 
-                {/* Subtotal de la línea */}
-                <div className="bg-gray-50 rounded-lg p-3 flex justify-between items-center">
-                  <span className="text-sm font-medium text-gray-600">Subtotal de compra:</span>
-                  <div className="text-right">
-                    <span className="text-lg font-bold text-gray-900">
-                      {formatCurrency(
-                        (parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)
-                      )}
-                    </span>
-                    <span className="block text-xs text-gray-500">Costo total</span>
-                  </div>
+                {/* Subtotal */}
+                <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                  <span className="text-xs text-gray-500">Subtotal:</span>
+                  <span className="font-bold text-gray-900">
+                    {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
+                  </span>
                 </div>
               </div>
             ))}
