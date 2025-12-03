@@ -315,7 +315,18 @@ export const calculateTotalStock = (warehouseStocks) => {
  * @returns {Object} - Producto actualizado con nuevo warehouseStocks
  */
 export const updateWarehouseStock = (product, warehouseId, quantity) => {
-  const warehouseStocks = product.warehouseStocks || []
+  const warehouseStocks = [...(product.warehouseStocks || [])]
+  const currentGeneralStock = product.stock || 0
+
+  // Si no hay almacenes configurados (warehouseStocks vacío), trabajar con stock general
+  if (warehouseStocks.length === 0 && !warehouseId) {
+    const newStock = Math.max(0, currentGeneralStock + quantity)
+    return {
+      ...product,
+      stock: newStock,
+      warehouseStocks: []
+    }
+  }
 
   // Buscar si ya existe entrada para este almacén
   const existingIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
@@ -334,6 +345,15 @@ export const updateWarehouseStock = (product, warehouseId, quantity) => {
       stock: quantity,
       minStock: 0
     })
+  } else if (quantity < 0 && warehouseStocks.length === 0) {
+    // Caso especial: descuento sin almacén configurado pero warehouseId proporcionado
+    // Descontar del stock general
+    const newStock = Math.max(0, currentGeneralStock + quantity)
+    return {
+      ...product,
+      stock: newStock,
+      warehouseStocks: []
+    }
   }
 
   return {
