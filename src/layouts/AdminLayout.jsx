@@ -213,20 +213,20 @@ export default function AdminLayout() {
         {/* Main Content */}
         <main className="flex-1 min-h-screen">
           {/* Top Bar */}
-          <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+          <header className="bg-white shadow-sm border-b border-gray-200 px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg lg:text-xl font-bold text-gray-900 truncate">
                   {currentPage?.label || 'Admin'}
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs lg:text-sm text-gray-500 hidden sm:block">
                   {currentPage?.description || 'Panel de administración'}
                 </p>
               </div>
 
-              <div className="flex items-center gap-4">
-                {/* Search */}
-                <div className="hidden md:flex items-center bg-gray-100 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 lg:gap-4">
+                {/* Search - solo desktop */}
+                <div className="hidden lg:flex items-center bg-gray-100 rounded-lg px-3 py-2">
                   <Search className="w-4 h-4 text-gray-400 mr-2" />
                   <input
                     type="text"
@@ -244,17 +244,18 @@ export default function AdminLayout() {
                 {/* Back to App */}
                 <NavLink
                   to="/app/dashboard"
-                  className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                  className="flex items-center gap-1 lg:gap-2 px-2 lg:px-4 py-2 text-xs lg:text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  Volver a la App
+                  <span className="hidden sm:inline">Volver a la App</span>
+                  <span className="sm:hidden">App</span>
                 </NavLink>
               </div>
             </div>
           </header>
 
           {/* Page Content */}
-          <div className="p-6">
+          <div className="p-3 sm:p-4 lg:p-6">
             <Outlet />
           </div>
         </main>

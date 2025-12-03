@@ -353,47 +353,47 @@ export default function AdminResellers() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-2 bg-indigo-100 rounded-lg">
-              <Users className="w-5 h-5 text-indigo-600" />
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            <div className="min-w-0">
+              <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total}</p>
               <p className="text-xs text-gray-500">Total Resellers</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center gap-3">
+        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-2 bg-green-100 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-600" />
+              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
+            <div className="min-w-0">
+              <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.active}</p>
               <p className="text-xs text-gray-500">Activos</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center gap-3">
+        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-2 bg-amber-100 rounded-lg">
-              <Wallet className="w-5 h-5 text-amber-600" />
+              <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" />
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">S/ {stats.totalBalance.toFixed(2)}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg sm:text-2xl font-bold text-gray-900 truncate">S/ {stats.totalBalance.toFixed(2)}</p>
               <p className="text-xs text-gray-500">Saldo Total</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center gap-3">
+        <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalClients}</p>
+            <div className="min-w-0">
+              <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.totalClients}</p>
               <p className="text-xs text-gray-500">Clientes Totales</p>
             </div>
           </div>
@@ -401,21 +401,21 @@ export default function AdminResellers() {
       </div>
 
       {/* Search */}
-      <div className="bg-white rounded-xl p-4 border border-gray-200">
-        <div className="flex gap-4">
+      <div className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+        <div className="flex gap-2">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por empresa, email o RUC..."
+              placeholder="Buscar..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-9 sm:pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <button
             onClick={loadResellers}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
@@ -430,96 +430,163 @@ export default function AdminResellers() {
             <p className="text-gray-500">No hay resellers</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contacto</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descuento</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clientes</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredResellers.map(reseller => (
-                  <tr key={reseller.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-indigo-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{reseller.companyName}</p>
-                          <p className="text-sm text-gray-500">{reseller.ruc}</p>
-                        </div>
+          <>
+            {/* Mobile Card View */}
+            <div className="sm:hidden divide-y divide-gray-200">
+              {filteredResellers.map(reseller => (
+                <div key={reseller.id} className="p-3 hover:bg-gray-50">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Building2 className="w-4 h-4 text-indigo-600" />
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-gray-900">{reseller.contactName || '-'}</p>
-                      <p className="text-sm text-gray-500">{reseller.email}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 text-sm truncate">{reseller.companyName}</p>
+                        <p className="text-xs text-gray-500 truncate">{reseller.email}</p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                      reseller.isActive !== false
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
                         <Percent className="w-3 h-3" />
                         {((reseller.discount || 0.30) * 100).toFixed(0)}%
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
-                        <button
-                          onClick={() => openDepositModal(reseller)}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded"
-                          title="Agregar saldo"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-gray-900">{reseller.clientsCount || 0}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                      <span className="text-gray-500">{reseller.clientsCount || 0} clientes</span>
+                    </div>
+                    <span className="font-bold text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
+                    <button
+                      onClick={() => openDepositModal(reseller)}
+                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg text-xs flex items-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" /> Saldo
+                    </button>
+                    <button
+                      onClick={() => openEditModal(reseller)}
+                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => toggleResellerStatus(reseller)}
+                      className={`p-2 rounded-lg ${
                         reseller.isActive !== false
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEditModal(reseller)}
-                          className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleResellerStatus(reseller)}
-                          className={`p-2 rounded-lg ${
-                            reseller.isActive !== false
-                              ? 'text-red-500 hover:bg-red-50'
-                              : 'text-green-500 hover:bg-green-50'
-                          }`}
-                        >
-                          {reseller.isActive !== false ? (
-                            <XCircle className="w-4 h-4" />
-                          ) : (
-                            <CheckCircle className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
+                          ? 'text-red-500 hover:bg-red-50'
+                          : 'text-green-500 hover:bg-green-50'
+                      }`}
+                    >
+                      {reseller.isActive !== false ? (
+                        <XCircle className="w-4 h-4" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contacto</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descuento</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clientes</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredResellers.map(reseller => (
+                    <tr key={reseller.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-indigo-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{reseller.companyName}</p>
+                            <p className="text-sm text-gray-500">{reseller.ruc}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-gray-900">{reseller.contactName || '-'}</p>
+                        <p className="text-sm text-gray-500">{reseller.email}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                          <Percent className="w-3 h-3" />
+                          {((reseller.discount || 0.30) * 100).toFixed(0)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
+                          <button
+                            onClick={() => openDepositModal(reseller)}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded"
+                            title="Agregar saldo"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-gray-900">{reseller.clientsCount || 0}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                          reseller.isActive !== false
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {reseller.isActive !== false ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditModal(reseller)}
+                            className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleResellerStatus(reseller)}
+                            className={`p-2 rounded-lg ${
+                              reseller.isActive !== false
+                                ? 'text-red-500 hover:bg-red-50'
+                                : 'text-green-500 hover:bg-green-50'
+                            }`}
+                          >
+                            {reseller.isActive !== false ? (
+                              <XCircle className="w-4 h-4" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

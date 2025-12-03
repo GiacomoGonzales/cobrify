@@ -85,14 +85,14 @@ export default function AdminAnalytics() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <tab.icon className="w-4 h-4" />
-              {tab.label}
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
 
@@ -100,14 +100,14 @@ export default function AdminAnalytics() {
 
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-4 py-2 m-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="flex items-center gap-1.5 px-3 py-2 m-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm"
           >
             <RefreshCw className="w-4 h-4" />
-            Actualizar
+            <span className="hidden sm:inline">Actualizar</span>
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {activeTab === 'overview' && (
             <OverviewTab stats={statsData} analytics={analyticsData} />
           )}
@@ -159,34 +159,34 @@ function OverviewTab({ stats, analytics }) {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         {kpis.map((kpi, index) => (
           <div
             key={index}
-            className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-5 border border-gray-200"
+            className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-3 sm:p-5 border border-gray-200"
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <kpi.icon className="w-5 h-5 text-indigo-600" />
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
+              <div className="p-1.5 sm:p-2 bg-indigo-100 rounded-lg">
+                <kpi.icon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
               </div>
-              <span className={`text-xs font-medium ${kpi.positive ? 'text-green-600' : 'text-red-600'}`}>
+              <span className={`text-xs font-medium ${kpi.positive ? 'text-green-600' : 'text-red-600'} hidden sm:inline`}>
                 {kpi.change}
               </span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
-            <p className="text-sm text-gray-500 mt-1">{kpi.label}</p>
+            <p className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{kpi.value}</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">{kpi.label}</p>
           </div>
         ))}
       </div>
 
       {/* Quick Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         {/* Plan Distribution */}
-        <div className="bg-gray-50 rounded-xl p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">Distribución por Plan</h3>
-          <div className="h-64">
+        <div className="bg-gray-50 rounded-xl p-3 sm:p-5">
+          <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Distribución por Plan</h3>
+          <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPie>
                 <Pie
@@ -209,9 +209,9 @@ function OverviewTab({ stats, analytics }) {
         </div>
 
         {/* Emission Methods */}
-        <div className="bg-gray-50 rounded-xl p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">Métodos de Emisión</h3>
-          <div className="h-64">
+        <div className="bg-gray-50 rounded-xl p-3 sm:p-5">
+          <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Métodos de Emisión</h3>
+          <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.emissionMethods || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -230,31 +230,31 @@ function OverviewTab({ stats, analytics }) {
 
 function GrowthTab({ stats }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Growth Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-green-50 rounded-xl p-5 border border-green-200">
-          <p className="text-sm text-green-600 font-medium">Nuevos este mes</p>
-          <p className="text-3xl font-bold text-green-700 mt-1">{stats?.newThisMonth || 0}</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="bg-green-50 rounded-xl p-3 sm:p-5 border border-green-200">
+          <p className="text-xs sm:text-sm text-green-600 font-medium">Nuevos este mes</p>
+          <p className="text-xl sm:text-3xl font-bold text-green-700 mt-1">{stats?.newThisMonth || 0}</p>
         </div>
-        <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
-          <p className="text-sm text-blue-600 font-medium">Mes anterior</p>
-          <p className="text-3xl font-bold text-blue-700 mt-1">{stats?.newLastMonth || 0}</p>
+        <div className="bg-blue-50 rounded-xl p-3 sm:p-5 border border-blue-200">
+          <p className="text-xs sm:text-sm text-blue-600 font-medium">Mes anterior</p>
+          <p className="text-xl sm:text-3xl font-bold text-blue-700 mt-1">{stats?.newLastMonth || 0}</p>
         </div>
-        <div className={`${stats?.growthRate >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} rounded-xl p-5 border`}>
-          <p className={`text-sm font-medium ${stats?.growthRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            Tasa de crecimiento
+        <div className={`${stats?.growthRate >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} rounded-xl p-3 sm:p-5 border`}>
+          <p className={`text-xs sm:text-sm font-medium ${stats?.growthRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            Crecimiento
           </p>
-          <p className={`text-3xl font-bold mt-1 ${stats?.growthRate >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+          <p className={`text-xl sm:text-3xl font-bold mt-1 ${stats?.growthRate >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
             {stats?.growthRate >= 0 ? '+' : ''}{stats?.growthRate || 0}%
           </p>
         </div>
       </div>
 
       {/* Growth Chart */}
-      <div className="bg-gray-50 rounded-xl p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">Crecimiento Mensual (12 meses)</h3>
-        <div className="h-80">
+      <div className="bg-gray-50 rounded-xl p-3 sm:p-5">
+        <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Crecimiento Mensual</h3>
+        <div className="h-64 sm:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={stats?.growthChartData || []}>
               <defs>
@@ -318,37 +318,37 @@ function GrowthTab({ stats }) {
 
 function UsageTab({ analytics }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Total Documents */}
-      <div className="bg-indigo-50 rounded-xl p-6 border border-indigo-200">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-indigo-100 rounded-xl">
-            <FileText className="w-8 h-8 text-indigo-600" />
+      <div className="bg-indigo-50 rounded-xl p-4 sm:p-6 border border-indigo-200">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="p-3 sm:p-4 bg-indigo-100 rounded-xl">
+            <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
           </div>
           <div>
-            <p className="text-sm text-indigo-600 font-medium">Total documentos emitidos este mes</p>
-            <p className="text-4xl font-bold text-indigo-700">{analytics?.totalDocuments?.toLocaleString() || 0}</p>
+            <p className="text-xs sm:text-sm text-indigo-600 font-medium">Total documentos este mes</p>
+            <p className="text-2xl sm:text-4xl font-bold text-indigo-700">{analytics?.totalDocuments?.toLocaleString() || 0}</p>
           </div>
         </div>
       </div>
 
       {/* Top Users */}
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="font-semibold text-gray-900">Top 10 Usuarios por Uso</h3>
+        <div className="p-3 sm:p-4 border-b border-gray-200">
+          <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Top 10 Usuarios por Uso</h3>
         </div>
         <div className="divide-y divide-gray-200">
           {(analytics?.topUsers || []).length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-gray-500 text-sm">
               No hay datos de uso disponibles
             </div>
           ) : (
             analytics.topUsers.map((user, index) => (
               <div
                 key={index}
-                className="flex items-center gap-4 p-4 hover:bg-gray-50"
+                className="flex items-center gap-3 p-3 sm:p-4 hover:bg-gray-50"
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${
+                <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-white text-xs sm:text-sm ${
                   index === 0 ? 'bg-yellow-500' :
                   index === 1 ? 'bg-gray-400' :
                   index === 2 ? 'bg-amber-600' :
@@ -356,13 +356,13 @@ function UsageTab({ analytics }) {
                 }`}>
                   {index + 1}
                 </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{user.businessName || 'Sin nombre'}</p>
-                  <p className="text-sm text-gray-500">{user.email}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 text-sm truncate">{user.businessName || 'Sin nombre'}</p>
+                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-indigo-600">{user.documents}</p>
-                  <p className="text-xs text-gray-500">documentos</p>
+                <div className="text-right flex-shrink-0">
+                  <p className="font-bold text-indigo-600 text-sm sm:text-base">{user.documents}</p>
+                  <p className="text-xs text-gray-500">docs</p>
                 </div>
               </div>
             ))
@@ -375,15 +375,15 @@ function UsageTab({ analytics }) {
 
 function DistributionTab({ stats, analytics }) {
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
         {/* Plan Distribution */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-600" />
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
+          <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
             Usuarios por Plan
           </h3>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPie>
                 <Pie
@@ -409,12 +409,12 @@ function DistributionTab({ stats, analytics }) {
         </div>
 
         {/* Business Mode Distribution */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-indigo-600" />
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5">
+          <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+            <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
             Tipo de Negocio
           </h3>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPie>
                 <Pie
@@ -440,12 +440,12 @@ function DistributionTab({ stats, analytics }) {
         </div>
 
         {/* Emission Methods Distribution */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 lg:col-span-2">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Server className="w-5 h-5 text-indigo-600" />
-            Métodos de Emisión Electrónica
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5 lg:col-span-2">
+          <h3 className="font-semibold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+            <Server className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+            Métodos de Emisión
           </h3>
-          <div className="h-64">
+          <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.emissionMethods || []} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />

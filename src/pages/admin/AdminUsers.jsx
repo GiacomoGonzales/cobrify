@@ -678,67 +678,67 @@ export default function AdminUsers() {
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <Users className="w-8 h-8 text-gray-400" />
-            <span className="text-2xl font-bold text-gray-900">{stats.total}</span>
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
+          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
+            <Users className="w-5 h-5 sm:w-8 sm:h-8 text-gray-400" />
+            <span className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total}</span>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Total</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Total</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-green-200">
-          <div className="flex items-center justify-between">
-            <CheckCircle className="w-8 h-8 text-green-500" />
-            <span className="text-2xl font-bold text-green-600">{stats.active}</span>
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-green-200">
+          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
+            <CheckCircle className="w-5 h-5 sm:w-8 sm:h-8 text-green-500" />
+            <span className="text-lg sm:text-2xl font-bold text-green-600">{stats.active}</span>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Activos</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Activos</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-blue-200">
-          <div className="flex items-center justify-between">
-            <Clock className="w-8 h-8 text-blue-500" />
-            <span className="text-2xl font-bold text-blue-600">{stats.trial}</span>
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-blue-200">
+          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
+            <Clock className="w-5 h-5 sm:w-8 sm:h-8 text-blue-500" />
+            <span className="text-lg sm:text-2xl font-bold text-blue-600">{stats.trial}</span>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Trial</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Trial</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-yellow-200">
-          <div className="flex items-center justify-between">
-            <AlertTriangle className="w-8 h-8 text-yellow-500" />
-            <span className="text-2xl font-bold text-yellow-600">{stats.expired}</span>
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-yellow-200 hidden sm:block">
+          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
+            <AlertTriangle className="w-5 h-5 sm:w-8 sm:h-8 text-yellow-500" />
+            <span className="text-lg sm:text-2xl font-bold text-yellow-600">{stats.expired}</span>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Vencidos</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Vencidos</p>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-red-200">
-          <div className="flex items-center justify-between">
-            <Ban className="w-8 h-8 text-red-500" />
-            <span className="text-2xl font-bold text-red-600">{stats.suspended}</span>
+        <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-red-200 hidden sm:block">
+          <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-1">
+            <Ban className="w-5 h-5 sm:w-8 sm:h-8 text-red-500" />
+            <span className="text-lg sm:text-2xl font-bold text-red-600">{stats.suspended}</span>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Suspendidos</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Suspendidos</p>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">
+        <div className="flex flex-col gap-3">
           {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por email, negocio o RUC..."
+              placeholder="Buscar..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
 
           {/* Filters */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="all">Todos los estados</option>
+              <option value="all">Estado</option>
               <option value="active">Activos</option>
               <option value="trial">Trial</option>
               <option value="expired">Vencidos</option>
@@ -748,9 +748,9 @@ export default function AdminUsers() {
             <select
               value={planFilter}
               onChange={e => setPlanFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="all">Todos los planes</option>
+              <option value="all">Plan</option>
               {Object.entries(PLANS).map(([key, plan]) => (
                 <option key={key} value={key}>{plan.name}</option>
               ))}
@@ -762,28 +762,70 @@ export default function AdminUsers() {
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
               title="Recargar"
             >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
 
             <button
               onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs sm:text-sm"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden md:inline">Exportar</span>
+              <span className="hidden sm:inline">Exportar</span>
             </button>
           </div>
         </div>
 
         {/* Results count */}
-        <div className="mt-3 text-sm text-gray-500">
-          Mostrando {filteredUsers.length} de {users.length} usuarios
+        <div className="mt-2 sm:mt-3 text-xs sm:text-sm text-gray-500">
+          {filteredUsers.length} de {users.length} usuarios
         </div>
       </div>
 
       {/* Users Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Vista móvil - Cards */}
+        <div className="sm:hidden">
+          {loading ? (
+            <div className="p-8 text-center">
+              <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
+              <p className="text-sm text-gray-500">Cargando...</p>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="p-8 text-center">
+              <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No se encontraron usuarios</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {filteredUsers.map(user => (
+                <div
+                  key={user.id}
+                  onClick={() => setSelectedUser(user)}
+                  className="p-3 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate text-sm">{user.businessName}</p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[user.status]}`}>
+                        {STATUS_LABELS[user.status]}
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">{PLANS[user.plan]?.name || user.plan}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Vista desktop - Tabla */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -963,10 +1005,10 @@ export default function AdminUsers() {
 
       {/* User Detail Modal */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Detalles del Usuario</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900">Detalles del Usuario</h2>
               <button
                 onClick={() => setSelectedUser(null)}
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -975,20 +1017,20 @@ export default function AdminUsers() {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* Header */}
-              <div className="flex items-start gap-4">
-                <div className="w-16 h-16 bg-indigo-100 rounded-xl flex items-center justify-center">
-                  <Building2 className="w-8 h-8 text-indigo-600" />
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900">{selectedUser.businessName}</h3>
-                  <p className="text-gray-500">{selectedUser.email}</p>
-                  <div className="flex gap-2 mt-2">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[selectedUser.status]}`}>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">{selectedUser.businessName}</h3>
+                  <p className="text-sm text-gray-500 truncate">{selectedUser.email}</p>
+                  <div className="flex flex-wrap gap-1 sm:gap-2 mt-2">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[selectedUser.status]}`}>
                       {STATUS_LABELS[selectedUser.status]}
                     </span>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
                       {PLANS[selectedUser.plan]?.name || selectedUser.plan}
                     </span>
                   </div>
@@ -996,57 +1038,57 @@ export default function AdminUsers() {
               </div>
 
               {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-500 mb-1">
-                    <CreditCard className="w-4 h-4" />
-                    <span className="text-sm">RUC</span>
+              <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
+                    <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">RUC</span>
                   </div>
-                  <p className="font-medium">{selectedUser.ruc || 'Sin configurar'}</p>
+                  <p className="font-medium text-xs sm:text-base truncate">{selectedUser.ruc || 'Sin configurar'}</p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-500 mb-1">
-                    <Calendar className="w-4 h-4" />
-                    <span className="text-sm">Fecha de registro</span>
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
+                    <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">Registro</span>
                   </div>
-                  <p className="font-medium">{formatDate(selectedUser.createdAt)}</p>
+                  <p className="font-medium text-xs sm:text-base">{formatDate(selectedUser.createdAt)}</p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-500 mb-1">
-                    <Building2 className="w-4 h-4" />
-                    <span className="text-sm">Tipo de negocio</span>
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
+                    <Building2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">Tipo</span>
                   </div>
-                  <p className="font-medium capitalize">{selectedUser.businessMode === 'restaurant' ? 'Restaurante' : 'Retail/Comercio'}</p>
+                  <p className="font-medium text-xs sm:text-base capitalize">{selectedUser.businessMode === 'restaurant' ? 'Restaurante' : 'Retail'}</p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-500 mb-1">
-                    <Shield className="w-4 h-4" />
-                    <span className="text-sm">Emisión electrónica</span>
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
+                    <Shield className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">Emisión</span>
                   </div>
-                  <p className="font-medium">
+                  <p className="font-medium text-xs sm:text-base">
                     {selectedUser.emissionMethod === 'qpse' ? 'QPse' :
-                     selectedUser.emissionMethod === 'sunat_direct' ? 'SUNAT Directo' :
-                     selectedUser.emissionMethod === 'nubefact' ? 'NubeFact' : 'Sin configurar'}
+                     selectedUser.emissionMethod === 'sunat_direct' ? 'SUNAT' :
+                     selectedUser.emissionMethod === 'nubefact' ? 'NubeFact' : 'Sin config.'}
                   </p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-500 mb-1">
-                    <Clock className="w-4 h-4" />
-                    <span className="text-sm">Vencimiento</span>
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
+                    <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">Vence</span>
                   </div>
-                  <p className="font-medium">{formatDate(selectedUser.periodEnd)}</p>
+                  <p className="font-medium text-xs sm:text-base">{formatDate(selectedUser.periodEnd)}</p>
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-gray-500 mb-1">
-                    <Users className="w-4 h-4" />
-                    <span className="text-sm">Sub-usuarios</span>
+                <div className="bg-gray-50 rounded-lg p-2 sm:p-4">
+                  <div className="flex items-center gap-1 sm:gap-2 text-gray-500 mb-1">
+                    <Users className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <span className="text-xs sm:text-sm">Sub-usuarios</span>
                   </div>
-                  <p className="font-medium">{selectedUser.subUsersCount}</p>
+                  <p className="font-medium text-xs sm:text-base">{selectedUser.subUsersCount}</p>
                 </div>
               </div>
 
@@ -1098,40 +1140,40 @@ export default function AdminUsers() {
               )}
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 <button
                   onClick={() => openPaymentModal(selectedUser)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs sm:text-sm"
                 >
-                  <DollarSign className="w-5 h-5" />
-                  Registrar Pago
+                  <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Registrar</span> Pago
                 </button>
 
                 <button
                   onClick={() => openPlanModal(selectedUser)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-xs sm:text-sm"
                 >
-                  <Edit2 className="w-5 h-5" />
-                  Cambiar Plan
+                  <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Cambiar</span> Plan
                 </button>
 
                 <button
                   onClick={() => {
                     openSunatConfig(selectedUser)
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-xs sm:text-sm"
                 >
-                  <Settings className="w-5 h-5" />
-                  Configurar SUNAT
+                  <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+                  SUNAT
                 </button>
 
                 <button
                   onClick={() => {
                     openFeaturesModal(selectedUser)
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-xs sm:text-sm"
                 >
-                  <Sparkles className="w-5 h-5" />
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
                   Features
                   {selectedUser.features?.productImages && (
                     <span className="w-2 h-2 bg-green-500 rounded-full"></span>
@@ -1144,9 +1186,9 @@ export default function AdminUsers() {
                       toggleUserAccess(selectedUser.id, true)
                       setSelectedUser(null)
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                    className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-xs sm:text-sm"
                   >
-                    <Ban className="w-5 h-5" />
+                    <Ban className="w-4 h-4 sm:w-5 sm:h-5" />
                     Suspender
                   </button>
                 ) : (
@@ -1155,9 +1197,9 @@ export default function AdminUsers() {
                       toggleUserAccess(selectedUser.id, false)
                       setSelectedUser(null)
                     }}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+                    className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs sm:text-sm"
                   >
-                    <CheckCircle className="w-5 h-5" />
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
                     Reactivar
                   </button>
                 )}
