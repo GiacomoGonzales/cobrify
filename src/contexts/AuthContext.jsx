@@ -193,11 +193,15 @@ export const AuthProvider = ({ children }) => {
             setSubscription(userSubscription)
             setSubscriptionOwnerId(ownerIdForSubscription) // Guardar el ownerId para el listener en tiempo real
 
-            // Cargar features del usuario
+            // Cargar features del usuario (del owner si es sub-usuario)
+            console.log('🎯 Features de la suscripción:', userSubscription?.features)
+            console.log('🎯 hidePaymentMethods:', userSubscription?.features?.hidePaymentMethods)
             if (userSubscription?.features) {
               setUserFeatures(userSubscription.features)
+              console.log('✅ Features establecidos:', userSubscription.features)
             } else {
               setUserFeatures({ productImages: false })
+              console.log('⚠️ No hay features, usando defaults')
             }
 
             // Verificar acceso activo (super admin y business owner siempre tienen acceso)
@@ -245,7 +249,7 @@ export const AuthProvider = ({ children }) => {
               console.log('🏢 dispatchGuidesEnabled:', businessData.dispatchGuidesEnabled)
 
               // Validar que el modo sea uno de los permitidos
-              const validModes = ['retail', 'restaurant', 'pharmacy']
+              const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate']
               const mode = validModes.includes(businessData.businessMode)
                 ? businessData.businessMode
                 : 'retail'
@@ -317,7 +321,9 @@ export const AuthProvider = ({ children }) => {
     const unsubscribeSnapshot = onSnapshot(subscriptionRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const subscriptionData = docSnapshot.data()
-        console.log('🔄 Suscripción actualizada en tiempo real:', subscriptionData.features)
+        console.log('🔄 Suscripción actualizada en tiempo real')
+        console.log('🔄 Features:', subscriptionData.features)
+        console.log('🔄 hidePaymentMethods:', subscriptionData.features?.hidePaymentMethods)
 
         // Actualizar features en tiempo real
         if (subscriptionData.features) {
@@ -454,9 +460,9 @@ export const AuthProvider = ({ children }) => {
 
   // Función helper para verificar si un feature está habilitado
   const hasFeature = (featureName) => {
-    // Verificar el valor real del feature en la suscripción
-
-    return userFeatures?.[featureName] === true
+    const result = userFeatures?.[featureName] === true
+    console.log(`🔍 hasFeature('${featureName}'):`, result, '| userFeatures:', userFeatures)
+    return result
   }
 
   const value = {

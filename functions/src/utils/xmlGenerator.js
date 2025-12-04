@@ -1,6 +1,88 @@
 import { create } from 'xmlbuilder2'
 
 /**
+ * Mapeo de unidades de medida internas a códigos SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
+ * Las unidades guardadas en la app pueden ser texto legible, pero SUNAT requiere códigos específicos
+ */
+const UNIT_CODE_MAP = {
+  // Mapeos de texto a código SUNAT
+  'SERVICIO': 'ZZ',
+  'UNIDAD': 'NIU',
+  'UNIDADES': 'NIU',
+  'UND': 'NIU',
+  'PIEZA': 'NIU',
+  'PIEZAS': 'NIU',
+  'KILOGRAMO': 'KGM',
+  'KILOGRAMOS': 'KGM',
+  'KG': 'KGM',
+  'GRAMO': 'GRM',
+  'GRAMOS': 'GRM',
+  'GR': 'GRM',
+  'LITRO': 'LTR',
+  'LITROS': 'LTR',
+  'LT': 'LTR',
+  'METRO': 'MTR',
+  'METROS': 'MTR',
+  'M': 'MTR',
+  'METRO CUADRADO': 'MTK',
+  'METROS CUADRADOS': 'MTK',
+  'M2': 'MTK',
+  'METRO CUBICO': 'MTQ',
+  'METROS CUBICOS': 'MTQ',
+  'M3': 'MTQ',
+  'GALON': 'GLL',
+  'GALONES': 'GLL',
+  'CAJA': 'BOX',
+  'CAJAS': 'BOX',
+  'PAQUETE': 'PK',
+  'PAQUETES': 'PK',
+  'JUEGO': 'SET',
+  'JUEGOS': 'SET',
+  'HORA': 'HUR',
+  'HORAS': 'HUR',
+  'DIA': 'DAY',
+  'DIAS': 'DAY',
+  'MES': 'MON',
+  'MESES': 'MON',
+  'DOCENA': 'DZN',
+  'DOCENAS': 'DZN',
+  'PAR': 'PR',
+  'PARES': 'PR',
+  'MILLAR': 'MIL',
+  'MILLARES': 'MIL',
+  // Códigos que ya son válidos (pass-through)
+  'NIU': 'NIU',
+  'ZZ': 'ZZ',
+  'KGM': 'KGM',
+  'GRM': 'GRM',
+  'LTR': 'LTR',
+  'MTR': 'MTR',
+  'MTK': 'MTK',
+  'MTQ': 'MTQ',
+  'GLL': 'GLL',
+  'BOX': 'BOX',
+  'PK': 'PK',
+  'SET': 'SET',
+  'HUR': 'HUR',
+  'DAY': 'DAY',
+  'MON': 'MON',
+  'DZN': 'DZN',
+  'PR': 'PR',
+  'MIL': 'MIL',
+}
+
+/**
+ * Convierte una unidad de medida al código SUNAT correspondiente
+ * @param {string} unit - Unidad de medida (puede ser texto o código)
+ * @returns {string} - Código SUNAT válido (default: NIU)
+ */
+function mapUnitToSunatCode(unit) {
+  if (!unit) return 'NIU'
+  const normalized = unit.toString().toUpperCase().trim()
+  return UNIT_CODE_MAP[normalized] || 'NIU'
+}
+
+/**
  * Genera XML UBL 2.1 para factura o boleta electrónica según especificaciones SUNAT
  *
  * Referencias:
@@ -404,9 +486,9 @@ export function generateInvoiceXML(invoiceData, businessData) {
     // ID de línea
     invoiceLine.ele('cbc:ID').txt(String(index + 1))
 
-    // Cantidad
+    // Cantidad - usar mapeo de unidades para códigos SUNAT válidos
     invoiceLine.ele('cbc:InvoicedQuantity', {
-      'unitCode': item.unit || 'NIU',
+      'unitCode': mapUnitToSunatCode(item.unit),
       'unitCodeListID': 'UN/ECE rec 20',
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
@@ -741,7 +823,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
     // Cantidad (CreditedQuantity en lugar de InvoicedQuantity)
     creditNoteLine.ele('cbc:CreditedQuantity', {
-      'unitCode': item.unit || 'NIU',
+      'unitCode': mapUnitToSunatCode(item.unit),
       'unitCodeListID': 'UN/ECE rec 20',
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
@@ -1067,7 +1149,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
     // Cantidad (DebitedQuantity en lugar de InvoicedQuantity)
     debitNoteLine.ele('cbc:DebitedQuantity', {
-      'unitCode': item.unit || 'NIU',
+      'unitCode': mapUnitToSunatCode(item.unit),
       'unitCodeListID': 'UN/ECE rec 20',
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
@@ -1406,7 +1488,7 @@ export function generateDispatchGuideXML(guideData, businessData) {
 
       // Cantidad despachada
       despatchLine.ele('cbc:DeliveredQuantity', {
-        'unitCode': item.unit || 'NIU'
+        'unitCode': mapUnitToSunatCode(item.unit)
       }).txt(String(item.quantity || 0))
 
       // Información del item

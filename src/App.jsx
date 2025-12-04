@@ -69,6 +69,11 @@ import Expenses from './pages/Expenses'
 import Laboratories from './pages/Laboratories'
 import ExpiryAlerts from './pages/ExpiryAlerts'
 import BatchControl from './pages/BatchControl'
+// Real Estate pages
+import Properties from './pages/Properties'
+import Operations from './pages/Operations'
+import Commissions from './pages/Commissions'
+import Agents from './pages/Agents'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -201,6 +206,12 @@ function App() {
               <Route path="laboratorios" element={<Laboratories />} />
               <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
               <Route path="control-lotes" element={<BatchControl />} />
+
+              {/* Rutas de modo inmobiliaria */}
+              <Route path="propiedades" element={<Properties />} />
+              <Route path="agentes" element={<Agents />} />
+              <Route path="operaciones" element={<Operations />} />
+              <Route path="comisiones" element={<Commissions />} />
 
               {/* Rutas de administración legacy eliminadas - usar /app/admin/dashboard */}
             </Route>

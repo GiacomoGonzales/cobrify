@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -1346,6 +1346,33 @@ export default function Settings() {
                       <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                         Para farmacias, boticas y droguerías.
                         Incluye: medicamentos, laboratorios, control de lotes, alertas de vencimiento, inventario FEFO.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'real_estate'
+                      ? 'border-cyan-500 bg-cyan-50'
+                      : 'border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/30'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="real_estate"
+                      checked={businessMode === 'real_estate'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-cyan-600 border-gray-300 focus:ring-cyan-500"
+                    />
+                    <Home className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'real_estate' ? 'text-cyan-600' : 'text-gray-400 group-hover:text-cyan-600'
+                    }`} />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-cyan-900">
+                        Modo Inmobiliaria
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para agencias inmobiliarias y corredores de bienes raíces.
+                        Incluye: propiedades, clientes interesados, propietarios, operaciones de venta/alquiler, comisiones.
                       </p>
                     </div>
                   </label>

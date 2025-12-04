@@ -31,10 +31,18 @@ service cloud.firestore {
       return isAdmin() || hasActiveSubscription(userId);
     }
 
+    // Helper function to check if current user is a sub-user of a specific owner
+    function isSubUserOfOwner(ownerId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc != null && userDoc.data.ownerId == ownerId && userDoc.data.isActive == true;
+    }
+
     // Subscriptions collection
     match /subscriptions/{userId} {
       // Users can read their own subscription, admins can read all
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      // Sub-usuarios pueden leer la suscripción de su owner (para heredar features)
+      allow read: if isAuthenticated() && isSubUserOfOwner(userId);
       // Resellers pueden leer suscripciones de clientes que crearon
       allow read: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
       // Resellers pueden leer por query de sus clientes (email match)
@@ -282,6 +290,30 @@ service cloud.firestore {
 
       // Subcollection: Expenses (Gastos del negocio)
       match /expenses/{expenseId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Laboratories (Laboratorios - para modo farmacia)
+      match /laboratories/{laboratoryId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Properties (Propiedades - para modo inmobiliaria)
+      match /properties/{propertyId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Operations (Operaciones de venta/alquiler - para modo inmobiliaria)
+      match /operations/{operationId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Agents (Agentes/Corredores - para modo inmobiliaria)
+      match /agents/{agentId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }

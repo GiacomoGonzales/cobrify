@@ -32,6 +32,13 @@ import {
   FlaskConical,
   AlertTriangle,
   Calendar,
+  // Iconos para modo inmobiliaria
+  Home,
+  Key,
+  Handshake,
+  MapPin,
+  DollarSign,
+  UserCheck,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -372,12 +379,72 @@ function Sidebar() {
     },
   ]
 
+  // Menú para modo INMOBILIARIA (agencias, corredores)
+  const realEstateMenuItems = [
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    {
+      path: '/propiedades',
+      icon: Home,
+      label: 'Propiedades',
+      pageId: 'properties',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Clientes',
+      pageId: 'customers',
+    },
+    {
+      path: '/agentes',
+      icon: UserCheck,
+      label: 'Agentes',
+      pageId: 'agents',
+    },
+    {
+      path: '/operaciones',
+      icon: Handshake,
+      label: 'Operaciones',
+      pageId: 'operations',
+    },
+    {
+      path: '/comisiones',
+      icon: DollarSign,
+      label: 'Comisiones',
+      pageId: 'commissions',
+    },
+    {
+      path: '/reportes',
+      icon: BarChart3,
+      label: 'Reportes',
+      pageId: 'reports',
+    },
+    {
+      path: '/usuarios',
+      icon: UserCog,
+      label: 'Gestión de Usuarios',
+      pageId: 'users',
+    },
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // Seleccionar menú según el modo de negocio (default: retail)
   const menuItems = businessMode === 'restaurant'
     ? restaurantMenuItems
     : businessMode === 'pharmacy'
       ? pharmacyMenuItems
-      : retailMenuItems
+      : businessMode === 'real_estate'
+        ? realEstateMenuItems
+        : retailMenuItems
 
   // Debug: ver qué modo está activo
   console.log('🏪 Modo de negocio:', businessMode)
@@ -430,6 +497,9 @@ function Sidebar() {
       const featureEnabled = hasFeature && hasFeature(item.requiresFeature)
       if (!featureEnabled && !isDemoMode) return false
     }
+
+    // Si es solo para business owner y el usuario no lo es, no mostrar
+    if (item.businessOwnerOnly && !isBusinessOwner) return false
 
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true

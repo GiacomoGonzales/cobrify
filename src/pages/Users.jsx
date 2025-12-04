@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -20,18 +20,25 @@ import {
   deleteManagedUser,
 } from '@/services/userManagementService'
 import { formatDate } from '@/lib/utils'
+import { db } from '@/lib/firebase'
+import { collection, getDocs } from 'firebase/firestore'
 
 export default function Users() {
   const { user, isAdmin, isBusinessOwner } = useAuth()
-  const { businessMode } = useAppContext()
+  const { businessMode, getBusinessId } = useAppContext()
   const toast = useToast()
   const [users, setUsers] = useState([])
+  const [agents, setAgents] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
   const [selectedPages, setSelectedPages] = useState([])
+  const [selectedAgentId, setSelectedAgentId] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
+  // Verificar si estamos en modo inmobiliaria
+  const isRealEstateMode = businessMode === 'real_estate'
 
   // Obtener páginas disponibles según el modo del negocio
   const availablePages = getAvailablePagesByMode(businessMode)
@@ -45,7 +52,10 @@ export default function Users() {
 
   useEffect(() => {
     loadUsers()
-  }, [user])
+    if (isRealEstateMode) {
+      loadAgents()
+    }
+  }, [user, isRealEstateMode])
 
   const loadUsers = async () => {
     if (!user?.uid) return
@@ -64,10 +74,26 @@ export default function Users() {
     }
   }
 
+  const loadAgents = async () => {
+    try {
+      const businessId = getBusinessId()
+      const agentsSnap = await getDocs(collection(db, `businesses/${businessId}/agents`))
+      const agentsData = agentsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      setAgents(agentsData.filter(a => a.isActive))
+    } catch (error) {
+      console.log('Error loading agents:', error.message)
+      setAgents([])
+    }
+  }
+
   const openCreateModal = () => {
     setIsEditMode(false)
     setSelectedUser(null)
     setSelectedPages([])
+    setSelectedAgentId('')
     reset({
       email: '',
       password: '',
@@ -80,6 +106,7 @@ export default function Users() {
     setIsEditMode(true)
     setSelectedUser(userToEdit)
     setSelectedPages(userToEdit.allowedPages || [])
+    setSelectedAgentId(userToEdit.agentId || '')
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -112,11 +139,22 @@ export default function Users() {
         return
       }
 
+      // Obtener datos del agente seleccionado
+      const selectedAgent = agents.find(a => a.id === selectedAgentId)
+
       if (isEditMode) {
         // Actualizar usuario existente
-        const updateResult = await updateUserData(selectedUser.id, {
+        const updateData = {
           displayName: data.displayName,
-        })
+        }
+
+        // Si es modo inmobiliaria, agregar datos del agente
+        if (isRealEstateMode) {
+          updateData.agentId = selectedAgentId || null
+          updateData.agentName = selectedAgent?.name || null
+        }
+
+        const updateResult = await updateUserData(selectedUser.id, updateData)
 
         const permissionsResult = await updateUserPermissions(selectedUser.id, selectedPages)
 
@@ -129,18 +167,27 @@ export default function Users() {
         }
       } else {
         // Crear nuevo usuario
-        const result = await createManagedUser(user.uid, {
+        const userData = {
           email: data.email,
           password: data.password,
           displayName: data.displayName,
           allowedPages: selectedPages,
-        })
+        }
+
+        // Si es modo inmobiliaria, agregar datos del agente
+        if (isRealEstateMode && selectedAgentId) {
+          userData.agentId = selectedAgentId
+          userData.agentName = selectedAgent?.name || null
+        }
+
+        const result = await createManagedUser(user.uid, userData)
 
         if (result.success) {
           toast.success('Usuario creado exitosamente')
           setIsModalOpen(false)
           reset()
           setSelectedPages([])
+          setSelectedAgentId('')
           loadUsers()
         } else {
           toast.error(result.error)
@@ -244,6 +291,7 @@ export default function Users() {
                   <TableHead>Usuario</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Estado</TableHead>
+                  {isRealEstateMode && <TableHead>Agente</TableHead>}
                   <TableHead>Páginas Permitidas</TableHead>
                   <TableHead>Creado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -252,7 +300,7 @@ export default function Users() {
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={isRealEstateMode ? 7 : 6} className="text-center py-8 text-gray-500">
                       <UsersIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                       <p>No hay usuarios creados</p>
                       <p className="text-sm">Crea tu primer usuario para comenzar</p>
@@ -268,6 +316,18 @@ export default function Users() {
                           {userItem.isActive ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </TableCell>
+                      {isRealEstateMode && (
+                        <TableCell>
+                          {userItem.agentName ? (
+                            <span className="inline-flex items-center gap-1 text-sm text-cyan-700 bg-cyan-50 px-2 py-1 rounded">
+                              <UserCheck className="w-3 h-3" />
+                              {userItem.agentName}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">-</span>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <span className="text-sm font-semibold text-primary-600">
                           {userItem.allowedPages?.length || 0} páginas
@@ -384,6 +444,38 @@ export default function Users() {
               </div>
             )}
           </div>
+
+          {/* Vinculación con Agente (solo en modo inmobiliaria) */}
+          {isRealEstateMode && agents.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-cyan-600" />
+                Vincular con Agente
+              </h3>
+              <p className="text-sm text-gray-600">
+                Si este usuario es un agente/corredor, vincúlalo para que vea sus propias comisiones
+              </p>
+              <select
+                value={selectedAgentId}
+                onChange={(e) => setSelectedAgentId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">Sin vincular (verá todas las comisiones)</option>
+                {agents.map(agent => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name} - {agent.commissionPercent}% comisión
+                  </option>
+                ))}
+              </select>
+              {selectedAgentId && (
+                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+                  <p className="text-sm text-cyan-800">
+                    Este usuario solo verá las comisiones de las operaciones donde esté asignado como agente.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Selección de páginas con checkboxes */}
           <div className="space-y-4">

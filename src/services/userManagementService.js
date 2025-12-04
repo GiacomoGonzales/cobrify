@@ -49,21 +49,45 @@ export const RESTAURANT_PAGES = [
   { id: 'recipes', name: 'Recetas', path: '/recipes', mode: 'restaurant' },
 ]
 
+// Páginas específicas de modo farmacia
+export const PHARMACY_PAGES = [
+  { id: 'purchases', name: 'Compras', path: '/purchases', mode: 'pharmacy' },
+  { id: 'inventory', name: 'Inventario', path: '/inventory', mode: 'pharmacy' },
+  { id: 'suppliers', name: 'Proveedores', path: '/suppliers', mode: 'pharmacy' },
+  { id: 'laboratories', name: 'Laboratorios', path: '/laboratories', mode: 'pharmacy' },
+  { id: 'batch-control', name: 'Control de Lotes', path: '/batch-control', mode: 'pharmacy' },
+  { id: 'expiry-alerts', name: 'Alertas de Vencimiento', path: '/expiry-alerts', mode: 'pharmacy' },
+]
+
+// Páginas específicas de modo inmobiliaria
+export const REAL_ESTATE_PAGES = [
+  { id: 'properties', name: 'Propiedades', path: '/propiedades', mode: 'real_estate' },
+  { id: 'agents', name: 'Agentes/Corredores', path: '/agentes', mode: 'real_estate' },
+  { id: 'operations', name: 'Operaciones', path: '/operaciones', mode: 'real_estate' },
+  { id: 'commissions', name: 'Comisiones', path: '/comisiones', mode: 'real_estate' },
+]
+
 // Lista completa de todas las páginas
 export const AVAILABLE_PAGES = [
   ...COMMON_PAGES,
   ...RETAIL_PAGES,
   ...RESTAURANT_PAGES,
+  ...PHARMACY_PAGES,
+  ...REAL_ESTATE_PAGES,
 ]
 
 /**
  * Obtener páginas disponibles según el modo del negocio
- * @param {string} businessMode - 'retail' o 'restaurant'
+ * @param {string} businessMode - 'retail', 'restaurant', 'pharmacy' o 'real_estate'
  * @returns {array} - Array de páginas disponibles
  */
 export const getAvailablePagesByMode = (businessMode) => {
   if (businessMode === 'restaurant') {
     return [...COMMON_PAGES, ...RESTAURANT_PAGES]
+  } else if (businessMode === 'pharmacy') {
+    return [...COMMON_PAGES, ...PHARMACY_PAGES]
+  } else if (businessMode === 'real_estate') {
+    return [...COMMON_PAGES, ...REAL_ESTATE_PAGES]
   } else {
     // Modo retail o por defecto
     return [...COMMON_PAGES, ...RETAIL_PAGES]

@@ -21,6 +21,7 @@ import {
   Building,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import RealEstateReports from './RealEstateReports'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
@@ -57,7 +58,13 @@ import {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
 
 export default function Reports() {
-  const { user, isDemoMode, demoData, getBusinessId, hasFeature } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode } = useAppContext()
+
+  // Si estamos en modo inmobiliaria, renderizar el componente especializado
+  if (businessMode === 'real_estate') {
+    return <RealEstateReports />
+  }
+
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
