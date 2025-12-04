@@ -65,6 +65,10 @@ import DispatchGuides from './pages/DispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
+// Pharmacy pages
+import Laboratories from './pages/Laboratories'
+import ExpiryAlerts from './pages/ExpiryAlerts'
+import BatchControl from './pages/BatchControl'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -192,6 +196,11 @@ function App() {
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
+
+              {/* Rutas de modo farmacia */}
+              <Route path="laboratorios" element={<Laboratories />} />
+              <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
+              <Route path="control-lotes" element={<BatchControl />} />
 
               {/* Rutas de administración legacy eliminadas - usar /app/admin/dashboard */}
             </Route>

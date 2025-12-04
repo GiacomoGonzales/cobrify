@@ -27,6 +27,11 @@ import {
   ListOrdered,
   Carrot,
   CookingPot,
+  // Iconos para modo farmacia
+  Pill,
+  FlaskConical,
+  AlertTriangle,
+  Calendar,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -271,8 +276,108 @@ function Sidebar() {
     },
   ]
 
+  // Menú para modo FARMACIA (farmacias, boticas, droguerías)
+  const pharmacyMenuItems = [
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    {
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Control de Caja',
+      pageId: 'cash-register',
+    },
+    {
+      path: '/facturas',
+      icon: FileText,
+      label: 'Ventas',
+      pageId: 'invoices',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Clientes',
+      pageId: 'customers',
+    },
+    {
+      path: '/productos',
+      icon: Pill,
+      label: 'Medicamentos',
+      pageId: 'products',
+    },
+    {
+      path: '/laboratorios',
+      icon: FlaskConical,
+      label: 'Laboratorios',
+      pageId: 'laboratories',
+    },
+    {
+      path: '/inventario',
+      icon: ClipboardList,
+      label: 'Inventario',
+      pageId: 'inventory',
+    },
+    {
+      path: '/control-lotes',
+      icon: Package,
+      label: 'Control de Lotes',
+      pageId: 'batch-control',
+    },
+    {
+      path: '/alertas-vencimiento',
+      icon: AlertTriangle,
+      label: 'Alertas Vencimiento',
+      pageId: 'expiry-alerts',
+    },
+    {
+      path: '/proveedores',
+      icon: Truck,
+      label: 'Proveedores',
+      pageId: 'suppliers',
+    },
+    {
+      path: '/compras',
+      icon: ShoppingBag,
+      label: 'Compras',
+      pageId: 'purchases',
+    },
+    {
+      path: '/reportes',
+      icon: BarChart3,
+      label: 'Reportes',
+      pageId: 'reports',
+    },
+    {
+      path: '/gastos',
+      icon: Receipt,
+      label: 'Gastos',
+      pageId: 'expenses',
+      requiresFeature: 'expenseManagement',
+    },
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // Seleccionar menú según el modo de negocio (default: retail)
-  const menuItems = businessMode === 'restaurant' ? restaurantMenuItems : retailMenuItems
+  const menuItems = businessMode === 'restaurant'
+    ? restaurantMenuItems
+    : businessMode === 'pharmacy'
+      ? pharmacyMenuItems
+      : retailMenuItems
 
   // Debug: ver qué modo está activo
   console.log('🏪 Modo de negocio:', businessMode)

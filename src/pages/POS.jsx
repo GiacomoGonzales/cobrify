@@ -104,6 +104,37 @@ const getAllSubcategoryIds = (categories, parentId) => {
   return allIds
 }
 
+// Helper para verificar estado de vencimiento de productos (FEFO - First Expire First Out)
+const getProductExpirationStatus = (product) => {
+  if (!product.trackExpiration || !product.expirationDate) {
+    return null
+  }
+
+  const expDate = product.expirationDate.toDate
+    ? product.expirationDate.toDate()
+    : new Date(product.expirationDate)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  expDate.setHours(0, 0, 0, 0)
+
+  const diffTime = expDate - today
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    return { status: 'expired', days: Math.abs(diffDays), message: `Vencido hace ${Math.abs(diffDays)} días`, canSell: false }
+  } else if (diffDays === 0) {
+    return { status: 'today', days: 0, message: 'Vence hoy', canSell: true }
+  } else if (diffDays <= 30) {
+    return { status: 'critical', days: diffDays, message: `Vence en ${diffDays} días`, canSell: true }
+  } else if (diffDays <= 60) {
+    return { status: 'warning', days: diffDays, message: `Vence en ${diffDays} días`, canSell: true }
+  } else if (diffDays <= 90) {
+    return { status: 'caution', days: diffDays, message: `Vence en ${diffDays} días`, canSell: true }
+  }
+
+  return { status: 'ok', days: diffDays, message: null, canSell: true }
+}
+
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
   const toast = useToast()
@@ -475,6 +506,18 @@ export default function POS() {
       setSelectedProductForVariant(product)
       setShowVariantModal(true)
       return
+    }
+
+    // FEFO: Verificar si el producto está vencido (solo en modo farmacia o si tiene control de vencimiento)
+    const expirationStatus = getProductExpirationStatus(product)
+    if (expirationStatus && !expirationStatus.canSell) {
+      toast.error(`No se puede vender: ${product.name} - ${expirationStatus.message}`)
+      return
+    }
+
+    // Mostrar advertencia si está próximo a vencer (pero permitir la venta)
+    if (expirationStatus && ['today', 'critical'].includes(expirationStatus.status)) {
+      toast.warning(`Atención: ${product.name} - ${expirationStatus.message}`)
     }
 
     // Verificar stock del almacén seleccionado solo si allowNegativeStock es false
@@ -1263,7 +1306,7 @@ export default function POS() {
         }
       }
 
-      // 4. Actualizar stock de productos por almacén
+      // 4. Actualizar stock de productos por almacén (con FEFO para farmacias)
       const stockUpdates = cart
         .filter(item => !item.isCustom) // Excluir solo productos personalizados
         .map(async item => {
@@ -1282,11 +1325,60 @@ export default function POS() {
             -item.quantity // Negativo porque es una salida
           )
 
-          // Guardar en Firestore
-          return updateProduct(businessId, item.id, {
+          const updates = {
             stock: updatedProduct.stock,
             warehouseStocks: updatedProduct.warehouseStocks
-          })
+          }
+
+          // FEFO: Si el producto tiene lotes, descontar del más próximo a vencer
+          if (productData.batches && productData.batches.length > 0) {
+            let remainingToDeduct = item.quantity
+            const updatedBatches = [...productData.batches]
+
+            // Ordenar lotes por fecha de vencimiento (FEFO - primero el que vence antes)
+            updatedBatches.sort((a, b) => {
+              if (!a.expirationDate) return 1
+              if (!b.expirationDate) return -1
+              const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+              const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+              return dateA - dateB
+            })
+
+            // Descontar de cada lote en orden FEFO
+            for (let i = 0; i < updatedBatches.length && remainingToDeduct > 0; i++) {
+              const batch = updatedBatches[i]
+              if (batch.quantity > 0) {
+                const deductFromBatch = Math.min(batch.quantity, remainingToDeduct)
+                updatedBatches[i] = {
+                  ...batch,
+                  quantity: batch.quantity - deductFromBatch
+                }
+                remainingToDeduct -= deductFromBatch
+              }
+            }
+
+            updates.batches = updatedBatches
+
+            // Recalcular el vencimiento más próximo de lotes con stock > 0
+            const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
+            if (activeBatches.length > 0) {
+              activeBatches.sort((a, b) => {
+                const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+                const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+                return dateA - dateB
+              })
+              const nearestBatch = activeBatches[0]
+              updates.expirationDate = nearestBatch.expirationDate
+              updates.batchNumber = nearestBatch.batchNumber
+            } else {
+              // No hay lotes activos, limpiar vencimiento
+              updates.expirationDate = null
+              updates.batchNumber = null
+            }
+          }
+
+          // Guardar en Firestore
+          return updateProduct(businessId, item.id, updates)
         })
 
       await Promise.all(stockUpdates)
@@ -2354,17 +2446,44 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     warehouseStock <= 0 &&
                     !companySettings?.allowNegativeStock
 
+                  // FEFO: Verificar estado de vencimiento
+                  const expirationStatus = getProductExpirationStatus(product)
+                  const isExpired = expirationStatus && !expirationStatus.canSell
+                  const isDisabled = isOutOfStock || isExpired
+
                   return (
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
-                  disabled={isOutOfStock}
-                  className={`p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left ${
-                    isOutOfStock
-                      ? 'border-gray-200 opacity-50 cursor-not-allowed'
-                      : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
+                  disabled={isDisabled}
+                  className={`p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left relative ${
+                    isExpired
+                      ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
+                      : isOutOfStock
+                        ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                        : expirationStatus?.status === 'critical' || expirationStatus?.status === 'today'
+                          ? 'border-red-300 hover:border-red-500 hover:shadow-md'
+                          : expirationStatus?.status === 'warning'
+                            ? 'border-orange-300 hover:border-orange-500 hover:shadow-md'
+                            : expirationStatus?.status === 'caution'
+                              ? 'border-yellow-300 hover:border-yellow-500 hover:shadow-md'
+                              : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
                 >
+                  {/* Badge de vencimiento */}
+                  {expirationStatus && expirationStatus.status !== 'ok' && (
+                    <div className={`absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      isExpired
+                        ? 'bg-red-600 text-white'
+                        : expirationStatus.status === 'critical' || expirationStatus.status === 'today'
+                          ? 'bg-red-500 text-white'
+                          : expirationStatus.status === 'warning'
+                            ? 'bg-orange-500 text-white'
+                            : 'bg-yellow-500 text-white'
+                    }`}>
+                      {isExpired ? 'VENCIDO' : `${expirationStatus.days}d`}
+                    </div>
+                  )}
                   <div className="flex gap-3 h-full">
                     {/* Product Image - Square on the left */}
                     {product.imageUrl && (
@@ -2381,7 +2500,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex-1">
                         <div className="flex items-start justify-between gap-2 mb-1">
-                          <p className="font-semibold text-gray-900 line-clamp-2 text-sm sm:text-base flex-1">
+                          <p className={`font-semibold line-clamp-2 text-sm sm:text-base flex-1 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
                             {product.name}
                           </p>
                           {product.hasVariants && (
@@ -2393,9 +2512,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         {product.code && !product.hasVariants && (
                           <p className="text-xs text-gray-500">{product.code}</p>
                         )}
+                        {/* Mostrar info de farmacia si existe */}
+                        {product.genericName && (
+                          <p className="text-xs text-gray-500 truncate">{product.genericName} {product.concentration}</p>
+                        )}
                       </div>
                       <div className="flex items-center justify-between mt-auto pt-1">
-                        <p className="text-base sm:text-lg font-bold text-primary-600">
+                        <p className={`text-base sm:text-lg font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
                           {product.hasVariants
                             ? formatCurrency(product.basePrice)
                             : formatCurrency(product.price)

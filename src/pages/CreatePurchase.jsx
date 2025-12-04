@@ -58,7 +58,7 @@ const getSubcategories = (cats, parentId) => {
 
 export default function CreatePurchase() {
   const { user } = useAuth()
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, businessMode } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [suppliers, setSuppliers] = useState([])
@@ -72,7 +72,7 @@ export default function CreatePurchase() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0 },
+    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '' },
   ])
 
   // Warehouses
@@ -168,7 +168,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0 },
+      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '' },
     ])
   }
 
@@ -516,6 +516,9 @@ export default function CreatePurchase() {
           productName: item.productName,
           quantity: parseFloat(item.quantity),
           unitPrice: parseFloat(item.cost), // Precio unitario de compra (costo)
+          // Campos de farmacia (lote y vencimiento)
+          ...(item.batchNumber && { batchNumber: item.batchNumber }),
+          ...(item.expirationDate && { expirationDate: new Date(item.expirationDate) }),
         })),
         subtotal: amounts.subtotal,
         igv: amounts.igv,
@@ -570,6 +573,44 @@ export default function CreatePurchase() {
                 businessName: selectedSupplier.businessName
               }
             })
+          }
+
+          // Sistema de múltiples lotes para farmacia
+          // Si hay lote y/o fecha de vencimiento, agregar al array de batches
+          if (item.batchNumber || item.expirationDate) {
+            const currentBatches = product.batches || []
+
+            // Crear nuevo lote
+            const newBatch = {
+              id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              batchNumber: item.batchNumber || '',
+              quantity: newQuantity,
+              expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
+              purchaseId: result.id || null,
+              purchaseDate: new Date(invoiceDate),
+              costPrice: newCost,
+              createdAt: new Date()
+            }
+
+            // Agregar al array de lotes
+            const updatedBatches = [...currentBatches, newBatch]
+            updates.batches = updatedBatches
+            updates.trackExpiration = true
+
+            // Calcular el vencimiento más próximo de todos los lotes con stock > 0
+            const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
+            if (activeBatches.length > 0) {
+              // Ordenar por fecha de vencimiento ascendente
+              activeBatches.sort((a, b) => {
+                const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+                const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+                return dateA - dateB
+              })
+              // El primer lote es el que vence primero
+              const nearestBatch = activeBatches[0]
+              updates.expirationDate = nearestBatch.expirationDate
+              updates.batchNumber = nearestBatch.batchNumber
+            }
           }
 
           return updateProduct(businessId, item.productId, updates)
@@ -780,12 +821,18 @@ export default function CreatePurchase() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[35%]">Producto</th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Cant.</th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[15%]">Costo s/IGV</th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[15%]">Costo c/IGV</th>
-                  <th className="text-right text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[15%]">Subtotal</th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]"></th>
+                  <th className={`text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 ${businessMode === 'pharmacy' ? 'w-[25%]' : 'w-[35%]'}`}>Producto</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]">Cant.</th>
+                  {businessMode === 'pharmacy' && (
+                    <>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Lote</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Vence</th>
+                    </>
+                  )}
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Costo s/IGV</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[12%]">Costo c/IGV</th>
+                  <th className="text-right text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[12%]">Subtotal</th>
+                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[5%]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -857,6 +904,28 @@ export default function CreatePurchase() {
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </td>
+                    {/* Lote y Vencimiento - Solo en modo farmacia */}
+                    {businessMode === 'pharmacy' && (
+                      <>
+                        <td className="px-2 py-2">
+                          <input
+                            type="text"
+                            placeholder="Lote"
+                            value={item.batchNumber || ''}
+                            onChange={e => updateItem(index, 'batchNumber', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="date"
+                            value={item.expirationDate || ''}
+                            onChange={e => updateItem(index, 'expirationDate', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                      </>
+                    )}
                     {/* Costo Sin IGV */}
                     <td className="px-2 py-2">
                       <input
@@ -970,6 +1039,31 @@ export default function CreatePurchase() {
                     <PackagePlus className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* Lote y Vencimiento - Solo en modo farmacia */}
+                {businessMode === 'pharmacy' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">N° Lote</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: LOT-001"
+                        value={item.batchNumber || ''}
+                        onChange={e => updateItem(index, 'batchNumber', e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">F. Vencimiento</label>
+                      <input
+                        type="date"
+                        value={item.expirationDate || ''}
+                        onChange={e => updateItem(index, 'expirationDate', e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Cantidad y Costos en una fila */}
                 <div className="grid grid-cols-3 gap-2">

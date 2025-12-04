@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   const [hasAccess, setHasAccess] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
-  const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant'
+  const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy'
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
   const [subscriptionOwnerId, setSubscriptionOwnerId] = useState(null) // ID del owner para escuchar cambios en suscripción
@@ -244,10 +244,16 @@ export const AuthProvider = ({ children }) => {
               console.log('🏢 businessMode específico:', businessData.businessMode)
               console.log('🏢 dispatchGuidesEnabled:', businessData.dispatchGuidesEnabled)
 
-              setBusinessMode(businessData.businessMode || 'retail')
+              // Validar que el modo sea uno de los permitidos
+              const validModes = ['retail', 'restaurant', 'pharmacy']
+              const mode = validModes.includes(businessData.businessMode)
+                ? businessData.businessMode
+                : 'retail'
+
+              setBusinessMode(mode)
               setBusinessSettings(businessData) // Guardar toda la configuración
 
-              console.log('✅ businessMode establecido a:', businessData.businessMode || 'retail')
+              console.log('✅ businessMode establecido a:', mode)
             } else {
               console.warn('⚠️ No se encontró documento del negocio en businesses/', businessId)
               console.warn('⚠️ Verificar que existe el documento en Firestore')
@@ -416,7 +422,6 @@ export const AuthProvider = ({ children }) => {
   // Función helper para verificar si el usuario tiene acceso a una página
   const hasPageAccess = (pageId) => {
     // Super Admin siempre tiene acceso
-    if (isAdmin) return true
 
     // Business Owner siempre tiene acceso
     if (isBusinessOwner) return true
@@ -449,8 +454,7 @@ export const AuthProvider = ({ children }) => {
 
   // Función helper para verificar si un feature está habilitado
   const hasFeature = (featureName) => {
-    // Super Admin siempre tiene todos los features
-    if (isAdmin) return true
+    // Verificar el valor real del feature en la suscripción
 
     return userFeatures?.[featureName] === true
   }

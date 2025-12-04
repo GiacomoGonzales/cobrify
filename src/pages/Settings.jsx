@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -1319,6 +1319,33 @@ export default function Settings() {
                       <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                         Para restaurantes, cafeterías, bares y negocios de comida.
                         Incluye: mesas, mozos, órdenes, cocina, menú/productos, caja, reportes.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'pharmacy'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="pharmacy"
+                      checked={businessMode === 'pharmacy'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500"
+                    />
+                    <Pill className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'pharmacy' ? 'text-green-600' : 'text-gray-400 group-hover:text-green-600'
+                    }`} />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-green-900">
+                        Modo Farmacia
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para farmacias, boticas y droguerías.
+                        Incluye: medicamentos, laboratorios, control de lotes, alertas de vencimiento, inventario FEFO.
                       </p>
                     </div>
                   </label>

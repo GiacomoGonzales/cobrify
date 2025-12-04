@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -26,6 +26,8 @@ import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse } from '@/services/warehouseService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 // Unidades de medida
 const UNITS = [
@@ -166,6 +168,23 @@ export default function Products() {
   // Modifiers state (for restaurant mode)
   const [modifiers, setModifiers] = useState([])
 
+  // Pharmacy mode state
+  const [pharmacyData, setPharmacyData] = useState({
+    genericName: '',           // Denominación Común Internacional (DCI)
+    concentration: '',         // Ej: 500mg, 100ml
+    presentation: '',          // Ej: Tabletas x 100, Jarabe 120ml
+    laboratoryId: '',          // ID del laboratorio
+    laboratoryName: '',        // Nombre del laboratorio (para mostrar)
+    batchNumber: '',           // Número de lote
+    activeIngredient: '',      // Principio activo
+    therapeuticAction: '',     // Acción terapéutica (Analgésico, Antibiótico, etc.)
+    saleCondition: 'sin_receta', // sin_receta | con_receta | receta_retenida
+    requiresPrescription: false,
+    sanitaryRegistry: '',      // Registro sanitario DIGEMID
+    location: '',              // Ubicación en estante/anaquel
+  })
+  const [laboratories, setLaboratories] = useState([]) // Lista de laboratorios para el select
+
   // Image upload state
   const [productImage, setProductImage] = useState(null) // File object
   const [productImagePreview, setProductImagePreview] = useState(null) // URL preview
@@ -200,7 +219,11 @@ export default function Products() {
   useEffect(() => {
     loadProducts()
     loadWarehouses()
-  }, [user])
+    // Cargar laboratorios solo en modo farmacia
+    if (businessMode === 'pharmacy') {
+      loadLaboratories()
+    }
+  }, [user, businessMode])
 
   const loadProducts = async () => {
     if (!user?.uid) return
@@ -266,6 +289,24 @@ export default function Products() {
     }
   }
 
+  // Cargar laboratorios para modo farmacia
+  const loadLaboratories = async () => {
+    if (!user?.uid) return
+
+    try {
+      const businessId = getBusinessId()
+      const labsRef = collection(db, 'businesses', businessId, 'laboratories')
+      const snapshot = await getDocs(labsRef)
+      const labsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      setLaboratories(labsData)
+    } catch (error) {
+      console.error('Error al cargar laboratorios:', error)
+    }
+  }
+
   const openCreateModal = () => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
@@ -298,6 +339,21 @@ export default function Products() {
       expirationDate: '',
     })
     setModifiers([]) // Limpiar modificadores
+    // Resetear datos de farmacia
+    setPharmacyData({
+      genericName: '',
+      concentration: '',
+      presentation: '',
+      laboratoryId: '',
+      laboratoryName: '',
+      batchNumber: '',
+      activeIngredient: '',
+      therapeuticAction: '',
+      saleCondition: 'sin_receta',
+      requiresPrescription: false,
+      sanitaryRegistry: '',
+      location: '',
+    })
     setIsModalOpen(true)
   }
 
@@ -327,6 +383,22 @@ export default function Products() {
 
     // Load modifiers if product has them (restaurant mode)
     setModifiers(product.modifiers || [])
+
+    // Load pharmacy data if exists (pharmacy mode)
+    setPharmacyData({
+      genericName: product.genericName || '',
+      concentration: product.concentration || '',
+      presentation: product.presentation || '',
+      laboratoryId: product.laboratoryId || '',
+      laboratoryName: product.laboratoryName || '',
+      batchNumber: product.batchNumber || '',
+      activeIngredient: product.activeIngredient || '',
+      therapeuticAction: product.therapeuticAction || '',
+      saleCondition: product.saleCondition || 'sin_receta',
+      requiresPrescription: product.requiresPrescription || false,
+      sanitaryRegistry: product.sanitaryRegistry || '',
+      location: product.location || '',
+    })
 
     // Load product image if exists
     setProductImage(null)
@@ -451,6 +523,21 @@ export default function Products() {
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
+        // Add pharmacy data if in pharmacy mode
+        ...(businessMode === 'pharmacy' ? {
+          genericName: pharmacyData.genericName || null,
+          concentration: pharmacyData.concentration || null,
+          presentation: pharmacyData.presentation || null,
+          laboratoryId: pharmacyData.laboratoryId || null,
+          laboratoryName: pharmacyData.laboratoryName || null,
+          batchNumber: pharmacyData.batchNumber || null,
+          activeIngredient: pharmacyData.activeIngredient || null,
+          therapeuticAction: pharmacyData.therapeuticAction || null,
+          saleCondition: pharmacyData.saleCondition || 'sin_receta',
+          requiresPrescription: pharmacyData.saleCondition !== 'sin_receta',
+          sanitaryRegistry: pharmacyData.sanitaryRegistry || null,
+          location: pharmacyData.location || null,
+        } : {}),
       }
 
       if (hasVariants) {
@@ -2420,6 +2507,200 @@ export default function Products() {
             </div>
           </div>
 
+          {/* Campos específicos de Farmacia */}
+          {businessMode === 'pharmacy' && (
+            <div className="border-t border-green-200 pt-4 bg-green-50/50 -mx-6 px-6 pb-4">
+              <h3 className="text-sm font-semibold text-green-800 mb-4 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Información Farmacéutica
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Nombre Genérico (DCI) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre Genérico (DCI)
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.genericName}
+                    onChange={(e) => setPharmacyData({...pharmacyData, genericName: e.target.value})}
+                    placeholder="Ej: Paracetamol"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Denominación Común Internacional</p>
+                </div>
+
+                {/* Concentración */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Concentración
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.concentration}
+                    onChange={(e) => setPharmacyData({...pharmacyData, concentration: e.target.value})}
+                    placeholder="Ej: 500mg, 100ml"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                </div>
+
+                {/* Presentación */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Presentación
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.presentation}
+                    onChange={(e) => setPharmacyData({...pharmacyData, presentation: e.target.value})}
+                    placeholder="Ej: Tabletas x 100, Jarabe 120ml"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                </div>
+
+                {/* Laboratorio */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Laboratorio
+                  </label>
+                  <select
+                    value={pharmacyData.laboratoryId}
+                    onChange={(e) => {
+                      const lab = laboratories.find(l => l.id === e.target.value)
+                      setPharmacyData({
+                        ...pharmacyData,
+                        laboratoryId: e.target.value,
+                        laboratoryName: lab?.name || ''
+                      })
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  >
+                    <option value="">Seleccionar laboratorio</option>
+                    {laboratories.map(lab => (
+                      <option key={lab.id} value={lab.id}>{lab.name}</option>
+                    ))}
+                  </select>
+                  {laboratories.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">No hay laboratorios registrados. Agrégalos desde el menú Laboratorios.</p>
+                  )}
+                </div>
+
+                {/* Número de Lote */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Número de Lote
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.batchNumber}
+                    onChange={(e) => setPharmacyData({...pharmacyData, batchNumber: e.target.value})}
+                    placeholder="Ej: LOT2024001"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                </div>
+
+                {/* Principio Activo */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Principio Activo
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.activeIngredient}
+                    onChange={(e) => setPharmacyData({...pharmacyData, activeIngredient: e.target.value})}
+                    placeholder="Ej: Paracetamol, Ibuprofeno"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                </div>
+
+                {/* Acción Terapéutica */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Acción Terapéutica
+                  </label>
+                  <select
+                    value={pharmacyData.therapeuticAction}
+                    onChange={(e) => setPharmacyData({...pharmacyData, therapeuticAction: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  >
+                    <option value="">Seleccionar acción</option>
+                    <option value="Analgésico">Analgésico</option>
+                    <option value="Antiinflamatorio">Antiinflamatorio</option>
+                    <option value="Antibiótico">Antibiótico</option>
+                    <option value="Antialérgico">Antialérgico</option>
+                    <option value="Antihipertensivo">Antihipertensivo</option>
+                    <option value="Antiácido">Antiácido</option>
+                    <option value="Antidiarreico">Antidiarreico</option>
+                    <option value="Antidepresivo">Antidepresivo</option>
+                    <option value="Antiparasitario">Antiparasitario</option>
+                    <option value="Antifúngico">Antifúngico</option>
+                    <option value="Antipirético">Antipirético</option>
+                    <option value="Antiemético">Antiemético</option>
+                    <option value="Antitusivo">Antitusivo</option>
+                    <option value="Broncodilatador">Broncodilatador</option>
+                    <option value="Diurético">Diurético</option>
+                    <option value="Laxante">Laxante</option>
+                    <option value="Vitamina/Suplemento">Vitamina/Suplemento</option>
+                    <option value="Dermatológico">Dermatológico</option>
+                    <option value="Oftálmico">Oftálmico</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+
+                {/* Condición de Venta */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Condición de Venta
+                  </label>
+                  <select
+                    value={pharmacyData.saleCondition}
+                    onChange={(e) => setPharmacyData({...pharmacyData, saleCondition: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  >
+                    <option value="sin_receta">Venta libre (sin receta)</option>
+                    <option value="con_receta">Con receta médica</option>
+                    <option value="receta_retenida">Receta retenida</option>
+                  </select>
+                  {pharmacyData.saleCondition !== 'sin_receta' && (
+                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      Este medicamento requiere receta médica para su venta
+                    </p>
+                  )}
+                </div>
+
+                {/* Registro Sanitario */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Registro Sanitario DIGEMID
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.sanitaryRegistry}
+                    onChange={(e) => setPharmacyData({...pharmacyData, sanitaryRegistry: e.target.value})}
+                    placeholder="Ej: N-12345"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                </div>
+
+                {/* Ubicación en estante */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ubicación (Estante/Anaquel)
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.location}
+                    onChange={(e) => setPharmacyData({...pharmacyData, location: e.target.value})}
+                    placeholder="Ej: A1-E3, Vitrina 2"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Descripción
@@ -2852,6 +3133,132 @@ export default function Products() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Información Farmacéutica (solo modo farmacia) */}
+            {businessMode === 'pharmacy' && (viewingProduct.genericName || viewingProduct.laboratoryId || viewingProduct.batches?.length > 0) && (
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <Pill className="w-4 h-4" />
+                  Información Farmacéutica
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {viewingProduct.genericName && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Nombre Genérico</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.genericName}</p>
+                    </div>
+                  )}
+                  {viewingProduct.concentration && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Concentración</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.concentration}</p>
+                    </div>
+                  )}
+                  {viewingProduct.presentation && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Presentación</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.presentation}</p>
+                    </div>
+                  )}
+                  {viewingProduct.laboratoryId && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Laboratorio</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">
+                        {laboratories.find(l => l.id === viewingProduct.laboratoryId)?.name || 'No especificado'}
+                      </p>
+                    </div>
+                  )}
+                  {viewingProduct.activeIngredient && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Principio Activo</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.activeIngredient}</p>
+                    </div>
+                  )}
+                  {viewingProduct.therapeuticAction && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Acción Terapéutica</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.therapeuticAction}</p>
+                    </div>
+                  )}
+                  {viewingProduct.saleCondition && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Condición de Venta</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">
+                        <Badge variant={
+                          viewingProduct.saleCondition === 'prescription' ? 'warning' :
+                          viewingProduct.saleCondition === 'retained' ? 'danger' : 'success'
+                        }>
+                          {viewingProduct.saleCondition === 'otc' ? 'Venta Libre' :
+                           viewingProduct.saleCondition === 'prescription' ? 'Bajo Receta' :
+                           viewingProduct.saleCondition === 'retained' ? 'Receta Retenida' : viewingProduct.saleCondition}
+                        </Badge>
+                      </p>
+                    </div>
+                  )}
+                  {viewingProduct.sanitaryRegistry && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Registro Sanitario</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.sanitaryRegistry}</p>
+                    </div>
+                  )}
+                  {viewingProduct.location && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Ubicación</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.location}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lotes del producto */}
+                {viewingProduct.batches && viewingProduct.batches.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-green-200">
+                    <label className="text-xs font-medium text-gray-500 mb-2 block">Lotes Registrados ({viewingProduct.batches.length})</label>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {viewingProduct.batches
+                        .sort((a, b) => {
+                          if (!a.expirationDate) return 1
+                          if (!b.expirationDate) return -1
+                          const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
+                          const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
+                          return dateA - dateB
+                        })
+                        .map((batch, idx) => {
+                          const expDate = batch.expirationDate
+                            ? (batch.expirationDate.toDate ? batch.expirationDate.toDate() : new Date(batch.expirationDate))
+                            : null
+                          const today = new Date()
+                          const diffDays = expDate ? Math.ceil((expDate - today) / (1000 * 60 * 60 * 24)) : null
+
+                          return (
+                            <div key={batch.id || idx} className={`flex items-center justify-between p-2 rounded ${
+                              batch.quantity <= 0 ? 'bg-gray-100 opacity-50' : 'bg-white border border-gray-200'
+                            }`}>
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium text-sm">{batch.batchNumber || 'Sin número'}</span>
+                                {expDate && (
+                                  <span className="text-xs text-gray-500">
+                                    Vence: {expDate.toLocaleDateString('es-PE')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm font-medium ${batch.quantity <= 0 ? 'text-gray-400' : 'text-gray-900'}`}>
+                                  {batch.quantity || 0} uds
+                                </span>
+                                {diffDays !== null && diffDays <= 90 && (
+                                  <Badge variant={diffDays < 0 ? 'danger' : diffDays <= 30 ? 'danger' : diffDays <= 60 ? 'warning' : 'warning'} className="text-xs">
+                                    {diffDays < 0 ? 'Vencido' : `${diffDays}d`}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

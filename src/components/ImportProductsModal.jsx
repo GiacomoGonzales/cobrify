@@ -3,8 +3,10 @@ import * as XLSX from 'xlsx'
 import { Upload, Download, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import { useAppContext } from '@/hooks/useAppContext'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport }) {
+  const { businessMode } = useAppContext()
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [previewData, setPreviewData] = useState([])
@@ -122,7 +124,17 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         trackStock: trackStock,
         hasVariants: false,
         variantAttributes: [],
-        variants: []
+        variants: [],
+        // Campos de farmacia
+        genericName: String(row.nombre_generico || row.Nombre_Generico || row.NOMBRE_GENERICO || row.nombreGenerico || row.NombreGenerico || row.generic_name || '').trim() || null,
+        concentration: String(row.concentracion || row.Concentracion || row.CONCENTRACION || row.concentration || '').trim() || null,
+        presentation: String(row.presentacion || row.Presentacion || row.PRESENTACION || row.presentation || '').trim() || null,
+        laboratoryName: String(row.laboratorio || row.Laboratorio || row.LABORATORIO || row.laboratory || '').trim() || null,
+        activeIngredient: String(row.principio_activo || row.Principio_Activo || row.PRINCIPIO_ACTIVO || row.principioActivo || row.active_ingredient || '').trim() || null,
+        therapeuticAction: String(row.accion_terapeutica || row.Accion_Terapeutica || row.ACCION_TERAPEUTICA || row.accionTerapeutica || row.therapeutic_action || '').trim() || null,
+        saleCondition: String(row.condicion_venta || row.Condicion_Venta || row.CONDICION_VENTA || row.condicionVenta || row.sale_condition || '').trim().toLowerCase() || null,
+        sanitaryRegistry: String(row.registro_sanitario || row.Registro_Sanitario || row.REGISTRO_SANITARIO || row.registroSanitario || row.sanitary_registry || '').trim() || null,
+        location: String(row.ubicacion || row.Ubicacion || row.UBICACION || row.location || '').trim() || null
       }
 
       // Validar y convertir costo si existe
@@ -206,69 +218,169 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
   }
 
   const downloadTemplate = () => {
-    // Crear plantilla de ejemplo con SKU y código de barras
-    const template = [
-      {
-        sku: 'SKU-001',
-        codigo_barras: '7501234567890',
-        nombre: 'Producto con Stock',
-        descripcion: 'Descripción del producto',
-        costo: 8.50,
-        precio: 10.50,
-        stock: 100,
-        trackStock: 'SI',
-        unidad: 'UNIDAD',
-        categoria: 'Categoría Ejemplo',
-        almacen: 'Almacén Principal'
-      },
-      {
-        sku: 'SKU-002',
-        codigo_barras: '',
-        nombre: 'Servicio (Sin Stock)',
-        descripcion: 'No controla inventario',
-        costo: 20.00,
-        precio: 25.00,
-        stock: '',
-        trackStock: 'NO',
-        unidad: 'SERVICIO',
-        categoria: 'Servicios',
-        almacen: ''
-      },
-      {
-        sku: '',
-        codigo_barras: '7509876543210',
-        nombre: 'Producto Solo con Barras',
-        descripcion: 'Sin código interno',
-        costo: 12.00,
-        precio: 15.00,
-        stock: 50,
-        trackStock: 'SI',
-        unidad: 'UNIDAD',
-        categoria: '',
-        almacen: 'Almacén Sucursal 2'
-      }
-    ]
+    // Crear plantilla de ejemplo según el modo de negocio
+    let template = []
+
+    if (businessMode === 'pharmacy') {
+      // Plantilla para farmacias con campos específicos
+      template = [
+        {
+          sku: 'MED-001',
+          codigo_barras: '7501234567890',
+          nombre: 'Panadol 500mg Tableta',
+          descripcion: 'Analgésico y antipirético',
+          nombre_generico: 'Paracetamol',
+          concentracion: '500mg',
+          presentacion: 'Tableta',
+          laboratorio: 'GSK',
+          principio_activo: 'Paracetamol',
+          accion_terapeutica: 'Analgésico',
+          condicion_venta: 'otc',
+          registro_sanitario: 'RS-12345',
+          ubicacion: 'Estante A-1',
+          costo: 0.80,
+          precio: 1.50,
+          stock: 500,
+          trackStock: 'SI',
+          unidad: 'UNIDAD',
+          categoria: 'Analgésicos',
+          almacen: 'Almacén Principal'
+        },
+        {
+          sku: 'MED-002',
+          codigo_barras: '7509876543210',
+          nombre: 'Amoxicilina 500mg Cápsula',
+          descripcion: 'Antibiótico de amplio espectro',
+          nombre_generico: 'Amoxicilina',
+          concentracion: '500mg',
+          presentacion: 'Cápsula',
+          laboratorio: 'Medifarma',
+          principio_activo: 'Amoxicilina trihidrato',
+          accion_terapeutica: 'Antibiótico',
+          condicion_venta: 'prescription',
+          registro_sanitario: 'RS-67890',
+          ubicacion: 'Estante B-2',
+          costo: 0.50,
+          precio: 1.20,
+          stock: 200,
+          trackStock: 'SI',
+          unidad: 'UNIDAD',
+          categoria: 'Antibióticos',
+          almacen: 'Almacén Principal'
+        },
+        {
+          sku: 'MED-003',
+          codigo_barras: '',
+          nombre: 'Clonazepam 2mg Tableta',
+          descripcion: 'Ansiolítico',
+          nombre_generico: 'Clonazepam',
+          concentracion: '2mg',
+          presentacion: 'Tableta',
+          laboratorio: 'AC Farma',
+          principio_activo: 'Clonazepam',
+          accion_terapeutica: 'Ansiolítico',
+          condicion_venta: 'retained',
+          registro_sanitario: 'RS-11111',
+          ubicacion: 'Estante C-1',
+          costo: 0.30,
+          precio: 0.80,
+          stock: 100,
+          trackStock: 'SI',
+          unidad: 'UNIDAD',
+          categoria: 'Psicotrópicos',
+          almacen: 'Almacén Principal'
+        }
+      ]
+    } else {
+      // Plantilla estándar para retail
+      template = [
+        {
+          sku: 'SKU-001',
+          codigo_barras: '7501234567890',
+          nombre: 'Producto con Stock',
+          descripcion: 'Descripción del producto',
+          costo: 8.50,
+          precio: 10.50,
+          stock: 100,
+          trackStock: 'SI',
+          unidad: 'UNIDAD',
+          categoria: 'Categoría Ejemplo',
+          almacen: 'Almacén Principal'
+        },
+        {
+          sku: 'SKU-002',
+          codigo_barras: '',
+          nombre: 'Servicio (Sin Stock)',
+          descripcion: 'No controla inventario',
+          costo: 20.00,
+          precio: 25.00,
+          stock: '',
+          trackStock: 'NO',
+          unidad: 'SERVICIO',
+          categoria: 'Servicios',
+          almacen: ''
+        },
+        {
+          sku: '',
+          codigo_barras: '7509876543210',
+          nombre: 'Producto Solo con Barras',
+          descripcion: 'Sin código interno',
+          costo: 12.00,
+          precio: 15.00,
+          stock: 50,
+          trackStock: 'SI',
+          unidad: 'UNIDAD',
+          categoria: '',
+          almacen: 'Almacén Sucursal 2'
+        }
+      ]
+    }
 
     const ws = XLSX.utils.json_to_sheet(template)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Productos')
+    XLSX.utils.book_append_sheet(wb, ws, businessMode === 'pharmacy' ? 'Medicamentos' : 'Productos')
 
-    // Ajustar anchos de columna
-    ws['!cols'] = [
-      { wch: 15 }, // sku
-      { wch: 18 }, // codigo_barras
-      { wch: 30 }, // nombre
-      { wch: 40 }, // descripcion
-      { wch: 10 }, // costo
-      { wch: 10 }, // precio
-      { wch: 10 }, // stock
-      { wch: 15 }, // trackStock
-      { wch: 15 }, // unidad
-      { wch: 20 }, // categoria
-      { wch: 25 }  // almacen
-    ]
+    // Ajustar anchos de columna según modo
+    if (businessMode === 'pharmacy') {
+      ws['!cols'] = [
+        { wch: 12 }, // sku
+        { wch: 16 }, // codigo_barras
+        { wch: 30 }, // nombre
+        { wch: 30 }, // descripcion
+        { wch: 18 }, // nombre_generico
+        { wch: 12 }, // concentracion
+        { wch: 12 }, // presentacion
+        { wch: 15 }, // laboratorio
+        { wch: 20 }, // principio_activo
+        { wch: 15 }, // accion_terapeutica
+        { wch: 15 }, // condicion_venta
+        { wch: 15 }, // registro_sanitario
+        { wch: 12 }, // ubicacion
+        { wch: 8 },  // costo
+        { wch: 8 },  // precio
+        { wch: 8 },  // stock
+        { wch: 10 }, // trackStock
+        { wch: 10 }, // unidad
+        { wch: 15 }, // categoria
+        { wch: 20 }  // almacen
+      ]
+    } else {
+      ws['!cols'] = [
+        { wch: 15 }, // sku
+        { wch: 18 }, // codigo_barras
+        { wch: 30 }, // nombre
+        { wch: 40 }, // descripcion
+        { wch: 10 }, // costo
+        { wch: 10 }, // precio
+        { wch: 10 }, // stock
+        { wch: 15 }, // trackStock
+        { wch: 15 }, // unidad
+        { wch: 20 }, // categoria
+        { wch: 25 }  // almacen
+      ]
+    }
 
-    XLSX.writeFile(wb, 'plantilla_productos.xlsx')
+    XLSX.writeFile(wb, businessMode === 'pharmacy' ? 'plantilla_medicamentos.xlsx' : 'plantilla_productos.xlsx')
   }
 
   return (
