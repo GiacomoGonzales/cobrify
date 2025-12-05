@@ -81,19 +81,19 @@ export default function AdminLayout() {
   const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-safe">
+    <div className="min-h-screen bg-gray-100 pt-safe overflow-x-hidden max-w-full">
       {/* Mobile Header */}
       <div className="lg:hidden bg-indigo-900 text-white p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Shield className="w-8 h-8" />
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 hover:bg-indigo-800 rounded-lg -ml-2"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+          <Shield className="w-7 h-7" />
           <span className="font-bold text-lg">Admin Panel</span>
         </div>
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 hover:bg-indigo-800 rounded-lg"
-        >
-          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
       </div>
 
       {/* Mobile Menu Overlay */}
@@ -129,7 +129,7 @@ export default function AdminLayout() {
         </div>
       )}
 
-      <div className="flex">
+      <div className="flex w-full">
         {/* Sidebar - Desktop */}
         <aside
           className={`hidden lg:flex flex-col bg-indigo-900 text-white min-h-screen transition-all duration-300 ${
@@ -211,7 +211,7 @@ export default function AdminLayout() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-h-screen">
+        <main className="flex-1 min-h-screen min-w-0 overflow-x-hidden">
           {/* Top Bar */}
           <header className="bg-white shadow-sm border-b border-gray-200 px-4 lg:px-6 py-3 lg:py-4">
             <div className="flex items-center justify-between">
@@ -255,7 +255,7 @@ export default function AdminLayout() {
           </header>
 
           {/* Page Content */}
-          <div className="p-3 sm:p-4 lg:p-6">
+          <div className="p-3 sm:p-4 lg:p-6 w-full max-w-full overflow-x-hidden">
             <Outlet />
           </div>
         </main>

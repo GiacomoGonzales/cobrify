@@ -3,7 +3,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { emitirComprobante, emitirNotaCredito } from './src/services/emissionRouter.js'
+import { emitirComprobante, emitirNotaCredito, emitirGuiaRemision } from './src/services/emissionRouter.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -60,6 +60,56 @@ function sanitizeForFirestore(value, maxDepth = 2, currentDepth = 0) {
     }
   }
   return sanitized
+}
+
+/**
+ * Lista de errores temporales de SUNAT que permiten reintento automático
+ * Estos errores NO son rechazos reales del documento, sino problemas de conectividad
+ */
+const TRANSIENT_SUNAT_ERRORS = [
+  // Errores de autenticación/servicio
+  '0109',                    // Servicio de autenticación no disponible
+  'soap-env:Client.0109',
+  'Client.0109',
+
+  // Errores de timeout/conexión
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ECONNRESET',
+  'ESOCKETTIMEDOUT',
+  'timeout',
+
+  // Errores de servicio
+  'service unavailable',
+  'servicio no disponible',
+  'no está disponible',
+  'temporarily unavailable',
+  'try again later',
+  'intente más tarde',
+
+  // Errores de QPse cuando SUNAT está caído
+  'PENDING_MANUAL',
+  'envío automático a SUNAT falló',
+
+  // Errores HTTP
+  '502', '503', '504',       // Bad Gateway, Service Unavailable, Gateway Timeout
+]
+
+/**
+ * Verifica si un error de SUNAT es temporal (permite reintento)
+ * @param {string} responseCode - Código de respuesta
+ * @param {string} description - Descripción del error
+ * @returns {boolean} true si es error temporal
+ */
+function isTransientSunatError(responseCode, description) {
+  const code = String(responseCode || '').toLowerCase()
+  const desc = String(description || '').toLowerCase()
+
+  return TRANSIENT_SUNAT_ERRORS.some(err => {
+    const errLower = err.toLowerCase()
+    return code.includes(errLower) || desc.includes(errLower)
+  })
 }
 
 /**
@@ -399,9 +449,24 @@ export const sendInvoiceToSunat = onRequest(
         }
       }
 
-      // Si es PENDING_MANUAL (firmado pero no enviado), guardamos como "signed"
+      // Determinar el estado final basado en el resultado
+      // IMPORTANTE: Los errores temporales de SUNAT NO deben quedar como 'rejected' ni 'signed'
+      // sino como 'pending' para permitir reintento automático
       const isPendingManual = emissionResult.pendingManual === true
-      const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
+      const isTransientError = isTransientSunatError(emissionResult.responseCode, emissionResult.description)
+
+      let finalStatus
+      if (emissionResult.accepted) {
+        finalStatus = 'accepted'
+      } else if (isTransientError || isPendingManual) {
+        // Error temporal o firmado pero no enviado → mantener como pending para reintento
+        finalStatus = 'pending'
+        console.log(`⏳ Error temporal detectado - manteniendo como 'pending' para reintento automático`)
+        console.log(`   Código: ${emissionResult.responseCode}, Descripción: ${emissionResult.description}`)
+      } else {
+        // Error permanente de SUNAT (rechazo real)
+        finalStatus = 'rejected'
+      }
 
       // Construir sunatResponse sin valores undefined (Firestore no los acepta)
       // Normalizar observations (notes) - puede venir como array, string, o array de objetos
@@ -458,8 +523,20 @@ export const sendInvoiceToSunat = onRequest(
         updatedAt: FieldValue.serverTimestamp(),
       }
 
+      // Si es error temporal, agregar información de reintento
+      if (isTransientError || isPendingManual) {
+        updateData.lastRetryError = sanitizeForFirestore({
+          code: emissionResult.responseCode || '',
+          description: emissionResult.description || '',
+          timestamp: new Date().toISOString(),
+          isTransient: true
+        })
+        updateData.retryCount = FieldValue.increment(1)
+        updateData.sunatSendingStartedAt = null // Limpiar para permitir reintento
+      }
+
       await invoiceRef.update(updateData)
-      console.log(`💾 Estado actualizado en Firestore`)
+      console.log(`💾 Estado actualizado en Firestore: ${finalStatus}`)
 
       // 5. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO por SUNAT
       if (emissionResult.accepted === true) {
@@ -1365,6 +1442,388 @@ export const createReseller = onRequest(
         success: false,
         error: error.message
       })
+    }
+  }
+)
+
+// ========================================
+// GUÍAS DE REMISIÓN - Cloud Functions
+// ========================================
+
+/**
+ * Cloud Function: Enviar Guía de Remisión a SUNAT
+ *
+ * Esta función es INDEPENDIENTE de sendInvoiceToSunat para no afectar
+ * el flujo existente de facturas y boletas.
+ *
+ * IMPORTANTE: Las GRE usan endpoints DIFERENTES a las facturas/boletas:
+ * - Producción: https://e-guiaremision.sunat.gob.pe/ol-ti-itemision-guia-gem/billService
+ * - Beta: https://e-beta.sunat.gob.pe/ol-ti-itemision-guia-gem-beta/billService
+ *
+ * Pasos:
+ * 1. Obtiene los datos de la guía de Firestore
+ * 2. Obtiene la configuración SUNAT del usuario
+ * 3. Genera el XML en formato UBL 2.1 DespatchAdvice
+ * 4. Firma el XML con el certificado digital
+ * 5. Envía el XML firmado a SUNAT vía SOAP (endpoint GRE)
+ * 6. Procesa la respuesta (CDR)
+ * 7. Actualiza el estado de la guía en Firestore
+ */
+export const sendDispatchGuideToSunatFn = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async (req, res) => {
+    // Manejar preflight OPTIONS request
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    // Solo aceptar POST
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Obtener y verificar token de autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Token de autorización requerido' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (tokenError) {
+        console.error('Error verificando token:', tokenError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const userId = decodedToken.uid
+      console.log(`🚛 [GRE] Usuario autenticado: ${userId}`)
+
+      // Obtener datos del body
+      const { businessId, guideId } = req.body
+
+      if (!businessId || !guideId) {
+        res.status(400).json({ error: 'businessId y guideId son requeridos' })
+        return
+      }
+
+      console.log(`🚛 [GRE] Procesando guía ${guideId} del negocio ${businessId}`)
+
+      // 1. Obtener datos del negocio
+      const businessRef = db.collection('businesses').doc(businessId)
+      const businessDoc = await businessRef.get()
+
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+      console.log(`🏢 [GRE] Negocio: ${businessData.businessName} (RUC: ${businessData.ruc})`)
+
+      // 2. Obtener datos de la guía de remisión
+      const guideRef = db.collection('businesses').doc(businessId)
+        .collection('dispatchGuides').doc(guideId)
+      const guideDoc = await guideRef.get()
+
+      if (!guideDoc.exists) {
+        res.status(404).json({ error: 'Guía de remisión no encontrada' })
+        return
+      }
+
+      const guideData = guideDoc.data()
+      console.log(`📄 [GRE] Guía: ${guideData.number}`)
+
+      // Verificar si ya fue enviada y aceptada
+      if (guideData.sunatStatus === 'accepted') {
+        res.status(400).json({
+          error: 'Esta guía ya fue aceptada por SUNAT',
+          sunatStatus: guideData.sunatStatus
+        })
+        return
+      }
+
+      // 3. Preparar datos para emisión
+      const guideForEmission = {
+        ...guideData,
+        series: guideData.series,
+        correlative: guideData.correlative,
+      }
+
+      // 4. Emitir la guía de remisión
+      console.log('🚀 [GRE] Iniciando emisión de guía de remisión...')
+      const result = await emitirGuiaRemision(guideForEmission, businessData)
+
+      console.log('📋 [GRE] Resultado de emisión:', JSON.stringify(result, null, 2))
+
+      // 5. Actualizar el estado de la guía en Firestore
+      const updateData = {
+        sunatStatus: result.accepted ? 'accepted' : (result.error ? 'error' : 'rejected'),
+        sunatResponseCode: result.responseCode || null,
+        sunatDescription: result.description || result.error || null,
+        sunatMethod: result.method || 'sunat_direct',
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      // Agregar datos específicos según el método
+      if (result.method === 'sunat_direct') {
+        if (result.cdrData) {
+          updateData.cdrData = result.cdrData
+        }
+      } else if (result.method === 'qpse') {
+        if (result.cdrUrl) updateData.cdrUrl = result.cdrUrl
+        if (result.xmlUrl) updateData.xmlUrl = result.xmlUrl
+        if (result.pdfUrl) updateData.pdfUrl = result.pdfUrl
+        if (result.hash) updateData.hash = result.hash
+      }
+
+      await guideRef.update(removeUndefined(updateData))
+
+      console.log(`✅ [GRE] Guía actualizada con estado: ${updateData.sunatStatus}`)
+
+      // 6. Responder al cliente
+      res.status(200).json({
+        success: result.success,
+        accepted: result.accepted,
+        method: result.method,
+        responseCode: result.responseCode,
+        description: result.description,
+        error: result.error,
+        guideNumber: guideData.number,
+        sunatStatus: updateData.sunatStatus
+      })
+
+    } catch (error) {
+      console.error('❌ [GRE] Error en sendDispatchGuideToSunat:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor'
+      })
+    }
+  }
+)
+
+// ========================================
+// REENVÍO AUTOMÁTICO DE DOCUMENTOS PENDIENTES
+// ========================================
+
+/**
+ * Cron Job: Reenviar documentos pendientes a SUNAT
+ *
+ * Se ejecuta cada 2 horas y busca:
+ * - Facturas/Boletas con sunatStatus = 'pending'
+ * - Que tengan más de 5 minutos de creadas (para no interferir con envíos en curso)
+ * - Que no hayan excedido el máximo de reintentos (50)
+ *
+ * Con 50 reintentos cada 2 horas = 100 horas (4+ días) de cobertura
+ * Esto es más que suficiente para caídas prolongadas de SUNAT
+ *
+ * Esto soluciona el problema de cuando SUNAT se cae por horas:
+ * - Los documentos quedan como 'pending'
+ * - Este job los reenvía automáticamente cuando SUNAT vuelve
+ * - El usuario no tiene que hacer nada manualmente
+ */
+export const retryPendingInvoices = onSchedule(
+  {
+    schedule: 'every 2 hours',
+    timeZone: 'America/Lima',
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 540, // 9 minutos máximo
+  },
+  async (event) => {
+    console.log('🔄 [RETRY] Iniciando reenvío automático de documentos pendientes...')
+
+    const MAX_RETRIES = 50 // 50 reintentos x 2 horas = 100 horas de cobertura
+    const MIN_AGE_MINUTES = 5 // No procesar documentos muy recientes
+    const BATCH_SIZE = 20 // Procesar máximo 20 por ejecución
+
+    try {
+      // Obtener todos los negocios
+      const businessesSnapshot = await db.collection('businesses').get()
+
+      let totalProcessed = 0
+      let totalSuccess = 0
+      let totalFailed = 0
+      let totalSkipped = 0
+
+      for (const businessDoc of businessesSnapshot.docs) {
+        const businessId = businessDoc.id
+        const businessData = businessDoc.data()
+
+        // Verificar que el negocio tenga configuración de emisión
+        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+          continue // Saltar negocios sin configuración SUNAT
+        }
+
+        // Buscar facturas/boletas pendientes de este negocio
+        const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+
+        const pendingInvoices = await invoicesRef
+          .where('sunatStatus', '==', 'pending')
+          .where('documentType', 'in', ['factura', 'boleta'])
+          .limit(BATCH_SIZE)
+          .get()
+
+        if (pendingInvoices.empty) {
+          continue
+        }
+
+        console.log(`📋 [RETRY] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes`)
+
+        // Mapear emissionConfig al formato esperado (igual que en sendInvoiceToSunat)
+        const businessDataForEmission = { ...businessData }
+        if (businessData.emissionConfig) {
+          const config = businessData.emissionConfig
+          if (config.method === 'qpse') {
+            businessDataForEmission.qpse = {
+              enabled: config.qpse.enabled !== false,
+              usuario: config.qpse.usuario,
+              password: config.qpse.password,
+              environment: config.qpse.environment || 'demo',
+            }
+            businessDataForEmission.sunat = { enabled: false }
+          } else if (config.method === 'sunat_direct') {
+            businessDataForEmission.sunat = {
+              enabled: config.sunat.enabled !== false,
+              environment: config.sunat.environment || 'beta',
+              solUser: config.sunat.solUser,
+              solPassword: config.sunat.solPassword,
+              certificateName: config.sunat.certificateName,
+              certificatePassword: config.sunat.certificatePassword,
+              certificateData: config.sunat.certificateData,
+            }
+            businessDataForEmission.qpse = { enabled: false }
+          }
+        }
+
+        for (const invoiceDoc of pendingInvoices.docs) {
+          const invoiceData = invoiceDoc.data()
+          const invoiceId = invoiceDoc.id
+
+          // Verificar antigüedad (no procesar documentos muy recientes)
+          const createdAt = invoiceData.createdAt?.toDate?.() || new Date(invoiceData.createdAt)
+          const ageMinutes = (Date.now() - createdAt.getTime()) / (1000 * 60)
+
+          if (ageMinutes < MIN_AGE_MINUTES) {
+            console.log(`⏳ [RETRY] ${invoiceData.series}-${invoiceData.correlativeNumber}: Muy reciente (${ageMinutes.toFixed(1)} min), saltando`)
+            totalSkipped++
+            continue
+          }
+
+          // Verificar máximo de reintentos
+          const retryCount = invoiceData.retryCount || 0
+          if (retryCount >= MAX_RETRIES) {
+            console.log(`❌ [RETRY] ${invoiceData.series}-${invoiceData.correlativeNumber}: Máximo de reintentos alcanzado (${retryCount})`)
+
+            // Marcar como failed_permanent
+            await invoicesRef.doc(invoiceId).update({
+              sunatStatus: 'failed_permanent',
+              sunatDescription: `Falló después de ${retryCount} intentos automáticos`,
+              updatedAt: FieldValue.serverTimestamp()
+            })
+
+            totalFailed++
+            continue
+          }
+
+          try {
+            console.log(`🚀 [RETRY] Reenviando ${invoiceData.series}-${invoiceData.correlativeNumber} (intento ${retryCount + 1})...`)
+
+            // Preparar datos para emisión
+            const invoiceForEmission = {
+              ...invoiceData,
+              correlativeNumber: invoiceData.correlativeNumber,
+            }
+
+            // Emitir comprobante
+            const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+
+            // Determinar estado final
+            const isTransient = isTransientSunatError(result.responseCode, result.description)
+
+            let finalStatus
+            if (result.accepted) {
+              finalStatus = 'accepted'
+              totalSuccess++
+            } else if (isTransient) {
+              finalStatus = 'pending' // Mantener para próximo reintento
+              totalSkipped++
+            } else {
+              finalStatus = 'rejected'
+              totalFailed++
+            }
+
+            // Actualizar documento
+            const updateData = {
+              sunatStatus: finalStatus,
+              sunatResponse: sanitizeForFirestore({
+                code: result.responseCode || '',
+                description: result.description || '',
+                method: result.method,
+                autoRetry: true
+              }),
+              updatedAt: FieldValue.serverTimestamp()
+            }
+
+            if (isTransient && !result.accepted) {
+              updateData.retryCount = FieldValue.increment(1)
+              updateData.lastRetryError = sanitizeForFirestore({
+                code: result.responseCode || '',
+                description: result.description || '',
+                timestamp: new Date().toISOString()
+              })
+            }
+
+            await invoicesRef.doc(invoiceId).update(updateData)
+
+            console.log(`✅ [RETRY] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
+            totalProcessed++
+
+          } catch (invoiceError) {
+            console.error(`❌ [RETRY] Error procesando ${invoiceData.series}-${invoiceData.correlativeNumber}:`, invoiceError.message)
+
+            // Incrementar contador de reintentos
+            await invoicesRef.doc(invoiceId).update({
+              retryCount: FieldValue.increment(1),
+              lastRetryError: {
+                message: invoiceError.message,
+                timestamp: new Date().toISOString()
+              },
+              updatedAt: FieldValue.serverTimestamp()
+            })
+
+            totalFailed++
+          }
+
+          // Pequeña pausa entre documentos para no sobrecargar SUNAT
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+
+      console.log('═══════════════════════════════════════════════════════')
+      console.log(`📊 [RETRY] Resumen:`)
+      console.log(`   - Procesados: ${totalProcessed}`)
+      console.log(`   - Exitosos: ${totalSuccess}`)
+      console.log(`   - Fallidos: ${totalFailed}`)
+      console.log(`   - Saltados: ${totalSkipped}`)
+      console.log('═══════════════════════════════════════════════════════')
+
+    } catch (error) {
+      console.error('❌ [RETRY] Error en cron job:', error)
     }
   }
 )

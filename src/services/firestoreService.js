@@ -1180,3 +1180,84 @@ export const deleteDispatchGuide = async (businessId, guideId) => {
     return { success: false, error: error.message }
   }
 }
+
+/**
+ * Enviar Guía de Remisión a SUNAT
+ *
+ * Esta función es INDEPENDIENTE de sendInvoiceToSunat para no afectar
+ * el flujo existente de facturas y boletas.
+ *
+ * IMPORTANTE: Las GRE usan endpoints DIFERENTES a las facturas/boletas
+ *
+ * @param {string} businessId - ID del negocio
+ * @param {string} guideId - ID de la guía de remisión
+ * @returns {Promise<Object>} Resultado del envío
+ */
+export const sendDispatchGuideToSunat = async (businessId, guideId) => {
+  try {
+    console.log(`🚛 Enviando Guía de Remisión ${guideId} a SUNAT...`)
+
+    // Obtener token de autenticación del usuario actual
+    const user = auth.currentUser
+    if (!user) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    const idToken = await user.getIdToken()
+
+    // Determinar URL de la Cloud Function (emulador o producción)
+    const useEmulator = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true'
+
+    const functionUrl = useEmulator
+      ? 'http://127.0.0.1:5001/cobrify-395fe/us-central1/sendDispatchGuideToSunatFn'
+      : 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendDispatchGuideToSunatFn'
+
+    console.log(`🌐 [GRE] Llamando a: ${functionUrl}`)
+
+    // Llamar a la Cloud Function con fetch
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        businessId,
+        guideId,
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ [GRE] Error HTTP Response:', errorText)
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: errorText }
+      }
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ [GRE] Respuesta de SUNAT:', result)
+
+    return {
+      success: result.success,
+      accepted: result.accepted,
+      method: result.method,
+      responseCode: result.responseCode,
+      description: result.description,
+      error: result.error,
+      guideNumber: result.guideNumber,
+      sunatStatus: result.sunatStatus,
+    }
+  } catch (error) {
+    console.error('❌ [GRE] Error al enviar guía a SUNAT:', error)
+
+    return {
+      success: false,
+      error: error.message || 'Error al enviar guía de remisión a SUNAT',
+    }
+  }
+}

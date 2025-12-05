@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getDispatchGuides } from '@/services/firestoreService'
+import { getDispatchGuides, sendDispatchGuideToSunat } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 
 const TRANSFER_REASONS = {
@@ -28,6 +28,7 @@ export default function DispatchGuides() {
   const [guides, setGuides] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [sendingToSunat, setSendingToSunat] = useState(null) // ID de guía siendo enviada
 
   // Cargar guías al montar el componente
   useEffect(() => {
@@ -60,6 +61,37 @@ export default function DispatchGuides() {
   const handleCloseModal = () => {
     setShowCreateModal(false)
     loadGuides() // Recargar guías después de crear una
+  }
+
+  // Enviar guía a SUNAT
+  const handleSendToSunat = async (guide) => {
+    if (sendingToSunat) return // Evitar múltiples envíos simultáneos
+
+    setSendingToSunat(guide.id)
+
+    try {
+      const businessId = getBusinessId()
+      toast.info(`Enviando guía ${guide.number} a SUNAT...`)
+
+      const result = await sendDispatchGuideToSunat(businessId, guide.id)
+
+      if (result.success && result.accepted) {
+        toast.success(`Guía ${guide.number} aceptada por SUNAT`)
+      } else if (result.success && !result.accepted) {
+        toast.warning(`Guía ${guide.number} rechazada: ${result.description || 'Error desconocido'}`)
+      } else {
+        toast.error(`Error al enviar guía: ${result.error || 'Error desconocido'}`)
+      }
+
+      // Recargar guías para mostrar el nuevo estado
+      await loadGuides()
+
+    } catch (error) {
+      console.error('Error al enviar guía a SUNAT:', error)
+      toast.error(`Error al enviar guía: ${error.message}`)
+    } finally {
+      setSendingToSunat(null)
+    }
   }
 
   // Calcular estadísticas
@@ -298,6 +330,31 @@ export default function DispatchGuides() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center gap-2">
+                          {/* Botón Enviar a SUNAT - Solo si está pendiente */}
+                          {guide.sunatStatus !== 'accepted' && (
+                            <button
+                              onClick={() => handleSendToSunat(guide)}
+                              disabled={sendingToSunat === guide.id}
+                              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors
+                                ${sendingToSunat === guide.id
+                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                }`}
+                              title="Enviar a SUNAT"
+                            >
+                              {sendingToSunat === guide.id ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Enviando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="w-3 h-3" />
+                                  <span>Enviar a SUNAT</span>
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             className="text-primary-600 hover:text-primary-900"
                             title="Ver detalles"

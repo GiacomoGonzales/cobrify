@@ -676,7 +676,7 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       {/* Stats Cards */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
         <div className="bg-white rounded-xl p-2 sm:p-4 shadow-sm border border-gray-200">
@@ -1005,8 +1005,8 @@ export default function AdminUsers() {
 
       {/* User Detail Modal */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
               <h2 className="text-lg sm:text-xl font-bold text-gray-900">Detalles del Usuario</h2>
               <button
@@ -1220,25 +1220,25 @@ export default function AdminUsers() {
 
       {/* Modal de Configuración SUNAT */}
       {showSunatModal && sunatUserToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Configurar Emisión Electrónica</h2>
-                <p className="text-sm text-gray-500">{sunatUserToEdit.businessName}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-xl font-bold text-gray-900">Configurar Emisión</h2>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">{sunatUserToEdit.businessName}</p>
               </div>
               <button
                 onClick={() => {
                   setShowSunatModal(false)
                   setSunatUserToEdit(null)
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               {/* Loading state */}
               {loadingSunatConfig ? (
                 <div className="flex flex-col items-center justify-center py-12">
@@ -1527,25 +1527,25 @@ export default function AdminUsers() {
 
       {/* Modal de Features */}
       {showFeaturesModal && featuresUserToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Features Especiales</h2>
-                <p className="text-sm text-gray-500">{featuresUserToEdit.businessName}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-xl font-bold text-gray-900">Features Especiales</h2>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">{featuresUserToEdit.businessName}</p>
               </div>
               <button
                 onClick={() => {
                   setShowFeaturesModal(false)
                   setFeaturesUserToEdit(null)
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
               <p className="text-sm text-gray-600">
                 Activa features especiales para este usuario. Estos features son adicionales al plan contratado.
               </p>

@@ -1,6 +1,7 @@
-import { generateInvoiceXML, generateCreditNoteXML } from '../utils/xmlGenerator.js'
+import { generateInvoiceXML, generateCreditNoteXML, generateDispatchGuideXML } from '../utils/xmlGenerator.js'
 import { signXML } from '../utils/xmlSigner.js'
 import { sendToSunat } from '../utils/sunatClient.js'
+import { sendDispatchGuideToSunat } from '../utils/sunatClientGRE.js'
 import { sendToNubefact, parseNubefactResponse } from './nubefactService.js'
 import { convertInvoiceToNubefactJSON } from '../utils/invoiceToNubefactJSON.js'
 import { sendToQPse } from './qpseService.js'
@@ -544,6 +545,203 @@ async function emitCreditNoteViaQPse(creditNoteData, businessData) {
 
   } catch (error) {
     console.error('❌ Error en emisión NC vía QPse:', error)
+
+    return {
+      success: false,
+      method: 'qpse',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+// ==================== GUÍAS DE REMISIÓN ====================
+
+/**
+ * Emite una Guía de Remisión Electrónica (GRE) a SUNAT
+ *
+ * Esta función es INDEPENDIENTE de emitirComprobante para no afectar
+ * el flujo existente de facturas y boletas.
+ *
+ * IMPORTANTE: Las GRE usan endpoints DIFERENTES a las facturas/boletas
+ *
+ * @param {Object} guideData - Datos de la guía de remisión
+ * @param {Object} businessData - Datos del negocio
+ * @returns {Promise<Object>} Resultado del envío
+ */
+export async function emitirGuiaRemision(guideData, businessData) {
+  try {
+    console.log('🚛 Iniciando emisión de GUÍA DE REMISIÓN...')
+    console.log(`📋 Documento: GRE ${guideData.series}-${guideData.correlative}`)
+    console.log(`📍 Origen: ${guideData.origin?.address}`)
+    console.log(`📍 Destino: ${guideData.destination?.address}`)
+
+    // Determinar qué método usar
+    const emissionMethod = determineEmissionMethod(businessData)
+    console.log(`📡 Método de emisión seleccionado: ${emissionMethod}`)
+
+    // Por ahora solo soportamos SUNAT directo para GRE
+    // QPse y NubeFact pueden agregarse después
+    let result
+
+    if (emissionMethod === 'qpse') {
+      result = await emitDispatchGuideViaQPse(guideData, businessData)
+    } else {
+      // Default: SUNAT directo
+      result = await emitDispatchGuideViaSunatDirect(guideData, businessData)
+    }
+
+    return result
+
+  } catch (error) {
+    console.error('❌ Error en emisión de guía de remisión:', error)
+
+    return {
+      success: false,
+      method: 'error',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Guía de Remisión vía SUNAT DIRECTO
+ *
+ * Pasos:
+ * 1. Generar XML UBL 2.1 DespatchAdvice
+ * 2. Firmar con certificado digital
+ * 3. Enviar a SUNAT vía SOAP (endpoint GRE)
+ * 4. Procesar CDR
+ */
+async function emitDispatchGuideViaSunatDirect(guideData, businessData) {
+  console.log('📤 Emitiendo Guía de Remisión vía SUNAT DIRECTO...')
+
+  try {
+    // Validar configuración SUNAT
+    if (!businessData.sunat || !businessData.sunat.enabled) {
+      throw new Error('SUNAT no está habilitado para este negocio')
+    }
+
+    if (!businessData.sunat.solUser || !businessData.sunat.solPassword) {
+      throw new Error('Credenciales SOL no configuradas')
+    }
+
+    if (!businessData.sunat.certificateData || !businessData.sunat.certificatePassword) {
+      throw new Error('Certificado digital no configurado')
+    }
+
+    // 1. Generar XML usando generateDispatchGuideXML
+    console.log('🔨 Generando XML UBL 2.1 DespatchAdvice...')
+    const xml = generateDispatchGuideXML(guideData, businessData)
+
+    console.log('📄 XML generado (primeros 500 chars):', xml.substring(0, 500))
+
+    // 2. Firmar XML
+    console.log('🔏 Firmando XML con certificado digital...')
+    const signedXML = await signXML(xml, {
+      certificate: businessData.sunat.certificateData,
+      certificatePassword: businessData.sunat.certificatePassword
+    })
+
+    // 3. Enviar a SUNAT (usando cliente específico de GRE)
+    console.log('📡 Enviando Guía de Remisión a SUNAT...')
+    const sunatResponse = await sendDispatchGuideToSunat(signedXML, {
+      ruc: businessData.ruc,
+      series: guideData.series,
+      number: guideData.correlative,
+      solUser: businessData.sunat.solUser,
+      solPassword: businessData.sunat.solPassword,
+      environment: businessData.sunat.environment || 'production'
+    })
+
+    return {
+      success: sunatResponse.accepted,
+      method: 'sunat_direct',
+      accepted: sunatResponse.accepted,
+      responseCode: sunatResponse.code,
+      description: sunatResponse.description,
+      notes: sunatResponse.notes,
+      cdrData: sunatResponse.cdrData,
+      xml: signedXML,
+      sunatResponse: sunatResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión GRE vía SUNAT directo:', error)
+
+    return {
+      success: false,
+      method: 'sunat_direct',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Guía de Remisión vía QPse
+ *
+ * Pasos:
+ * 1. Generar XML UBL 2.1 DespatchAdvice
+ * 2. Enviar a QPse para firma y envío
+ * 3. Procesar respuesta
+ */
+async function emitDispatchGuideViaQPse(guideData, businessData) {
+  console.log('📤 Emitiendo Guía de Remisión vía QPSE...')
+
+  try {
+    // Validar configuración QPse
+    if (!businessData.qpse || !businessData.qpse.enabled) {
+      throw new Error('QPse no está habilitado para este negocio')
+    }
+
+    if (!businessData.qpse.usuario || !businessData.qpse.password) {
+      throw new Error('Credenciales de QPse no configuradas')
+    }
+
+    // 1. Generar XML
+    console.log('🔨 Generando XML UBL 2.1 DespatchAdvice...')
+    const xml = generateDispatchGuideXML(guideData, businessData)
+
+    // 2. Tipo de documento: 09 = Guía de Remisión Remitente
+    const tipoDocumento = '09'
+    console.log(`📄 Tipo de documento: GRE → Código SUNAT: ${tipoDocumento}`)
+
+    // 3. Enviar a QPse (firma y envía automáticamente)
+    console.log('📡 Enviando Guía de Remisión a QPse...')
+    const qpseResponse = await sendToQPse(
+      xml,
+      businessData.ruc,
+      tipoDocumento,
+      guideData.series,
+      guideData.correlative,
+      businessData.qpse,
+      businessData
+    )
+
+    const isPendingManual = qpseResponse.responseCode === 'PENDING_MANUAL'
+
+    return {
+      success: true,
+      method: 'qpse',
+      accepted: qpseResponse.accepted,
+      responseCode: qpseResponse.responseCode,
+      description: qpseResponse.description,
+      notes: qpseResponse.notes,
+      cdrUrl: qpseResponse.cdrUrl,
+      xmlUrl: qpseResponse.xmlUrl,
+      pdfUrl: qpseResponse.pdfUrl,
+      ticket: qpseResponse.ticket,
+      hash: qpseResponse.hash,
+      nombreArchivo: qpseResponse.nombreArchivo,
+      xmlFirmado: qpseResponse.xmlFirmado,
+      pendingManual: isPendingManual,
+      qpseResponse: qpseResponse.rawResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión GRE vía QPse:', error)
 
     return {
       success: false,
