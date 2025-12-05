@@ -1381,14 +1381,14 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </>
                   )}
 
-                  {/* Eliminar - Solo si está habilitado en Configuración Y NO fue enviado a SUNAT */}
-                  {/* Los comprobantes enviados a SUNAT tienen validez fiscal y no se pueden eliminar */}
-                  {/* Solo se pueden anular mediante Nota de Crédito */}
+                  {/* Eliminar - Solo si está habilitado en Configuración Y NO fue enviado/aceptado por SUNAT */}
+                  {/* Los comprobantes aceptados por SUNAT tienen validez fiscal y no se pueden eliminar */}
+                  {/* Facturas/Boletas aceptadas solo se pueden anular mediante Nota de Crédito */}
                   {businessSettings?.allowDeleteInvoices && (
                     // Notas de venta (sin validez fiscal) se pueden eliminar si está habilitado
                     invoice.documentType === 'nota_venta' ||
-                    // Facturas/Boletas solo si NO fueron enviadas a SUNAT
-                    (invoice.documentType !== 'nota_venta' && invoice.sunatStatus !== 'accepted' && invoice.sunatStatus !== 'pending')
+                    // Facturas/Boletas/Notas de Crédito/Notas de Débito: solo si NO fueron aceptadas por SUNAT
+                    (invoice.documentType !== 'nota_venta' && invoice.sunatStatus !== 'accepted')
                   ) && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
