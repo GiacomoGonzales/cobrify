@@ -1,5 +1,4 @@
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { storage } from '@/lib/firebase'
 import { ref, getBlob } from 'firebase/storage'
@@ -12,8 +11,6 @@ import { Share } from '@capacitor/share'
  */
 const getStoragePathFromUrl = (url) => {
   try {
-    // Extraer path de URL de Firebase Storage
-    // Formato: https://firebasestorage.googleapis.com/v0/b/{bucket}/o/{encodedPath}?...
     const match = url.match(/\/o\/(.+?)\?/)
     if (match) {
       const encodedPath = match[1]
@@ -28,23 +25,17 @@ const getStoragePathFromUrl = (url) => {
 
 /**
  * Carga una imagen desde Firebase Storage y la convierte a base64
- * Usa el SDK de Firebase para evitar problemas de CORS
  */
 const loadImageAsBase64 = async (url) => {
   try {
     console.log('🔄 Cargando logo para cotización desde Firebase Storage')
-
-    // Extraer el path del storage desde la URL
     const storagePath = getStoragePathFromUrl(url)
 
     if (storagePath) {
       console.log('📁 Path extraído:', storagePath)
-
-      // Usar Firebase SDK para obtener el blob
       const storageRef = ref(storage, storagePath)
       const blob = await getBlob(storageRef)
 
-      // Convertir blob a base64
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onloadend = () => {
@@ -84,469 +75,432 @@ const loadImageAsBase64 = async (url) => {
 }
 
 /**
- * Genera un PDF para una cotización con el mismo estilo que los comprobantes
+ * Genera un PDF para una cotización con el mismo estilo que facturas/boletas
  * @param {Object} quotation - Datos de la cotización
  * @param {Object} companySettings - Configuración de la empresa
  * @param {boolean} download - Si se debe descargar automáticamente (default: true)
  * @returns {jsPDF} - El documento PDF generado
  */
 export const generateQuotationPDF = async (quotation, companySettings, download = true) => {
-  // Crear documento A4 en orientación vertical (portrait)
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
     format: 'a4'
   })
 
-  // Paleta de colores neutros - solo negros y grises
+  // Paleta de colores - Solo negro y grises (IGUAL que facturas/boletas)
   const BLACK = [0, 0, 0]
-  const DARK_GRAY = [51, 51, 51]      // Gris muy oscuro para títulos
-  const MEDIUM_GRAY = [102, 102, 102] // Gris medio para texto secundario
-  const LIGHT_GRAY = [224, 224, 224]  // Gris claro para fondos
-  const BORDER_GRAY = [189, 189, 189] // Gris para bordes
+  const DARK_GRAY = [60, 60, 60]
+  const MEDIUM_GRAY = [120, 120, 120]
+  const LIGHT_GRAY = [240, 240, 240]
+  const TABLE_HEADER_BG = [245, 245, 245]
+  const BORDER_COLOR = [0, 0, 0]
 
-  // Márgenes y dimensiones - A4 portrait: 595pt x 842pt
+  // Márgenes y dimensiones - A4: 595pt x 842pt (IGUAL que facturas/boletas)
   const MARGIN_LEFT = 40
   const MARGIN_RIGHT = 40
-  const MARGIN_TOP = 40
+  const MARGIN_TOP = 35
   const PAGE_WIDTH = doc.internal.pageSize.getWidth()
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
-  // Coordenada Y actual
   let currentY = MARGIN_TOP
 
-  // ========== 1. ENCABEZADO PRINCIPAL ==========
+  // ========== 1. ENCABEZADO - 3 COLUMNAS (IGUAL que facturas/boletas) ==========
 
-  // Barra superior negra elegante
-  doc.setFillColor(...BLACK)
-  doc.rect(0, 0, PAGE_WIDTH, 5, 'F')
+  const headerHeight = 95
+  const logoMaxWidth = 90
+  const docColumnWidth = 160
+  let actualLogoWidth = 0
 
-  currentY += 8
-
-  const headerY = currentY
-
-  // Columna izquierda - Información de la empresa (60%)
-  const leftColumnWidth = CONTENT_WIDTH * 0.60
-  const leftColumnX = MARGIN_LEFT
-
-  // Logo de la empresa si existe - ARRIBA A LA IZQUIERDA
-  let logoHeight = 0
-  let textY = headerY
-
+  // COLUMNA 1: Logo (izquierda)
   if (companySettings?.logoUrl) {
     try {
-      console.log('📸 Intentando cargar logo para cotización desde:', companySettings.logoUrl)
-
-      // Agregar un timeout para no bloquear la generación del PDF
       const imgData = await Promise.race([
         loadImageAsBase64(companySettings.logoUrl),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout loading logo')), 5000)
-        )
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
       ])
 
-      // Determinar el formato de la imagen
       let format = 'PNG'
       if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
           companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
         format = 'JPEG'
       }
 
-      // Crear una imagen temporal para obtener dimensiones originales
       const img = new Image()
       img.src = imgData
-
       await new Promise((resolve, reject) => {
         img.onload = resolve
         img.onerror = reject
       })
 
-      // Calcular dimensiones manteniendo la proporción
-      const originalWidth = img.width
-      const originalHeight = img.height
-      const aspectRatio = originalWidth / originalHeight
+      const aspectRatio = img.width / img.height
+      let logoHeight = headerHeight - 10
+      let logoWidth = logoHeight * aspectRatio
 
-      // Altura máxima del logo
-      const maxLogoHeight = 45
-      const maxLogoWidth = 120 // Ancho máximo para logos horizontales
-
-      let logoWidth, calculatedLogoHeight
-
-      if (aspectRatio > 1) {
-        // Logo horizontal (más ancho que alto)
-        logoWidth = Math.min(maxLogoWidth, leftColumnWidth - 10)
-        calculatedLogoHeight = logoWidth / aspectRatio
-
-        // Si la altura calculada excede el máximo, ajustar
-        if (calculatedLogoHeight > maxLogoHeight) {
-          calculatedLogoHeight = maxLogoHeight
-          logoWidth = calculatedLogoHeight * aspectRatio
-        }
-      } else {
-        // Logo vertical o cuadrado (más alto que ancho o igual)
-        calculatedLogoHeight = maxLogoHeight
-        logoWidth = calculatedLogoHeight * aspectRatio
+      if (logoWidth > logoMaxWidth) {
+        logoWidth = logoMaxWidth
+        logoHeight = logoWidth / aspectRatio
       }
 
-      logoHeight = calculatedLogoHeight
-
-      // Logo en la esquina superior izquierda
-      doc.addImage(imgData, format, leftColumnX, headerY, logoWidth, logoHeight, undefined, 'FAST')
-      textY = headerY + logoHeight + 15 // Texto debajo del logo con más separación
-      console.log('✅ Logo cargado correctamente en cotización (dimensiones:', logoWidth, 'x', logoHeight, ')')
+      actualLogoWidth = logoWidth
+      const logoX = MARGIN_LEFT
+      const logoY = currentY + (headerHeight - logoHeight) / 2
+      doc.addImage(imgData, format, logoX, logoY, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
-      console.warn('⚠️ No se pudo cargar el logo en cotización, continuando sin él:', error.message)
-      textY = headerY + 5
+      console.warn('⚠️ No se pudo cargar el logo:', error.message)
     }
-  } else {
-    textY = headerY + 5
   }
 
-  // Primero calcular altura del header (fija en 85pt)
-  const headerHeight = 85
+  // COLUMNA 2: Información de la empresa - justo al lado del logo
+  const logoPadding = 8
+  const infoX = MARGIN_LEFT + (actualLogoWidth > 0 ? actualLogoWidth : 0) + logoPadding
+  const infoColumnWidth = CONTENT_WIDTH - (actualLogoWidth > 0 ? actualLogoWidth : 0) - logoPadding - docColumnWidth - 10
 
-  // Columna derecha - Recuadro del comprobante (40%)
-  const rightColumnWidth = CONTENT_WIDTH * 0.40
-  const rightColumnX = MARGIN_LEFT + leftColumnWidth
+  // Obtener nombre comercial y razón social (en MAYÚSCULAS)
+  const commercialName = (companySettings?.name || companySettings?.businessName || 'EMPRESA SAC').toUpperCase()
+  const legalName = (companySettings?.businessName || '').toUpperCase()
+  const hasLegalName = legalName && legalName !== commercialName
 
-  // Recuadro con borde negro
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(2)
-  doc.roundedRect(rightColumnX, headerY, rightColumnWidth, headerHeight, 5, 5)
+  // Calcular altura total del contenido de empresa para centrar
+  doc.setFontSize(13)
+  const commercialNameLines = doc.splitTextToSize(commercialName, infoColumnWidth)
+  const commercialNameHeight = commercialNameLines.length * 14
+  const legalNameHeight = hasLegalName ? 12 : 0
+  const addressHeight = companySettings?.address ? 20 : 0
+  const totalInfoHeight = commercialNameHeight + legalNameHeight + addressHeight
 
-  // Información de la empresa DEBAJO del logo - alineada con la parte inferior del recuadro
-  // Calcular la posición Y final donde debe terminar el texto (parte inferior del recuadro)
-  const bottomY = headerY + headerHeight - 5 // 5pt de margen inferior
+  // Centrar verticalmente
+  let infoY = currentY + (headerHeight - totalInfoHeight) / 2 + 10
 
-  // Contar cuántas líneas de información tenemos
-  let lineCount = 1 // Nombre de empresa (siempre)
-  if (companySettings?.ruc) lineCount++
-  if (companySettings?.address) lineCount++ // Asumiendo 1 línea
-  if (companySettings?.phone) lineCount++
-  if (companySettings?.email) lineCount++
-
-  // Calcular espaciado entre líneas
-  const lineHeight = 11
-  const totalTextHeight = lineCount * lineHeight
-
-  // Calcular posición inicial del texto
-  let calculatedTextY = bottomY - totalTextHeight + lineHeight
-
-  // Asegurarse de que el texto no se superponga con el logo
-  // textY ya contiene la posición después del logo + separación
-  const minTextY = textY // Esta es la posición mínima (después del logo)
-
-  // Usar la mayor de las dos posiciones para evitar superposición
-  textY = Math.max(minTextY, calculatedTextY)
-
-  // Nombre de la empresa
-  doc.setFontSize(14)
-  doc.setTextColor(...DARK_GRAY)
+  // Nombre comercial - GRANDE y en negrita (MAYÚSCULAS)
   doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  commercialNameLines.forEach((line, i) => {
+    doc.text(line, infoX, infoY + (i * 14))
+  })
+  infoY += commercialNameLines.length * 14 + 2
 
-  const companyName = companySettings?.businessName || 'EMPRESA SAC'
-  doc.text(companyName, leftColumnX, textY)
-  textY += lineHeight
+  // Razón social - más pequeña (MAYÚSCULAS)
+  if (hasLegalName) {
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    const legalNameLines = doc.splitTextToSize(legalName, infoColumnWidth)
+    doc.text(legalNameLines[0], infoX, infoY)
+    infoY += 11
+  }
 
-  // RUC de la empresa
-  doc.setFontSize(9)
+  // Dirección - más pequeña (MAYÚSCULAS)
+  doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...MEDIUM_GRAY)
-  const ruc = companySettings?.ruc || ''
-  if (ruc) {
-    doc.text(`RUC: ${ruc}`, leftColumnX, textY)
-    textY += lineHeight
-  }
-
-  // Dirección
-  doc.setFontSize(9)
   if (companySettings?.address) {
-    const addressLines = doc.splitTextToSize(companySettings.address, leftColumnWidth - 10)
-    doc.text(`Dirección: ${addressLines[0]}`, leftColumnX, textY) // Con label
-    textY += lineHeight
+    const addressText = companySettings.address.toUpperCase()
+    const addressLines = doc.splitTextToSize(addressText, infoColumnWidth)
+    addressLines.slice(0, 2).forEach((line, i) => {
+      doc.text(line, infoX, infoY + (i * 10))
+    })
   }
 
-  // Teléfono
-  if (companySettings?.phone) {
-    doc.setFontSize(9)
-    doc.text(`Tel: ${companySettings.phone}`, leftColumnX, textY)
-    textY += lineHeight
-  }
+  // COLUMNA 3: Recuadro del documento (derecha) - IGUAL que facturas/boletas
+  const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docColumnWidth
+  const docBoxY = currentY
 
-  // Email
-  if (companySettings?.email) {
-    doc.setFontSize(9)
-    doc.text(`Email: ${companySettings.email}`, leftColumnX, textY)
-    textY += lineHeight
-  }
+  // Recuadro con borde negro (esquinas rectas como facturas)
+  doc.setDrawColor(...BORDER_COLOR)
+  doc.setLineWidth(1.5)
+  doc.rect(docBoxX, docBoxY, docColumnWidth, headerHeight)
 
-  // Página web
-  if (companySettings?.website) {
-    doc.setFontSize(9)
-    doc.text(`Página web: ${companySettings.website}`, leftColumnX, textY)
-    textY += lineHeight
-  }
+  // Línea separadora después del RUC
+  const rucLineY = docBoxY + 28
+  doc.setLineWidth(0.5)
+  doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
 
-  // Calcular altura del contenido de la empresa para ajustar el recuadro
-  const companyContentHeight = textY - headerY
-  const boxMinHeight = 70 // Altura mínima del recuadro
-
-  // Contenido del recuadro - bien centrado y ajustado dinámicamente
-  const boxCenterX = rightColumnX + (rightColumnWidth / 2)
-  let boxTextY = headerY + 25
-
-  // Tipo de documento en negro
-  doc.setFontSize(13)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
-  doc.text('COTIZACIÓN', boxCenterX, boxTextY, { align: 'center' })
-
-  boxTextY += 18
-
-  // Número de cotización centrado
-  doc.setFontSize(15)
-  doc.setTextColor(...BLACK)
-  doc.setFont('helvetica', 'bold')
-  doc.text(quotation.number || 'N/A', boxCenterX, boxTextY, { align: 'center' })
-
-  // Calcular la altura del recuadro
-  const boxEndY = boxTextY + 5 // Posición final del contenido del recuadro
-
-  // Usar la mayor altura entre el contenido de la empresa y el recuadro
-  currentY = Math.max(textY, boxEndY, headerY + headerHeight) + 15
-
-  // Línea separadora
-  doc.setDrawColor(...LIGHT_GRAY)
-  doc.setLineWidth(1)
-  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-
-  currentY += 20
-
-  // ========== 2. DATOS DEL CLIENTE ==========
-
-  // Recuadro con fondo gris claro
-  const clientBoxHeight = 55
-  doc.setFillColor(...LIGHT_GRAY)
-  doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, clientBoxHeight, 'F')
-
-  // Título de la sección
+  // RUC
   doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...DARK_GRAY)
-  const clientTitleY = currentY + 15
-  doc.text('DATOS DEL CLIENTE', MARGIN_LEFT + 10, clientTitleY)
+  doc.setTextColor(...BLACK)
+  doc.text(`R.U.C. N° ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 18, { align: 'center' })
 
-  // Datos del cliente
+  // Tipo de documento (en dos líneas para que sea igual que facturas/boletas)
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  const titleY = rucLineY + 20
+  doc.text('COTIZACIÓN', docBoxX + docColumnWidth / 2, titleY, { align: 'center' })
+
+  // Número de cotización
+  doc.setFontSize(13)
+  const numberY = titleY + 18
+  doc.text(quotation.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
+
+  currentY += headerHeight + 20
+
+  // ========== 2. DATOS DEL CLIENTE (IGUAL que facturas/boletas) ==========
+
+  // Calcular ancho de etiquetas para alinear valores
   doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...DARK_GRAY)
+  doc.setFont('helvetica', 'bold')
 
-  let clientY = clientTitleY + 14
-  const clientDataX = MARGIN_LEFT + 10
-
-  // Nombre/Razón Social
-  const customerName = quotation.customer?.name || 'Cliente General'
-  const isRUC = quotation.customer?.documentType === 'RUC'
-  doc.text(`${isRUC ? 'Razón Social' : 'Nombre'}: ${customerName}`, clientDataX, clientY)
-  clientY += 10
-
-  // Documento
-  const docType = quotation.customer?.documentType || 'Documento'
-  const docNumber = quotation.customer?.documentNumber || '-'
-  doc.text(`${docType}: ${docNumber}`, clientDataX, clientY)
-
-  // Columna derecha del cliente (si hay dirección o contacto)
-  const clientRightX = MARGIN_LEFT + (CONTENT_WIDTH / 2) + 10
-  clientY = clientTitleY + 14
-
-  if (quotation.customer?.address) {
-    const maxAddressWidth = (CONTENT_WIDTH / 2) - 20
-    const addressLines = doc.splitTextToSize(`Dirección: ${quotation.customer.address}`, maxAddressWidth)
-    doc.text(addressLines.slice(0, 2), clientRightX, clientY)
-  }
-
-  currentY += clientBoxHeight + 20
-
-  // ========== 3. FECHAS ==========
-  const datesY = currentY
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...MEDIUM_GRAY)
-
-  // Fecha de emisión
-  let quotationDate = 'N/A'
-  if (quotation.createdAt) {
-    if (quotation.createdAt.toDate) {
-      quotationDate = formatDate(quotation.createdAt.toDate())
-    } else {
-      quotationDate = formatDate(quotation.createdAt)
-    }
-  }
-  doc.text(`Fecha de emisión: ${quotationDate}`, MARGIN_LEFT, datesY)
-
-  // Fecha de vencimiento
-  if (quotation.expiryDate) {
-    let expiryDate = 'N/A'
-    if (quotation.expiryDate.toDate) {
-      expiryDate = formatDate(quotation.expiryDate.toDate())
-    } else {
-      expiryDate = formatDate(quotation.expiryDate)
-    }
-    doc.text(`Válida hasta: ${expiryDate}`, PAGE_WIDTH - MARGIN_RIGHT, datesY, { align: 'right' })
-  }
-
-  currentY += 20
-
-  // ========== 4. TABLA DE PRODUCTOS/SERVICIOS ==========
-
-  const tableData = quotation.items?.map((item, index) => {
-    // Construir el texto de descripción: nombre + descripción (si existe)
-    let descriptionText = item.name
-    if (item.description) {
-      descriptionText += '\n' + item.description
-    }
-
-    return [
-      (index + 1).toString(),
-      descriptionText,
-      item.quantity.toString(),
-      item.unit || 'UNIDAD',
-      formatCurrency(item.unitPrice),
-      formatCurrency(item.subtotal || (item.quantity * item.unitPrice))
-    ]
-  }) || []
-
-  autoTable(doc, {
-    startY: currentY,
-    head: [['#', 'Descripción', 'Cant.', 'Unidad', 'P. Unit.', 'Subtotal']],
-    body: tableData,
-    theme: 'plain',
-    headStyles: {
-      fillColor: BLACK,
-      textColor: [255, 255, 255],
-      fontSize: 9,
-      fontStyle: 'bold',
-      halign: 'center',
-      cellPadding: 6
-    },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: DARK_GRAY,
-      cellPadding: 5,
-      cellPadding: { top: 5, right: 5, bottom: 5, left: 5 },
-      lineColor: BORDER_GRAY,
-      lineWidth: 0.1
-    },
-    didParseCell: function(data) {
-      // Aplicar estilo especial a la descripción del producto (columna 1)
-      if (data.column.index === 1 && data.section === 'body') {
-        const cellText = data.cell.text
-        if (cellText.length > 1) {
-          // Si hay más de una línea (nombre + descripción)
-          data.cell.styles.fontSize = 8
-          data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 }
-        }
-      }
-    },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 25 },
-      1: { halign: 'left', cellWidth: 'auto' },
-      2: { halign: 'center', cellWidth: 35 },
-      3: { halign: 'center', cellWidth: 45 },
-      4: { halign: 'right', cellWidth: 60 },
-      5: { halign: 'right', cellWidth: 70 }
-    },
-    alternateRowStyles: {
-      fillColor: LIGHT_GRAY
-    },
-    margin: { left: MARGIN_LEFT, right: MARGIN_RIGHT },
-    didDrawPage: (data) => {
-      currentY = data.cursor.y
-    }
+  const labels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:', 'EMISIÓN:', 'VÁLIDO HASTA:']
+  let maxLabelWidth = 0
+  labels.forEach(label => {
+    const width = doc.getTextWidth(label)
+    if (width > maxLabelWidth) maxLabelWidth = width
   })
+  maxLabelWidth += 5
 
+  const labelValueGap = 5
+  const valueX = MARGIN_LEFT + maxLabelWidth + labelValueGap
+
+  // Razón Social / Nombre
+  const isRUC = quotation.customer?.documentType === 'RUC'
+  const labelName = isRUC ? 'RAZÓN SOCIAL:' : 'CLIENTE:'
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  doc.text(labelName, MARGIN_LEFT + maxLabelWidth - doc.getTextWidth(labelName), currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text(quotation.customer?.name || 'CLIENTE GENERAL', valueX, currentY)
+  currentY += 13
+
+  // RUC/DNI
+  const docType = quotation.customer?.documentType === 'RUC' ? 'RUC' :
+                  quotation.customer?.documentType === 'DNI' ? 'DNI' : 'DOC'
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${docType}:`, MARGIN_LEFT + maxLabelWidth - doc.getTextWidth(`${docType}:`), currentY)
+  doc.setFont('helvetica', 'normal')
+  const docNumber = quotation.customer?.documentNumber || '-'
+  doc.text(docNumber, valueX, currentY)
+  currentY += 13
+
+  // Dirección
+  doc.setFont('helvetica', 'bold')
+  doc.text('DIRECCIÓN:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('DIRECCIÓN:'), currentY)
+  doc.setFont('helvetica', 'normal')
+  const customerAddress = quotation.customer?.address || '-'
+  const addrLines = doc.splitTextToSize(customerAddress, CONTENT_WIDTH - maxLabelWidth)
+  doc.text(addrLines[0], valueX, currentY)
   currentY += 15
 
-  // ========== 5. TOTALES ==========
+  // Fecha de emisión
+  let quotationDate = new Date().toLocaleDateString('es-PE')
+  if (quotation.createdAt) {
+    if (quotation.createdAt.toDate) {
+      const date = quotation.createdAt.toDate()
+      quotationDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    } else if (quotation.createdAt instanceof Date) {
+      quotationDate = `${quotation.createdAt.getFullYear()}-${String(quotation.createdAt.getMonth() + 1).padStart(2, '0')}-${String(quotation.createdAt.getDate()).padStart(2, '0')}`
+    }
+  }
 
-  const totalsBoxWidth = 200
-  const totalsBoxX = PAGE_WIDTH - MARGIN_RIGHT - totalsBoxWidth
-  let totalsY = currentY
-
-  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('EMISIÓN:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('EMISIÓN:'), currentY)
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...DARK_GRAY)
+  doc.text(quotationDate, valueX, currentY)
+  currentY += 13
 
-  const labelX = totalsBoxX + 10
-  const valueX = PAGE_WIDTH - MARGIN_RIGHT - 10
+  // Fecha de validez
+  if (quotation.expiryDate || quotation.validityDays) {
+    let expiryDateStr = '-'
+    if (quotation.expiryDate) {
+      if (quotation.expiryDate.toDate) {
+        const date = quotation.expiryDate.toDate()
+        expiryDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      } else if (quotation.expiryDate instanceof Date) {
+        expiryDateStr = `${quotation.expiryDate.getFullYear()}-${String(quotation.expiryDate.getMonth() + 1).padStart(2, '0')}-${String(quotation.expiryDate.getDate()).padStart(2, '0')}`
+      }
+    } else if (quotation.validityDays) {
+      expiryDateStr = `${quotation.validityDays} días desde emisión`
+    }
+    doc.setFont('helvetica', 'bold')
+    doc.text('VÁLIDO HASTA:', MARGIN_LEFT + maxLabelWidth - doc.getTextWidth('VÁLIDO HASTA:'), currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(expiryDateStr, valueX, currentY)
+    currentY += 13
+  }
+
+  currentY += 5
+
+  // ========== 3. TABLA DE PRODUCTOS (IGUAL que facturas/boletas) ==========
+
+  const tableY = currentY
+  const headerRowHeight = 22
+
+  // Definir columnas
+  const colWidths = {
+    cant: CONTENT_WIDTH * 0.15,
+    desc: CONTENT_WIDTH * 0.45,
+    pu: CONTENT_WIDTH * 0.20,
+    total: CONTENT_WIDTH * 0.20
+  }
+
+  let colX = MARGIN_LEFT
+  const cols = {
+    cant: colX,
+    desc: colX += colWidths.cant,
+    pu: colX += colWidths.desc,
+    total: colX += colWidths.pu
+  }
+
+  // Encabezado de tabla con fondo gris oscuro y texto blanco
+  doc.setFillColor(70, 70, 70)
+  doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, headerRowHeight, 'F')
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(255, 255, 255)
+
+  const headerRowY = tableY + 14
+
+  doc.text('CANTIDAD', cols.cant + colWidths.cant / 2, headerRowY, { align: 'center' })
+  doc.text('CÓDIGO y DESCRIPCIÓN', cols.desc + 10, headerRowY)
+  doc.text('PRECIO UNITARIO', cols.pu + colWidths.pu / 2, headerRowY, { align: 'center' })
+  doc.text('PRECIO TOTAL', cols.total + colWidths.total / 2, headerRowY, { align: 'center' })
+
+  // Filas de datos
+  let dataRowY = tableY + headerRowHeight
+  const items = quotation.items || []
+  const lineHeight = 11
+  const minRowHeight = 20
+  const rowPadding = 6
+
+  const unitLabels = {
+    'UNIDAD': 'UNIDAD',
+    'CAJA': 'CAJA',
+    'KG': 'KG',
+    'LITRO': 'LITRO',
+    'METRO': 'METRO',
+    'HORA': 'HORA',
+    'SERVICIO': 'SERVICIO'
+  }
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(...BLACK)
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const precioConIGV = item.unitPrice || item.price || 0
+    const importeConIGV = item.quantity * precioConIGV
+
+    // Descripción con posible descripción adicional
+    let itemDesc = item.name || item.description || ''
+    if (item.description && item.name && item.description !== item.name) {
+      itemDesc = `${item.name}\n${item.description}`
+    }
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 15)
+
+    // Calcular altura dinámica de la fila
+    const descHeight = descLines.length * lineHeight
+    const currentRowHeight = Math.max(minRowHeight, descHeight + rowPadding)
+
+    // Línea inferior sutil
+    doc.setDrawColor(200, 200, 200)
+    doc.setLineWidth(0.5)
+    doc.line(MARGIN_LEFT, dataRowY + currentRowHeight, MARGIN_LEFT + CONTENT_WIDTH, dataRowY + currentRowHeight)
+
+    const firstLineY = dataRowY + 14
+
+    // Cantidad con unidad
+    const quantityText = Number.isInteger(item.quantity)
+      ? item.quantity.toString()
+      : item.quantity.toFixed(3).replace(/\.?0+$/, '')
+    const unitCode = item.unit || 'UNIDAD'
+    const unitText = unitLabels[unitCode] || unitCode
+    doc.text(`${quantityText} ${unitText}`, cols.cant + colWidths.cant / 2, firstLineY, { align: 'center' })
+
+    // Descripción
+    descLines.forEach((line, lineIndex) => {
+      doc.text(line, cols.desc + 8, firstLineY + (lineIndex * lineHeight))
+    })
+
+    // Precio unitario
+    const puFormatted = precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+    doc.text(puFormatted, cols.pu + colWidths.pu - 10, firstLineY, { align: 'right' })
+
+    // Precio total
+    const totalFormatted = importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    doc.text(totalFormatted, cols.total + colWidths.total - 10, firstLineY, { align: 'right' })
+
+    dataRowY += currentRowHeight
+  }
+
+  currentY = dataRowY + 8
+
+  // ========== 4. TOTALES (estilo tabla con filas grises intercaladas - IGUAL que facturas) ==========
+
+  const totalsWidth = 220
+  const totalsRowHeight = 18
+  const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
 
   // Solo mostrar desglose si no está oculto el IGV
   if (!quotation.hideIgv) {
-    // Subtotal
-    doc.text('Subtotal:', labelX, totalsY)
-    doc.text(formatCurrency(quotation.subtotal || 0), valueX, totalsY, { align: 'right' })
-    totalsY += 12
+    // OP. GRAVADA - Fondo gris claro (IGUAL que facturas)
+    doc.setFillColor(245, 245, 245)
+    doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.setLineWidth(0.5)
+    doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'S')
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...BLACK)
+    doc.text('OP. GRAVADA', totalsX + totalsWidth - 90, currentY + 12, { align: 'right' })
+    doc.text((quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 12, { align: 'right' })
+    currentY += totalsRowHeight
 
     // Descuento (si existe)
     if (quotation.discount && quotation.discount > 0) {
-      const discountLabel = quotation.discountType === 'percentage'
-        ? `Descuento (${quotation.discount}%):`
-        : 'Descuento:'
+      doc.setDrawColor(200, 200, 200)
+      doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'S')
 
-      doc.text(discountLabel, labelX, totalsY)
+      const discountLabel = quotation.discountType === 'percentage'
+        ? `DESCUENTO (${quotation.discount}%)`
+        : 'DESCUENTO'
       const discountAmount = quotation.discountType === 'percentage'
         ? (quotation.subtotal * quotation.discount / 100)
         : quotation.discount
 
-      doc.text(`- ${formatCurrency(discountAmount)}`, valueX, totalsY, { align: 'right' })
-      totalsY += 12
+      doc.text(discountLabel, totalsX + totalsWidth - 90, currentY + 12, { align: 'right' })
+      doc.text(`-${discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, totalsX + totalsWidth - 8, currentY + 12, { align: 'right' })
+      currentY += totalsRowHeight
     }
 
-    // IGV
-    doc.text('IGV (18%):', labelX, totalsY)
-    doc.text(formatCurrency(quotation.igv || 0), valueX, totalsY, { align: 'right' })
-    totalsY += 15
+    // IGV - Sin fondo (blanco) (IGUAL que facturas)
+    doc.setDrawColor(200, 200, 200)
+    doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight, 'S')
+
+    doc.text('IGV', totalsX + totalsWidth - 90, currentY + 12, { align: 'right' })
+    doc.text((quotation.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 12, { align: 'right' })
+    currentY += totalsRowHeight
   }
 
-  // Total en caja negra
-  const totalBoxHeight = 24
-  const totalBoxY = totalsY - 8
-  doc.setFillColor(...BLACK)
-  doc.rect(totalsBoxX, totalBoxY, totalsBoxWidth, totalBoxHeight, 'F')
+  // IMPORTE TOTAL - Fondo gris claro, texto más grande (IGUAL que facturas)
+  doc.setFillColor(245, 245, 245)
+  doc.setDrawColor(150, 150, 150)
+  doc.setLineWidth(1)
+  doc.rect(totalsX, currentY, totalsWidth, totalsRowHeight + 6, 'FD')
 
-  // Texto del total - centrado verticalmente
-  doc.setFontSize(11)
+  doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-  const totalTextY = totalBoxY + (totalBoxHeight / 2) + 3.5
-  doc.text('TOTAL:', labelX, totalTextY)
-  doc.text(formatCurrency(quotation.total || 0), valueX, totalTextY, { align: 'right' })
+  doc.text('IMPORTE TOTAL (S/)', totalsX + 8, currentY + 15)
+  doc.setFontSize(14)
+  doc.text((quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 15, { align: 'right' })
+  currentY += totalsRowHeight + 20
 
-  currentY = totalBoxY + totalBoxHeight + 20
-
-  // ========== 6. INFORMACIÓN ADICIONAL ==========
-
-  // Validez de la cotización
-  if (quotation.validityDays) {
-    doc.setFontSize(8)
-    doc.setTextColor(...MEDIUM_GRAY)
-    doc.setFont('helvetica', 'italic')
-    doc.text(`* Esta cotización tiene una validez de ${quotation.validityDays} días desde su emisión`, MARGIN_LEFT, currentY)
-    currentY += 15
-  }
+  // ========== 5. INFORMACIÓN ADICIONAL ==========
 
   // Términos y condiciones
   if (quotation.terms) {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text('Términos y condiciones:', MARGIN_LEFT, currentY)
+    doc.setTextColor(...BLACK)
+    doc.text('TÉRMINOS Y CONDICIONES:', MARGIN_LEFT, currentY)
     currentY += 12
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.setTextColor(...MEDIUM_GRAY)
+    doc.setTextColor(...DARK_GRAY)
     const termsLines = doc.splitTextToSize(quotation.terms, CONTENT_WIDTH - 20)
     doc.text(termsLines, MARGIN_LEFT + 10, currentY)
     currentY += 10 * termsLines.length + 10
@@ -556,24 +510,24 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   if (quotation.notes) {
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...DARK_GRAY)
-    doc.text('Observaciones:', MARGIN_LEFT, currentY)
+    doc.setTextColor(...BLACK)
+    doc.text('OBSERVACIONES:', MARGIN_LEFT, currentY)
     currentY += 12
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.setTextColor(...MEDIUM_GRAY)
+    doc.setTextColor(...DARK_GRAY)
     const notesLines = doc.splitTextToSize(quotation.notes, CONTENT_WIDTH - 20)
     doc.text(notesLines, MARGIN_LEFT + 10, currentY)
     currentY += 10 * notesLines.length
   }
 
-  // ========== 7. FOOTER ==========
+  // ========== 6. FOOTER ==========
 
   const footerY = PAGE_HEIGHT - 40
 
   // Línea separadora
-  doc.setDrawColor(...BORDER_GRAY)
+  doc.setDrawColor(200, 200, 200)
   doc.setLineWidth(0.5)
   doc.line(MARGIN_LEFT, footerY, PAGE_WIDTH - MARGIN_RIGHT, footerY)
 
@@ -581,8 +535,10 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setFontSize(7)
   doc.setTextColor(...MEDIUM_GRAY)
   doc.setFont('helvetica', 'italic')
-  const footerText = companySettings?.website || 'www.cobrify.com'
-  doc.text(footerText, PAGE_WIDTH / 2, footerY + 12, { align: 'center' })
+  const footerText = companySettings?.website || ''
+  if (footerText) {
+    doc.text(footerText, PAGE_WIDTH / 2, footerY + 12, { align: 'center' })
+  }
 
   // Nota importante
   doc.setFont('helvetica', 'normal')
@@ -596,12 +552,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const isNative = Capacitor.isNativePlatform()
 
     if (isNative) {
-      // En app móvil, guardar usando Filesystem API
       try {
-        // Convertir PDF a base64
         const pdfBase64 = doc.output('datauristring').split(',')[1]
 
-        // Guardar en el directorio de documentos
         const result = await Filesystem.writeFile({
           path: fileName,
           data: pdfBase64,
@@ -610,7 +563,6 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
         console.log('PDF guardado en:', result.uri)
 
-        // Compartir el PDF usando el plugin Share
         await Share.share({
           title: fileName,
           text: `Cotización ${quotation.number}`,
@@ -620,11 +572,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
       } catch (error) {
         console.error('Error al guardar PDF en móvil:', error)
-        // Fallback: intentar guardar de todos modos
         doc.save(fileName)
       }
     } else {
-      // En web, usar el método normal
       doc.save(fileName)
     }
   }
