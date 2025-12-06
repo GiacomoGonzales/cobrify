@@ -101,7 +101,15 @@
       "Bash(sudo xcode-select:*)",
       "Bash(pod install)",
       "Bash(open:*)",
-      "Bash(firebase functions:list:*)"
+      "Bash(firebase functions:list:*)",
+      "WebFetch(domain:adiasoft.com)",
+      "WebFetch(domain:okfac.pe)",
+      "WebFetch(domain:soinfosa.com)",
+      "WebFetch(domain:www.sooprema.com)",
+      "WebFetch(domain:wasi.co)",
+      "WebFetch(domain:enneto.com)",
+      "WebFetch(domain:docs.apisunat.com)",
+      "WebFetch(domain:firebase.google.com)"
     ],
     "deny": [],
     "ask": []

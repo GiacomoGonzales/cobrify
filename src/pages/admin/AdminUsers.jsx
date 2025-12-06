@@ -36,7 +36,8 @@ import {
   Image,
   Sparkles,
   DollarSign,
-  Receipt
+  Receipt,
+  Upload
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -92,6 +93,7 @@ export default function AdminUsers() {
     sol: false,
     cert: false
   })
+  const [certificateFile, setCertificateFile] = useState(null)
 
   // Estados para modal de features
   const [showFeaturesModal, setShowFeaturesModal] = useState(false)
@@ -378,7 +380,7 @@ export default function AdminUsers() {
         }
 
         const normalizeSunatEnv = (env) => {
-          if (env === 'production' || env === 'produccion') return 'produccion'
+          if (env === 'production' || env === 'produccion') return 'production'
           return env || 'beta'
         }
 
@@ -436,6 +438,32 @@ export default function AdminUsers() {
     }
   }
 
+  // Manejar subida de certificado
+  const handleCertificateUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.name.endsWith('.pfx') || file.name.endsWith('.p12')) {
+        setCertificateFile(file)
+        setSunatForm(prev => ({
+          ...prev,
+          certificateName: file.name,
+        }))
+      } else {
+        alert('El archivo debe ser un certificado .pfx o .p12')
+      }
+    }
+  }
+
+  // Eliminar certificado
+  const handleRemoveCertificate = () => {
+    setCertificateFile(null)
+    setSunatForm(prev => ({
+      ...prev,
+      certificateName: '',
+      certificatePassword: '',
+    }))
+  }
+
   // Guardar configuración SUNAT
   async function saveSunatConfig() {
     if (!sunatUserToEdit) return
@@ -474,17 +502,44 @@ export default function AdminUsers() {
         }
         emissionConfig.sunat = { enabled: false }
       } else if (sunatForm.emissionMethod === 'sunat_direct') {
-        emissionConfig.sunat = {
+        // Preparar datos de SUNAT
+        const sunatData = {
           enabled: true,
           solUser: sunatForm.solUser,
           solPassword: sunatForm.solPassword,
           certificatePassword: sunatForm.certificatePassword,
           environment: sunatForm.sunatEnvironment,
-          homologated: sunatForm.sunatEnvironment === 'produccion',
-          // Preservar certificado si existe
-          certificateName: currentEmissionConfig.sunat?.certificateName || '',
+          homologated: sunatForm.sunatEnvironment === 'production',
+          certificateName: sunatForm.certificateName || currentEmissionConfig.sunat?.certificateName || '',
           certificateData: currentEmissionConfig.sunat?.certificateData || null
         }
+
+        // Si hay un nuevo archivo de certificado, convertirlo a base64
+        if (certificateFile) {
+          try {
+            const certificateBase64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => {
+                // Extraer solo la parte base64 (sin el prefijo data:...)
+                const base64 = reader.result.split(',')[1]
+                resolve(base64)
+              }
+              reader.onerror = reject
+              reader.readAsDataURL(certificateFile)
+            })
+
+            sunatData.certificateData = certificateBase64
+            console.log('✅ Certificado convertido a base64 (' + certificateBase64.length + ' caracteres)')
+          } catch (certError) {
+            console.error('Error al leer certificado:', certError)
+            throw new Error('Error al procesar el certificado digital')
+          }
+        } else if (!sunatForm.certificateName) {
+          // Si no hay nombre de certificado, eliminar el certificateData
+          sunatData.certificateData = null
+        }
+
+        emissionConfig.sunat = sunatData
         emissionConfig.qpse = { enabled: false }
       } else {
         emissionConfig.qpse = { enabled: false }
@@ -517,6 +572,7 @@ export default function AdminUsers() {
 
       setShowSunatModal(false)
       setSunatUserToEdit(null)
+      setCertificateFile(null) // Limpiar archivo temporal
       loadUsers()
       alert('Configuración guardada correctamente')
     } catch (error) {
@@ -1231,6 +1287,7 @@ export default function AdminUsers() {
                 onClick={() => {
                   setShowSunatModal(false)
                   setSunatUserToEdit(null)
+                  setCertificateFile(null)
                 }}
                 className="p-2 hover:bg-gray-100 rounded-lg flex-shrink-0"
               >
@@ -1397,7 +1454,7 @@ export default function AdminUsers() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="beta">Beta (Pruebas)</option>
-                      <option value="produccion">Producción</option>
+                      <option value="production">Producción</option>
                     </select>
                   </div>
 
@@ -1466,21 +1523,46 @@ export default function AdminUsers() {
                     {sunatForm.certificateName ? (
                       <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                         <FileKey className="w-5 h-5 text-green-600" />
-                        <span className="text-sm text-green-700 font-medium">{sunatForm.certificateName}</span>
-                        <CheckCircle className="w-4 h-4 text-green-600 ml-auto" />
+                        <span className="text-sm text-green-700 font-medium flex-1">{sunatForm.certificateName}</span>
+                        <button
+                          type="button"
+                          onClick={handleRemoveCertificate}
+                          className="p-1 hover:bg-green-100 rounded text-green-600 hover:text-red-600 transition-colors"
+                          title="Eliminar certificado"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                        <span className="text-sm text-yellow-700">Sin certificado - El usuario debe subirlo desde su Configuración</span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                          <span className="text-sm text-yellow-700">Sin certificado</span>
+                        </div>
                       </div>
                     )}
+                    {/* Botón para subir certificado */}
+                    <label className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
+                      <Upload className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        {sunatForm.certificateName ? 'Cambiar certificado' : 'Subir certificado'}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pfx,.p12"
+                        onChange={handleCertificateUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Formatos aceptados: .pfx, .p12
+                    </p>
                   </div>
 
                   {/* Estado de homologación - derivado del ambiente */}
                   <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm text-gray-600">Estado:</span>
-                    {sunatForm.sunatEnvironment === 'produccion' ? (
+                    {sunatForm.sunatEnvironment === 'production' ? (
                       <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Homologado</span>
                     ) : (
                       <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">En pruebas</span>
@@ -1495,6 +1577,7 @@ export default function AdminUsers() {
                   onClick={() => {
                     setShowSunatModal(false)
                     setSunatUserToEdit(null)
+                    setCertificateFile(null)
                   }}
                   className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
