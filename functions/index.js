@@ -115,6 +115,11 @@ const TRANSIENT_SUNAT_ERRORS = [
   'rejected by policy',
   'no tiene el perfil',
 
+  // Errores de documento en proceso (SUNAT lo está procesando)
+  'documento igual en proceso',
+  'vuelva intentarlo',
+  'en proceso',
+
   // Errores HTTP
   '500', '502', '503', '504', // Server Error, Bad Gateway, Service Unavailable, Gateway Timeout
 ]

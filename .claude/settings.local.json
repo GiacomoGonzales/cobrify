@@ -109,7 +109,8 @@
       "WebFetch(domain:wasi.co)",
       "WebFetch(domain:enneto.com)",
       "WebFetch(domain:docs.apisunat.com)",
-      "WebFetch(domain:firebase.google.com)"
+      "WebFetch(domain:firebase.google.com)",
+      "WebFetch(domain:www.nubefact.com)"
     ],
     "deny": [],
     "ask": []
