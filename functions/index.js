@@ -67,8 +67,23 @@ function sanitizeForFirestore(value, maxDepth = 2, currentDepth = 0) {
  * Estos errores NO son rechazos reales del documento, sino problemas de conectividad
  */
 const TRANSIENT_SUNAT_ERRORS = [
-  // Errores de autenticación/servicio
+  // Errores de sistema SUNAT (según catálogo oficial)
+  '0100',                    // El sistema no puede responder su solicitud
   '0109',                    // Servicio de autenticación no disponible
+  '0110',                    // No se pudo obtener información del tipo de usuario
+  '0111',                    // No tiene el perfil (SUNAT a veces lo devuelve por error cuando está caído)
+  '0130',                    // No se pudo obtener el ticket de proceso
+  '0131',                    // No se pudo grabar el archivo
+  '0132',                    // Error al escribir en archivo ZIP
+  '0133',                    // No se pudo grabar entrada del log
+  '0134',                    // No se pudo grabar en storage
+  '0135',                    // No se pudo encolar el pedido
+  '0136',                    // No se pudo recibir respuesta del batch
+  '0137',                    // Se obtuvo una respuesta nula
+  '0138',                    // Error en Base de Datos
+  '0200',                    // Ocurrió error en el batch
+
+  // Variantes de código 0109
   'soap-env:Client.0109',
   'Client.0109',
 
@@ -79,6 +94,9 @@ const TRANSIENT_SUNAT_ERRORS = [
   'ECONNRESET',
   'ESOCKETTIMEDOUT',
   'timeout',
+  'socket hang up',
+  'network error',
+  'error de conexión',
 
   // Errores de servicio
   'service unavailable',
@@ -87,13 +105,18 @@ const TRANSIENT_SUNAT_ERRORS = [
   'temporarily unavailable',
   'try again later',
   'intente más tarde',
+  'intente nuevamente',
 
   // Errores de QPse cuando SUNAT está caído
   'PENDING_MANUAL',
   'envío automático a SUNAT falló',
 
+  // Errores de política/autenticación que SUNAT devuelve incorrectamente cuando está caído
+  'rejected by policy',
+  'no tiene el perfil',
+
   // Errores HTTP
-  '502', '503', '504',       // Bad Gateway, Service Unavailable, Gateway Timeout
+  '500', '502', '503', '504', // Server Error, Bad Gateway, Service Unavailable, Gateway Timeout
 ]
 
 /**
@@ -403,13 +426,54 @@ export const sendInvoiceToSunat = onRequest(
       console.log(`📡 Método usado: ${emissionResult.method}`)
 
       if (!emissionResult.success) {
-        // Actualizar factura con error
-        // IMPORTANTE: El mensaje de error de SUNAT puede venir en 'error' (excepciones) o 'description' (rechazos)
+        // IMPORTANTE: Verificar si es un error temporal ANTES de marcar como rejected
         const errorMessage = emissionResult.error || emissionResult.description || 'Error al emitir comprobante'
+        const errorCode = emissionResult.responseCode || 'ERROR'
+
+        // Verificar si es error temporal (SUNAT caído, timeout, etc.)
+        const isTransientError = isTransientSunatError(errorCode, errorMessage)
+
+        if (isTransientError) {
+          // Error temporal → mantener como 'pending' para reintento automático
+          console.log(`⏳ Error temporal detectado en emisión fallida - manteniendo como 'pending'`)
+          console.log(`   Error: ${errorMessage}`)
+
+          await invoiceRef.update({
+            sunatStatus: 'pending',
+            sunatResponse: {
+              code: errorCode,
+              description: errorMessage,
+              observations: [],
+              error: true,
+              method: emissionResult.method,
+              isTransient: true
+            },
+            lastRetryError: {
+              code: errorCode,
+              description: errorMessage,
+              timestamp: new Date().toISOString(),
+              isTransient: true
+            },
+            retryCount: FieldValue.increment(1),
+            sunatSendingStartedAt: null,
+            sunatSentAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+
+          res.status(503).json({
+            error: errorMessage,
+            method: emissionResult.method,
+            isTransient: true,
+            message: 'Error temporal de SUNAT. El documento se reintentará automáticamente.'
+          })
+          return
+        }
+
+        // Error permanente → marcar como rejected
         await invoiceRef.update({
           sunatStatus: 'rejected',
           sunatResponse: {
-            code: emissionResult.responseCode || 'ERROR',
+            code: errorCode,
             description: errorMessage,
             observations: [],
             error: true,
