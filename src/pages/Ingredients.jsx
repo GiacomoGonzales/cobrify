@@ -122,8 +122,8 @@ export default function Ingredients() {
     setIsLoading(true)
     try {
       // En modo demo, usar insumos del contexto de demo o fallback
-      if (demoContext) {
-        const demoIngredients = demoContext.demoData?.ingredients || [
+      if (isDemoMode) {
+        const demoIngredients = demoContext?.demoData?.ingredients || [
           {
             id: 'ing1',
             name: 'Arroz',
@@ -267,7 +267,7 @@ export default function Ingredients() {
 
   const handleAddIngredient = async () => {
     // Verificar si está en modo demo
-    if (demoContext) {
+    if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
       return
     }
@@ -309,7 +309,7 @@ export default function Ingredients() {
 
   const handleEditIngredient = async () => {
     // Verificar si está en modo demo
-    if (demoContext) {
+    if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
       return
     }
@@ -348,7 +348,7 @@ export default function Ingredients() {
 
   const handleDeleteIngredient = async () => {
     // Verificar si está en modo demo
-    if (demoContext) {
+    if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
       return
     }

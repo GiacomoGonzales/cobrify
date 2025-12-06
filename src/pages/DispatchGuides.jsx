@@ -21,8 +21,48 @@ const TRANSPORT_MODES = {
   '02': 'Transporte Privado',
 }
 
+// Datos demo para guías de remisión
+const DEMO_GUIDES = [
+  {
+    id: 'demo-guide-1',
+    number: 'T001-00000001',
+    transferDate: new Date().toISOString(),
+    transferReason: '01',
+    transportMode: '02',
+    destination: { address: 'Av. Larco 1234, Miraflores, Lima' },
+    items: [{ description: 'Producto Demo 1', quantity: 10 }, { description: 'Producto Demo 2', quantity: 5 }],
+    status: 'in_transit',
+    sunatStatus: 'accepted',
+    createdAt: new Date(),
+  },
+  {
+    id: 'demo-guide-2',
+    number: 'T001-00000002',
+    transferDate: new Date(Date.now() - 86400000).toISOString(), // Ayer
+    transferReason: '04',
+    transportMode: '01',
+    destination: { address: 'Jr. de la Unión 456, Centro de Lima' },
+    items: [{ description: 'Mercadería variada', quantity: 20 }],
+    status: 'delivered',
+    sunatStatus: 'accepted',
+    createdAt: new Date(Date.now() - 86400000),
+  },
+  {
+    id: 'demo-guide-3',
+    number: 'T001-00000003',
+    transferDate: new Date(Date.now() - 172800000).toISOString(), // Hace 2 días
+    transferReason: '13',
+    transportMode: '02',
+    destination: { address: 'Calle Los Pinos 789, San Isidro, Lima' },
+    items: [{ description: 'Equipos electrónicos', quantity: 3 }],
+    status: 'pending',
+    sunatStatus: 'pending',
+    createdAt: new Date(Date.now() - 172800000),
+  },
+]
+
 export default function DispatchGuides() {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, isDemoMode } = useAppContext()
   const toast = useToast()
 
   const [guides, setGuides] = useState([])
@@ -38,6 +78,15 @@ export default function DispatchGuides() {
   const loadGuides = async () => {
     setIsLoading(true)
     try {
+      // MODO DEMO: Usar datos simulados
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Cargando guías de remisión simuladas...')
+        await new Promise(resolve => setTimeout(resolve, 500)) // Simular delay
+        setGuides(DEMO_GUIDES)
+        setIsLoading(false)
+        return
+      }
+
       const businessId = getBusinessId()
       const result = await getDispatchGuides(businessId)
 
@@ -70,6 +119,23 @@ export default function DispatchGuides() {
     setSendingToSunat(guide.id)
 
     try {
+      // MODO DEMO: Simular envío a SUNAT
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Simulando envío a SUNAT...')
+        toast.info(`Enviando guía ${guide.number} a SUNAT...`)
+        await new Promise(resolve => setTimeout(resolve, 1500)) // Simular delay
+
+        // Actualizar estado de la guía demo
+        setGuides(prev => prev.map(g =>
+          g.id === guide.id
+            ? { ...g, sunatStatus: 'accepted' }
+            : g
+        ))
+        toast.success(`Guía ${guide.number} aceptada por SUNAT (Demo)`)
+        setSendingToSunat(null)
+        return
+      }
+
       const businessId = getBusinessId()
       toast.info(`Enviando guía ${guide.number} a SUNAT...`)
 

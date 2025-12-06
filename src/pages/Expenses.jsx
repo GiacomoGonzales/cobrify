@@ -65,8 +65,67 @@ const CATEGORY_COLORS = {
   otros: 'bg-slate-100 text-slate-700 border-slate-200'
 }
 
+// Datos demo de gastos
+const DEMO_EXPENSES = [
+  {
+    id: 'demo-expense-1',
+    amount: 350.00,
+    description: 'Pago de luz del mes',
+    category: 'servicios',
+    date: new Date(),
+    paymentMethod: 'transferencia',
+    reference: 'REC-001234',
+    supplier: 'Luz del Sur',
+    notes: ''
+  },
+  {
+    id: 'demo-expense-2',
+    amount: 1200.00,
+    description: 'Compra de insumos para cocina',
+    category: 'proveedores',
+    date: new Date(Date.now() - 86400000 * 2),
+    paymentMethod: 'efectivo',
+    reference: 'F001-00456',
+    supplier: 'Distribuidora San Juan',
+    notes: 'Arroz, aceite, condimentos'
+  },
+  {
+    id: 'demo-expense-3',
+    amount: 180.00,
+    description: 'Servicio de agua',
+    category: 'servicios',
+    date: new Date(Date.now() - 86400000 * 5),
+    paymentMethod: 'transferencia',
+    reference: 'REC-78945',
+    supplier: 'Sedapal',
+    notes: ''
+  },
+  {
+    id: 'demo-expense-4',
+    amount: 450.00,
+    description: 'Mantenimiento de equipos',
+    category: 'mantenimiento',
+    date: new Date(Date.now() - 86400000 * 7),
+    paymentMethod: 'efectivo',
+    reference: '',
+    supplier: 'Técnico Luis',
+    notes: 'Reparación de congeladora'
+  },
+  {
+    id: 'demo-expense-5',
+    amount: 85.00,
+    description: 'Transporte de mercadería',
+    category: 'transporte',
+    date: new Date(Date.now() - 86400000 * 3),
+    paymentMethod: 'efectivo',
+    reference: '',
+    supplier: 'Taxi carga',
+    notes: ''
+  },
+]
+
 export default function Expenses() {
-  const { user } = useAppContext()
+  const { user, isDemoMode } = useAppContext()
   const toast = useToast()
 
   // Estados
@@ -111,6 +170,15 @@ export default function Expenses() {
   async function loadExpenses() {
     setLoading(true)
     try {
+      // MODO DEMO: Usar datos simulados
+      if (isDemoMode) {
+        console.log('🎭 MODO DEMO: Cargando gastos simulados...')
+        await new Promise(resolve => setTimeout(resolve, 500))
+        setExpenses(DEMO_EXPENSES)
+        setLoading(false)
+        return
+      }
+
       const data = await getExpenses(user.uid, {
         startDate: dateRange.startDate,
         endDate: dateRange.endDate
@@ -220,6 +288,13 @@ export default function Expenses() {
   async function handleSubmit(e) {
     e.preventDefault()
 
+    // MODO DEMO: No permitir guardar
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      setShowModal(false)
+      return
+    }
+
     if (!form.amount || parseFloat(form.amount) <= 0) {
       toast.error('Ingresa un monto válido')
       return
@@ -256,6 +331,13 @@ export default function Expenses() {
   }
 
   async function handleDelete(expenseId) {
+    // MODO DEMO: No permitir eliminar
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      setShowDeleteConfirm(null)
+      return
+    }
+
     setDeleting(true)
     try {
       await deleteExpense(user.uid, expenseId)
