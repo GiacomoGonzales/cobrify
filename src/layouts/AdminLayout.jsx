@@ -98,8 +98,8 @@ export default function AdminLayout() {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setMobileMenuOpen(false)}>
-          <div className="bg-indigo-900 w-72 h-full" onClick={e => e.stopPropagation()}>
+        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50 pt-safe" onClick={() => setMobileMenuOpen(false)}>
+          <div className="bg-indigo-900 w-72 h-full pt-safe" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-indigo-800">
               <div className="flex items-center gap-3">
                 <Shield className="w-8 h-8 text-white" />
