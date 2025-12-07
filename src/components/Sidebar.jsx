@@ -437,18 +437,17 @@ function Sidebar() {
     },
   ]
 
-  // Seleccionar menú según el modo de negocio (default: retail)
+  // Seleccionar menú según el modo de negocio
+  // Si businessMode es null (cargando), no mostrar nada aún
   const menuItems = businessMode === 'restaurant'
     ? restaurantMenuItems
     : businessMode === 'pharmacy'
       ? pharmacyMenuItems
       : businessMode === 'real_estate'
         ? realEstateMenuItems
-        : retailMenuItems
-
-  // Debug: ver qué modo está activo
-  console.log('🏪 Modo de negocio:', businessMode)
-  console.log('📋 Menu items a mostrar:', menuItems.length, 'items')
+        : businessMode === 'retail'
+          ? retailMenuItems
+          : [] // Si es null, array vacío mientras carga
 
   // Agregar opciones adicionales según el rol
   const additionalItems = [
@@ -574,6 +573,17 @@ function Sidebar() {
 
       {/* Navigation */}
       <nav className="p-3 pb-safe space-y-1 overflow-y-auto h-[calc(100dvh-4rem)]">
+        {/* Skeleton loader mientras carga businessMode */}
+        {!businessMode && (
+          <div className="space-y-2 animate-pulse">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex items-center space-x-3 px-3 py-2">
+                <div className="w-5 h-5 bg-gray-200 rounded" />
+                <div className="h-4 bg-gray-200 rounded w-24" />
+              </div>
+            ))}
+          </div>
+        )}
         {filteredMenuItems.map(item => (
           <NavLink
             key={item.path}

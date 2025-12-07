@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   const [hasAccess, setHasAccess] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
-  const [businessMode, setBusinessMode] = useState('retail') // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy'
+  const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
   const [subscriptionOwnerId, setSubscriptionOwnerId] = useState(null) // ID del owner para escuchar cambios en suscripción
