@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus,
@@ -591,15 +592,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             <MoreVertical className="w-4 h-4" />
                           </button>
 
-                          {/* Dropdown Menu */}
-                          {openMenuId === quotation.id && (
+                          {/* Dropdown Menu - usando Portal para evitar overflow clipping */}
+                          {openMenuId === quotation.id && createPortal(
                             <>
                               {/* Backdrop */}
-                              <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                              <div className="fixed inset-0 z-[9998]" onClick={() => setOpenMenuId(null)} />
 
                               {/* Menu */}
                               <div
-                                className="fixed w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                                className="fixed w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-[9999]"
                                 style={{
                                   top: `${menuPosition.top}px`,
                                   right: `${menuPosition.right}px`,
@@ -676,7 +677,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   <span>Eliminar</span>
                                 </button>
                               </div>
-                            </>
+                            </>,
+                            document.body
                           )}
                         </div>
                       </div>

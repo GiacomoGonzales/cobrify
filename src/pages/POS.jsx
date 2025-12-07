@@ -1573,50 +1573,46 @@ export default function POS() {
                            lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
         const customerName = lastInvoiceData.customer?.name || 'Cliente'
 
-        if (isMobileWeb && navigator.share) {
-          // MÓVIL WEB - Usar Share API nativo del navegador
+        if (isMobileWeb) {
+          // MÓVIL WEB - Descargar PDF y abrir WhatsApp directamente con el número
           try {
             toast.info('Generando PDF...')
 
-            // Generar PDF como blob
-            const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings)
-            const fileName = `${docTypeName}_${lastInvoiceData.number.replace(/\//g, '-')}.pdf`
-
-            // Crear archivo para compartir
-            const file = new File([pdfBlob], fileName, { type: 'application/pdf' })
-
-            const shareData = {
-              title: `${docTypeName} ${lastInvoiceData.number}`,
-              text: `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.\n\n${companySettings?.businessName || 'Tu Empresa'}`,
-              files: [file]
+            // Formatear número de teléfono con código de país
+            let formattedPhone = cleanPhone
+            if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
+              formattedPhone = '51' + formattedPhone
+            }
+            if (formattedPhone.startsWith('0')) {
+              formattedPhone = '51' + formattedPhone.substring(1)
             }
 
-            // Verificar si el navegador soporta compartir archivos
-            if (navigator.canShare && navigator.canShare(shareData)) {
-              await navigator.share(shareData)
-              toast.success('Compartido exitosamente')
-            } else {
-              // Fallback: descargar PDF y abrir WhatsApp
-              await generateInvoicePDF(lastInvoiceData, companySettings)
-              toast.success('PDF descargado')
+            // Descargar el PDF
+            await generateInvoicePDF(lastInvoiceData, companySettings)
+            toast.success('PDF descargado')
 
-              const message = `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.`
-              const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
+            // Crear mensaje y abrir WhatsApp directamente
+            const total = formatCurrency(lastInvoiceData.total)
+            const message = `Hola ${customerName},
 
-              setTimeout(() => {
-                window.open(url, '_blank')
-                toast.success('Abriendo WhatsApp...')
-              }, 500)
-            }
+Gracias por tu compra.
+
+${docTypeName}: ${lastInvoiceData.number}
+Total: ${total}
+
+${companySettings?.businessName || 'Tu Empresa'}`
+
+            const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
+
+            // Pequeño delay para que el usuario vea que se descargó el PDF
+            setTimeout(() => {
+              window.location.href = whatsappUrl
+              toast.info('Adjunta el PDF descargado en WhatsApp', 5000)
+            }, 500)
+
           } catch (error) {
-            console.error('Error al compartir:', error)
-            // Si el usuario cancela o hay error, fallback a WhatsApp Web
-            if (error.name !== 'AbortError') {
-              toast.error('Error al compartir. Abriendo WhatsApp...')
-              const message = `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.`
-              const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-              window.open(url, '_blank')
-            }
+            console.error('Error:', error)
+            toast.error('Error al generar el PDF')
           }
           return
         }
@@ -1644,7 +1640,12 @@ export default function POS() {
         return
       }
 
-      // En móvil nativo, compartir PDF
+      // En móvil nativo - Generar PDF y compartir directamente
+      const phone = lastInvoiceData.customer?.phone || customerData.phone
+      const customerName = lastInvoiceData.customer?.name || 'Cliente'
+      const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                         lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+
       toast.info('Generando PDF...')
 
       // Generar el PDF como blob
@@ -1660,45 +1661,49 @@ export default function POS() {
             const base64Data = reader.result.split(',')[1]
 
             // Crear nombre de archivo
-            const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+            const docTypeFileName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
                                lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'NotaVenta'
-            const fileName = `${docTypeName}_${lastInvoiceData.number.replace(/\//g, '-')}.pdf`
+            const fileName = `${docTypeFileName}_${lastInvoiceData.number.replace(/\//g, '-')}.pdf`
 
-            // Guardar archivo temporalmente
+            // Guardar archivo en Cache (temporal) para poder compartirlo
             const savedFile = await Filesystem.writeFile({
               path: fileName,
               data: base64Data,
               directory: Directory.Cache,
             })
 
-            console.log('Archivo guardado:', savedFile.uri)
+            console.log('PDF guardado en:', savedFile.uri)
 
             // Crear mensaje
-            const customerName = lastInvoiceData.customer?.name || 'Cliente'
             const total = formatCurrency(lastInvoiceData.total)
-
             const message = `Hola ${customerName},
 
-Gracias por tu compra. Adjunto encontrarás tu ${docTypeName}.
+Gracias por tu compra.
 
 ${docTypeName}: ${lastInvoiceData.number}
 Total: ${total}
 
 ${companySettings?.businessName || 'Tu Empresa'}`
 
-            // Compartir usando Capacitor Share
+            // Usar Share para compartir el PDF
+            // Esto abre el selector de iOS donde el usuario elige WhatsApp
+            // El PDF se adjunta automáticamente
             await Share.share({
               title: `${docTypeName} ${lastInvoiceData.number}`,
               text: message,
               url: savedFile.uri,
-              dialogTitle: 'Compartir comprobante',
+              dialogTitle: 'Enviar comprobante',
             })
 
-            toast.success('PDF compartido exitosamente')
+            toast.success('Comprobante compartido', 3000)
             resolve()
           } catch (error) {
             console.error('Error al compartir:', error)
-            reject(error)
+            // Si cancela el share, no mostrar error
+            if (!error.message?.includes('cancel') && !error.message?.includes('abort')) {
+              toast.error('Error al compartir el PDF')
+            }
+            resolve()
           }
         }
         reader.onerror = reject
@@ -1809,7 +1814,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
                 {/* Fecha de Emisión - Solo si está habilitado en configuración */}
                 {businessSettings?.allowCustomEmissionDate && (
-                  <div>
+                  <div className="overflow-hidden">
                     <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
                       Fecha de Emisión
@@ -1826,7 +1831,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         return minDate.toISOString().split('T')[0]
                       })()}
                       onChange={e => setEmissionDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 appearance-none bg-white"
+                      style={{ minWidth: 0 }}
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       {documentType === 'factura' && 'Máximo 3 días anteriores según SUNAT'}

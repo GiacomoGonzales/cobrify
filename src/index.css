@@ -37,6 +37,16 @@
   textarea {
     font-size: 16px;
   }
+
+  /* Fix date input overflow on iOS */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    min-width: 0;
+    max-width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }
 
 @layer components {

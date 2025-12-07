@@ -1,8 +1,8 @@
 import jsPDF from 'jspdf'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { storage } from '@/lib/firebase'
-import { ref, getBlob } from 'firebase/storage'
-import { Capacitor } from '@capacitor/core'
+import { ref, getBlob, getDownloadURL } from 'firebase/storage'
+import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 
@@ -28,7 +28,43 @@ const getStoragePathFromUrl = (url) => {
  */
 const loadImageAsBase64 = async (url) => {
   try {
-    console.log('🔄 Cargando logo para cotización desde Firebase Storage')
+    const isNative = Capacitor.isNativePlatform()
+    console.log('🔄 Cargando logo para cotización, isNative:', isNative)
+
+    // En plataformas nativas, usar CapacitorHttp que es más confiable
+    if (isNative) {
+      console.log('📱 Usando CapacitorHttp para cargar logo')
+      try {
+        // Primero obtener la URL de descarga directa
+        const storagePath = getStoragePathFromUrl(url)
+        let downloadUrl = url
+
+        if (storagePath) {
+          const storageRef = ref(storage, storagePath)
+          downloadUrl = await getDownloadURL(storageRef)
+          console.log('🔗 URL de descarga obtenida')
+        }
+
+        // Usar CapacitorHttp para descargar la imagen
+        const response = await CapacitorHttp.get({
+          url: downloadUrl,
+          responseType: 'blob'
+        })
+
+        if (response.status === 200 && response.data) {
+          const base64Data = response.data
+          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
+          console.log('✅ Logo cargado con CapacitorHttp')
+          return `data:${mimeType};base64,${base64Data}`
+        }
+        throw new Error('No se pudo descargar la imagen')
+      } catch (nativeError) {
+        console.warn('⚠️ CapacitorHttp falló, intentando Firebase SDK:', nativeError.message)
+      }
+    }
+
+    // Método estándar: Firebase SDK
+    console.log('🔄 Cargando logo desde Firebase Storage usando SDK')
     const storagePath = getStoragePathFromUrl(url)
 
     if (storagePath) {
@@ -118,7 +154,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     try {
       const imgData = await Promise.race([
         loadImageAsBase64(companySettings.logoUrl),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
       ])
 
       let format = 'PNG'

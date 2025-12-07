@@ -78,8 +78,11 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={toast}>
       {children}
 
-      {/* Toast Container */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+      {/* Toast Container - con safe area para iOS */}
+      <div
+        className="fixed right-4 z-50 flex flex-col gap-2 max-w-sm"
+        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}
+      >
         {toasts.map((toastItem) => {
           const variant = toastVariants[toastItem.variant]
           const Icon = variant.icon

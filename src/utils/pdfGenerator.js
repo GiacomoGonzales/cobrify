@@ -3,7 +3,7 @@ import { formatDate } from '@/lib/utils'
 import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 
 /**
@@ -89,6 +89,43 @@ const getStoragePathFromUrl = (url) => {
  */
 const loadImageAsBase64 = async (url) => {
   try {
+    const isNative = Capacitor.isNativePlatform()
+    console.log('🔄 Cargando imagen, isNative:', isNative)
+
+    // En plataformas nativas, usar CapacitorHttp que es más confiable
+    if (isNative) {
+      console.log('📱 Usando CapacitorHttp para cargar logo')
+      try {
+        // Primero obtener la URL de descarga directa
+        const storagePath = getStoragePathFromUrl(url)
+        let downloadUrl = url
+
+        if (storagePath) {
+          const storageRef = ref(storage, storagePath)
+          downloadUrl = await getDownloadURL(storageRef)
+          console.log('🔗 URL de descarga obtenida')
+        }
+
+        // Usar CapacitorHttp para descargar la imagen
+        const response = await CapacitorHttp.get({
+          url: downloadUrl,
+          responseType: 'blob'
+        })
+
+        if (response.status === 200 && response.data) {
+          // response.data ya viene como base64 cuando responseType es 'blob'
+          const base64Data = response.data
+          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
+          console.log('✅ Logo cargado con CapacitorHttp')
+          return `data:${mimeType};base64,${base64Data}`
+        }
+        throw new Error('No se pudo descargar la imagen')
+      } catch (nativeError) {
+        console.warn('⚠️ CapacitorHttp falló, intentando Firebase SDK:', nativeError.message)
+      }
+    }
+
+    // Método estándar: Firebase SDK
     console.log('🔄 Cargando imagen desde Firebase Storage usando SDK')
     const storagePath = getStoragePathFromUrl(url)
 
@@ -230,7 +267,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     try {
       const imgData = await Promise.race([
         loadImageAsBase64(companySettings.logoUrl),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
       ])
 
       let format = 'PNG'
