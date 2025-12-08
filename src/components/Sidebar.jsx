@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import {
   LayoutDashboard,
   FileText,
@@ -458,6 +459,7 @@ function Sidebar() {
       adminOnly: false,
       businessOwnerOnly: true, // Solo visible para el usuario principal/owner
       pageId: null,
+      hideOnIOS: true, // Ocultar en iOS por política de Apple (Guideline 3.1.1)
     },
     {
       path: '/usuarios',
@@ -520,7 +522,13 @@ function Sidebar() {
 
   console.log('✅ Items filtrados:', filteredMenuItems.length, 'de', menuItems.length)
 
+  // Detectar si estamos en iOS nativo
+  const isIOSNative = Capacitor.getPlatform() === 'ios'
+
   const filteredAdditionalItems = additionalItems.filter((item) => {
+    // Ocultar en iOS si tiene la bandera hideOnIOS (política Apple Guideline 3.1.1)
+    if (item.hideOnIOS && isIOSNative) return false
+
     // Si es solo para admin y el usuario no es admin, no mostrar
     if (item.adminOnly && !isAdmin) return false
 
