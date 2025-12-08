@@ -144,7 +144,7 @@ export default function MainLayout() {
   return (
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
       {/* iOS Status Bar - Gradiente moderno */}
-      <div className="ios-status-bar bg-gradient-to-r from-primary-600 via-primary-500 to-blue-500 md:hidden flex-shrink-0" />
+      <div className="ios-status-bar bg-gradient-to-r from-primary-800 via-primary-700 to-blue-800 md:hidden flex-shrink-0" />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}

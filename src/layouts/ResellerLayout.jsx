@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronLeft,
   Building2
 } from 'lucide-react'
 
@@ -47,6 +48,7 @@ export default function ResellerLayout() {
         className={`fixed top-0 left-0 z-50 h-full w-64 bg-gradient-to-b from-emerald-800 to-emerald-900 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
         {/* Logo */}
         <div className="flex items-center justify-between p-4 border-b border-emerald-700">
@@ -116,7 +118,7 @@ export default function ResellerLayout() {
       {/* Main content */}
       <div className="lg:ml-64">
         {/* Top bar */}
-        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+        <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="flex items-center justify-between px-4 py-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -132,6 +134,15 @@ export default function ResellerLayout() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Volver a la App */}
+              <NavLink
+                to="/app/dashboard"
+                className="flex items-center gap-1 lg:gap-2 px-2 lg:px-4 py-2 text-xs lg:text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Volver a la App</span>
+                <span className="sm:hidden">App</span>
+              </NavLink>
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-medium text-gray-700">{resellerData?.companyName || 'Reseller'}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>

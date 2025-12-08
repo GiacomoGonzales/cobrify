@@ -661,7 +661,7 @@ function Sidebar() {
         </div>
 
         {/* Espaciador inferior para iOS - permite que el scroll muestre la última opción */}
-        <div style={{ height: '80px', flexShrink: 0 }} />
+        <div style={{ height: '34px', flexShrink: 0 }} />
       </nav>
     </aside>
     </>
