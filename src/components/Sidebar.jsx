@@ -651,6 +651,9 @@ function Sidebar() {
             )
           })}
         </div>
+
+        {/* Espaciador para safe area en iOS - permite ver la última opción del menú */}
+        <div className="h-safe-bottom flex-shrink-0" style={{ minHeight: 'env(safe-area-inset-bottom, 20px)' }} />
       </nav>
     </aside>
     </>
