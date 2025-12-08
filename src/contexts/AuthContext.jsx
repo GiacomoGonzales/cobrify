@@ -261,13 +261,17 @@ export const AuthProvider = ({ children }) => {
             } else {
               console.warn('⚠️ No se encontró documento del negocio en businesses/', businessId)
               console.warn('⚠️ Verificar que existe el documento en Firestore')
+              // Para usuarios nuevos sin documento, usar retail como default
+              // Pero solo después de confirmar que realmente no existe el documento
               setBusinessMode('retail')
               setBusinessSettings(null)
             }
           } catch (error) {
             console.error('❌ Error al cargar configuración del negocio:', error)
             console.error('❌ Stack trace:', error.stack)
-            setBusinessMode('retail') // Fallback a retail
+            // Mantener null en caso de error para que el sidebar muestre skeleton
+            // hasta que se resuelva. Esto evita mostrar retail incorrectamente.
+            setBusinessMode(null)
             setBusinessSettings(null)
           }
 
@@ -291,7 +295,7 @@ export const AuthProvider = ({ children }) => {
           setHasAccess(false)
           setUserPermissions(null)
           setAllowedPages([])
-          setBusinessMode('retail')
+          setBusinessMode(null) // null cuando no hay usuario
           setBusinessSettings(null)
           setUserFeatures({ productImages: false })
           setSubscriptionOwnerId(null)
@@ -387,7 +391,7 @@ export const AuthProvider = ({ children }) => {
       setHasAccess(false)
       setUserPermissions(null)
       setAllowedPages([])
-      setBusinessMode('retail')
+      setBusinessMode(null) // null para que muestre skeleton hasta que se cargue el nuevo modo
       setBusinessSettings(null)
       setUserFeatures({ productImages: false })
       navigate('/')
