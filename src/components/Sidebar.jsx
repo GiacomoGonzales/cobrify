@@ -572,7 +572,7 @@ function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="p-3 pb-safe space-y-1 overflow-y-auto h-[calc(100dvh-4rem)]">
+      <nav className="p-3 space-y-1 overflow-y-auto" style={{ height: 'calc(100dvh - 4rem - env(safe-area-inset-bottom, 0px))' }}>
         {/* Skeleton loader mientras carga businessMode */}
         {!businessMode && (
           <div className="space-y-2 animate-pulse">
@@ -652,8 +652,6 @@ function Sidebar() {
           })}
         </div>
 
-        {/* Espaciador para safe area en iOS - permite ver la última opción del menú al soltar el scroll */}
-        <div className="flex-shrink-0" style={{ height: 'calc(env(safe-area-inset-bottom, 20px) + 24px)' }} />
       </nav>
     </aside>
     </>
