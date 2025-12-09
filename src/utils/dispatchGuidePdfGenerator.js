@@ -721,12 +721,12 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   // Línea para firma
   doc.line(signatureX + 20, footerY + 45, signatureX + signatureWidth - 20, footerY + 45)
 
-  // Textos de firma
+  // Textos de firma (alineados a la izquierda para dejar espacio para escribir)
   doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')
-  doc.text('Conformidad del cliente:', signatureX + signatureWidth - 10, footerY + 52, { align: 'right' })
-  doc.text('Nombre:', signatureX + signatureWidth - 10, footerY + 60, { align: 'right' })
-  doc.text('DNI:', signatureX + signatureWidth - 10, footerY + 68, { align: 'right' })
+  doc.text('Conformidad del cliente:', signatureX + 5, footerY + 52)
+  doc.text('Nombre:', signatureX + 5, footerY + 60)
+  doc.text('DNI:', signatureX + 5, footerY + 68)
 
   currentY = footerY + qrSize + 15
 

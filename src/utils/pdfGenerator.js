@@ -7,12 +7,15 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 
 /**
- * Convierte un número a texto en español (para montos)
+ * Convierte un número a texto en español (para montos en facturas peruanas)
+ * Soporta hasta 999,999,999 (millones)
  */
 const numeroALetras = (num) => {
-  const unidades = ['', 'UNO', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
+  const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
+  const unidadesFem = ['', 'UNA', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
+  const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISEIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE']
   const decenas = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA']
-  const especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE']
+  const veintis = ['VEINTE', 'VEINTIUNO', 'VEINTIDOS', 'VEINTITRES', 'VEINTICUATRO', 'VEINTICINCO', 'VEINTISEIS', 'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE']
   const centenas = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS']
 
   const convertirGrupo = (n) => {
@@ -28,11 +31,16 @@ const numeroALetras = (num) => {
     if (c > 0) resultado += centenas[c]
 
     if (d === 1) {
+      // 10-19
       resultado += (resultado ? ' ' : '') + especiales[u]
+    } else if (d === 2) {
+      // 20-29: VEINTE, VEINTIUNO, VEINTIDOS...
+      resultado += (resultado ? ' ' : '') + veintis[u]
     } else {
+      // 30-99
       if (d > 0) resultado += (resultado ? ' ' : '') + decenas[d]
       if (u > 0) {
-        if (d > 2) resultado += ' Y '
+        if (d > 0) resultado += ' Y '
         else if (resultado) resultado += ' '
         resultado += unidades[u]
       }
@@ -46,22 +54,36 @@ const numeroALetras = (num) => {
 
   if (entero === 0) return `CERO CON ${decimales.toString().padStart(2, '0')}/100`
 
-  const miles = Math.floor(entero / 1000)
-  const restoMiles = entero % 1000
+  const millones = Math.floor(entero / 1000000)
+  const restoMillones = entero % 1000000
+  const miles = Math.floor(restoMillones / 1000)
+  const unidadesFinales = restoMillones % 1000
 
   let resultado = ''
 
-  if (miles > 0) {
-    if (miles === 1) {
-      resultado = 'MIL'
+  // Millones
+  if (millones > 0) {
+    if (millones === 1) {
+      resultado = 'UN MILLON'
     } else {
-      resultado = convertirGrupo(miles) + ' MIL'
+      resultado = convertirGrupo(millones) + ' MILLONES'
     }
   }
 
-  if (restoMiles > 0) {
+  // Miles
+  if (miles > 0) {
     if (resultado) resultado += ' '
-    resultado += convertirGrupo(restoMiles)
+    if (miles === 1) {
+      resultado += 'MIL'
+    } else {
+      resultado += convertirGrupo(miles) + ' MIL'
+    }
+  }
+
+  // Unidades
+  if (unidadesFinales > 0) {
+    if (resultado) resultado += ' '
+    resultado += convertirGrupo(unidadesFinales)
   }
 
   return `${resultado} CON ${decimales.toString().padStart(2, '0')}/100`
@@ -605,6 +627,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const totalsWidth = 220
   const totalsRowHeight = 18
   const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
+  const totalsStartY = currentY // Guardar posición inicial para el recuadro de monto en letras
 
   // OP. GRAVADA - Fondo gris claro
   const igvExempt = companySettings?.taxConfig?.igvExempt || false
@@ -642,6 +665,27 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('IMPORTE TOTAL (S/)', totalsX + 8, currentY + 15)
   doc.setFontSize(14)
   doc.text((invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 15, { align: 'right' })
+
+  // ========== MONTO EN LETRAS (a la izquierda de los totales) ==========
+  const letrasBoxWidth = totalsX - MARGIN_LEFT - 10 // Ancho del recuadro de letras
+  const letrasBoxHeight = currentY + totalsRowHeight + 6 - totalsStartY // Misma altura que los totales
+  const montoEnLetras = numeroALetras(invoice.total || 0) + ' SOLES'
+
+  // Dibujar recuadro
+  doc.setDrawColor(...BORDER_COLOR)
+  doc.setLineWidth(0.5)
+  doc.rect(MARGIN_LEFT, totalsStartY, letrasBoxWidth, letrasBoxHeight, 'S')
+
+  // Texto "SON:" y monto en letras
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
+  doc.text('SON:', MARGIN_LEFT + 5, totalsStartY + 12)
+
+  doc.setFont('helvetica', 'normal')
+  // Dividir el texto en líneas si es muy largo
+  const letrasLines = doc.splitTextToSize(montoEnLetras, letrasBoxWidth - 40)
+  doc.text(letrasLines, MARGIN_LEFT + 28, totalsStartY + 12)
 
   currentY += totalsRowHeight + 14
 
