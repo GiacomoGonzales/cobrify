@@ -228,6 +228,101 @@ export default function POS() {
   const [enablePartialPayment, setEnablePartialPayment] = useState(false)
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('')
 
+  // Ref para controlar si ya se cargó el borrador
+  const draftLoadedRef = useRef(false)
+
+  // Clave única para el localStorage basada en el businessId
+  const getDraftKey = () => `pos_draft_${getBusinessId()}`
+
+  // Cargar borrador del localStorage al iniciar
+  useEffect(() => {
+    if (!user?.uid || draftLoadedRef.current) return
+
+    // No cargar borrador si viene de una mesa o una orden
+    if (location.state?.fromTable || location.state?.fromOrder) return
+
+    try {
+      const savedDraft = localStorage.getItem(getDraftKey())
+      if (savedDraft) {
+        const draft = JSON.parse(savedDraft)
+
+        // Solo restaurar si el borrador tiene menos de 24 horas
+        const draftAge = Date.now() - (draft.timestamp || 0)
+        const maxAge = 24 * 60 * 60 * 1000 // 24 horas
+
+        if (draftAge < maxAge) {
+          if (draft.cart?.length > 0) setCart(draft.cart)
+          if (draft.customerData) setCustomerData(draft.customerData)
+          if (draft.documentType) setDocumentType(draft.documentType)
+          if (draft.payments) setPayments(draft.payments)
+          if (draft.discountAmount) setDiscountAmount(draft.discountAmount)
+          if (draft.discountPercentage) setDiscountPercentage(draft.discountPercentage)
+          if (draft.orderType) setOrderType(draft.orderType)
+          if (draft.selectedSeller) setSelectedSeller(draft.selectedSeller)
+
+          // Mostrar notificación si hay items en el carrito
+          if (draft.cart?.length > 0) {
+            toast.info(`Borrador recuperado (${draft.cart.length} items)`)
+          }
+        } else {
+          // Borrador muy antiguo, eliminarlo
+          localStorage.removeItem(getDraftKey())
+        }
+      }
+    } catch (error) {
+      console.error('Error al cargar borrador:', error)
+    }
+
+    draftLoadedRef.current = true
+  }, [user])
+
+  // Guardar borrador en localStorage cuando cambian los datos importantes
+  useEffect(() => {
+    if (!user?.uid || !draftLoadedRef.current) return
+
+    // No guardar si no hay nada significativo
+    const hasData = cart.length > 0 ||
+                    customerData.documentNumber ||
+                    customerData.name ||
+                    customerData.businessName
+
+    if (!hasData) {
+      localStorage.removeItem(getDraftKey())
+      return
+    }
+
+    // Usar debounce para no guardar en cada tecla
+    const timeoutId = setTimeout(() => {
+      try {
+        const draft = {
+          cart,
+          customerData,
+          documentType,
+          payments,
+          discountAmount,
+          discountPercentage,
+          orderType,
+          selectedSeller,
+          timestamp: Date.now(),
+        }
+        localStorage.setItem(getDraftKey(), JSON.stringify(draft))
+      } catch (error) {
+        console.error('Error al guardar borrador:', error)
+      }
+    }, 500) // Esperar 500ms antes de guardar
+
+    return () => clearTimeout(timeoutId)
+  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, user])
+
+  // Función para limpiar el borrador del localStorage
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(getDraftKey())
+    } catch (error) {
+      console.error('Error al limpiar borrador:', error)
+    }
+  }
+
   // Scroll to top when component mounts
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -749,6 +844,7 @@ export default function POS() {
     setLastInvoiceData(null)
     setDiscountAmount('')
     setDiscountPercentage('')
+    clearDraft() // Limpiar borrador de localStorage
   }
 
   // Buscar datos de DNI o RUC automáticamente
@@ -1497,6 +1593,9 @@ export default function POS() {
       if (productsResult.success) {
         setProducts(productsResult.data || [])
       }
+
+      // 8. Limpiar borrador del localStorage (venta exitosa)
+      clearDraft()
     } catch (error) {
       console.error('Error al procesar venta:', error)
       toast.error(error.message || 'Error al procesar la venta. Inténtalo nuevamente.')

@@ -66,12 +66,14 @@ export async function signXML(xmlContent, certificateConfig) {
 
     console.log('✅ Certificado y clave privada extraídos correctamente')
 
-    // Detectar el tipo de documento (Invoice, CreditNote, DebitNote)
+    // Detectar el tipo de documento (Invoice, CreditNote, DebitNote, DespatchAdvice)
     let rootElement = 'Invoice' // Default
     if (xmlContent.includes('<CreditNote') || xmlContent.includes('CreditNote-2')) {
       rootElement = 'CreditNote'
     } else if (xmlContent.includes('<DebitNote') || xmlContent.includes('DebitNote-2')) {
       rootElement = 'DebitNote'
+    } else if (xmlContent.includes('<DespatchAdvice') || xmlContent.includes('DespatchAdvice-2')) {
+      rootElement = 'DespatchAdvice'
     }
     console.log(`📄 Tipo de documento detectado: ${rootElement}`)
 

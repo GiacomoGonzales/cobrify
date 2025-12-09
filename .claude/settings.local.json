@@ -111,7 +111,10 @@
       "WebFetch(domain:docs.apisunat.com)",
       "WebFetch(domain:firebase.google.com)",
       "WebFetch(domain:www.nubefact.com)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(grep:*)",
+      "WebFetch(domain:www.odoo.com)"
     ],
     "deny": [],
     "ask": []
