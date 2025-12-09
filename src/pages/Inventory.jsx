@@ -16,6 +16,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ClipboardCheck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -33,6 +34,8 @@ import { getProducts, getProductCategories, updateProduct } from '@/services/fir
 import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock } from '@/services/warehouseService'
+import InventoryCountModal from '@/components/InventoryCountModal'
+import { getCompanySettings } from '@/services/firestoreService'
 
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
@@ -99,6 +102,10 @@ export default function Inventory() {
   // Estado para migración de stock huérfano
   const [isMigratingOrphanStock, setIsMigratingOrphanStock] = useState(false)
 
+  // Estado para modal de recuento de inventario
+  const [showInventoryCountModal, setShowInventoryCountModal] = useState(false)
+  const [companySettings, setCompanySettings] = useState(null)
+
   useEffect(() => {
     loadProducts()
     if (isRetailMode) {
@@ -106,6 +113,7 @@ export default function Inventory() {
     }
     loadCategories()
     loadWarehouses()
+    loadCompanySettings()
   }, [user, isRetailMode])
 
   const loadProducts = async () => {
@@ -185,6 +193,24 @@ export default function Inventory() {
       }
     } catch (error) {
       console.error('Error al cargar almacenes:', error)
+    }
+  }
+
+  const loadCompanySettings = async () => {
+    if (!user?.uid) return
+
+    try {
+      if (isDemoMode) {
+        setCompanySettings({ companyName: 'Empresa Demo' })
+        return
+      }
+
+      const result = await getCompanySettings(getBusinessId())
+      if (result.success) {
+        setCompanySettings(result.data || {})
+      }
+    } catch (error) {
+      console.error('Error al cargar configuración de empresa:', error)
     }
   }
 
@@ -643,6 +669,14 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setShowInventoryCountModal(true)}
+            className="w-full sm:w-auto"
+          >
+            <ClipboardCheck className="w-4 h-4 mr-2" />
+            Recuento
+          </Button>
           <Button
             variant="outline"
             onClick={handleExportToExcel}
@@ -1391,6 +1425,26 @@ export default function Inventory() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de Recuento de Inventario */}
+      <InventoryCountModal
+        isOpen={showInventoryCountModal}
+        onClose={() => setShowInventoryCountModal(false)}
+        products={isRetailMode ? [...products, ...ingredients.map(ing => ({
+          ...ing,
+          isIngredient: true,
+          name: `${ing.name} (Insumo)`,
+        }))] : products}
+        categories={productCategories}
+        businessId={getBusinessId()}
+        userId={user?.uid}
+        companySettings={companySettings}
+        onCountCompleted={() => {
+          loadProducts()
+          if (isRetailMode) loadIngredients()
+          setShowInventoryCountModal(false)
+        }}
+      />
     </div>
   )
 }
