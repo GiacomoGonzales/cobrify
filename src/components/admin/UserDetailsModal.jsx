@@ -48,6 +48,8 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
       environment: 'beta',
       solUser: '',
       solPassword: '',
+      clientId: '',
+      clientSecret: '',
       certificateName: '',
       certificatePassword: '',
       certificateData: '',
@@ -156,6 +158,8 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
             environment: data?.sunat?.environment || 'beta',
             solUser: data?.sunat?.solUser || '',
             solPassword: data?.sunat?.solPassword || '',
+            clientId: data?.sunat?.clientId || '',
+            clientSecret: data?.sunat?.clientSecret || '',
             certificateName: data?.sunat?.certificateName || '',
             certificatePassword: data?.sunat?.certificatePassword || '',
             certificateData: data?.sunat?.certificateData || '',
@@ -1246,6 +1250,49 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                       {showPasswords ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                     <p className="text-xs text-gray-500 mt-1">Contraseña SOL de SUNAT</p>
+                  </div>
+
+                  {/* Credenciales API REST (requeridas para Guías de Remisión) */}
+                  <div className="md:col-span-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900 mb-2">
+                      Credenciales API REST (para Guías de Remisión)
+                    </p>
+                    <p className="text-xs text-blue-700 mb-3">
+                      Requeridas para enviar Guías de Remisión directamente a SUNAT.
+                      Generar en: Menú SOL &gt; Empresa &gt; Credenciales API
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Client ID
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="ej: 12345678901-abc123..."
+                          value={emissionConfig.sunat.clientId}
+                          onChange={(e) => setEmissionConfig({
+                            ...emissionConfig,
+                            sunat: { ...emissionConfig.sunat, clientId: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div className="relative">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Client Secret
+                        </label>
+                        <input
+                          type={showPasswords ? 'text' : 'password'}
+                          placeholder="••••••••••••••••"
+                          value={emissionConfig.sunat.clientSecret}
+                          onChange={(e) => setEmissionConfig({
+                            ...emissionConfig,
+                            sunat: { ...emissionConfig.sunat, clientSecret: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Certificado Digital */}

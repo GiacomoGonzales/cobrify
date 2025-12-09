@@ -50,6 +50,8 @@ export default function Settings() {
     environment: 'beta',
     solUser: '',
     solPassword: '',
+    clientId: '',
+    clientSecret: '',
     certificateName: '',
     certificatePassword: '',
     homologated: false,
@@ -238,6 +240,8 @@ export default function Settings() {
             environment: businessData.sunat.environment || 'beta',
             solUser: businessData.sunat.solUser || '',
             solPassword: businessData.sunat.solPassword || '',
+            clientId: businessData.sunat.clientId || '',
+            clientSecret: businessData.sunat.clientSecret || '',
             certificateName: businessData.sunat.certificateName || '',
             certificatePassword: businessData.sunat.certificatePassword || '',
             homologated: businessData.sunat.homologated || false,
@@ -562,6 +566,8 @@ export default function Settings() {
         environment: sunatConfig.environment,
         solUser: sunatConfig.solUser,
         solPassword: sunatConfig.solPassword, // TODO: Encriptar
+        clientId: sunatConfig.clientId,
+        clientSecret: sunatConfig.clientSecret, // TODO: Encriptar
         certificateName: sunatConfig.certificateName,
         certificatePassword: sunatConfig.certificatePassword, // TODO: Encriptar
         homologated: sunatConfig.homologated,

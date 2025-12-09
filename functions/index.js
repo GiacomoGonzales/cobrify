@@ -1627,6 +1627,8 @@ export const sendDispatchGuideToSunatFn = onRequest(
             environment: config.sunat?.environment || 'beta',
             solUser: config.sunat?.solUser,
             solPassword: config.sunat?.solPassword,
+            clientId: config.sunat?.clientId,
+            clientSecret: config.sunat?.clientSecret,
             certificateName: config.sunat?.certificateName,
             certificatePassword: config.sunat?.certificatePassword,
             certificateData: config.sunat?.certificateData,
@@ -1635,6 +1637,7 @@ export const sendDispatchGuideToSunatFn = onRequest(
           businessData.qpse = { enabled: false }
           businessData.nubefact = { enabled: false }
           console.log('✅ [GRE] SUNAT configurado desde emissionConfig')
+          console.log('🔑 [GRE] Client ID presente:', !!config.sunat?.clientId)
         }
       }
 

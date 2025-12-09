@@ -2,6 +2,7 @@ import { generateInvoiceXML, generateCreditNoteXML, generateDispatchGuideXML } f
 import { signXML } from '../utils/xmlSigner.js'
 import { sendToSunat } from '../utils/sunatClient.js'
 import { sendDispatchGuideToSunat } from '../utils/sunatClientGRE.js'
+import { sendDispatchGuideToSunatREST, hasAPICredentials } from '../utils/sunatClientGRE_REST.js'
 import { sendToNubefact, parseNubefactResponse } from './nubefactService.js'
 import { convertInvoiceToNubefactJSON } from '../utils/invoiceToNubefactJSON.js'
 import { sendToQPse } from './qpseService.js'
@@ -624,14 +625,18 @@ export async function emitirGuiaRemision(guideData, businessData) {
 /**
  * Emite Guía de Remisión vía SUNAT DIRECTO
  *
+ * IMPORTANTE: Desde 2024, SUNAT cambió el método de envío de GRE de SOAP a REST API
+ * Ahora se requieren credenciales API adicionales (clientId, clientSecret)
+ * generadas en el portal SOL de SUNAT.
+ *
  * Pasos:
  * 1. Generar XML UBL 2.1 DespatchAdvice
  * 2. Firmar con certificado digital
- * 3. Enviar a SUNAT vía SOAP (endpoint GRE)
- * 4. Procesar CDR
+ * 3. Enviar a SUNAT vía REST API (nuevo método)
+ * 4. Procesar respuesta asíncrona
  */
 async function emitDispatchGuideViaSunatDirect(guideData, businessData) {
-  console.log('📤 Emitiendo Guía de Remisión vía SUNAT DIRECTO...')
+  console.log('📤 Emitiendo Guía de Remisión vía SUNAT DIRECTO (REST API)...')
 
   try {
     // Validar configuración SUNAT
@@ -647,6 +652,15 @@ async function emitDispatchGuideViaSunatDirect(guideData, businessData) {
       throw new Error('Certificado digital no configurado')
     }
 
+    // Validar credenciales API REST (requeridas para GRE desde 2024)
+    if (!hasAPICredentials(businessData.sunat)) {
+      throw new Error(
+        'Credenciales API no configuradas. Para enviar Guías de Remisión directamente a SUNAT, ' +
+        'debe generar las credenciales API (Client ID y Client Secret) en el portal SOL de SUNAT: ' +
+        'Menú SOL > Empresa > Credenciales API. Alternativamente, puede usar el método QPse.'
+      )
+    }
+
     // 1. Generar XML usando generateDispatchGuideXML
     console.log('🔨 Generando XML UBL 2.1 DespatchAdvice...')
     const xml = generateDispatchGuideXML(guideData, businessData)
@@ -660,14 +674,16 @@ async function emitDispatchGuideViaSunatDirect(guideData, businessData) {
       certificatePassword: businessData.sunat.certificatePassword
     })
 
-    // 3. Enviar a SUNAT (usando cliente específico de GRE)
-    console.log('📡 Enviando Guía de Remisión a SUNAT...')
-    const sunatResponse = await sendDispatchGuideToSunat(signedXML, {
+    // 3. Enviar a SUNAT vía REST API (nuevo método desde 2024)
+    console.log('📡 Enviando Guía de Remisión a SUNAT vía REST API...')
+    const sunatResponse = await sendDispatchGuideToSunatREST(signedXML, {
       ruc: businessData.ruc,
       series: guideData.series,
       number: guideData.correlative,
       solUser: businessData.sunat.solUser,
       solPassword: businessData.sunat.solPassword,
+      clientId: businessData.sunat.clientId,
+      clientSecret: businessData.sunat.clientSecret,
       environment: businessData.sunat.environment || 'production'
     })
 
@@ -680,6 +696,7 @@ async function emitDispatchGuideViaSunatDirect(guideData, businessData) {
       notes: sunatResponse.notes,
       cdrData: sunatResponse.cdrData,
       xml: signedXML,
+      ticket: sunatResponse.ticket,
       sunatResponse: sunatResponse
     }
 

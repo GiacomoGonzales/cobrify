@@ -81,6 +81,8 @@ export default function AdminUsers() {
     // SUNAT Directo
     solUser: '',
     solPassword: '',
+    clientId: '',
+    clientSecret: '',
     certificatePassword: '',
     certificateName: '',
     sunatEnvironment: 'beta',
@@ -91,7 +93,8 @@ export default function AdminUsers() {
   const [showPasswords, setShowPasswords] = useState({
     qpse: false,
     sol: false,
-    cert: false
+    cert: false,
+    api: false
   })
   const [certificateFile, setCertificateFile] = useState(null)
 
@@ -393,6 +396,8 @@ export default function AdminUsers() {
           // SUNAT Directo
           solUser: sunatData.solUser || '',
           solPassword: sunatData.solPassword || '',
+          clientId: sunatData.clientId || '',
+          clientSecret: sunatData.clientSecret || '',
           certificatePassword: sunatData.certificatePassword || '',
           certificateName: sunatData.certificateName || '',
           sunatEnvironment: normalizeSunatEnv(sunatData.environment),
@@ -492,21 +497,27 @@ export default function AdminUsers() {
       }
 
       if (sunatForm.emissionMethod === 'qpse') {
-        emissionConfig.qpse = {
+        const qpseData = {
           enabled: true,
           usuario: sunatForm.qpseUsuario,
           password: sunatForm.qpsePassword,
           environment: sunatForm.qpseEnvironment,
-          firmasDisponibles: currentEmissionConfig.qpse?.firmasDisponibles || 500,
-          firmasUsadas: currentEmissionConfig.qpse?.firmasUsadas || 0
+          firmasDisponibles: currentEmissionConfig.qpse?.firmasDisponibles || currentData.qpse?.firmasDisponibles || 500,
+          firmasUsadas: currentEmissionConfig.qpse?.firmasUsadas || currentData.qpse?.firmasUsadas || 0
         }
+        emissionConfig.qpse = qpseData
         emissionConfig.sunat = { enabled: false }
+        // También guardar en raíz para compatibilidad
+        updateData.qpse = qpseData
+        updateData.sunat = { enabled: false }
       } else if (sunatForm.emissionMethod === 'sunat_direct') {
         // Preparar datos de SUNAT
         const sunatData = {
           enabled: true,
           solUser: sunatForm.solUser,
           solPassword: sunatForm.solPassword,
+          clientId: sunatForm.clientId,
+          clientSecret: sunatForm.clientSecret,
           certificatePassword: sunatForm.certificatePassword,
           environment: sunatForm.sunatEnvironment,
           homologated: sunatForm.sunatEnvironment === 'production',
@@ -541,9 +552,14 @@ export default function AdminUsers() {
 
         emissionConfig.sunat = sunatData
         emissionConfig.qpse = { enabled: false }
+        // También guardar en raíz para compatibilidad
+        updateData.sunat = sunatData
+        updateData.qpse = { enabled: false }
       } else {
         emissionConfig.qpse = { enabled: false }
         emissionConfig.sunat = { enabled: false }
+        updateData.qpse = { enabled: false }
+        updateData.sunat = { enabled: false }
       }
 
       updateData.emissionConfig = emissionConfig
@@ -1490,6 +1506,51 @@ export default function AdminUsers() {
                       >
                         <Key className="w-4 h-4" />
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Credenciales API REST para Guías de Remisión */}
+                  <div className="col-span-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900 mb-1">
+                      Credenciales API REST (para Guías de Remisión)
+                    </p>
+                    <p className="text-xs text-blue-700 mb-3">
+                      Requeridas para enviar GRE directamente a SUNAT. Generar en: Menú SOL → Empresa → Credenciales API
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Client ID
+                        </label>
+                        <input
+                          type="text"
+                          value={sunatForm.clientId}
+                          onChange={e => setSunatForm({ ...sunatForm, clientId: e.target.value })}
+                          placeholder="ej: 12345678901-abc123..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Client Secret
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPasswords.api ? 'text' : 'password'}
+                            value={sunatForm.clientSecret}
+                            onChange={e => setSunatForm({ ...sunatForm, clientSecret: e.target.value })}
+                            placeholder="••••••••"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPasswords({ ...showPasswords, api: !showPasswords.api })}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
