@@ -61,6 +61,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Items (productos)
   const [items, setItems] = useState([])
 
+  // Datos del destinatario
+  const [useSameRecipient, setUseSameRecipient] = useState(true) // Usar mismo destinatario que cliente
+  const [recipientDocType, setRecipientDocType] = useState('6') // 6=RUC, 1=DNI
+  const [recipientDocNumber, setRecipientDocNumber] = useState('')
+  const [recipientName, setRecipientName] = useState('')
+
   const [isSaving, setIsSaving] = useState(false)
 
   // Pre-llenar datos si hay factura de referencia
@@ -87,8 +93,71 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       // Motivo: Venta (si viene de factura)
       setTransferReason('01')
+
+      // Pre-llenar datos del destinatario desde el cliente de la factura
+      if (referenceInvoice.customer) {
+        const customer = referenceInvoice.customer
+        console.log('📋 Datos del cliente de la factura:', customer)
+
+        // Normalizar tipo de documento (puede venir como "RUC", "DNI", "6", "1", etc.)
+        let docType = '6' // Por defecto RUC
+        if (customer.documentType === 'RUC' || customer.documentType === '6') {
+          docType = '6'
+        } else if (customer.documentType === 'DNI' || customer.documentType === '1') {
+          docType = '1'
+        } else if (customer.documentType === 'CE' || customer.documentType === '4') {
+          docType = '4'
+        } else if (customer.documentNumber?.length === 11) {
+          // Si el número tiene 11 dígitos, probablemente es RUC
+          docType = '6'
+        } else if (customer.documentNumber?.length === 8) {
+          // Si el número tiene 8 dígitos, probablemente es DNI
+          docType = '1'
+        }
+
+        setRecipientDocType(docType)
+        setRecipientDocNumber(customer.documentNumber || '')
+        setRecipientName(customer.name || '')
+
+        console.log('📋 Destinatario pre-llenado:', { docType, documentNumber: customer.documentNumber, name: customer.name })
+
+        // Pre-llenar dirección de destino si el cliente tiene dirección
+        if (customer.address) {
+          setDestinationAddress(customer.address)
+        }
+      }
     }
   }, [referenceInvoice])
+
+  // Limpiar datos del destinatario al cambiar entre mismo/diferente
+  useEffect(() => {
+    if (useSameRecipient && referenceInvoice?.customer) {
+      const customer = referenceInvoice.customer
+
+      // Normalizar tipo de documento
+      let docType = '6'
+      if (customer.documentType === 'RUC' || customer.documentType === '6') {
+        docType = '6'
+      } else if (customer.documentType === 'DNI' || customer.documentType === '1') {
+        docType = '1'
+      } else if (customer.documentType === 'CE' || customer.documentType === '4') {
+        docType = '4'
+      } else if (customer.documentNumber?.length === 11) {
+        docType = '6'
+      } else if (customer.documentNumber?.length === 8) {
+        docType = '1'
+      }
+
+      setRecipientDocType(docType)
+      setRecipientDocNumber(customer.documentNumber || '')
+      setRecipientName(customer.name || '')
+    } else if (!useSameRecipient) {
+      // Limpiar para que ingrese nuevo destinatario
+      setRecipientDocType('1')
+      setRecipientDocNumber('')
+      setRecipientName('')
+    }
+  }, [useSameRecipient, referenceInvoice])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -134,6 +203,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       return
     }
 
+    // Validar datos del destinatario
+    if (!recipientDocNumber || !recipientName) {
+      toast.error('Debe completar los datos del destinatario')
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -142,10 +217,19 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const dispatchGuide = {
         // Documento de referencia (si viene de factura)
         referencedInvoice: referenceInvoice ? {
+          id: referenceInvoice.id,
           documentType: referenceInvoice.documentType === 'factura' ? '01' : '03',
           series: referenceInvoice.number?.split('-')[0] || '',
           number: referenceInvoice.number?.split('-')[1] || '',
+          fullNumber: referenceInvoice.number,
         } : null,
+
+        // Datos del destinatario
+        recipient: {
+          documentType: recipientDocType,
+          documentNumber: recipientDocNumber,
+          name: recipientName,
+        },
 
         // Datos básicos
         transferReason,
@@ -388,6 +472,82 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             onChange={(e) => setDestinationUbigeo(e.target.value)}
             maxLength={6}
             helperText="6 dígitos (consultar en SUNAT)"
+          />
+        </div>
+
+        {/* Destinatario */}
+        <div className="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg">
+          <div className="flex items-start gap-2">
+            <User className="w-5 h-5 text-teal-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-teal-900 text-sm">Datos del Destinatario</h3>
+              <p className="text-xs text-teal-800 mt-1">
+                Persona o empresa que recibirá la mercancía
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Opción de mismo destinatario (solo si viene de factura) */}
+        {referenceInvoice && referenceInvoice.customer && (
+          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="recipientOption"
+                checked={useSameRecipient}
+                onChange={() => setUseSameRecipient(true)}
+                className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700">
+                Mismo que el cliente: <strong>{referenceInvoice.customer.name}</strong> ({referenceInvoice.customer.documentNumber})
+              </span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="recipientOption"
+                checked={!useSameRecipient}
+                onChange={() => setUseSameRecipient(false)}
+                className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700">Otro destinatario</span>
+            </label>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Select
+            label="Tipo de Documento"
+            required
+            value={recipientDocType}
+            onChange={(e) => setRecipientDocType(e.target.value)}
+            disabled={useSameRecipient && referenceInvoice?.customer}
+          >
+            <option value="6">RUC</option>
+            <option value="1">DNI</option>
+            <option value="4">Carnet de Extranjería</option>
+            <option value="7">Pasaporte</option>
+            <option value="0">Sin documento</option>
+          </Select>
+
+          <Input
+            label="Número de Documento"
+            placeholder={recipientDocType === '6' ? '20123456789' : '12345678'}
+            required
+            value={recipientDocNumber}
+            onChange={(e) => setRecipientDocNumber(e.target.value)}
+            maxLength={recipientDocType === '6' ? 11 : 15}
+            disabled={useSameRecipient && referenceInvoice?.customer}
+          />
+
+          <Input
+            label="Nombre / Razón Social"
+            placeholder="Nombre del destinatario"
+            required
+            value={recipientName}
+            onChange={(e) => setRecipientName(e.target.value)}
+            disabled={useSameRecipient && referenceInvoice?.customer}
           />
         </div>
 

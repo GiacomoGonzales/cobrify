@@ -110,7 +110,8 @@
       "WebFetch(domain:enneto.com)",
       "WebFetch(domain:docs.apisunat.com)",
       "WebFetch(domain:firebase.google.com)",
-      "WebFetch(domain:www.nubefact.com)"
+      "WebFetch(domain:www.nubefact.com)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []

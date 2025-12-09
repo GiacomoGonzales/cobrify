@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getDispatchGuides, sendDispatchGuideToSunat } from '@/services/firestoreService'
+import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
+import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
+import { generateDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -69,10 +71,15 @@ export default function DispatchGuides() {
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de guía siendo enviada
+  const [downloadingPdf, setDownloadingPdf] = useState(null) // ID de guía descargándose
+  const [companySettings, setCompanySettings] = useState(null) // Datos de la empresa
+  const [selectedGuide, setSelectedGuide] = useState(null) // Guía seleccionada para ver detalles
+  const [editingGuide, setEditingGuide] = useState(null) // Guía en edición
 
-  // Cargar guías al montar el componente
+  // Cargar guías y datos de empresa al montar el componente
   useEffect(() => {
     loadGuides()
+    loadCompanySettings()
   }, [])
 
   const loadGuides = async () => {
@@ -100,6 +107,31 @@ export default function DispatchGuides() {
       toast.error('Error al cargar las guías de remisión')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadCompanySettings = async () => {
+    try {
+      // MODO DEMO: Usar datos simulados
+      if (isDemoMode) {
+        setCompanySettings({
+          name: 'EMPRESA DEMO SAC',
+          businessName: 'EMPRESA DEMO SOCIEDAD ANÓNIMA CERRADA',
+          ruc: '20123456789',
+          address: 'Av. Demo 123, Lima, Perú',
+          logoUrl: null
+        })
+        return
+      }
+
+      const businessId = getBusinessId()
+      const result = await getCompanySettings(businessId)
+
+      if (result.success && result.data) {
+        setCompanySettings(result.data)
+      }
+    } catch (error) {
+      console.error('Error al cargar datos de empresa:', error)
     }
   }
 
@@ -157,6 +189,28 @@ export default function DispatchGuides() {
       toast.error(`Error al enviar guía: ${error.message}`)
     } finally {
       setSendingToSunat(null)
+    }
+  }
+
+  // Descargar PDF de guía de remisión
+  const handleDownloadPdf = async (guide) => {
+    if (downloadingPdf) return
+
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+
+    setDownloadingPdf(guide.id)
+    try {
+      toast.info(`Generando PDF de ${guide.number}...`)
+      await generateDispatchGuidePDF(guide, companySettings)
+      toast.success('PDF descargado correctamente')
+    } catch (error) {
+      console.error('Error al generar PDF:', error)
+      toast.error('Error al generar el PDF')
+    } finally {
+      setDownloadingPdf(null)
     }
   }
 
@@ -396,6 +450,16 @@ export default function DispatchGuides() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center gap-2">
+                          {/* Botón Editar - Solo si no está aceptada por SUNAT */}
+                          {guide.sunatStatus !== 'accepted' && (
+                            <button
+                              onClick={() => setEditingGuide(guide)}
+                              className="text-amber-600 hover:text-amber-900"
+                              title="Editar guía"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
                           {/* Botón Enviar a SUNAT - Solo si está pendiente */}
                           {guide.sunatStatus !== 'accepted' && (
                             <button
@@ -422,16 +486,23 @@ export default function DispatchGuides() {
                             </button>
                           )}
                           <button
+                            onClick={() => setSelectedGuide(guide)}
                             className="text-primary-600 hover:text-primary-900"
                             title="Ver detalles"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
-                            className="text-green-600 hover:text-green-900"
-                            title="Descargar XML"
+                            onClick={() => handleDownloadPdf(guide)}
+                            disabled={downloadingPdf === guide.id}
+                            className={`${downloadingPdf === guide.id ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-900'}`}
+                            title="Descargar PDF"
                           >
-                            <Download className="w-4 h-4" />
+                            {downloadingPdf === guide.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Download className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -500,6 +571,266 @@ export default function DispatchGuides() {
         isOpen={showCreateModal}
         onClose={handleCloseModal}
       />
+
+      {/* Edit Guide Modal */}
+      <EditDispatchGuideModal
+        isOpen={!!editingGuide}
+        onClose={() => {
+          setEditingGuide(null)
+          loadGuides() // Recargar guías después de editar
+        }}
+        guide={editingGuide}
+      />
+
+      {/* Detail Guide Modal */}
+      {selectedGuide && (() => {
+        // Extraer datos de transporte de las diferentes ubicaciones posibles
+        const driver = selectedGuide.transport?.driver || selectedGuide.driver || {}
+        const vehicle = selectedGuide.transport?.vehicle || selectedGuide.vehicle || {}
+        const carrier = selectedGuide.transport?.carrier || selectedGuide.carrier || {}
+        const recipient = selectedGuide.recipient || selectedGuide.customer || {}
+        const driverFullName = [driver.name, driver.lastName].filter(Boolean).join(' ') || '-'
+
+        return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Guía de Remisión</h2>
+                  <p className="text-primary-100 text-sm">{selectedGuide.number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedGuide(null)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-6">
+              {/* Estado */}
+              <div className="flex justify-center">
+                {getStatusBadge(selectedGuide.status, selectedGuide.sunatStatus)}
+              </div>
+
+              {/* Documento de Referencia */}
+              {selectedGuide.referencedInvoice && (
+                <div className="bg-indigo-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    Documento de Referencia
+                  </h3>
+                  <div className="text-sm">
+                    <span className="text-gray-500">Comprobante: </span>
+                    <span className="font-medium">
+                      {selectedGuide.referencedInvoice.documentType === '01' ? 'FACTURA' :
+                       selectedGuide.referencedInvoice.documentType === '03' ? 'BOLETA' : 'COMPROBANTE'}{' '}
+                      {selectedGuide.referencedInvoice.fullNumber ||
+                       `${selectedGuide.referencedInvoice.series}-${selectedGuide.referencedInvoice.number}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Datos del Traslado */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary-600" />
+                  Datos del Traslado
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Fecha de traslado:</span>
+                    <p className="font-medium">{new Date(selectedGuide.transferDate).toLocaleDateString('es-PE')}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Motivo:</span>
+                    <p className="font-medium">{TRANSFER_REASONS[selectedGuide.transferReason] || selectedGuide.transferReason}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Modalidad:</span>
+                    <p className="font-medium">{TRANSPORT_MODES[selectedGuide.transportMode] || selectedGuide.transportMode}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Peso total:</span>
+                    <p className="font-medium">{selectedGuide.totalWeight || '0'} KG</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Puntos de Traslado */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                  Puntos de Traslado
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="text-gray-500">Punto de partida:</span>
+                    <p className="font-medium">{selectedGuide.origin?.address || companySettings?.address || '-'}</p>
+                    {selectedGuide.origin?.ubigeo && (
+                      <p className="text-xs text-gray-400">Ubigeo: {selectedGuide.origin.ubigeo}</p>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Punto de llegada:</span>
+                    <p className="font-medium">{selectedGuide.destination?.address || '-'}</p>
+                    {selectedGuide.destination?.ubigeo && (
+                      <p className="text-xs text-gray-400">Ubigeo: {selectedGuide.destination.ubigeo}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Destinatario */}
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4 text-green-600" />
+                  Destinatario
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Razón social:</span>
+                    <p className="font-medium">{recipient.name || recipient.businessName || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">
+                      {recipient.documentType === '6' || recipient.documentType === 'RUC' ? 'RUC' :
+                       recipient.documentType === '1' || recipient.documentType === 'DNI' ? 'DNI' : 'RUC/DNI'}:
+                    </span>
+                    <p className="font-medium">{recipient.documentNumber || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Datos de Transporte - Privado */}
+              {selectedGuide.transportMode === '02' && (
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-orange-600" />
+                    Vehículo y Conductor
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Placa:</span>
+                      <p className="font-medium">{vehicle.plate || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Conductor:</span>
+                      <p className="font-medium">{driverFullName}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">DNI Conductor:</span>
+                      <p className="font-medium">{driver.documentNumber || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Licencia:</span>
+                      <p className="font-medium">{driver.license || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Datos de Transporte - Público */}
+              {selectedGuide.transportMode === '01' && (
+                <div className="bg-orange-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-orange-600" />
+                    Transportista
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Razón social:</span>
+                      <p className="font-medium">{carrier.businessName || carrier.name || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">RUC:</span>
+                      <p className="font-medium">{carrier.ruc || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Bienes */}
+              <div className="bg-purple-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-purple-600" />
+                  Bienes a Transportar ({selectedGuide.items?.length || 0})
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-purple-200">
+                        <th className="text-left py-2 px-2 text-gray-600">#</th>
+                        <th className="text-left py-2 px-2 text-gray-600">Descripción</th>
+                        <th className="text-center py-2 px-2 text-gray-600">Cantidad</th>
+                        <th className="text-center py-2 px-2 text-gray-600">Unidad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedGuide.items || []).map((item, index) => (
+                        <tr key={index} className="border-b border-purple-100">
+                          <td className="py-2 px-2 text-gray-500">{index + 1}</td>
+                          <td className="py-2 px-2 font-medium">{item.description || item.name || '-'}</td>
+                          <td className="py-2 px-2 text-center">{item.quantity || 1}</td>
+                          <td className="py-2 px-2 text-center">{item.unit || 'UNIDAD'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Hash SUNAT */}
+              {selectedGuide.sunatHash && (
+                <div className="bg-gray-100 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-gray-600" />
+                    Hash SUNAT
+                  </h3>
+                  <p className="text-sm font-mono text-gray-600 break-all">{selectedGuide.sunatHash}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedGuide(null)}
+              >
+                Cerrar
+              </Button>
+              <Button
+                onClick={() => {
+                  handleDownloadPdf(selectedGuide)
+                }}
+                disabled={downloadingPdf === selectedGuide.id}
+              >
+                {downloadingPdf === selectedGuide.id ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Descargar PDF
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+        )
+      })()}
     </div>
   )
 }

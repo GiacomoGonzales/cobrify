@@ -1210,7 +1210,7 @@ export const sendDispatchGuideToSunat = async (businessId, guideId) => {
 
     const functionUrl = useEmulator
       ? 'http://127.0.0.1:5001/cobrify-395fe/us-central1/sendDispatchGuideToSunatFn'
-      : 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendDispatchGuideToSunatFn'
+      : 'https://senddispatchguidetosunatfn-tb5ph5ddsq-uc.a.run.app'
 
     console.log(`🌐 [GRE] Llamando a: ${functionUrl}`)
 

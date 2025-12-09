@@ -100,27 +100,43 @@ export async function emitirComprobante(invoiceData, businessData) {
  * 5. Default: SUNAT directo
  */
 function determineEmissionMethod(businessData) {
-  // Opción 1: Método explícito configurado
-  if (businessData.emissionMethod) {
-    return businessData.emissionMethod
+  console.log('🔍 Determinando método de emisión...')
+  console.log('   - emissionMethod:', businessData.emissionMethod)
+  console.log('   - qpse:', JSON.stringify(businessData.qpse))
+  console.log('   - nubefact:', JSON.stringify(businessData.nubefact))
+  console.log('   - sunat:', JSON.stringify(businessData.sunat))
+
+  // Opción 1: Método explícito configurado (puede estar en emissionMethod o emissionConfig.method)
+  const explicitMethod = businessData.emissionMethod || businessData.emissionConfig?.method
+  if (explicitMethod) {
+    console.log(`   ✓ Usando método explícito: ${explicitMethod}`)
+    return explicitMethod
   }
 
-  // Opción 2: QPse habilitado
-  if (businessData.qpse?.enabled === true) {
+  // Opción 2: QPse habilitado (aceptar true, "true", 1, "1", o si tiene credenciales configuradas)
+  const qpseEnabled = businessData.qpse?.enabled
+  const hasQpseCredentials = businessData.qpse?.usuario && businessData.qpse?.password
+  if (qpseEnabled === true || qpseEnabled === 'true' || qpseEnabled === 1 || qpseEnabled === '1' || hasQpseCredentials) {
+    console.log('   ✓ QPse está habilitado (enabled:', qpseEnabled, ', hasCredentials:', hasQpseCredentials, ')')
     return 'qpse'
   }
 
   // Opción 3: NubeFact habilitado
-  if (businessData.nubefact?.enabled === true) {
+  const nubefactEnabled = businessData.nubefact?.enabled
+  if (nubefactEnabled === true || nubefactEnabled === 'true' || nubefactEnabled === 1 || nubefactEnabled === '1') {
+    console.log('   ✓ NubeFact está habilitado')
     return 'nubefact'
   }
 
-  // Opción 4: SUNAT directo habilitado (o default)
-  if (businessData.sunat?.enabled !== false) {
+  // Opción 4: SUNAT directo habilitado
+  const sunatEnabled = businessData.sunat?.enabled
+  if (sunatEnabled === true || sunatEnabled === 'true' || sunatEnabled === 1 || sunatEnabled === '1') {
+    console.log('   ✓ SUNAT directo está habilitado')
     return 'sunat_direct'
   }
 
   // Default: SUNAT directo
+  console.log('   ⚠ Ningún método habilitado, usando sunat_direct por defecto')
   return 'sunat_direct'
 }
 
@@ -691,14 +707,23 @@ async function emitDispatchGuideViaQPse(guideData, businessData) {
   console.log('📤 Emitiendo Guía de Remisión vía QPSE...')
 
   try {
-    // Validar configuración QPse
-    if (!businessData.qpse || !businessData.qpse.enabled) {
+    // Validar configuración QPse (aceptar enabled true, "true", o si tiene credenciales)
+    const qpseEnabled = businessData.qpse?.enabled
+    const hasCredentials = businessData.qpse?.usuario && businessData.qpse?.password
+    const isEnabled = qpseEnabled === true || qpseEnabled === 'true' || hasCredentials
+
+    if (!businessData.qpse || !isEnabled) {
       throw new Error('QPse no está habilitado para este negocio')
     }
 
-    if (!businessData.qpse.usuario || !businessData.qpse.password) {
+    if (!hasCredentials) {
       throw new Error('Credenciales de QPse no configuradas')
     }
+
+    console.log('✅ QPse configurado correctamente:', {
+      usuario: businessData.qpse.usuario,
+      environment: businessData.qpse.environment || 'production'
+    })
 
     // 1. Generar XML
     console.log('🔨 Generando XML UBL 2.1 DespatchAdvice...')

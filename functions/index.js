@@ -1603,6 +1603,54 @@ export const sendDispatchGuideToSunatFn = onRequest(
       const businessData = businessDoc.data()
       console.log(`🏢 [GRE] Negocio: ${businessData.businessName} (RUC: ${businessData.ruc})`)
 
+      // Mapear emissionConfig (configurado por super admin) al formato esperado
+      // Esto es necesario porque emissionConfig.qpse contiene las credenciales anidadas
+      if (businessData.emissionConfig) {
+        console.log('📋 [GRE] Usando configuración de emisión del admin')
+        const config = businessData.emissionConfig
+
+        if (config.method === 'qpse') {
+          businessData.qpse = {
+            enabled: config.qpse?.enabled !== false,
+            usuario: config.qpse?.usuario,
+            password: config.qpse?.password,
+            environment: config.qpse?.environment || 'demo',
+            firmasDisponibles: config.qpse?.firmasDisponibles || 0,
+            firmasUsadas: config.qpse?.firmasUsadas || 0
+          }
+          businessData.sunat = { enabled: false }
+          businessData.nubefact = { enabled: false }
+          console.log('✅ [GRE] QPse configurado desde emissionConfig:', JSON.stringify(businessData.qpse))
+        } else if (config.method === 'sunat_direct') {
+          businessData.sunat = {
+            enabled: config.sunat?.enabled !== false,
+            environment: config.sunat?.environment || 'beta',
+            solUser: config.sunat?.solUser,
+            solPassword: config.sunat?.solPassword,
+            certificateName: config.sunat?.certificateName,
+            certificatePassword: config.sunat?.certificatePassword,
+            certificateData: config.sunat?.certificateData,
+            homologated: config.sunat?.homologated || false
+          }
+          businessData.qpse = { enabled: false }
+          businessData.nubefact = { enabled: false }
+          console.log('✅ [GRE] SUNAT configurado desde emissionConfig')
+        }
+      }
+
+      // Validar que al menos un método esté habilitado
+      const sunatEnabled = businessData.sunat?.enabled === true
+      const qpseEnabled = businessData.qpse?.enabled === true
+      const nubefactEnabled = businessData.nubefact?.enabled === true
+
+      if (!sunatEnabled && !qpseEnabled && !nubefactEnabled) {
+        console.log('❌ [GRE] Ningún método de emisión habilitado')
+        res.status(400).json({
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo, QPse o NubeFact en Configuración.'
+        })
+        return
+      }
+
       // 2. Obtener datos de la guía de remisión
       const guideRef = db.collection('businesses').doc(businessId)
         .collection('dispatchGuides').doc(guideId)

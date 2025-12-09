@@ -1356,21 +1356,30 @@ export function generateDispatchGuideXML(guideData, businessData) {
   supplierLegalEntity.ele('cbc:RegistrationName').txt(businessData.businessName)
 
   // === DESTINATARIO ===
+  // Prioridad: recipient > customer (para compatibilidad)
+  const recipientData = guideData.recipient || guideData.customer || {}
+
+  // Determinar tipo de documento del destinatario
+  let recipientDocType = recipientData.documentType || '1'
+  // Convertir si viene como texto
+  if (recipientDocType === 'RUC') recipientDocType = '6'
+  else if (recipientDocType === 'DNI') recipientDocType = '1'
+
   const deliveryCustomerParty = root.ele('cac:DeliveryCustomerParty')
   const customerParty = deliveryCustomerParty.ele('cac:Party')
 
   // Identificación del destinatario
   const customerPartyId = customerParty.ele('cac:PartyIdentification')
   customerPartyId.ele('cbc:ID', {
-    'schemeID': guideData.customer?.documentType === 'RUC' ? '6' : '1',
+    'schemeID': recipientDocType,
     'schemeName': 'Documento de Identidad',
     'schemeAgencyName': 'PE:SUNAT',
     'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
-  }).txt(guideData.customer?.documentNumber || '-')
+  }).txt(recipientData.documentNumber || '00000000')
 
   // Nombre del destinatario
   const customerLegalEntity = customerParty.ele('cac:PartyLegalEntity')
-  customerLegalEntity.ele('cbc:RegistrationName').txt(guideData.customer?.name || 'VARIOS')
+  customerLegalEntity.ele('cbc:RegistrationName').txt(recipientData.name || 'CLIENTE GENERAL')
 
   // === ENVÍO (Shipment) ===
   const shipment = root.ele('cac:Shipment')
