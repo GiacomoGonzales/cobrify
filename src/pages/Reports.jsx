@@ -777,6 +777,113 @@ export default function Reports() {
       .map(([, value]) => value)
   }, [filteredExpenses, dateRange])
 
+  // ========== DATOS COMBINADOS PARA RENTABILIDAD ==========
+
+  // Combinar ingresos y gastos por período para el gráfico de rentabilidad
+  const profitabilityByPeriod = useMemo(() => {
+    // Crear un mapa combinado de períodos
+    const combinedData = {}
+
+    // Agregar datos de ventas
+    salesByPeriod.forEach((sale, index) => {
+      if (!combinedData[index]) {
+        combinedData[index] = {
+          period: sale.period,
+          ingresos: 0,
+          gastos: 0,
+          utilidad: 0
+        }
+      }
+      combinedData[index].ingresos = sale.revenue || 0
+    })
+
+    // Agregar datos de gastos
+    expensesByPeriod.forEach((expense, index) => {
+      if (!combinedData[index]) {
+        combinedData[index] = {
+          period: expense.period,
+          ingresos: 0,
+          gastos: 0,
+          utilidad: 0
+        }
+      }
+      combinedData[index].gastos = expense.gastos || 0
+    })
+
+    // Calcular utilidad neta
+    Object.keys(combinedData).forEach(key => {
+      combinedData[key].utilidad = combinedData[key].ingresos - combinedData[key].gastos
+    })
+
+    return Object.values(combinedData)
+  }, [salesByPeriod, expensesByPeriod])
+
+  // Estadísticas de rentabilidad
+  const profitabilityStats = useMemo(() => {
+    const totalIngresos = stats.totalRevenue
+    const totalGastos = expenseStats.total
+    const utilidadNeta = totalIngresos - totalGastos
+    const margenNeto = totalIngresos > 0 ? (utilidadNeta / totalIngresos) * 100 : 0
+
+    // Calcular ratio gastos/ingresos
+    const ratioGastos = totalIngresos > 0 ? (totalGastos / totalIngresos) * 100 : 0
+
+    return {
+      totalIngresos,
+      totalGastos,
+      utilidadNeta,
+      margenNeto,
+      ratioGastos
+    }
+  }, [stats.totalRevenue, expenseStats.total])
+
+  // Función para exportar reporte de rentabilidad
+  const exportProfitabilityReport = () => {
+    // Hoja 1: Resumen
+    const summaryData = [
+      { 'Concepto': 'Total Ingresos', 'Valor': profitabilityStats.totalIngresos },
+      { 'Concepto': 'Total Gastos', 'Valor': profitabilityStats.totalGastos },
+      { 'Concepto': 'Utilidad Neta', 'Valor': profitabilityStats.utilidadNeta },
+      { 'Concepto': 'Margen Neto (%)', 'Valor': profitabilityStats.margenNeto.toFixed(2) + '%' },
+      { 'Concepto': 'Ratio Gastos/Ingresos (%)', 'Valor': profitabilityStats.ratioGastos.toFixed(2) + '%' },
+    ]
+
+    // Hoja 2: Detalle por período
+    const detailData = profitabilityByPeriod.map(p => ({
+      'Período': p.period,
+      'Ingresos': p.ingresos,
+      'Gastos': p.gastos,
+      'Utilidad': p.utilidad,
+      'Margen (%)': p.ingresos > 0 ? ((p.utilidad / p.ingresos) * 100).toFixed(2) + '%' : '0%'
+    }))
+
+    // Agregar fila de totales
+    detailData.push({
+      'Período': 'TOTAL',
+      'Ingresos': profitabilityStats.totalIngresos,
+      'Gastos': profitabilityStats.totalGastos,
+      'Utilidad': profitabilityStats.utilidadNeta,
+      'Margen (%)': profitabilityStats.margenNeto.toFixed(2) + '%'
+    })
+
+    const wb = XLSX.utils.book_new()
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData)
+    const wsDetail = XLSX.utils.json_to_sheet(detailData)
+
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen')
+    XLSX.utils.book_append_sheet(wb, wsDetail, 'Detalle por Período')
+
+    const dateRangeText = {
+      week: 'ultima_semana',
+      month: 'ultimo_mes',
+      quarter: 'ultimo_trimestre',
+      year: 'ultimo_año',
+      all: 'todo'
+    }[dateRange] || 'periodo'
+
+    XLSX.writeFile(wb, `reporte_rentabilidad_${dateRangeText}.xlsx`)
+  }
+
   // Función para exportar reporte de gastos
   const exportExpensesReport = () => {
     const data = filteredExpenses.map(e => ({
@@ -939,6 +1046,20 @@ export default function Reports() {
           >
             <Receipt className="w-4 h-4 inline-block mr-2" />
             Gastos
+          </button>
+        )}
+        {/* Tab de Rentabilidad - solo visible si tiene el feature de gastos */}
+        {hasFeature && hasFeature('expenseManagement') && (
+          <button
+            onClick={() => setSelectedReport('profitability')}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+              selectedReport === 'profitability'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 inline-block mr-2" />
+            Rentabilidad
           </button>
         )}
       </div>
@@ -2107,6 +2228,363 @@ export default function Reports() {
               )}
             </CardContent>
           </Card>
+        </>
+      )}
+
+      {/* Reporte de Rentabilidad */}
+      {selectedReport === 'profitability' && (
+        <>
+          {/* Botón de exportación */}
+          <div className="flex justify-end">
+            <button
+              onClick={exportProfitabilityReport}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Descargar Reporte de Rentabilidad (Excel)
+            </button>
+          </div>
+
+          {/* KPIs de Rentabilidad */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Ingresos</p>
+                    <p className="text-2xl font-bold text-blue-600 mt-2">
+                      {formatCurrency(profitabilityStats.totalIngresos)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {stats.totalInvoices} ventas
+                    </p>
+                  </div>
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <TrendingUp className="w-6 h-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Gastos</p>
+                    <p className="text-2xl font-bold text-red-600 mt-2">
+                      {formatCurrency(profitabilityStats.totalGastos)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {expenseStats.count} registros
+                    </p>
+                  </div>
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <TrendingDown className="w-6 h-6 text-red-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Utilidad Neta</p>
+                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatCurrency(profitabilityStats.utilidadNeta)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Ingresos - Gastos
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${profitabilityStats.utilidadNeta >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                    <DollarSign className={`w-6 h-6 ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Margen Neto</p>
+                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-600' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {profitabilityStats.margenNeto.toFixed(1)}%
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Utilidad / Ingresos
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${profitabilityStats.margenNeto >= 20 ? 'bg-emerald-100' : profitabilityStats.margenNeto >= 0 ? 'bg-yellow-100' : 'bg-red-100'}`}>
+                    <BarChart3 className={`w-6 h-6 ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-600' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-600'}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Ratio Gastos</p>
+                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.ratioGastos <= 50 ? 'text-emerald-600' : profitabilityStats.ratioGastos <= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {profitabilityStats.ratioGastos.toFixed(1)}%
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Gastos / Ingresos
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${profitabilityStats.ratioGastos <= 50 ? 'bg-emerald-100' : profitabilityStats.ratioGastos <= 80 ? 'bg-yellow-100' : 'bg-red-100'}`}>
+                    <PieChart className={`w-6 h-6 ${profitabilityStats.ratioGastos <= 50 ? 'text-emerald-600' : profitabilityStats.ratioGastos <= 80 ? 'text-yellow-600' : 'text-red-600'}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Gráfico Principal: Ingresos vs Gastos */}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Ingresos vs Gastos
+                {dateRange === 'week' && ' (Última Semana)'}
+                {dateRange === 'month' && ' (Último Mes)'}
+                {dateRange === 'quarter' && ' (Último Trimestre)'}
+                {dateRange === 'year' && ' (Último Año)'}
+                {dateRange === 'all' && ' (Todo el Período)'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={profitabilityByPeriod}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="period" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={80} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    labelFormatter={(label) => `Período: ${label}`}
+                  />
+                  <Legend />
+                  <Bar dataKey="ingresos" fill="#3b82f6" name="Ingresos" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="gastos" fill="#ef4444" name="Gastos" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Gráficos secundarios */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Gráfico de Utilidad por Período */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Evolución de la Utilidad Neta</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={profitabilityByPeriod}>
+                    <defs>
+                      <linearGradient id="colorUtilidad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value)}
+                      labelFormatter={(label) => `Período: ${label}`}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="utilidad"
+                      stroke="#10b981"
+                      fillOpacity={1}
+                      fill="url(#colorUtilidad)"
+                      name="Utilidad Neta"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Distribución Ingresos vs Gastos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribución del Ingreso</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {profitabilityStats.totalIngresos > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RePieChart>
+                      <Pie
+                        data={[
+                          { name: 'Utilidad Neta', value: Math.max(0, profitabilityStats.utilidadNeta), color: '#10b981' },
+                          { name: 'Gastos', value: profitabilityStats.totalGastos, color: '#ef4444' },
+                        ].filter(d => d.value > 0)}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        paddingAngle={5}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {[
+                          { name: 'Utilidad Neta', value: Math.max(0, profitabilityStats.utilidadNeta), color: '#10b981' },
+                          { name: 'Gastos', value: profitabilityStats.totalGastos, color: '#ef4444' },
+                        ].filter(d => d.value > 0).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[300px] text-gray-500">
+                    <p>No hay datos de ingresos disponibles</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tabla de Detalle por Período */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Detalle por Período</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Período</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Gastos</TableHead>
+                      <TableHead className="text-right">Utilidad Neta</TableHead>
+                      <TableHead className="text-right">Margen (%)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {profitabilityByPeriod.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                          No hay datos disponibles en este período
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      <>
+                        {profitabilityByPeriod.map((period, index) => {
+                          const margin = period.ingresos > 0 ? (period.utilidad / period.ingresos) * 100 : 0
+                          return (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{period.period}</TableCell>
+                              <TableCell className="text-right text-blue-600 font-semibold">
+                                {formatCurrency(period.ingresos)}
+                              </TableCell>
+                              <TableCell className="text-right text-red-600 font-semibold">
+                                {formatCurrency(period.gastos)}
+                              </TableCell>
+                              <TableCell className={`text-right font-bold ${period.utilidad >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {formatCurrency(period.utilidad)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <span className={`font-medium ${margin >= 20 ? 'text-emerald-600' : margin >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {margin.toFixed(1)}%
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                        {/* Fila de totales */}
+                        <TableRow className="bg-gray-50 border-t-2">
+                          <TableCell className="font-bold">TOTAL</TableCell>
+                          <TableCell className="text-right text-blue-700 font-bold">
+                            {formatCurrency(profitabilityStats.totalIngresos)}
+                          </TableCell>
+                          <TableCell className="text-right text-red-700 font-bold">
+                            {formatCurrency(profitabilityStats.totalGastos)}
+                          </TableCell>
+                          <TableCell className={`text-right font-bold ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                            {formatCurrency(profitabilityStats.utilidadNeta)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-bold ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-700' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-700'}`}>
+                              {profitabilityStats.margenNeto.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      </>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Análisis Comparativo */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className={`border-2 ${profitabilityStats.utilidadNeta > 0 ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+              <CardContent className="p-6 text-center">
+                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${profitabilityStats.utilidadNeta > 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                  {profitabilityStats.utilidadNeta > 0 ? (
+                    <TrendingUp className="w-8 h-8 text-emerald-600" />
+                  ) : (
+                    <TrendingDown className="w-8 h-8 text-red-600" />
+                  )}
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {profitabilityStats.utilidadNeta > 0 ? 'Rentable' : 'En Pérdida'}
+                </h3>
+                <p className="text-sm text-gray-600 mt-2">
+                  {profitabilityStats.utilidadNeta > 0
+                    ? `Tu negocio genera ${formatCurrency(profitabilityStats.utilidadNeta)} de utilidad`
+                    : `Tu negocio tiene una pérdida de ${formatCurrency(Math.abs(profitabilityStats.utilidadNeta))}`
+                  }
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-blue-200 bg-blue-50">
+              <CardContent className="p-6 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+                  <DollarSign className="w-8 h-8 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Por cada S/ 100</h3>
+                <p className="text-sm text-gray-600 mt-2">
+                  De ingresos, gastas S/ {profitabilityStats.ratioGastos.toFixed(0)} y
+                  {profitabilityStats.utilidadNeta >= 0
+                    ? ` ganas S/ ${(100 - profitabilityStats.ratioGastos).toFixed(0)}`
+                    : ` pierdes S/ ${(profitabilityStats.ratioGastos - 100).toFixed(0)}`
+                  }
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-purple-200 bg-purple-50">
+              <CardContent className="p-6 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-100 mb-4">
+                  <BarChart3 className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Margen de Utilidad</h3>
+                <p className="text-sm text-gray-600 mt-2">
+                  {profitabilityStats.margenNeto >= 30
+                    ? 'Excelente margen de utilidad'
+                    : profitabilityStats.margenNeto >= 20
+                    ? 'Buen margen de utilidad'
+                    : profitabilityStats.margenNeto >= 10
+                    ? 'Margen aceptable, hay espacio de mejora'
+                    : profitabilityStats.margenNeto >= 0
+                    ? 'Margen bajo, considera optimizar gastos'
+                    : 'Necesitas reducir gastos urgentemente'
+                  }
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>
