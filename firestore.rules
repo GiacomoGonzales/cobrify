@@ -26,6 +26,15 @@ service cloud.firestore {
              exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    // Helper function to check if user is a reseller (by UID or by email)
+    function isReseller(resellerId) {
+      // Check if user's UID matches the resellerId
+      return request.auth.uid == resellerId ||
+             // Or check if user's email matches the reseller's email
+             (exists(/databases/$(database)/documents/resellers/$(resellerId)) &&
+              get(/databases/$(database)/documents/resellers/$(resellerId)).data.email == request.auth.token.email);
+    }
+
     // Helper function to check access (admin OR active subscription)
     function hasAccess(userId) {
       return isAdmin() || hasActiveSubscription(userId);
@@ -43,20 +52,16 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
       // Sub-usuarios pueden leer la suscripción de su owner (para heredar features)
       allow read: if isAuthenticated() && isSubUserOfOwner(userId);
-      // Resellers pueden leer suscripciones de clientes que crearon
-      allow read: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
-      // Resellers pueden leer por query de sus clientes (email match)
-      allow read: if isAuthenticated() &&
-        exists(/databases/$(database)/documents/resellers/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/resellers/$(request.auth.uid)).data.email == request.auth.token.email;
+      // Resellers pueden leer suscripciones de clientes que crearon (verificar por UID o email)
+      allow read: if isAuthenticated() && resource.data.resellerId != null && isReseller(resource.data.resellerId);
       // Users can create their own subscription (for trial), admins can modify any
       allow create: if isAuthenticated() && isOwner(userId);
-      // Resellers pueden crear suscripciones para sus clientes
-      allow create: if isAuthenticated() && request.resource.data.resellerId == request.auth.uid;
+      // Resellers pueden crear suscripciones para sus clientes (verificar que el resellerId en los datos coincida)
+      allow create: if isAuthenticated() && request.resource.data.resellerId != null && isReseller(request.resource.data.resellerId);
       // Only admins can update/delete subscriptions
       allow update, delete: if isAdmin();
-      // Resellers pueden actualizar suscripciones de sus clientes
-      allow update: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
+      // Resellers pueden actualizar suscripciones de sus clientes (verificar por UID o email)
+      allow update: if isAuthenticated() && resource.data.resellerId != null && isReseller(resource.data.resellerId);
     }
 
     // Admins collection (lista de UIDs de administradores)
@@ -75,18 +80,19 @@ service cloud.firestore {
     match /resellers/{resellerId} {
       // Resellers pueden leer/escribir sus propios datos (por UID)
       allow read, write: if isAuthenticated() && isOwner(resellerId);
-      // Usuarios autenticados pueden buscar si son resellers (por email)
-      allow read: if isAuthenticated() && resource.data.email == request.auth.token.email;
+      // Usuarios autenticados pueden leer/escribir si su email coincide con el del reseller
+      // Esto permite que resellers creados con docId diferente al uid puedan acceder
+      allow read, write: if isAuthenticated() && resource.data.email == request.auth.token.email;
       // Admins pueden leer/escribir cualquier reseller
       allow read, write: if isAdmin();
     }
 
     // Reseller Transactions collection
     match /resellerTransactions/{transactionId} {
-      // Resellers pueden leer sus transacciones
-      allow read: if isAuthenticated() && resource.data.resellerId == request.auth.uid;
-      // Resellers pueden crear transacciones (solo sus propias)
-      allow create: if isAuthenticated() && request.resource.data.resellerId == request.auth.uid;
+      // Resellers pueden leer sus transacciones (verificar por UID o email)
+      allow read: if isAuthenticated() && resource.data.resellerId != null && isReseller(resource.data.resellerId);
+      // Resellers pueden crear transacciones (verificar que el resellerId en los datos coincida)
+      allow create: if isAuthenticated() && request.resource.data.resellerId != null && isReseller(request.resource.data.resellerId);
       // Admins pueden leer/escribir cualquier transacción
       allow read, write: if isAdmin();
     }

@@ -404,10 +404,12 @@ export const AuthProvider = ({ children }) => {
   const refreshResellerData = async () => {
     if (user && isReseller) {
       try {
-        const resellerRef = doc(db, 'resellers', user.uid)
+        // Usar el docId existente si lo hay, si no usar el uid
+        const currentDocId = resellerData?.docId || user.uid
+        const resellerRef = doc(db, 'resellers', currentDocId)
         const resellerDoc = await getDoc(resellerRef)
         if (resellerDoc.exists()) {
-          setResellerData(resellerDoc.data())
+          setResellerData({ ...resellerDoc.data(), docId: currentDocId })
         }
       } catch (error) {
         console.error('Error al refrescar datos de reseller:', error)
