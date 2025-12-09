@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -14,8 +14,11 @@ import {
   closeCashRegister,
   addCashMovement,
   getCashMovements,
+  updateCashMovement,
+  deleteCashMovement,
   getInvoices,
   getCompanySettings,
+  getCashRegisterHistory,
 } from '@/services/firestoreService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
@@ -26,6 +29,13 @@ export default function CashRegister() {
   const [currentSession, setCurrentSession] = useState(null)
   const [movements, setMovements] = useState([])
   const [todayInvoices, setTodayInvoices] = useState([])
+
+  // Tab state: 'current' o 'history'
+  const [activeTab, setActiveTab] = useState('current')
+  const [historyData, setHistoryData] = useState([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [selectedHistorySession, setSelectedHistorySession] = useState(null)
+  const [historyMovements, setHistoryMovements] = useState([])
 
   // Helper para convertir fechas (Firestore Timestamp o Date)
   const getDateFromTimestamp = (timestamp) => {
@@ -39,6 +49,7 @@ export default function CashRegister() {
   const [showMovementModal, setShowMovementModal] = useState(false)
   const [closedSuccessfully, setClosedSuccessfully] = useState(false)
   const [closedSessionData, setClosedSessionData] = useState(null)
+  const [showHistoryDetailModal, setShowHistoryDetailModal] = useState(false)
 
   // Form states
   const [openingAmount, setOpeningAmount] = useState('')
@@ -53,6 +64,10 @@ export default function CashRegister() {
     description: '',
     category: '',
   })
+
+  // Estados para editar/eliminar movimientos
+  const [editingMovement, setEditingMovement] = useState(null)
+  const [showDeleteMovementConfirm, setShowDeleteMovementConfirm] = useState(null)
 
   useEffect(() => {
     if (user?.uid) {
@@ -150,6 +165,110 @@ export default function CashRegister() {
     }
   }
 
+  const loadHistory = async () => {
+    setIsLoadingHistory(true)
+    try {
+      if (isDemoMode) {
+        // Datos demo de historial
+        const demoHistory = [
+          {
+            id: 'demo-hist-1',
+            openingAmount: 500,
+            closingAmount: 1850,
+            closingCash: 1350,
+            closingCard: 300,
+            closingTransfer: 200,
+            openedAt: new Date(Date.now() - 86400000), // Ayer
+            closedAt: new Date(Date.now() - 86400000 + 36000000),
+            status: 'closed',
+            totalSales: 1500,
+            totalIncome: 100,
+            totalExpense: 50,
+            expectedAmount: 1550,
+            difference: -200,
+          },
+          {
+            id: 'demo-hist-2',
+            openingAmount: 300,
+            closingAmount: 980,
+            closingCash: 780,
+            closingCard: 150,
+            closingTransfer: 50,
+            openedAt: new Date(Date.now() - 86400000 * 2),
+            closedAt: new Date(Date.now() - 86400000 * 2 + 36000000),
+            status: 'closed',
+            totalSales: 850,
+            totalIncome: 50,
+            totalExpense: 20,
+            expectedAmount: 780,
+            difference: 0,
+          },
+          {
+            id: 'demo-hist-3',
+            openingAmount: 400,
+            closingAmount: 1200,
+            closingCash: 900,
+            closingCard: 200,
+            closingTransfer: 100,
+            openedAt: new Date(Date.now() - 86400000 * 3),
+            closedAt: new Date(Date.now() - 86400000 * 3 + 36000000),
+            status: 'closed',
+            totalSales: 1100,
+            totalIncome: 0,
+            totalExpense: 100,
+            expectedAmount: 900,
+            difference: 0,
+          },
+        ]
+        setHistoryData(demoHistory)
+        setIsLoadingHistory(false)
+        return
+      }
+
+      const result = await getCashRegisterHistory(getBusinessId())
+      if (result.success) {
+        setHistoryData(result.data || [])
+      } else {
+        toast.error('Error al cargar historial')
+      }
+    } catch (error) {
+      console.error('Error al cargar historial:', error)
+      toast.error('Error al cargar historial')
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const handleViewHistoryDetail = async (session) => {
+    setSelectedHistorySession(session)
+    setShowHistoryDetailModal(true)
+
+    // Cargar movimientos de esa sesión
+    if (!isDemoMode) {
+      try {
+        const movementsResult = await getCashMovements(getBusinessId(), session.id)
+        if (movementsResult.success) {
+          setHistoryMovements(movementsResult.data || [])
+        }
+      } catch (error) {
+        console.error('Error al cargar movimientos:', error)
+      }
+    } else {
+      // Movimientos demo
+      setHistoryMovements([
+        { id: '1', type: 'income', amount: 50, description: 'Cobro cliente', category: 'Cobro a Cliente', createdAt: new Date() },
+        { id: '2', type: 'expense', amount: 30, description: 'Taxi', category: 'Transporte', createdAt: new Date() },
+      ])
+    }
+  }
+
+  // Cargar historial cuando se cambia a esa pestaña
+  useEffect(() => {
+    if (activeTab === 'history' && historyData.length === 0 && user?.uid) {
+      loadHistory()
+    }
+  }, [activeTab, user?.uid])
+
   const handleOpenCashRegister = async () => {
     if (!openingAmount || parseFloat(openingAmount) < 0) {
       toast.error('Ingresa un monto inicial válido')
@@ -233,6 +352,16 @@ export default function CashRegister() {
         cash,
         card,
         transfer,
+        totalSales: totals.sales,
+        salesCash: totals.salesCash,
+        salesCard: totals.salesCard,
+        salesTransfer: totals.salesTransfer,
+        salesYape: totals.salesYape,
+        salesPlin: totals.salesPlin,
+        totalIncome: totals.income,
+        totalExpense: totals.expense,
+        expectedAmount: totals.expected,
+        difference: cash - totals.expected,
       })
       if (result.success) {
         // Guardar datos y mostrar pantalla de éxito
@@ -367,6 +496,94 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error al agregar movimiento:', error)
       toast.error('Error al registrar el movimiento')
+    }
+  }
+
+  const handleEditMovement = (movement) => {
+    setEditingMovement(movement)
+    setMovementData({
+      type: movement.type,
+      amount: movement.amount.toString(),
+      description: movement.description,
+      category: movement.category,
+    })
+    setShowMovementModal(true)
+  }
+
+  const handleUpdateMovement = async () => {
+    if (!movementData.amount || parseFloat(movementData.amount) <= 0) {
+      toast.error('Ingresa un monto válido')
+      return
+    }
+
+    if (!movementData.category) {
+      toast.error('Selecciona una categoría')
+      return
+    }
+
+    if (!movementData.description.trim()) {
+      toast.error('Ingresa una descripción')
+      return
+    }
+
+    try {
+      if (isDemoMode) {
+        // Actualizar en la lista local para demo
+        setMovements(prev => prev.map(m =>
+          m.id === editingMovement.id
+            ? { ...m, ...movementData, amount: parseFloat(movementData.amount) }
+            : m
+        ))
+        toast.success('Movimiento actualizado (DEMO)', { duration: 5000 })
+        setShowMovementModal(false)
+        setEditingMovement(null)
+        setMovementData({ type: 'income', amount: '', description: '', category: '' })
+        return
+      }
+
+      const result = await updateCashMovement(getBusinessId(), editingMovement.id, {
+        type: movementData.type,
+        amount: parseFloat(movementData.amount),
+        description: movementData.description,
+        category: movementData.category,
+      })
+
+      if (result.success) {
+        toast.success('Movimiento actualizado correctamente')
+        setShowMovementModal(false)
+        setEditingMovement(null)
+        setMovementData({ type: 'income', amount: '', description: '', category: '' })
+        loadData()
+      } else {
+        toast.error(result.error || 'Error al actualizar el movimiento')
+      }
+    } catch (error) {
+      console.error('Error al actualizar movimiento:', error)
+      toast.error('Error al actualizar el movimiento')
+    }
+  }
+
+  const handleDeleteMovement = async (movementId) => {
+    try {
+      if (isDemoMode) {
+        setMovements(prev => prev.filter(m => m.id !== movementId))
+        toast.success('Movimiento eliminado (DEMO)', { duration: 5000 })
+        setShowDeleteMovementConfirm(null)
+        return
+      }
+
+      const result = await deleteCashMovement(getBusinessId(), movementId)
+
+      if (result.success) {
+        toast.success('Movimiento eliminado correctamente')
+        setShowDeleteMovementConfirm(null)
+        loadData()
+      } else {
+        toast.error(result.error || 'Error al eliminar el movimiento')
+      }
+    } catch (error) {
+      console.error('Error al eliminar movimiento:', error)
+      toast.error('Error al eliminar el movimiento')
     }
   }
 
@@ -541,27 +758,60 @@ export default function CashRegister() {
           <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
         </div>
 
-        {!currentSession ? (
-          <Button onClick={() => setShowOpenModal(true)} className="w-full sm:w-auto">
-            <Unlock className="w-4 h-4 mr-2" />
-            Abrir Caja
-          </Button>
-        ) : (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowMovementModal(true)} className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Movimiento
+        {activeTab === 'current' && (
+          !currentSession ? (
+            <Button onClick={() => setShowOpenModal(true)} className="w-full sm:w-auto">
+              <Unlock className="w-4 h-4 mr-2" />
+              Abrir Caja
             </Button>
-            <Button variant="danger" onClick={() => setShowCloseModal(true)} className="w-full sm:w-auto">
-              <Lock className="w-4 h-4 mr-2" />
-              Cerrar Caja
-            </Button>
-          </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowMovementModal(true)} className="w-full sm:w-auto">
+                <Plus className="w-4 h-4 mr-2" />
+                Movimiento
+              </Button>
+              <Button variant="danger" onClick={() => setShowCloseModal(true)} className="w-full sm:w-auto">
+                <Lock className="w-4 h-4 mr-2" />
+                Cerrar Caja
+              </Button>
+            </div>
+          )
         )}
       </div>
 
-      {/* Estado de la caja */}
-      {currentSession ? (
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8">
+          <button
+            onClick={() => setActiveTab('current')}
+            className={`py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+              activeTab === 'current'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <DollarSign className="w-4 h-4 inline mr-2" />
+            Caja Actual
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+              activeTab === 'history'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <History className="w-4 h-4 inline mr-2" />
+            Historial
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'current' ? (
+        <>
+          {/* Estado de la caja */}
+          {currentSession ? (
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -733,7 +983,7 @@ export default function CashRegister() {
                     {movements.map((movement) => (
                       <div
                         key={movement.id}
-                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 group"
                       >
                         <div className="flex items-center gap-3">
                           <div
@@ -754,17 +1004,36 @@ export default function CashRegister() {
                             <p className="text-xs text-gray-500">{movement.category}</p>
                           </div>
                         </div>
-                        <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-0 sm:text-right ml-13 sm:ml-0">
-                          <p
-                            className={`text-base sm:text-lg font-bold ${
-                              movement.type === 'income' ? 'text-green-600' : 'text-red-600'
-                            }`}
-                          >
-                            {movement.type === 'income' ? '+' : '-'} {formatCurrency(movement.amount)}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {getDateFromTimestamp(movement.createdAt) ? formatDate(getDateFromTimestamp(movement.createdAt)) : 'Hoy'}
-                          </p>
+                        <div className="flex items-center gap-3">
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 sm:gap-0 sm:text-right">
+                            <p
+                              className={`text-base sm:text-lg font-bold ${
+                                movement.type === 'income' ? 'text-green-600' : 'text-red-600'
+                              }`}
+                            >
+                              {movement.type === 'income' ? '+' : '-'} {formatCurrency(movement.amount)}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {getDateFromTimestamp(movement.createdAt) ? formatDate(getDateFromTimestamp(movement.createdAt)) : 'Hoy'}
+                            </p>
+                          </div>
+                          {/* Botones de editar/eliminar */}
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity sm:ml-2">
+                            <button
+                              onClick={() => handleEditMovement(movement)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setShowDeleteMovementConfirm(movement.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -793,6 +1062,309 @@ export default function CashRegister() {
           </CardContent>
         </Card>
       )}
+        </>
+      ) : (
+        /* Historial de Cajas */
+        <div className="space-y-4">
+          {isLoadingHistory ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : historyData.length === 0 ? (
+            <Card>
+              <CardContent className="py-12">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <History className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Sin Historial</h3>
+                  <p className="text-gray-600">
+                    No hay sesiones de caja cerradas anteriormente
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Resumen del historial */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Total Sesiones</p>
+                        <p className="text-2xl font-bold text-gray-900">{historyData.length}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <History className="w-6 h-6 text-blue-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Total Ventas (Historial)</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {formatCurrency(historyData.reduce((sum, s) => sum + (s.totalSales || 0), 0))}
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-green-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">Diferencia Acumulada</p>
+                        {(() => {
+                          const totalDiff = historyData.reduce((sum, s) => sum + (s.difference || 0), 0)
+                          return (
+                            <p className={`text-2xl font-bold ${totalDiff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {formatCurrency(totalDiff)}
+                            </p>
+                          )
+                        })()}
+                      </div>
+                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                        <DollarSign className="w-6 h-6 text-gray-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Lista de sesiones */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                    <History className="w-5 h-5" />
+                    Sesiones Anteriores
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {historyData.map((session) => {
+                      const openedAt = getDateFromTimestamp(session.openedAt)
+                      const closedAt = getDateFromTimestamp(session.closedAt)
+                      const difference = session.difference || 0
+
+                      return (
+                        <div
+                          key={session.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
+                          onClick={() => handleViewHistoryDetail(session)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Calendar className="w-6 h-6 text-primary-600" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900">
+                                {openedAt ? openedAt.toLocaleDateString('es-PE', {
+                                  weekday: 'long',
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                }) : 'Fecha desconocida'}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                {openedAt ? openedAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''} - {closedAt ? closedAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 sm:gap-6">
+                            <div className="text-center">
+                              <p className="text-xs text-gray-500">Ventas</p>
+                              <p className="font-semibold text-green-600">{formatCurrency(session.totalSales || 0)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-500">Cierre</p>
+                              <p className="font-semibold text-gray-900">{formatCurrency(session.closingCash || 0)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-500">Diferencia</p>
+                              <p className={`font-semibold ${difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {difference > 0 ? '+' : ''}{formatCurrency(difference)}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 hidden sm:block" />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Modal Detalle de Historial */}
+      <Modal
+        isOpen={showHistoryDetailModal}
+        onClose={() => {
+          setShowHistoryDetailModal(false)
+          setSelectedHistorySession(null)
+          setHistoryMovements([])
+        }}
+        title="Detalle de Sesión"
+        size="lg"
+      >
+        {selectedHistorySession && (
+          <div className="space-y-6">
+            {/* Fecha y hora */}
+            <div className="text-center py-4 bg-gray-50 rounded-lg">
+              <p className="text-lg font-semibold text-gray-900">
+                {getDateFromTimestamp(selectedHistorySession.openedAt)?.toLocaleDateString('es-PE', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Apertura: {getDateFromTimestamp(selectedHistorySession.openedAt)?.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} |
+                Cierre: {getDateFromTimestamp(selectedHistorySession.closedAt)?.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+
+            {/* Resumen */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-xs text-blue-600 font-medium">Monto Inicial</p>
+                <p className="text-xl font-bold text-blue-700">{formatCurrency(selectedHistorySession.openingAmount || 0)}</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <p className="text-xs text-green-600 font-medium">Ventas del Día</p>
+                <p className="text-xl font-bold text-green-700">{formatCurrency(selectedHistorySession.totalSales || 0)}</p>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <p className="text-xs text-purple-600 font-medium">Otros Ingresos</p>
+                <p className="text-xl font-bold text-purple-700">{formatCurrency(selectedHistorySession.totalIncome || 0)}</p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-lg">
+                <p className="text-xs text-red-600 font-medium">Egresos</p>
+                <p className="text-xl font-bold text-red-700">{formatCurrency(selectedHistorySession.totalExpense || 0)}</p>
+              </div>
+            </div>
+
+            {/* Cierre */}
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="font-semibold text-gray-900 mb-3">Arqueo de Cierre</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Efectivo Contado:</span>
+                  <span className="font-semibold">{formatCurrency(selectedHistorySession.closingCash || 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Tarjetas:</span>
+                  <span className="font-semibold">{formatCurrency(selectedHistorySession.closingCard || 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Transferencias:</span>
+                  <span className="font-semibold">{formatCurrency(selectedHistorySession.closingTransfer || 0)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
+                  <span className="text-gray-600">Efectivo Esperado:</span>
+                  <span className="font-semibold">{formatCurrency(selectedHistorySession.expectedAmount || 0)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium text-gray-700">Diferencia:</span>
+                  <span className={`font-bold ${(selectedHistorySession.difference || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {(selectedHistorySession.difference || 0) > 0 ? '+' : ''}{formatCurrency(selectedHistorySession.difference || 0)}
+                    {(selectedHistorySession.difference || 0) !== 0 && (
+                      <span className="text-xs ml-1">
+                        ({(selectedHistorySession.difference || 0) > 0 ? 'Sobrante' : 'Faltante'})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Movimientos */}
+            {historyMovements.length > 0 && (
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="font-semibold text-gray-900 mb-3">Movimientos Adicionales</h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {historyMovements.map((movement) => (
+                    <div key={movement.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div className="flex items-center gap-2">
+                        {movement.type === 'income' ? (
+                          <TrendingUp className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-red-600" />
+                        )}
+                        <span className="text-sm text-gray-700">{movement.description}</span>
+                      </div>
+                      <span className={`font-semibold ${movement.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                        {movement.type === 'income' ? '+' : '-'}{formatCurrency(movement.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Botones */}
+            <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const businessResult = await getCompanySettings(getBusinessId())
+                    const businessData = businessResult.success ? businessResult.data : null
+                    generateCashReportPDF(selectedHistorySession, historyMovements, [], businessData)
+                    toast.success('PDF descargado')
+                  } catch (error) {
+                    toast.error('Error al generar PDF')
+                  }
+                }}
+                className="flex-1"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const businessResult = await getCompanySettings(getBusinessId())
+                    const businessData = businessResult.success ? businessResult.data : null
+                    generateCashReportExcel(selectedHistorySession, historyMovements, [], businessData)
+                    toast.success('Excel descargado')
+                  } catch (error) {
+                    toast.error('Error al generar Excel')
+                  }
+                }}
+                className="flex-1"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Excel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowHistoryDetailModal(false)
+                  setSelectedHistorySession(null)
+                  setHistoryMovements([])
+                }}
+                className="flex-1"
+              >
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal Abrir Caja */}
       <Modal
@@ -1053,11 +1625,12 @@ export default function CashRegister() {
         )}
       </Modal>
 
-      {/* Modal Agregar Movimiento */}
+      {/* Modal Agregar/Editar Movimiento */}
       <Modal
         isOpen={showMovementModal}
         onClose={() => {
           setShowMovementModal(false)
+          setEditingMovement(null)
           setMovementData({
             type: 'income',
             amount: '',
@@ -1065,7 +1638,7 @@ export default function CashRegister() {
             category: '',
           })
         }}
-        title="Registrar Movimiento"
+        title={editingMovement ? 'Editar Movimiento' : 'Registrar Movimiento'}
       >
         <div className="space-y-4">
           <div>
@@ -1154,6 +1727,7 @@ export default function CashRegister() {
               variant="outline"
               onClick={() => {
                 setShowMovementModal(false)
+                setEditingMovement(null)
                 setMovementData({
                   type: 'income',
                   amount: '',
@@ -1164,9 +1738,54 @@ export default function CashRegister() {
             >
               Cancelar
             </Button>
-            <Button onClick={handleAddMovement}>
-              <Plus className="w-4 h-4 mr-2" />
-              Registrar
+            <Button onClick={editingMovement ? handleUpdateMovement : handleAddMovement}>
+              {editingMovement ? (
+                <>
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Actualizar
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Registrar
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Confirmar Eliminación de Movimiento */}
+      <Modal
+        isOpen={!!showDeleteMovementConfirm}
+        onClose={() => setShowDeleteMovementConfirm(null)}
+        title="Eliminar Movimiento"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="w-8 h-8 text-red-600" />
+            </div>
+          </div>
+          <p className="text-center text-gray-600">
+            ¿Estás seguro de eliminar este movimiento? Esta acción no se puede deshacer.
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteMovementConfirm(null)}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => handleDeleteMovement(showDeleteMovementConfirm)}
+              className="flex-1"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Eliminar
             </Button>
           </div>
         </div>

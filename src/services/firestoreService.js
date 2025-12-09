@@ -971,7 +971,7 @@ export const openCashRegister = async (userId, openingAmount) => {
  */
 export const closeCashRegister = async (userId, sessionId, closingData) => {
   try {
-    const { cash, card, transfer } = closingData
+    const { cash, card, transfer, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, totalIncome, totalExpense, expectedAmount, difference } = closingData
     const closingAmount = cash + card + transfer
 
     await updateDoc(doc(db, 'businesses', userId, 'cashSessions', sessionId), {
@@ -982,6 +982,17 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
       status: 'closed',
       closedAt: serverTimestamp(),
       closedBy: userId,
+      // Datos adicionales para historial
+      totalSales: totalSales || 0,
+      salesCash: salesCash || 0,
+      salesCard: salesCard || 0,
+      salesTransfer: salesTransfer || 0,
+      salesYape: salesYape || 0,
+      salesPlin: salesPlin || 0,
+      totalIncome: totalIncome || 0,
+      totalExpense: totalExpense || 0,
+      expectedAmount: expectedAmount || 0,
+      difference: difference || 0,
     })
 
     return { success: true }
@@ -1039,6 +1050,74 @@ export const getCashMovements = async (userId, sessionId) => {
     return { success: true, data: movements }
   } catch (error) {
     console.error('Error al obtener movimientos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar un movimiento de caja
+ */
+export const updateCashMovement = async (userId, movementId, movementData) => {
+  try {
+    await updateDoc(doc(db, 'businesses', userId, 'cashMovements', movementId), {
+      type: movementData.type,
+      amount: movementData.amount,
+      description: movementData.description,
+      category: movementData.category || 'Otros',
+      updatedAt: serverTimestamp(),
+      updatedBy: userId,
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar movimiento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Eliminar un movimiento de caja
+ */
+export const deleteCashMovement = async (userId, movementId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', userId, 'cashMovements', movementId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar movimiento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener historial de sesiones de caja cerradas
+ */
+export const getCashRegisterHistory = async (userId, options = {}) => {
+  try {
+    const { limit: maxResults = 30 } = options
+
+    // Query simple sin orderBy para evitar necesitar índice compuesto
+    const q = query(
+      collection(db, 'businesses', userId, 'cashSessions'),
+      where('status', '==', 'closed')
+    )
+    const snapshot = await getDocs(q)
+
+    // Ordenar en el cliente por closedAt descendente
+    const sessions = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .sort((a, b) => {
+        const dateA = a.closedAt?.toDate?.() || new Date(0)
+        const dateB = b.closedAt?.toDate?.() || new Date(0)
+        return dateB - dateA // Más reciente primero
+      })
+      .slice(0, maxResults)
+
+    return { success: true, data: sessions }
+  } catch (error) {
+    console.error('Error al obtener historial de caja:', error)
     return { success: false, error: error.message }
   }
 }
