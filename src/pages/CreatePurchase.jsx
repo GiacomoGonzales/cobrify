@@ -69,7 +69,14 @@ export default function CreatePurchase() {
   const [message, setMessage] = useState(null)
   const [selectedSupplier, setSelectedSupplier] = useState(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
+  // Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
+  const getLocalDateString = (date = new Date()) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  const [invoiceDate, setInvoiceDate] = useState(getLocalDateString())
   const [notes, setNotes] = useState('')
   const [purchaseItems, setPurchaseItems] = useState([
     { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '' },

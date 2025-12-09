@@ -149,7 +149,14 @@ export default function POS() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [documentType, setDocumentType] = useState('boleta')
-  const [emissionDate, setEmissionDate] = useState(new Date().toISOString().split('T')[0]) // Fecha de emisión (por defecto hoy)
+  // Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
+  const getLocalDateString = (date = new Date()) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  const [emissionDate, setEmissionDate] = useState(getLocalDateString()) // Fecha de emisión (por defecto hoy)
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -1822,13 +1829,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <input
                       type="date"
                       value={emissionDate}
-                      max={new Date().toISOString().split('T')[0]}
+                      max={getLocalDateString()}
                       min={(() => {
                         const today = new Date()
                         const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
                         const minDate = new Date(today)
                         minDate.setDate(today.getDate() - maxDaysBack)
-                        return minDate.toISOString().split('T')[0]
+                        return getLocalDateString(minDate)
                       })()}
                       onChange={e => setEmissionDate(e.target.value)}
                       className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 appearance-none bg-white"

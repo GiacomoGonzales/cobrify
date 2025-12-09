@@ -124,6 +124,14 @@ const DEMO_EXPENSES = [
   },
 ]
 
+// Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
+const getLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function Expenses() {
   const { user, isDemoMode } = useAppContext()
   const toast = useToast()
@@ -135,8 +143,8 @@ export default function Expenses() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
   const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
+    startDate: getLocalDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    endDate: getLocalDateString()
   })
   const [sortField, setSortField] = useState('date')
   const [sortDirection, setSortDirection] = useState('desc')
@@ -153,7 +161,7 @@ export default function Expenses() {
     amount: '',
     description: '',
     category: 'otros',
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     paymentMethod: 'efectivo',
     reference: '',
     supplier: '',
@@ -259,7 +267,7 @@ export default function Expenses() {
       amount: '',
       description: '',
       category: 'otros',
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateString(),
       paymentMethod: 'efectivo',
       reference: '',
       supplier: '',
@@ -270,13 +278,12 @@ export default function Expenses() {
 
   function openEditModal(expense) {
     setEditingExpense(expense)
+    const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
     setForm({
       amount: expense.amount.toString(),
       description: expense.description || '',
       category: expense.category || 'otros',
-      date: expense.date instanceof Date
-        ? expense.date.toISOString().split('T')[0]
-        : new Date(expense.date).toISOString().split('T')[0],
+      date: getLocalDateString(expenseDate),
       paymentMethod: expense.paymentMethod || 'efectivo',
       reference: expense.reference || '',
       supplier: expense.supplier || '',

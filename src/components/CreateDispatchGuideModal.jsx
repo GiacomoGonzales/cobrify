@@ -28,6 +28,14 @@ const DOCUMENT_TYPES = [
   { value: '7', label: 'Pasaporte' },
 ]
 
+// Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
+const getLocalDateString = (date = new Date()) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null }) {
   const toast = useToast()
   const { getBusinessId } = useAppContext()
@@ -89,7 +97,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       // Pre-llenar fecha de traslado (mañana por defecto)
       const tomorrow = new Date()
       tomorrow.setDate(tomorrow.getDate() + 1)
-      setTransferDate(tomorrow.toISOString().split('T')[0])
+      setTransferDate(getLocalDateString(tomorrow))
 
       // Motivo: Venta (si viene de factura)
       setTransferReason('01')
@@ -390,7 +398,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               required
               value={transferDate}
               onChange={(e) => setTransferDate(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
+              min={getLocalDateString()}
               helperText="Debe ser hoy o fecha futura"
             />
             <p className="text-xs text-blue-600 mt-1">
