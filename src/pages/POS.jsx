@@ -44,6 +44,7 @@ import {
   getNextDocumentNumber,
   getProductCategories,
   sendInvoiceToSunat,
+  upsertCustomerFromSale,
 } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
@@ -1409,6 +1410,19 @@ export default function POS() {
         }
       }
 
+      // 3.2. Guardar cliente automáticamente (si tiene documento válido)
+      try {
+        const customerResult = await upsertCustomerFromSale(businessId, customerData)
+        if (customerResult.created) {
+          console.log('✅ Cliente guardado automáticamente:', customerData.documentNumber)
+        } else if (customerResult.updated) {
+          console.log('✅ Cliente actualizado:', customerData.documentNumber)
+        }
+      } catch (customerError) {
+        // No interrumpir la venta si falla el guardado del cliente
+        console.error('⚠️ Error al guardar cliente (no crítico):', customerError)
+      }
+
       // 4. Actualizar stock de productos por almacén (con FEFO para farmacias)
       const stockUpdates = cart
         .filter(item => !item.isCustom) // Excluir solo productos personalizados
@@ -1416,10 +1430,11 @@ export default function POS() {
           const productData = products.find(p => p.id === item.id)
           if (!productData) return
 
-          // Solo actualizar si el producto maneja stock (trackStock !== false)
-          // Si trackStock es undefined o true, sí actualizar
-          // Si trackStock es false, NO actualizar
-          if (productData.trackStock === false) return
+          // Solo actualizar si el producto maneja stock
+          // NO actualizar si:
+          // - trackStock === false (explícitamente sin control de stock)
+          // - stock === null (producto sin control de inventario)
+          if (productData.trackStock === false || productData.stock === null) return
 
           // Actualizar stock usando el helper de almacén
           const updatedProduct = updateWarehouseStock(

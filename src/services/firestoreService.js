@@ -165,6 +165,92 @@ export const deleteCustomer = async (userId, customerId) => {
 }
 
 /**
+ * Buscar cliente por número de documento
+ */
+export const getCustomerByDocumentNumber = async (userId, documentNumber) => {
+  try {
+    const customersRef = collection(db, 'businesses', userId, 'customers')
+    const q = query(customersRef, where('documentNumber', '==', documentNumber))
+    const querySnapshot = await getDocs(q)
+
+    if (querySnapshot.empty) {
+      return { success: true, data: null }
+    }
+
+    const customerDoc = querySnapshot.docs[0]
+    return {
+      success: true,
+      data: { id: customerDoc.id, ...customerDoc.data() }
+    }
+  } catch (error) {
+    console.error('Error al buscar cliente por documento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Crear o actualizar cliente automáticamente desde una venta
+ * Si el cliente ya existe (por documentNumber), actualiza sus datos
+ * Si no existe, lo crea
+ */
+export const upsertCustomerFromSale = async (userId, customerData) => {
+  try {
+    // No guardar clientes genéricos (sin documento real)
+    if (!customerData.documentNumber ||
+        customerData.documentNumber === '00000000' ||
+        customerData.documentNumber.trim() === '') {
+      return { success: true, skipped: true, reason: 'Cliente genérico sin documento' }
+    }
+
+    // Buscar si el cliente ya existe
+    const existingResult = await getCustomerByDocumentNumber(userId, customerData.documentNumber)
+
+    if (!existingResult.success) {
+      return existingResult
+    }
+
+    if (existingResult.data) {
+      // Cliente existe - actualizar solo si hay datos nuevos más completos
+      const existing = existingResult.data
+      const updates = {}
+
+      // Actualizar campos solo si el nuevo dato tiene valor y el existente no
+      if (customerData.name && !existing.name) updates.name = customerData.name
+      if (customerData.businessName && !existing.businessName) updates.businessName = customerData.businessName
+      if (customerData.email && !existing.email) updates.email = customerData.email
+      if (customerData.phone && !existing.phone) updates.phone = customerData.phone
+      if (customerData.address && !existing.address) updates.address = customerData.address
+
+      // Solo actualizar si hay cambios
+      if (Object.keys(updates).length > 0) {
+        await updateCustomer(userId, existing.id, updates)
+        return { success: true, updated: true, id: existing.id }
+      }
+
+      return { success: true, exists: true, id: existing.id }
+    } else {
+      // Cliente no existe - crearlo
+      const newCustomerData = {
+        documentType: customerData.documentType || 'DNI',
+        documentNumber: customerData.documentNumber,
+        name: customerData.name || '',
+        businessName: customerData.businessName || '',
+        email: customerData.email || '',
+        phone: customerData.phone || '',
+        address: customerData.address || '',
+        source: 'auto_from_sale' // Marcar que fue creado automáticamente
+      }
+
+      const createResult = await createCustomer(userId, newCustomerData)
+      return { success: true, created: true, id: createResult.id }
+    }
+  } catch (error) {
+    console.error('Error al crear/actualizar cliente desde venta:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener estadísticas de clientes (pedidos y totales)
  */
 export const getCustomersWithStats = async userId => {
