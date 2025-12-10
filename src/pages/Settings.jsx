@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -2376,7 +2376,7 @@ export default function Settings() {
                       <Button
                         onClick={handleScanPrinters}
                         disabled={isScanning}
-                        className="flex-1"
+                        className="flex-1 bg-blue-600 hover:bg-blue-700"
                       >
                         {isScanning ? (
                           <>
@@ -2385,7 +2385,7 @@ export default function Settings() {
                           </>
                         ) : (
                           <>
-                            <Printer className="w-4 h-4 mr-2" />
+                            <Bluetooth className="w-4 h-4 mr-2" />
                             Bluetooth
                           </>
                         )}
@@ -2396,9 +2396,19 @@ export default function Settings() {
                           setShowManualConnect(!showManualConnect)
                           setShowWifiConnect(false)
                         }}
-                        className="flex-1"
+                        className="flex-1 border-gray-300 hover:bg-gray-100"
                       >
-                        {showManualConnect ? 'Cancelar' : 'MAC Manual'}
+                        {showManualConnect ? (
+                          <>
+                            <X className="w-4 h-4 mr-2" />
+                            Cancelar
+                          </>
+                        ) : (
+                          <>
+                            <Hash className="w-4 h-4 mr-2" />
+                            MAC Manual
+                          </>
+                        )}
                       </Button>
                       <Button
                         variant="outline"
@@ -2406,9 +2416,19 @@ export default function Settings() {
                           setShowWifiConnect(!showWifiConnect)
                           setShowManualConnect(false)
                         }}
-                        className="flex-1 bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+                        className="flex-1 border-green-300 text-green-700 hover:bg-green-100"
                       >
-                        {showWifiConnect ? 'Cancelar' : '📶 WiFi/LAN'}
+                        {showWifiConnect ? (
+                          <>
+                            <X className="w-4 h-4 mr-2 text-green-700" />
+                            Cancelar
+                          </>
+                        ) : (
+                          <>
+                            <Wifi className="w-4 h-4 mr-2" />
+                            WiFi/LAN
+                          </>
+                        )}
                       </Button>
                     </div>
 

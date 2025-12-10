@@ -3,10 +3,14 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { prepareLogoForPrinting } from './imageProcessingService';
+import * as BLEPrinter from './blePrinterService';
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
  * Soporta impresión de tickets, comandas de cocina y precuentas
+ *
+ * En iOS: Usa @capacitor-community/bluetooth-le como alternativa
+ * En Android: Usa capacitor-thermal-printer
  */
 
 // Plugin TCP para impresión WiFi/LAN
@@ -16,6 +20,7 @@ const TcpPrinter = registerPlugin('TcpPrinter');
 let isPrinterConnected = false;
 let connectedPrinterAddress = null;
 let connectionType = 'bluetooth'; // 'bluetooth' o 'wifi'
+let useAlternativeBLE = false; // Usar servicio alternativo BLE en iOS
 
 /**
  * Constantes de formato según ancho de papel
@@ -51,6 +56,7 @@ const getFormat = (paperWidth = 58) => {
  */
 export const scanPrinters = async () => {
   const isNative = Capacitor.isNativePlatform();
+  const platform = Capacitor.getPlatform();
 
   if (!isNative) {
     console.warn('Thermal printer only available on native platforms');
@@ -58,40 +64,42 @@ export const scanPrinters = async () => {
   }
 
   try {
-    // Solicitar permisos de Bluetooth antes de escanear
-    console.log('📱 Solicitando permisos de Bluetooth...');
-    try {
-      const permissionResult = await CapacitorThermalPrinter.requestPermissions();
-      console.log('Permisos de Bluetooth:', permissionResult);
+    // Solo en Android: solicitar permisos y verificar estado
+    // iOS no tiene estos métodos, los permisos se solicitan automáticamente
+    if (platform === 'android') {
+      console.log('📱 Solicitando permisos de Bluetooth (Android)...');
+      try {
+        const permissionResult = await CapacitorThermalPrinter.requestPermissions();
+        console.log('Permisos de Bluetooth:', permissionResult);
 
-      if (permissionResult && permissionResult.granted === false) {
-        return {
-          success: false,
-          error: 'Permisos de Bluetooth denegados. Ve a Configuración y habilita los permisos de Bluetooth y Ubicación.',
-          devices: []
-        };
+        if (permissionResult && permissionResult.granted === false) {
+          return {
+            success: false,
+            error: 'Permisos de Bluetooth denegados. Ve a Configuración y habilita los permisos de Bluetooth y Ubicación.',
+            devices: []
+          };
+        }
+      } catch (permError) {
+        console.warn('No se pudieron solicitar permisos:', permError);
       }
-    } catch (permError) {
-      console.warn('No se pudieron solicitar permisos (puede que no sea necesario en esta versión):', permError);
-      // Continuar de todos modos, algunos dispositivos no necesitan solicitar permisos explícitamente
-    }
 
-    // Verificar que el Bluetooth esté activado
-    console.log('📡 Verificando estado del Bluetooth...');
-    try {
-      const bluetoothState = await CapacitorThermalPrinter.isEnabled();
-      console.log('Estado del Bluetooth:', bluetoothState);
+      console.log('📡 Verificando estado del Bluetooth...');
+      try {
+        const bluetoothState = await CapacitorThermalPrinter.isEnabled();
+        console.log('Estado del Bluetooth:', bluetoothState);
 
-      if (bluetoothState && bluetoothState.enabled === false) {
-        return {
-          success: false,
-          error: 'El Bluetooth está desactivado. Por favor, activa el Bluetooth en tu dispositivo.',
-          devices: []
-        };
+        if (bluetoothState && bluetoothState.enabled === false) {
+          return {
+            success: false,
+            error: 'El Bluetooth está desactivado. Por favor, activa el Bluetooth en tu dispositivo.',
+            devices: []
+          };
+        }
+      } catch (stateError) {
+        console.warn('No se pudo verificar el estado del Bluetooth:', stateError);
       }
-    } catch (stateError) {
-      console.warn('No se pudo verificar el estado del Bluetooth:', stateError);
-      // Continuar de todos modos
+    } else {
+      console.log('📱 iOS: Los permisos se solicitan automáticamente al escanear');
     }
 
     // Limpiar listeners anteriores
@@ -101,28 +109,34 @@ export const scanPrinters = async () => {
     const devices = [];
 
     // Escuchar dispositivos descubiertos
-    await CapacitorThermalPrinter.addListener('discoverDevices', (device) => {
-      console.log('Printer discovered:', device);
+    await CapacitorThermalPrinter.addListener('discoverDevices', (data) => {
+      console.log('Printer discovered:', data);
 
-      // Normalizar la dirección (puede venir como address, macAddress, id, etc)
-      const deviceAddress = device.address || device.macAddress || device.id || device.deviceAddress;
-      const deviceName = device.name || device.deviceName || 'Impresora sin nombre';
+      // iOS retorna { devices: [...] }, Android retorna dispositivo individual
+      const deviceList = data.devices || [data];
 
-      if (!deviceAddress) {
-        console.warn('Device without address:', device);
-        return;
-      }
+      for (const device of deviceList) {
+        // Normalizar la dirección (puede venir como address, macAddress, id, etc)
+        const deviceAddress = device.address || device.macAddress || device.id || device.deviceAddress;
+        const deviceName = device.name || device.deviceName || 'Impresora sin nombre';
 
-      // Crear objeto normalizado
-      const normalizedDevice = {
-        address: deviceAddress,
-        name: deviceName,
-        ...device // Mantener propiedades originales
-      };
+        if (!deviceAddress) {
+          console.warn('Device without address:', device);
+          continue;
+        }
 
-      // Evitar duplicados
-      if (!devices.find(d => d.address === deviceAddress)) {
-        devices.push(normalizedDevice);
+        // Crear objeto normalizado
+        const normalizedDevice = {
+          address: deviceAddress,
+          name: deviceName,
+          ...device // Mantener propiedades originales
+        };
+
+        // Evitar duplicados
+        if (!devices.find(d => d.address === deviceAddress)) {
+          console.log('✅ Dispositivo agregado:', normalizedDevice.name, normalizedDevice.address);
+          devices.push(normalizedDevice);
+        }
       }
     });
 
@@ -213,11 +227,14 @@ export const disconnectPrinter = async () => {
     // Desconectar según el tipo de conexión actual
     if (connectionType === 'wifi') {
       await TcpPrinter.disconnect();
+    } else if (useAlternativeBLE) {
+      await BLEPrinter.disconnectBLEPrinter();
     } else {
       await CapacitorThermalPrinter.disconnect();
     }
 
     isPrinterConnected = false;
+    useAlternativeBLE = false;
     connectedPrinterAddress = null;
     connectionType = 'bluetooth';
     console.log('✅ Impresora desconectada');
@@ -275,8 +292,30 @@ export const connectPrinter = async (address) => {
         return { success: false, error: 'No se pudo conectar a la impresora WiFi' };
       }
     } else {
-      // Conexión Bluetooth (comportamiento original)
-      console.log('🔵 Conectando via Bluetooth...');
+      // Conexión Bluetooth
+      const platform = Capacitor.getPlatform();
+
+      // En iOS, usar el servicio alternativo BLE directamente (más confiable)
+      if (platform === 'ios') {
+        console.log('🔵 iOS: Conectando via BLE alternativo...');
+        const bleResult = await BLEPrinter.connectBLEPrinter(address);
+        console.log('📋 Resultado de conexión BLE alternativo:', bleResult);
+
+        if (bleResult.success) {
+          isPrinterConnected = true;
+          connectedPrinterAddress = address;
+          connectionType = 'bluetooth';
+          useAlternativeBLE = true;
+          console.log('✅ Impresora BLE conectada (alternativo):', address);
+          return { success: true, address, type: 'bluetooth' };
+        } else {
+          console.error('❌ Conexión BLE alternativo falló:', bleResult.error);
+          return { success: false, error: bleResult.error || 'No se pudo conectar a la impresora' };
+        }
+      }
+
+      // En Android, usar el plugin original
+      console.log('🔵 Android: Conectando via Bluetooth...');
       const result = await CapacitorThermalPrinter.connect({ address });
       console.log('📋 Resultado de connect():', result);
 
@@ -285,6 +324,7 @@ export const connectPrinter = async (address) => {
         isPrinterConnected = true;
         connectedPrinterAddress = address;
         connectionType = 'bluetooth';
+        useAlternativeBLE = false;
         console.log('✅ Printer connected:', address);
         console.log('✅ isPrinterConnected:', isPrinterConnected);
         console.log('✅ connectedPrinterAddress:', connectedPrinterAddress);
@@ -303,6 +343,7 @@ export const connectPrinter = async (address) => {
 
     isPrinterConnected = false;
     connectedPrinterAddress = null;
+    useAlternativeBLE = false;
     connectionType = 'bluetooth';
     return { success: false, error: error.message || 'Error al conectar' };
   }
@@ -423,8 +464,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     return await printWifiTicket(invoice, business, paperWidth);
   }
 
-  // Bluetooth - comportamiento original
-  console.log('🔵 Usando impresión Bluetooth para ticket...');
+  // Si usa el servicio BLE alternativo (iOS), usar printBLEReceipt
+  if (useAlternativeBLE) {
+    console.log('🔵 iOS: Usando impresión BLE alternativa para ticket...');
+    return await printBLETicket(invoice, business, paperWidth);
+  }
+
+  // Bluetooth Android - comportamiento original
+  console.log('🔵 Android: Usando impresión Bluetooth para ticket...');
 
   try {
     const format = getFormat(paperWidth);
@@ -1112,6 +1159,70 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
 };
 
 /**
+ * Imprimir ticket usando el servicio BLE alternativo (iOS)
+ * @param {Object} invoice - Datos de la factura/boleta
+ * @param {Object} business - Datos del negocio
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ */
+const printBLETicket = async (invoice, business, paperWidth = 58) => {
+  try {
+    const format = getFormat(paperWidth);
+    const separator = format.separator;
+    const charsPerLine = format.charsPerLine;
+
+    // Determinar tipo de documento
+    const docType = invoice.documentType || invoice.type || 'boleta';
+    const isInvoice = docType === 'factura' || docType === 'invoice';
+    const isNotaVenta = docType === 'nota_venta';
+    const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
+
+    // Formatear fecha
+    let fechaEmision = '';
+    if (invoice.createdAt) {
+      const date = invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt);
+      fechaEmision = date.toLocaleDateString('es-PE') + ' ' + date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Obtener datos del cliente
+    const customerName = invoice.customer?.name || invoice.customerName || '';
+    const customerDoc = invoice.customer?.documentNumber || invoice.customerDocument || '';
+
+    // Preparar datos del recibo para BLEPrinter
+    const receiptData = {
+      businessName: business?.name || invoice.businessName || '',
+      ruc: business?.ruc || invoice.ruc || '',
+      address: business?.address || invoice.businessAddress || '',
+      documentType: tipoComprobante,
+      documentNumber: invoice.serieNumber || invoice.documentNumber || '',
+      date: fechaEmision,
+      customerName: customerName,
+      customerDocument: customerDoc,
+      items: (invoice.items || []).map(item => ({
+        name: item.name || item.description || '',
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+        total: item.total || (item.quantity * item.price) || 0,
+      })),
+      subtotal: invoice.subtotal || (invoice.total / 1.18),
+      igv: invoice.igv || (invoice.total - (invoice.total / 1.18)),
+      total: invoice.total || 0,
+    };
+
+    // Usar la función printBLEReceipt del servicio BLE
+    const result = await BLEPrinter.printBLEReceipt(receiptData, paperWidth);
+
+    if (result.success) {
+      console.log('✅ Ticket impreso exitosamente via BLE');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('❌ Error imprimiendo ticket via BLE:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Probar impresora con un ticket de prueba
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
@@ -1153,48 +1264,71 @@ export const testPrinter = async (paperWidth = 58) => {
       }
     }
 
-    // Bluetooth - comportamiento original
-    console.log('🔵 Usando impresión Bluetooth...');
+    // Si usa el servicio BLE alternativo (iOS)
+    if (useAlternativeBLE) {
+      console.log('🔵 iOS: Usando impresión BLE alternativa...');
+      const result = await BLEPrinter.printBLETest(paperWidth);
+      console.log('📋 Resultado de impresión BLE alternativa:', result);
+
+      if (result.success) {
+        console.log('🎉 Impresión de prueba BLE completada exitosamente');
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || 'Error al imprimir via BLE' };
+      }
+    }
+
+    // Bluetooth Android - comportamiento original
+    console.log('🔵 Android: Usando impresión Bluetooth...');
     console.log('🔄 Preparando comandos de impresión...');
 
     // Mostrar ancho configurado
     const widthText = paperWidth === 58 ? '58MM (ESTRECHO)' : '80MM (ANCHO)';
     const charsText = `${format.charsPerLine} caracteres por linea`;
 
-    await CapacitorThermalPrinter.begin()
-      .align('center')
-      .bold()
-      .text('PRUEBA DE IMPRESORA\n')
-      .clearFormatting()
-      .text(format.separator + '\n')
-      .text('\n')
-      .bold()
-      .doubleWidth()
-      .text(`${widthText}\n`)
-      .clearFormatting()
-      .text(`${charsText}\n`)
-      .text('\n')
-      .text(format.separator + '\n')
-      .text('\n')
-      .align('left')
-      .text(convertSpanishText('Texto en español: áéíóú\n'))
-      .text(convertSpanishText('Caracteres: ñÑ ¿? ¡!\n'))
-      .bold()
-      .text('Texto en negrita\n')
-      .clearFormatting()
-      .underline()
-      .text('Texto subrayado\n')
-      .clearFormatting()
-      .text('\n')
-      .align('center')
-      .text(`Fecha: ${new Date().toLocaleString('es-PE')}\n`)
-      .text('\n')
-      .text(convertSpanishText('Impresora configurada\n'))
-      .text('correctamente!\n')
-      .text('\n')
-      .text('\n')
-      .cutPaper()
-      .write();
+    // Usar try-catch individual para manejar errores de impresión
+    try {
+      const printer = CapacitorThermalPrinter.begin()
+        .align('center')
+        .bold()
+        .text('PRUEBA DE IMPRESORA\n')
+        .bold(false)
+        .text(format.separator + '\n')
+        .text('\n')
+        .bold()
+        .text(`${widthText}\n`)
+        .bold(false)
+        .text(`${charsText}\n`)
+        .text('\n')
+        .text(format.separator + '\n')
+        .text('\n')
+        .align('left')
+        .text(convertSpanishText('Texto en espanol: aeiou\n'))
+        .text(convertSpanishText('Caracteres: nN\n'))
+        .bold()
+        .text('Texto en negrita\n')
+        .bold(false)
+        .text('\n')
+        .align('center')
+        .text(`Fecha: ${new Date().toLocaleDateString('es-PE')}\n`)
+        .text('\n')
+        .text(convertSpanishText('Impresora configurada\n'))
+        .text('correctamente!\n')
+        .text('\n')
+        .text('\n')
+        .text('\n');
+
+      // Intentar cortar papel (puede fallar en algunas impresoras)
+      try {
+        await printer.cutPaper().write();
+      } catch (cutError) {
+        console.warn('⚠️ cutPaper no soportado, enviando sin corte');
+        await printer.write();
+      }
+    } catch (printError) {
+      console.error('❌ Error en comandos de impresión:', printError);
+      throw printError;
+    }
 
     console.log('✅ Impresión completada');
 
