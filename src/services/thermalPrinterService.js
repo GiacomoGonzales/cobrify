@@ -1166,46 +1166,78 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
  */
 const printBLETicket = async (invoice, business, paperWidth = 58) => {
   try {
-    const format = getFormat(paperWidth);
-    const separator = format.separator;
-    const charsPerLine = format.charsPerLine;
-
     // Determinar tipo de documento
     const docType = invoice.documentType || invoice.type || 'boleta';
     const isInvoice = docType === 'factura' || docType === 'invoice';
     const isNotaVenta = docType === 'nota_venta';
-    const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
 
-    // Formatear fecha
-    let fechaEmision = '';
-    if (invoice.createdAt) {
-      const date = invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt);
-      fechaEmision = date.toLocaleDateString('es-PE') + ' ' + date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-    }
-
-    // Obtener datos del cliente
-    const customerName = invoice.customer?.name || invoice.customerName || '';
-    const customerDoc = invoice.customer?.documentNumber || invoice.customerDocument || '';
-
-    // Preparar datos del recibo para BLEPrinter
+    // Preparar datos completos del recibo para BLEPrinter (igual que Android)
     const receiptData = {
-      businessName: business?.name || invoice.businessName || '',
-      ruc: business?.ruc || invoice.ruc || '',
-      address: business?.address || invoice.businessAddress || '',
-      documentType: tipoComprobante,
-      documentNumber: invoice.serieNumber || invoice.documentNumber || '',
-      date: fechaEmision,
-      customerName: customerName,
-      customerDocument: customerDoc,
+      // Datos del negocio
+      businessName: business?.name || '',
+      tradeName: business?.tradeName || business?.name || '',
+      businessLegalName: business?.businessName || '',
+      businessRuc: business?.ruc || '',
+      ruc: business?.ruc || '',
+      address: business?.address || '',
+      phone: business?.phone || '',
+      email: business?.email || '',
+      socialMedia: business?.socialMedia || '',
+      website: business?.website || '',
+      logoUrl: business?.logoUrl || '',
+
+      // Configuración
+      hideRucIgvInNotaVenta: business?.hideRucIgvInNotaVenta || false,
+
+      // Documento
+      documentType: docType,
+      isNotaVenta: isNotaVenta,
+      isInvoice: isInvoice,
+      series: invoice.series || 'B001',
+      correlativeNumber: invoice.correlativeNumber || invoice.number,
+      number: invoice.number,
+
+      // Fechas
+      emissionDate: invoice.emissionDate,
+      issueDate: invoice.issueDate,
+      createdAt: invoice.createdAt,
+
+      // Cliente
+      customer: invoice.customer,
+      customerName: invoice.customerName,
+      customerDocument: invoice.customerDocument || invoice.customerDni || invoice.customerRuc,
+      customerAddress: invoice.customerAddress,
+      customerBusinessName: invoice.customerBusinessName,
+
+      // Items (con todos los campos necesarios)
       items: (invoice.items || []).map(item => ({
-        name: item.name || item.description || '',
+        name: item.name || '',
+        description: item.description || item.name || '',
+        code: item.code || '',
         quantity: item.quantity || 1,
+        unit: item.unit || '',
+        allowDecimalQuantity: item.allowDecimalQuantity || false,
         price: item.price || 0,
-        total: item.total || (item.quantity * item.price) || 0,
+        unitPrice: item.unitPrice || item.price || 0,
+        total: item.total || item.subtotal || ((item.unitPrice || item.price || 0) * (item.quantity || 1)),
+        subtotal: item.subtotal || item.total,
       })),
-      subtotal: invoice.subtotal || (invoice.total / 1.18),
-      igv: invoice.igv || (invoice.total - (invoice.total / 1.18)),
+
+      // Totales
+      subtotal: invoice.subtotal || 0,
+      tax: invoice.tax || invoice.igv || 0,
+      igv: invoice.igv || invoice.tax || 0,
+      discount: invoice.discount || 0,
       total: invoice.total || 0,
+
+      // Pago
+      paymentMethod: invoice.paymentMethod || '',
+      payments: invoice.payments || [],
+
+      // Otros
+      notes: invoice.notes || '',
+      sunatHash: invoice.sunatHash || '',
+      qrCode: invoice.qrCode || '',
     };
 
     // Usar la función printBLEReceipt del servicio BLE

@@ -5,6 +5,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
+import { prepareLogoForPrinting } from './imageProcessingService';
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -458,7 +459,154 @@ export const printBLETest = async (paperWidth = 58) => {
 };
 
 /**
- * Imprimir recibo/ticket
+ * Convertir texto con tildes a formato ASCII simple (sin acentos)
+ * @param {string} text - Texto a convertir
+ */
+const convertSpanishText = (text) => {
+  if (!text) return '';
+  const charMap = {
+    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+    'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+    'ñ': 'n', 'Ñ': 'N',
+    'ü': 'u', 'Ü': 'U',
+    '¿': '?', '¡': '!'
+  };
+  return text.split('').map(char => charMap[char] || char).join('');
+};
+
+/**
+ * Convertir imagen base64 a comandos ESC/POS de bitmap para impresora térmica
+ * @param {string} base64 - Imagen en base64 (sin prefijo data:image)
+ * @param {number} maxWidth - Ancho máximo en píxeles (debe ser múltiplo de 8)
+ * @returns {Promise<Uint8Array>} Comandos ESC/POS para imprimir la imagen
+ */
+const imageToEscPosCommands = async (base64, maxWidth = 384) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const img = new Image();
+
+      img.onload = () => {
+        try {
+          // Crear canvas para procesar la imagen
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // Calcular dimensiones manteniendo aspect ratio
+          // El ancho debe ser múltiplo de 8 para ESC/POS
+          let width = Math.min(img.width, maxWidth);
+          width = Math.floor(width / 8) * 8; // Redondear a múltiplo de 8
+          const scale = width / img.width;
+          const height = Math.floor(img.height * scale);
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Fondo blanco
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+
+          // Dibujar imagen
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Obtener datos de píxeles
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const pixels = imageData.data;
+
+          // Convertir a bitmap monocromático (1 bit por píxel)
+          const bytesPerLine = width / 8;
+          const bitmapData = [];
+
+          for (let y = 0; y < height; y++) {
+            for (let byteIndex = 0; byteIndex < bytesPerLine; byteIndex++) {
+              let byte = 0;
+              for (let bit = 0; bit < 8; bit++) {
+                const x = byteIndex * 8 + bit;
+                const pixelIndex = (y * width + x) * 4;
+
+                // Convertir a escala de grises y aplicar umbral
+                const r = pixels[pixelIndex];
+                const g = pixels[pixelIndex + 1];
+                const b = pixels[pixelIndex + 2];
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                // Si es oscuro (< 128), establecer bit (punto negro)
+                if (gray < 128) {
+                  byte |= (0x80 >> bit);
+                }
+              }
+              bitmapData.push(byte);
+            }
+          }
+
+          // Construir comandos ESC/POS para imagen raster
+          // Comando GS v 0 (imprimir imagen raster)
+          const commands = [];
+
+          // GS v 0 m xL xH yL yH d1...dk
+          // m = 0 (modo normal)
+          // xL xH = bytes por línea (low, high)
+          // yL yH = número de líneas (low, high)
+          const xL = bytesPerLine % 256;
+          const xH = Math.floor(bytesPerLine / 256);
+          const yL = height % 256;
+          const yH = Math.floor(height / 256);
+
+          commands.push(GS, 0x76, 0x30, 0x00, xL, xH, yL, yH);
+          commands.push(...bitmapData);
+
+          console.log(`✅ Imagen convertida: ${width}x${height} px, ${bitmapData.length} bytes`);
+
+          resolve(new Uint8Array(commands));
+        } catch (error) {
+          console.error('❌ Error procesando imagen:', error);
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        reject(new Error('Error al cargar imagen'));
+      };
+
+      // Cargar imagen desde base64
+      img.src = `data:image/png;base64,${base64}`;
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+/**
+ * Generar código QR usando comandos ESC/POS
+ * @param {string} data - Datos del QR
+ * @param {number} size - Tamaño del módulo (1-8)
+ */
+const generateQRCommands = (data, size = 4) => {
+  const commands = [];
+
+  // Modelo QR: 1=Model 1, 2=Model 2
+  commands.push(new Uint8Array([GS, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]));
+
+  // Tamaño del módulo (1-8)
+  commands.push(new Uint8Array([GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, size]));
+
+  // Nivel de corrección de errores (48=L, 49=M, 50=Q, 51=H)
+  commands.push(new Uint8Array([GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31]));
+
+  // Almacenar datos
+  const dataBytes = new TextEncoder().encode(data);
+  const len = dataBytes.length + 3;
+  const pL = len % 256;
+  const pH = Math.floor(len / 256);
+  commands.push(new Uint8Array([GS, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30, ...dataBytes]));
+
+  // Imprimir QR
+  commands.push(new Uint8Array([GS, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30]));
+
+  return commands;
+};
+
+/**
+ * Imprimir recibo/ticket completo (igual que Android)
  */
 export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
   if (!isBLEPrinterConnected()) {
@@ -466,102 +614,362 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
   }
 
   try {
-    const separator = paperWidth === 58 ? '--------------------------------' : '------------------------------------------------';
-    const charsPerLine = paperWidth === 58 ? 32 : 48;
+    const separator = paperWidth === 58 ? '------------------------' : '------------------------------------------';
+    const charsPerLine = paperWidth === 58 ? 24 : 42;
+
+    // Extraer datos
+    const {
+      // Datos del negocio
+      businessName,
+      tradeName,
+      businessRuc,
+      ruc,
+      address,
+      phone,
+      email,
+      socialMedia,
+      website,
+      logoUrl,
+      // Configuración
+      hideRucIgvInNotaVenta,
+      // Documento
+      documentType,
+      isNotaVenta,
+      isInvoice,
+      series,
+      correlativeNumber,
+      number,
+      // Fechas
+      emissionDate,
+      issueDate,
+      createdAt,
+      // Cliente
+      customer,
+      customerName,
+      customerDocument,
+      customerAddress,
+      customerBusinessName,
+      // Items
+      items,
+      // Totales
+      subtotal,
+      tax,
+      igv,
+      discount,
+      total,
+      // Pago
+      paymentMethod,
+      payments,
+      // Otros
+      notes,
+      sunatHash,
+      qrCode,
+    } = receiptData;
 
     const commands = [
       ESCPOSCommands.init(),
     ];
 
-    // Encabezado - Nombre del negocio
-    if (receiptData.businessName) {
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.bold(true));
-      commands.push(ESCPOSCommands.text(receiptData.businessName + '\n'));
-      commands.push(ESCPOSCommands.bold(false));
+    // ========== HEADER - Datos del Emisor ==========
+    commands.push(ESCPOSCommands.align(1)); // Centro
+
+    // Logo del negocio (si existe)
+    if (logoUrl) {
+      console.log('📷 Preparando logo para impresión BLE...');
+      try {
+        const logoConfig = await prepareLogoForPrinting(logoUrl, paperWidth);
+
+        if (logoConfig.ready && logoConfig.base64) {
+          console.log('✅ Logo listo, convirtiendo a comandos ESC/POS...');
+          // Determinar ancho máximo del logo según papel (30% más pequeño)
+          const maxLogoWidth = paperWidth === 58 ? 192 : 288; // Píxeles
+
+          const logoCommands = await imageToEscPosCommands(logoConfig.base64, maxLogoWidth);
+          commands.push(logoCommands);
+          commands.push(ESCPOSCommands.lineFeed());
+          console.log('✅ Logo agregado al ticket');
+        } else {
+          console.warn('⚠️ Logo no disponible para impresión');
+        }
+      } catch (logoError) {
+        console.error('❌ Error al imprimir logo:', logoError.message);
+        // Continuar sin logo
+      }
     }
 
-    // RUC
-    if (receiptData.ruc) {
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.text('RUC: ' + receiptData.ruc + '\n'));
+    // Nombre del negocio
+    const businessDisplayName = convertSpanishText(tradeName || businessName || 'MI EMPRESA');
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text(businessDisplayName + '\n'));
+    commands.push(ESCPOSCommands.bold(false));
+
+    // RUC (si no es nota de venta con ocultación)
+    if (!(isNotaVenta && hideRucIgvInNotaVenta)) {
+      const rucValue = businessRuc || ruc || '00000000000';
+      commands.push(ESCPOSCommands.text('RUC: ' + rucValue + '\n'));
+    }
+
+    // Razón Social (si existe y es diferente)
+    if (receiptData.businessLegalName && receiptData.businessLegalName !== businessDisplayName) {
+      commands.push(ESCPOSCommands.text(convertSpanishText(receiptData.businessLegalName) + '\n'));
     }
 
     // Dirección
-    if (receiptData.address) {
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.text(receiptData.address + '\n'));
+    commands.push(ESCPOSCommands.text(convertSpanishText(address || 'Direccion no configurada') + '\n'));
+
+    // Teléfono
+    if (phone) {
+      commands.push(ESCPOSCommands.text('Tel: ' + phone + '\n'));
     }
+
+    // Email
+    if (email) {
+      commands.push(ESCPOSCommands.text('Email: ' + email + '\n'));
+    }
+
+    // Redes sociales
+    if (socialMedia) {
+      commands.push(ESCPOSCommands.text(convertSpanishText(socialMedia) + '\n'));
+    }
+
+    commands.push(ESCPOSCommands.lineFeed());
+
+    // Tipo de documento
+    const tipoComprobanteCompleto = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text(tipoComprobanteCompleto + '\n'));
+    commands.push(ESCPOSCommands.bold(false));
+
+    // Número de documento
+    const docNumber = `${series || 'B001'}-${String(correlativeNumber || number || '000').padStart(8, '0')}`;
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text(docNumber + '\n'));
+    commands.push(ESCPOSCommands.bold(false));
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
 
-    // Tipo de documento y número
-    if (receiptData.documentType && receiptData.documentNumber) {
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.bold(true));
-      commands.push(ESCPOSCommands.text(receiptData.documentType + '\n'));
-      commands.push(ESCPOSCommands.text(receiptData.documentNumber + '\n'));
-      commands.push(ESCPOSCommands.bold(false));
+    // ========== Fecha y Hora ==========
+    let invoiceDate;
+    if (emissionDate && typeof emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(emissionDate)) {
+      const [year, month, day] = emissionDate.split('-').map(Number);
+      invoiceDate = new Date(year, month - 1, day, 12, 0, 0);
+    } else if (issueDate) {
+      invoiceDate = issueDate.toDate ? issueDate.toDate() : new Date(issueDate);
+    } else if (createdAt) {
+      invoiceDate = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+    } else {
+      invoiceDate = new Date();
     }
 
-    // Fecha
-    if (receiptData.date) {
-      commands.push(ESCPOSCommands.align(1));
-      commands.push(ESCPOSCommands.text('Fecha: ' + receiptData.date + '\n'));
-    }
+    const createdDate = createdAt ? (createdAt.toDate ? createdAt.toDate() : new Date(createdAt)) : new Date();
+    const hours = String(createdDate.getHours()).padStart(2, '0');
+    const minutes = String(createdDate.getMinutes()).padStart(2, '0');
+    const seconds = String(createdDate.getSeconds()).padStart(2, '0');
+    const timeString = `${hours}:${minutes}:${seconds}`;
 
-    commands.push(ESCPOSCommands.text(separator + '\n'));
+    commands.push(ESCPOSCommands.align(0)); // Izquierda
+    commands.push(ESCPOSCommands.text('Fecha: ' + invoiceDate.toLocaleDateString('es-PE') + '\n'));
+    commands.push(ESCPOSCommands.text('Hora: ' + timeString + '\n'));
 
-    // Cliente
-    if (receiptData.customerName) {
-      commands.push(ESCPOSCommands.align(0));
-      commands.push(ESCPOSCommands.text('Cliente: ' + receiptData.customerName + '\n'));
-    }
-    if (receiptData.customerDocument) {
-      commands.push(ESCPOSCommands.text('Doc: ' + receiptData.customerDocument + '\n'));
-    }
+    // ========== Datos del Cliente ==========
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text('DATOS DEL CLIENTE\n'));
+    commands.push(ESCPOSCommands.bold(false));
 
-    commands.push(ESCPOSCommands.text(separator + '\n'));
+    const custName = customer?.name || customerName || 'Cliente';
+    const custDoc = customer?.documentNumber || customerDocument || '-';
+    const custAddress = customer?.address || customerAddress || '';
+    const custBusinessName = customer?.businessName || customerBusinessName || '';
 
-    // Items
-    commands.push(ESCPOSCommands.align(0));
-    if (receiptData.items && receiptData.items.length > 0) {
-      for (const item of receiptData.items) {
-        const qty = item.quantity || 1;
-        const name = (item.name || '').substring(0, charsPerLine - 10);
-        const price = (item.total || item.price || 0).toFixed(2);
-
-        commands.push(ESCPOSCommands.text(`${qty} x ${name}\n`));
-        commands.push(ESCPOSCommands.align(2));
-        commands.push(ESCPOSCommands.text(`S/ ${price}\n`));
-        commands.push(ESCPOSCommands.align(0));
+    if (isInvoice) {
+      // Factura: RUC, Razón Social, Nombre Comercial (opcional), Dirección
+      commands.push(ESCPOSCommands.text('RUC: ' + custDoc + '\n'));
+      commands.push(ESCPOSCommands.text(convertSpanishText('Razon Social: ' + (custBusinessName || '-')) + '\n'));
+      if (custName && custName !== 'VARIOS') {
+        commands.push(ESCPOSCommands.text(convertSpanishText('Nombre Comercial: ' + custName) + '\n'));
+      }
+      if (custAddress) {
+        commands.push(ESCPOSCommands.text(convertSpanishText('Direccion: ' + custAddress) + '\n'));
+      }
+    } else {
+      // Boleta/Nota de venta: DNI, Nombre, Dirección
+      commands.push(ESCPOSCommands.text('DNI: ' + custDoc + '\n'));
+      commands.push(ESCPOSCommands.text(convertSpanishText('Nombre: ' + custName) + '\n'));
+      if (custAddress) {
+        commands.push(ESCPOSCommands.text(convertSpanishText('Direccion: ' + custAddress) + '\n'));
       }
     }
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
 
-    // Totales
-    commands.push(ESCPOSCommands.align(2));
+    // ========== Detalle de Productos ==========
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text('DETALLE\n'));
+    commands.push(ESCPOSCommands.bold(false));
 
-    if (receiptData.subtotal !== undefined) {
-      commands.push(ESCPOSCommands.text(`Subtotal: S/ ${receiptData.subtotal.toFixed(2)}\n`));
-    }
-    if (receiptData.igv !== undefined) {
-      commands.push(ESCPOSCommands.text(`IGV (18%): S/ ${receiptData.igv.toFixed(2)}\n`));
-    }
-    if (receiptData.total !== undefined) {
-      commands.push(ESCPOSCommands.bold(true));
-      commands.push(ESCPOSCommands.text(`TOTAL: S/ ${receiptData.total.toFixed(2)}\n`));
-      commands.push(ESCPOSCommands.bold(false));
+    if (items && items.length > 0) {
+      for (const item of items) {
+        const itemName = convertSpanishText(item.description || item.name || '');
+        let itemTotal = 0;
+        let unitPrice = 0;
+
+        if (item.total) {
+          itemTotal = item.total;
+          unitPrice = item.unitPrice || item.price || (itemTotal / (item.quantity || 1));
+        } else if (item.subtotal) {
+          itemTotal = item.subtotal;
+          unitPrice = item.unitPrice || item.price || (itemTotal / (item.quantity || 1));
+        } else if (item.unitPrice && item.quantity) {
+          unitPrice = item.unitPrice;
+          itemTotal = item.unitPrice * item.quantity;
+        } else if (item.price && item.quantity) {
+          unitPrice = item.price;
+          itemTotal = item.price * item.quantity;
+        }
+
+        // Línea 1: Nombre del producto
+        commands.push(ESCPOSCommands.text(itemName + '\n'));
+
+        // Línea 2: cantidad x precio -> total
+        const qtyFormatted = Number.isInteger(item.quantity)
+          ? item.quantity.toString()
+          : item.quantity.toFixed(3).replace(/\.?0+$/, '');
+        const unitSuffix = item.unit && item.allowDecimalQuantity ? item.unit.toLowerCase() : '';
+        const qtyAndPrice = `${qtyFormatted}${unitSuffix}x S/ ${unitPrice.toFixed(2)}`;
+        const totalStr = `S/ ${itemTotal.toFixed(2)}`;
+        const spaceBetween = charsPerLine - qtyAndPrice.length - totalStr.length;
+        commands.push(ESCPOSCommands.text(qtyAndPrice + ' '.repeat(Math.max(1, spaceBetween)) + totalStr + '\n'));
+
+        // Línea 3: Código si existe
+        if (item.code) {
+          commands.push(ESCPOSCommands.text('Codigo: ' + convertSpanishText(item.code) + '\n'));
+        }
+
+        // Espacio entre items (solo para 80mm)
+        if (paperWidth === 80) {
+          commands.push(ESCPOSCommands.lineFeed());
+        }
+      }
     }
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
 
-    // Pie de página
-    commands.push(ESCPOSCommands.align(1));
-    commands.push(ESCPOSCommands.text('Gracias por su compra!\n'));
+    // ========== Totales ==========
+    commands.push(ESCPOSCommands.align(2)); // Derecha
 
-    commands.push(ESCPOSCommands.feed(4));
+    if (!(isNotaVenta && hideRucIgvInNotaVenta)) {
+      const subtotalValue = subtotal || 0;
+      const taxValue = tax || igv || 0;
+      commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotalValue.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text('IGV (18%): S/ ' + taxValue.toFixed(2) + '\n'));
+    }
+
+    if (discount && discount > 0) {
+      commands.push(ESCPOSCommands.text('Descuento: -S/ ' + discount.toFixed(2) + '\n'));
+    }
+
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text('TOTAL: S/ ' + (total || 0).toFixed(2) + '\n'));
+    commands.push(ESCPOSCommands.bold(false));
+
+    // ========== Forma de Pago ==========
+    if (paymentMethod || (payments && payments.length > 0)) {
+      commands.push(ESCPOSCommands.text(separator + '\n'));
+      commands.push(ESCPOSCommands.align(0));
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('FORMA DE PAGO\n'));
+      commands.push(ESCPOSCommands.bold(false));
+
+      if (payments && payments.length > 0) {
+        for (const payment of payments) {
+          commands.push(ESCPOSCommands.text(convertSpanishText(payment.method) + ': S/ ' + payment.amount.toFixed(2) + '\n'));
+        }
+      } else if (paymentMethod) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(paymentMethod) + ': S/ ' + (total || 0).toFixed(2) + '\n'));
+      }
+    }
+
+    // ========== Observaciones ==========
+    if (notes) {
+      commands.push(ESCPOSCommands.text(separator + '\n'));
+      commands.push(ESCPOSCommands.align(1));
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('OBSERVACIONES\n'));
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.text(convertSpanishText(notes) + '\n'));
+    }
+
+    // ========== FOOTER ==========
+    commands.push(ESCPOSCommands.text(separator + '\n'));
+    commands.push(ESCPOSCommands.align(1));
+
+    if (isNotaVenta) {
+      // Nota de venta: no válido tributariamente
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('DOCUMENTO NO VALIDO PARA\n'));
+      commands.push(ESCPOSCommands.text('FINES TRIBUTARIOS\n'));
+      commands.push(ESCPOSCommands.bold(false));
+    } else {
+      // Factura/Boleta electrónica
+      const tipoComprobante = isInvoice ? 'FACTURA' : 'BOLETA DE VENTA';
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('REPRESENTACION IMPRESA DE LA\n'));
+      commands.push(ESCPOSCommands.text(tipoComprobante + ' ELECTRONICA\n'));
+      commands.push(ESCPOSCommands.bold(false));
+
+      // Hash SUNAT
+      if (sunatHash) {
+        commands.push(ESCPOSCommands.align(0));
+        commands.push(ESCPOSCommands.bold(true));
+        commands.push(ESCPOSCommands.text('Hash: '));
+        commands.push(ESCPOSCommands.bold(false));
+        const hashLength = paperWidth === 80 ? 45 : 30;
+        commands.push(ESCPOSCommands.text(sunatHash.substring(0, hashLength) + '\n'));
+        commands.push(ESCPOSCommands.align(1));
+      }
+
+      // Código QR
+      let qrData = qrCode;
+      if (!qrData && (businessRuc || ruc) && series) {
+        const tipoDoc = isInvoice ? '01' : '03';
+        let fecha;
+        if (emissionDate && typeof emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(emissionDate)) {
+          fecha = emissionDate;
+        } else {
+          fecha = invoiceDate.toISOString().split('T')[0];
+        }
+        const docCliente = isInvoice ? '6' : '1';
+        const numDocCliente = custDoc;
+        const taxValue = tax || igv || 0;
+        qrData = `${businessRuc || ruc}|${tipoDoc}|${series}|${correlativeNumber || number}|${taxValue.toFixed(2)}|${(total || 0).toFixed(2)}|${fecha}|${docCliente}|${numDocCliente}`;
+      }
+
+      if (qrData) {
+        // Generar QR
+        const qrCommands = generateQRCommands(qrData, paperWidth === 58 ? 3 : 4);
+        for (const cmd of qrCommands) {
+          commands.push(cmd);
+        }
+        commands.push(ESCPOSCommands.text('Escanea para validar\n'));
+      }
+
+      // Consulta SUNAT
+      commands.push(ESCPOSCommands.text('Consulte su comprobante en:\n'));
+      commands.push(ESCPOSCommands.text('www.sunat.gob.pe\n'));
+    }
+
+    // Mensaje de agradecimiento
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text('!Gracias por su preferencia!\n'));
+    commands.push(ESCPOSCommands.bold(false));
+
+    // Website
+    if (website) {
+      commands.push(ESCPOSCommands.text(convertSpanishText(website) + '\n'));
+    }
+
+    commands.push(ESCPOSCommands.feed(3));
+    commands.push(ESCPOSCommands.cut());
 
     const data = concatUint8Arrays(...commands);
     return await writeBLEData(data);
