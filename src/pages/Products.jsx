@@ -154,6 +154,8 @@ export default function Products() {
   const [parentCategoryId, setParentCategoryId] = useState(null)
   const [editingCategory, setEditingCategory] = useState(null)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
+  const [selectedCategories, setSelectedCategories] = useState(new Set())
+  const [isDeletingCategories, setIsDeletingCategories] = useState(false)
 
   // Import modal state
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -1045,6 +1047,72 @@ export default function Products() {
     } catch (error) {
       console.error('Error al eliminar categoría:', error)
       toast.error('Error al eliminar la categoría')
+    }
+  }
+
+  // Funciones para selección masiva de categorías
+  const toggleCategorySelection = (categoryId) => {
+    const newSelection = new Set(selectedCategories)
+    if (newSelection.has(categoryId)) {
+      newSelection.delete(categoryId)
+    } else {
+      newSelection.add(categoryId)
+    }
+    setSelectedCategories(newSelection)
+  }
+
+  const toggleAllCategories = () => {
+    if (selectedCategories.size === categories.length) {
+      setSelectedCategories(new Set())
+    } else {
+      setSelectedCategories(new Set(categories.map(c => c.id)))
+    }
+  }
+
+  const canDeleteCategory = (categoryId) => {
+    const category = getCategoryById(categories, categoryId)
+    if (!category) return false
+    const hasProducts = products.some(p => p.category === categoryId || p.category === category.name)
+    const hasSubcategories = getSubcategories(categories, categoryId).length > 0
+    return !hasProducts && !hasSubcategories
+  }
+
+  const getDeleteableCategoriesCount = () => {
+    return Array.from(selectedCategories).filter(id => canDeleteCategory(id)).length
+  }
+
+  const handleBulkDeleteCategories = async () => {
+    if (!user?.uid) return
+
+    const categoriesToDelete = Array.from(selectedCategories).filter(id => canDeleteCategory(id))
+
+    if (categoriesToDelete.length === 0) {
+      toast.error('Ninguna de las categorías seleccionadas puede ser eliminada')
+      return
+    }
+
+    setIsDeletingCategories(true)
+    try {
+      const updatedCategories = categories.filter(cat => !categoriesToDelete.includes(cat.id))
+      setCategories(updatedCategories)
+
+      const result = await saveProductCategories(getBusinessId(), updatedCategories)
+      if (result.success) {
+        const skipped = selectedCategories.size - categoriesToDelete.length
+        if (skipped > 0) {
+          toast.success(`${categoriesToDelete.length} categoría(s) eliminada(s). ${skipped} no se pudieron eliminar (tienen productos o subcategorías).`, 5000)
+        } else {
+          toast.success(`${categoriesToDelete.length} categoría(s) eliminada(s) exitosamente`)
+        }
+        setSelectedCategories(new Set())
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al eliminar categorías:', error)
+      toast.error('Error al eliminar las categorías')
+    } finally {
+      setIsDeletingCategories(false)
     }
   }
 
@@ -3410,6 +3478,7 @@ export default function Products() {
           setEditingCategory(null)
           setNewCategoryName('')
           setParentCategoryId(null)
+          setSelectedCategories(new Set())
         }}
         title="Gestionar Categorías"
         size="md"
@@ -3421,6 +3490,51 @@ export default function Products() {
               Por ejemplo: Hamburguesas, Bebidas, Postres, etc.
             </p>
           </div>
+
+          {/* Barra de selección masiva */}
+          {categories.length > 0 && (
+            <div className="flex items-center justify-between p-3 bg-gray-100 rounded-lg border border-gray-200">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleAllCategories}
+                  className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900"
+                >
+                  {selectedCategories.size === categories.length ? (
+                    <CheckSquare className="w-5 h-5 text-primary-600" />
+                  ) : selectedCategories.size > 0 ? (
+                    <CheckSquare className="w-5 h-5 text-primary-400" />
+                  ) : (
+                    <Square className="w-5 h-5 text-gray-400" />
+                  )}
+                  {selectedCategories.size === categories.length
+                    ? 'Deseleccionar todas'
+                    : selectedCategories.size > 0
+                      ? `${selectedCategories.size} seleccionada(s)`
+                      : 'Seleccionar todas'}
+                </button>
+              </div>
+              {selectedCategories.size > 0 && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={handleBulkDeleteCategories}
+                  disabled={isDeletingCategories || getDeleteableCategoriesCount() === 0}
+                >
+                  {isDeletingCategories ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar ({getDeleteableCategoriesCount()})
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* Add/Edit Category Form */}
           <div className="space-y-3">
@@ -3507,12 +3621,25 @@ export default function Products() {
                 // Count products for this category (compare by ID or name for backward compatibility)
                 const productCount = products.filter(p => p.category === category.id || p.category === category.name).length
                 const subcategories = getSubcategories(categories, category.id)
+                const isSelected = selectedCategories.has(category.id)
+                const isDeletable = canDeleteCategory(category.id)
 
                 return (
                   <div key={category.id}>
                     {/* Root Category */}
-                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className={`flex items-center justify-between p-3 rounded-lg border ${isSelected ? 'bg-primary-50 border-primary-300' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleCategorySelection(category.id)}
+                          className="flex-shrink-0"
+                          title={isDeletable ? 'Seleccionar para eliminar' : 'No se puede eliminar (tiene productos o subcategorías)'}
+                        >
+                          {isSelected ? (
+                            <CheckSquare className={`w-5 h-5 ${isDeletable ? 'text-primary-600' : 'text-gray-400'}`} />
+                          ) : (
+                            <Square className={`w-5 h-5 ${isDeletable ? 'text-gray-400 hover:text-gray-600' : 'text-gray-300'}`} />
+                          )}
+                        </button>
                         <Folder className="w-5 h-5 text-primary-600" />
                         <div>
                           <p className="font-medium text-gray-900">{category.name}</p>
@@ -3546,12 +3673,25 @@ export default function Products() {
                       <div className="ml-8 mt-2 space-y-2">
                         {subcategories.map((subcategory) => {
                           const subProductCount = products.filter(p => p.category === subcategory.id || p.category === subcategory.name).length
+                          const isSubSelected = selectedCategories.has(subcategory.id)
+                          const isSubDeletable = canDeleteCategory(subcategory.id)
                           return (
                             <div
                               key={subcategory.id}
-                              className="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200"
+                              className={`flex items-center justify-between p-2 rounded-lg border ${isSubSelected ? 'bg-primary-50 border-primary-300' : 'bg-white border-gray-200'}`}
                             >
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleCategorySelection(subcategory.id)}
+                                  className="flex-shrink-0"
+                                  title={isSubDeletable ? 'Seleccionar para eliminar' : 'No se puede eliminar (tiene productos)'}
+                                >
+                                  {isSubSelected ? (
+                                    <CheckSquare className={`w-4 h-4 ${isSubDeletable ? 'text-primary-600' : 'text-gray-400'}`} />
+                                  ) : (
+                                    <Square className={`w-4 h-4 ${isSubDeletable ? 'text-gray-400 hover:text-gray-600' : 'text-gray-300'}`} />
+                                  )}
+                                </button>
                                 <div className="w-5 flex items-center justify-center">
                                   <div className="w-3 h-3 border-l-2 border-b-2 border-gray-300"></div>
                                 </div>
@@ -3607,6 +3747,7 @@ export default function Products() {
                 setEditingCategory(null)
                 setNewCategoryName('')
                 setParentCategoryId(null)
+                setSelectedCategories(new Set())
               }}
             >
               Cerrar
