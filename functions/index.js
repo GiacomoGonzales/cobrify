@@ -4,6 +4,9 @@ import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { emitirComprobante, emitirNotaCredito, emitirGuiaRemision } from './src/services/emissionRouter.js'
+import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
+import { signXML } from './src/utils/xmlSigner.js'
+import { sendSummary, getStatus } from './src/utils/sunatClient.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -1944,6 +1947,476 @@ export const retryPendingInvoices = onSchedule(
 
     } catch (error) {
       console.error('❌ [RETRY] Error en cron job:', error)
+    }
+  }
+)
+
+/**
+ * Anula una factura mediante Comunicación de Baja a SUNAT
+ *
+ * Solo para facturas y notas (no boletas) que:
+ * - Tienen CDR aceptado
+ * - No han sido entregadas al cliente
+ * - Están dentro del plazo de 7 días
+ */
+export const voidInvoice = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      // Obtener datos del body
+      const { userId, invoiceId, reason } = req.body
+
+      if (!userId || !invoiceId) {
+        res.status(400).json({ error: 'userId e invoiceId son requeridos' })
+        return
+      }
+
+      // Verificar autorización
+      if (authenticatedUserId !== userId) {
+        const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+        if (!userDoc.exists || userDoc.data().ownerId !== userId) {
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`🗑️ Iniciando anulación - Usuario: ${userId}, Factura: ${invoiceId}`)
+
+      // 1. Obtener datos de la factura
+      const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId)
+      const invoiceDoc = await invoiceRef.get()
+
+      if (!invoiceDoc.exists) {
+        res.status(404).json({ error: 'Factura no encontrada' })
+        return
+      }
+
+      const invoiceData = invoiceDoc.data()
+
+      // 2. Validar que se puede anular
+      const validationResult = canVoidDocument({
+        sunatStatus: invoiceData.sunatStatus,
+        delivered: invoiceData.delivered || false,
+        issueDate: invoiceData.issueDate,
+        documentType: invoiceData.documentType
+      })
+
+      if (!validationResult.canVoid) {
+        res.status(400).json({
+          error: validationResult.reason,
+          canVoid: false
+        })
+        return
+      }
+
+      // 3. Obtener datos del negocio
+      const businessDoc = await db.collection('businesses').doc(userId).get()
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      // Obtener configuración de emisión (puede estar en emissionConfig o sunat)
+      const emissionConfig = businessData.emissionConfig || {}
+      const sunatConfig = emissionConfig.sunat || businessData.sunat || {}
+
+      // Verificar credenciales SUNAT
+      if (!sunatConfig.solUser || !sunatConfig.solPassword) {
+        res.status(400).json({ error: 'Faltan credenciales SOL de SUNAT' })
+        return
+      }
+
+      // Obtener certificado (puede estar en certificateData o certificate)
+      const certificate = sunatConfig.certificateData || sunatConfig.certificate
+      if (!certificate) {
+        res.status(400).json({ error: 'Falta certificado digital para firmar' })
+        return
+      }
+
+      // Guardar en businessData para uso posterior
+      businessData.sunatCredentials = {
+        solUser: sunatConfig.solUser,
+        solPassword: sunatConfig.solPassword,
+        certificate: certificate,
+        certificatePassword: sunatConfig.certificatePassword || '',
+        environment: sunatConfig.environment || 'beta'
+      }
+
+      // 4. Generar correlativo para la comunicación de baja
+      const today = new Date()
+      const voidedDocsRef = db.collection('businesses').doc(userId).collection('voidedDocuments')
+
+      // Buscar el último correlativo del día usando transaction para evitar race conditions
+      const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
+
+      // Usar un documento contador para el día
+      const counterDocRef = voidedDocsRef.doc(`counter_${todayStr}`)
+
+      let correlativo = 1
+      const counterDoc = await counterDocRef.get()
+      if (counterDoc.exists) {
+        correlativo = (counterDoc.data().lastCorrelativo || 0) + 1
+      }
+
+      // Actualizar contador
+      await counterDocRef.set({
+        dateStr: todayStr,
+        lastCorrelativo: correlativo,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      const voidedDocId = generateVoidedDocumentId(today, correlativo)
+
+      console.log(`📄 Generando comunicación de baja: ${voidedDocId}`)
+
+      // 5. Generar XML de baja
+      const issueDate = invoiceData.issueDate?.toDate ? invoiceData.issueDate.toDate() : new Date(invoiceData.issueDate)
+      const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
+      const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+      const voidedXmlData = {
+        id: voidedDocId,
+        referenceDate: referenceDateStr,
+        issueDate: issueDateStr,
+        supplier: {
+          ruc: businessData.ruc,
+          name: businessData.businessName || businessData.name
+        },
+        documents: [{
+          lineId: 1,
+          documentType: getVoidDocTypeCode(invoiceData.documentType),
+          series: invoiceData.series,
+          number: invoiceData.correlativeNumber,
+          reason: reason || 'ANULACION DE OPERACION'
+        }]
+      }
+
+      const voidedXml = generateVoidedDocumentsXML(voidedXmlData)
+
+      console.log('✅ XML de baja generado')
+
+      // 6. Firmar XML
+      const signedXml = await signXML(voidedXml, {
+        certificate: businessData.sunatCredentials.certificate,
+        certificatePassword: businessData.sunatCredentials.certificatePassword
+      })
+
+      console.log('✅ XML firmado')
+
+      // 7. Enviar a SUNAT
+      const environment = businessData.sunatCredentials.environment
+
+      const sendResult = await sendSummary(signedXml, {
+        ruc: businessData.ruc,
+        solUser: businessData.sunatCredentials.solUser,
+        solPassword: businessData.sunatCredentials.solPassword,
+        environment,
+        fileName: voidedDocId
+      })
+
+      if (!sendResult.success) {
+        console.error('❌ Error al enviar a SUNAT:', sendResult.error)
+        if (sendResult.rawResponse) {
+          console.error('📄 Respuesta raw:', sendResult.rawResponse)
+        }
+
+        // Guardar intento fallido
+        await voidedDocsRef.add({
+          voidedDocId,
+          dateStr: todayStr,
+          correlativo,
+          invoiceId,
+          invoiceSeries: invoiceData.series,
+          invoiceNumber: invoiceData.correlativeNumber,
+          documentType: invoiceData.documentType,
+          reason: reason || 'ANULACION DE OPERACION',
+          status: 'failed',
+          error: sendResult.error,
+          rawResponse: sendResult.rawResponse || null,
+          createdAt: FieldValue.serverTimestamp()
+        })
+
+        res.status(500).json({
+          error: sendResult.error || 'Error al enviar comunicación de baja a SUNAT',
+          rawResponse: sendResult.rawResponse || null
+        })
+        return
+      }
+
+      console.log(`🎫 Ticket recibido: ${sendResult.ticket}`)
+
+      // 8. Guardar documento de baja con ticket
+      const voidedDocRef = await voidedDocsRef.add({
+        voidedDocId,
+        dateStr: todayStr,
+        correlativo,
+        invoiceId,
+        invoiceSeries: invoiceData.series,
+        invoiceNumber: invoiceData.correlativeNumber,
+        documentType: invoiceData.documentType,
+        reason: reason || 'ANULACION DE OPERACION',
+        status: 'pending',
+        ticket: sendResult.ticket,
+        xmlSent: voidedXml,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      // 9. Marcar factura como "anulando"
+      await invoiceRef.update({
+        sunatStatus: 'voiding',
+        voidingTicket: sendResult.ticket,
+        voidedDocumentId: voidedDocRef.id,
+        voidReason: reason || 'ANULACION DE OPERACION',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      // 10. Consultar estado del ticket (puede tomar unos segundos)
+      // Esperamos un poco y consultamos
+      await new Promise(resolve => setTimeout(resolve, 3000))
+
+      const statusResult = await getStatus(sendResult.ticket, {
+        ruc: businessData.ruc,
+        solUser: businessData.sunatCredentials.solUser,
+        solPassword: businessData.sunatCredentials.solPassword,
+        environment
+      })
+
+      if (statusResult.pending) {
+        // Aún en proceso, el usuario deberá consultar después
+        res.status(202).json({
+          success: true,
+          status: 'pending',
+          ticket: sendResult.ticket,
+          voidedDocumentId: voidedDocRef.id,
+          message: 'La comunicación de baja está siendo procesada por SUNAT. Consulte el estado en unos minutos.'
+        })
+        return
+      }
+
+      if (statusResult.success && statusResult.accepted) {
+        // Baja aceptada
+        await voidedDocsRef.doc(voidedDocRef.id).update({
+          status: 'accepted',
+          cdrData: statusResult.cdrData || null,
+          responseCode: statusResult.code || null,
+          responseDescription: statusResult.description || null,
+          processedAt: FieldValue.serverTimestamp()
+        })
+
+        await invoiceRef.update({
+          sunatStatus: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          voidCdrData: statusResult.cdrData || null
+        })
+
+        console.log(`✅ Factura ${invoiceData.series}-${invoiceData.correlativeNumber} anulada exitosamente`)
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'Factura anulada exitosamente en SUNAT',
+          voidedDocumentId: voidedDocRef.id
+        })
+        return
+      }
+
+      // Error en la baja
+      const errorMsg = statusResult.error || 'SUNAT rechazó la comunicación de baja'
+
+      await voidedDocsRef.doc(voidedDocRef.id).update({
+        status: 'rejected',
+        error: errorMsg,
+        responseCode: statusResult.code || null,
+        processedAt: FieldValue.serverTimestamp()
+      })
+
+      await invoiceRef.update({
+        sunatStatus: 'accepted', // Volver al estado anterior
+        voidingTicket: null,
+        voidError: errorMsg,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      res.status(400).json({
+        success: false,
+        error: errorMsg
+      })
+
+    } catch (error) {
+      console.error('❌ Error al anular factura:', error)
+      res.status(500).json({ error: error.message || 'Error interno del servidor' })
+    }
+  }
+)
+
+/**
+ * Consulta el estado de una comunicación de baja pendiente
+ */
+export const checkVoidStatus = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      await auth.verifyIdToken(idToken)
+
+      const { userId, voidedDocumentId } = req.body
+
+      if (!userId || !voidedDocumentId) {
+        res.status(400).json({ error: 'userId y voidedDocumentId son requeridos' })
+        return
+      }
+
+      // Obtener documento de baja
+      const voidedDocRef = db.collection('businesses').doc(userId).collection('voidedDocuments').doc(voidedDocumentId)
+      const voidedDoc = await voidedDocRef.get()
+
+      if (!voidedDoc.exists) {
+        res.status(404).json({ error: 'Documento de baja no encontrado' })
+        return
+      }
+
+      const voidedData = voidedDoc.data()
+
+      // Si ya está procesado, retornar estado
+      if (voidedData.status !== 'pending') {
+        res.status(200).json({
+          status: voidedData.status,
+          responseCode: voidedData.responseCode,
+          responseDescription: voidedData.responseDescription,
+          error: voidedData.error
+        })
+        return
+      }
+
+      // Consultar estado en SUNAT
+      const businessDoc = await db.collection('businesses').doc(userId).get()
+      const businessData = businessDoc.data()
+
+      // Obtener configuración de emisión
+      const emissionConfig = businessData.emissionConfig || {}
+      const sunatConfig = emissionConfig.sunat || businessData.sunat || {}
+
+      const statusResult = await getStatus(voidedData.ticket, {
+        ruc: businessData.ruc,
+        solUser: sunatConfig.solUser,
+        solPassword: sunatConfig.solPassword,
+        environment: sunatConfig.environment || 'beta'
+      })
+
+      if (statusResult.pending) {
+        res.status(200).json({
+          status: 'pending',
+          message: 'Aún en proceso'
+        })
+        return
+      }
+
+      // Actualizar estado
+      const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(voidedData.invoiceId)
+
+      if (statusResult.success && statusResult.accepted) {
+        await voidedDocRef.update({
+          status: 'accepted',
+          cdrData: statusResult.cdrData || null,
+          responseCode: statusResult.code,
+          responseDescription: statusResult.description,
+          processedAt: FieldValue.serverTimestamp()
+        })
+
+        await invoiceRef.update({
+          sunatStatus: 'voided',
+          voidedAt: FieldValue.serverTimestamp()
+        })
+
+        res.status(200).json({
+          status: 'voided',
+          message: 'Factura anulada exitosamente'
+        })
+      } else {
+        await voidedDocRef.update({
+          status: 'rejected',
+          error: statusResult.error,
+          processedAt: FieldValue.serverTimestamp()
+        })
+
+        await invoiceRef.update({
+          sunatStatus: 'accepted',
+          voidingTicket: null,
+          voidError: statusResult.error
+        })
+
+        res.status(200).json({
+          status: 'rejected',
+          error: statusResult.error
+        })
+      }
+
+    } catch (error) {
+      console.error('❌ Error al consultar estado:', error)
+      res.status(500).json({ error: error.message })
     }
   }
 )

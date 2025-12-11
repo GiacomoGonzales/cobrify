@@ -114,7 +114,8 @@
       "Bash(git pull:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(grep:*)",
-      "WebFetch(domain:www.odoo.com)"
+      "WebFetch(domain:www.odoo.com)",
+      "Bash(gcloud functions logs read:*)"
     ],
     "deny": [],
     "ask": []

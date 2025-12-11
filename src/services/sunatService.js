@@ -288,6 +288,163 @@ export const getSunatErrorMessage = code => {
   return errors[code] || `Error desconocido (código: ${code})`
 }
 
+/**
+ * Anula una factura mediante Comunicación de Baja a SUNAT
+ *
+ * @param {string} userId - ID del usuario/negocio
+ * @param {string} invoiceId - ID de la factura a anular
+ * @param {string} reason - Motivo de la anulación
+ * @param {string} idToken - Token de autenticación
+ * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
+ */
+export const voidInvoice = async (userId, invoiceId, reason, idToken) => {
+  try {
+    // URL de Cloud Functions (funciona con autenticación Firebase)
+    const voidInvoiceUrl = import.meta.env.VITE_VOID_INVOICE_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/voidInvoice'
+
+    const response = await axios.post(
+      voidInvoiceUrl,
+      {
+        userId,
+        invoiceId,
+        reason: reason || 'ANULACION DE OPERACION'
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        timeout: 120000 // 2 minutos
+      }
+    )
+
+    return response.data
+  } catch (error) {
+    console.error('Error al anular factura:', error)
+
+    if (error.response?.data) {
+      return {
+        success: false,
+        error: error.response.data.error || 'Error al anular la factura'
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message || 'Error de conexión'
+    }
+  }
+}
+
+/**
+ * Consulta el estado de una comunicación de baja pendiente
+ *
+ * @param {string} userId - ID del usuario/negocio
+ * @param {string} voidedDocumentId - ID del documento de baja
+ * @param {string} idToken - Token de autenticación
+ * @returns {Promise<Object>} { status: string, message?: string, error?: string }
+ */
+export const checkVoidStatus = async (userId, voidedDocumentId, idToken) => {
+  try {
+    // URL de Cloud Functions (funciona con autenticación Firebase)
+    const checkVoidStatusUrl = import.meta.env.VITE_CHECK_VOID_STATUS_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/checkVoidStatus'
+
+    const response = await axios.post(
+      checkVoidStatusUrl,
+      {
+        userId,
+        voidedDocumentId
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        timeout: 60000
+      }
+    )
+
+    return response.data
+  } catch (error) {
+    console.error('Error al consultar estado de baja:', error)
+
+    return {
+      status: 'error',
+      error: error.response?.data?.error || error.message || 'Error de conexión'
+    }
+  }
+}
+
+/**
+ * Valida si una factura puede ser anulada
+ *
+ * @param {Object} invoice - Datos de la factura
+ * @returns {Object} { canVoid: boolean, reason: string }
+ */
+export const canVoidInvoice = (invoice) => {
+  // Debe ser factura o nota (no boleta)
+  if (invoice.documentType === 'boleta') {
+    return {
+      canVoid: false,
+      reason: 'Las boletas no pueden anularse con comunicación de baja. Debe usar resumen diario.'
+    }
+  }
+
+  // Debe tener estado aceptado o en proceso de anulación (para reintentos)
+  const validStatuses = ['ACEPTADO', 'accepted', 'voiding']
+  if (!validStatuses.includes(invoice.sunatStatus)) {
+    return {
+      canVoid: false,
+      reason: 'Solo se pueden anular facturas aceptadas por SUNAT'
+    }
+  }
+
+  // No debe haber sido entregada
+  if (invoice.delivered === true) {
+    return {
+      canVoid: false,
+      reason: 'La factura ya fue entregada al cliente. Debe emitir una Nota de Crédito.'
+    }
+  }
+
+  // Debe estar dentro del plazo de 7 días
+  const issueDate = invoice.issueDate?.toDate ? invoice.issueDate.toDate() : new Date(invoice.issueDate)
+  const today = new Date()
+  const diffTime = Math.abs(today - issueDate)
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays > 7) {
+    return {
+      canVoid: false,
+      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. Debe emitir una Nota de Crédito.`
+    }
+  }
+
+  // Si está en proceso de anulación, permitir reintentar
+  if (invoice.sunatStatus === 'voiding') {
+    return {
+      canVoid: true,
+      reason: 'La factura está en proceso de anulación. Puede reintentar.',
+      isRetry: true,
+      daysRemaining: 7 - diffDays
+    }
+  }
+
+  // Ya está anulada
+  if (invoice.sunatStatus === 'voided') {
+    return {
+      canVoid: false,
+      reason: 'La factura ya fue anulada'
+    }
+  }
+
+  return {
+    canVoid: true,
+    reason: 'La factura puede ser anulada',
+    daysRemaining: 7 - diffDays
+  }
+}
+
 export default {
   isSunatConfigured,
   prepareInvoiceXML,
@@ -296,4 +453,7 @@ export default {
   downloadCompressedXML,
   getInvoiceStatus,
   getSunatErrorMessage,
+  voidInvoice,
+  checkVoidStatus,
+  canVoidInvoice,
 }

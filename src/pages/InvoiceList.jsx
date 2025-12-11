@@ -40,7 +40,7 @@ import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
-import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured } from '@/services/sunatService'
+import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidInvoice as voidInvoiceSunat, canVoidInvoice, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
@@ -97,6 +97,11 @@ export default function InvoiceList() {
   const [voidingInvoice, setVoidingInvoice] = useState(null)
   const [isVoiding, setIsVoiding] = useState(false)
   const [voidReason, setVoidReason] = useState('')
+
+  // Estados para anulación de facturas SUNAT (Comunicación de Baja)
+  const [voidingSunatInvoice, setVoidingSunatInvoice] = useState(null)
+  const [isVoidingSunat, setIsVoidingSunat] = useState(false)
+  const [voidSunatReason, setVoidSunatReason] = useState('')
 
   // Estados para registro de pagos
   const [paymentInvoice, setPaymentInvoice] = useState(null)
@@ -354,6 +359,57 @@ ${companySettings?.website ? companySettings.website : ''}`
       toast.error('Error al anular la nota de venta. Inténtalo nuevamente.')
     } finally {
       setIsVoiding(false)
+    }
+  }
+
+  // Función para anular factura en SUNAT (Comunicación de Baja)
+  const handleVoidSunatInvoice = async () => {
+    if (!voidingSunatInvoice || !user?.uid) return
+
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    setIsVoidingSunat(true)
+    try {
+      const businessId = getBusinessId()
+
+      // Obtener token de autenticación
+      const { getAuth } = await import('firebase/auth')
+      const auth = getAuth()
+      const idToken = await auth.currentUser?.getIdToken()
+
+      if (!idToken) {
+        throw new Error('No se pudo obtener el token de autenticación')
+      }
+
+      // Llamar al servicio de anulación
+      const result = await voidInvoiceSunat(
+        businessId,
+        voidingSunatInvoice.id,
+        voidSunatReason || 'ANULACION DE OPERACION',
+        idToken
+      )
+
+      if (result.success || result.status === 'voided') {
+        toast.success('Factura anulada exitosamente en SUNAT')
+        setVoidingSunatInvoice(null)
+        setVoidSunatReason('')
+        loadInvoices()
+      } else if (result.status === 'pending') {
+        toast.info('La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos.')
+        setVoidingSunatInvoice(null)
+        setVoidSunatReason('')
+        loadInvoices()
+      } else {
+        throw new Error(result.error || 'Error al anular la factura')
+      }
+    } catch (error) {
+      console.error('Error al anular factura en SUNAT:', error)
+      toast.error(error.message || 'Error al anular la factura. Inténtalo nuevamente.')
+    } finally {
+      setIsVoidingSunat(false)
     }
   }
 
@@ -1390,6 +1446,30 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </>
                   )}
 
+                  {/* Anular en SUNAT - Solo para facturas aceptadas dentro del plazo */}
+                  {invoice.documentType === 'factura' &&
+                   invoice.sunatStatus === 'accepted' &&
+                   invoice.status !== 'cancelled' &&
+                   (() => {
+                     const validation = canVoidInvoice(invoice)
+                     return validation.canVoid
+                   })() && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          setVoidingSunatInvoice(invoice)
+                          setVoidSunatReason('')
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                      >
+                        <Ban className="w-4 h-4" />
+                        <span>Anular en SUNAT</span>
+                      </button>
+                    </>
+                  )}
+
                   {/* Eliminar - Solo si está habilitado en Configuración Y NO fue enviado/aceptado por SUNAT */}
                   {/* Los comprobantes aceptados por SUNAT tienen validez fiscal y no se pueden eliminar */}
                   {/* Facturas/Boletas aceptadas solo se pueden anular mediante Nota de Crédito */}
@@ -1953,6 +2033,95 @@ ${companySettings?.website ? companySettings.website : ''}`
                 <>
                   <Ban className="w-4 h-4 mr-2" />
                   Anular Nota de Venta
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Void SUNAT Invoice Modal (Comunicación de Baja) */}
+      <Modal
+        isOpen={!!voidingSunatInvoice}
+        onClose={() => !isVoidingSunat && setVoidingSunatInvoice(null)}
+        title="Anular Factura en SUNAT"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <Ban className="w-6 h-6 text-orange-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-700">
+                ¿Estás seguro de que deseas anular la factura{' '}
+                <strong>{voidingSunatInvoice?.number || `${voidingSunatInvoice?.series}-${voidingSunatInvoice?.correlativeNumber}`}</strong> en SUNAT?
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800 font-medium mb-2">Comunicación de Baja</p>
+            <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+              <li>Se enviará una Comunicación de Baja a SUNAT</li>
+              <li>La factura quedará anulada en el sistema de SUNAT</li>
+              <li>Este proceso puede tomar unos segundos</li>
+            </ul>
+          </div>
+
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800">
+              <strong>Importante:</strong> Solo puede anular facturas que NO hayan sido entregadas al cliente.
+              Si el cliente ya recibió la factura, debe emitir una Nota de Crédito.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Motivo de anulación
+            </label>
+            <select
+              value={voidSunatReason}
+              onChange={(e) => setVoidSunatReason(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              disabled={isVoidingSunat}
+            >
+              <option value="">Seleccione un motivo</option>
+              <option value="ANULACION DE OPERACION">Anulación de operación</option>
+              <option value="ERROR EN RUC">Error en RUC del cliente</option>
+              <option value="ERROR EN DESCRIPCION">Error en descripción de productos</option>
+              <option value="ERROR EN MONTOS">Error en montos o cálculos</option>
+              <option value="DOCUMENTO NO ENTREGADO">Documento no entregado</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setVoidingSunatInvoice(null)
+                setVoidSunatReason('')
+              }}
+              disabled={isVoidingSunat}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="warning"
+              onClick={handleVoidSunatInvoice}
+              disabled={isVoidingSunat || !voidSunatReason}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {isVoidingSunat ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Anulando...
+                </>
+              ) : (
+                <>
+                  <Ban className="w-4 h-4 mr-2" />
+                  Anular en SUNAT
                 </>
               )}
             </Button>
