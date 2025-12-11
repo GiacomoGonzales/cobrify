@@ -792,7 +792,8 @@ ${companySettings?.website ? companySettings.website : ''}`
       case 'overdue':
         return <Badge variant="danger">Vencida</Badge>
       case 'cancelled':
-        return <Badge className="bg-red-100 text-red-800">Anulada</Badge>
+      case 'voided':
+        return <Badge variant="danger">Anulada</Badge>
       case 'partial_refund':
         return <Badge className="bg-orange-100 text-orange-800">Dev. Parcial</Badge>
       default:
@@ -837,6 +838,20 @@ ${companySettings?.website ? companySettings.website : ''}`
           <Badge variant="danger" className="flex items-center gap-1">
             <XCircle className="w-3 h-3" />
             Rechazado
+          </Badge>
+        )
+      case 'voided':
+        return (
+          <Badge variant="danger" className="flex items-center gap-1">
+            <XCircle className="w-3 h-3" />
+            Anulado
+          </Badge>
+        )
+      case 'voiding':
+        return (
+          <Badge variant="warning" className="flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Anulando...
           </Badge>
         )
       case 'SIGNED':
@@ -2393,6 +2408,7 @@ ${companySettings?.website ? companySettings.website : ''}`
               <option value="accepted">Aceptados por SUNAT</option>
               <option value="pending">Pendientes de envío</option>
               <option value="rejected">Rechazados por SUNAT</option>
+              <option value="voided">Anulados en SUNAT</option>
               <option value="not_applicable">No aplica (Notas de Venta)</option>
             </Select>
           </div>

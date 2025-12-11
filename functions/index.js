@@ -2242,11 +2242,63 @@ export const voidInvoice = onRequest(
           processedAt: FieldValue.serverTimestamp()
         })
 
+        // Actualizar factura: estado SUNAT y estado de pago
         await invoiceRef.update({
           sunatStatus: 'voided',
+          status: 'voided', // Cambiar estado de pago a anulado
           voidedAt: FieldValue.serverTimestamp(),
           voidCdrData: statusResult.cdrData || null
         })
+
+        // Devolver stock de los productos
+        if (invoiceData.items && invoiceData.items.length > 0) {
+          console.log('📦 Devolviendo stock de productos...')
+          for (const item of invoiceData.items) {
+            if (item.productId && !item.productId.startsWith('custom-')) {
+              try {
+                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                const productDoc = await productRef.get()
+                if (productDoc.exists) {
+                  const currentStock = productDoc.data().stock || 0
+                  await productRef.update({
+                    stock: currentStock + (item.quantity || 0),
+                    updatedAt: FieldValue.serverTimestamp()
+                  })
+                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+                }
+              } catch (stockError) {
+                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+              }
+            }
+          }
+        }
+
+        // Actualizar estadísticas del cliente (si existe)
+        if (invoiceData.customer?.documentNumber) {
+          try {
+            const customersRef = db.collection('businesses').doc(userId).collection('customers')
+            const customerQuery = await customersRef
+              .where('documentNumber', '==', invoiceData.customer.documentNumber)
+              .limit(1)
+              .get()
+
+            if (!customerQuery.empty) {
+              const customerDoc = customerQuery.docs[0]
+              const customerData = customerDoc.data()
+              const newOrdersCount = Math.max(0, (customerData.ordersCount || 1) - 1)
+              const newTotalSpent = Math.max(0, (customerData.totalSpent || invoiceData.total) - (invoiceData.total || 0))
+
+              await customerDoc.ref.update({
+                ordersCount: newOrdersCount,
+                totalSpent: newTotalSpent,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+              console.log(`👤 Estadísticas de cliente actualizadas: ${invoiceData.customer.documentNumber}`)
+            }
+          } catch (customerError) {
+            console.error('❌ Error actualizando estadísticas del cliente:', customerError.message)
+          }
+        }
 
         console.log(`✅ Factura ${invoiceData.series}-${invoiceData.correlativeNumber} anulada exitosamente`)
 
