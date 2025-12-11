@@ -5,6 +5,7 @@ import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 /**
  * Convierte un número a texto en español (para montos en facturas peruanas)
@@ -845,6 +846,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         })
 
         console.log('PDF guardado en:', result.uri)
+
+        // Abrir menú compartir en iOS/Android
+        try {
+          await Share.share({
+            title: fileName,
+            text: `Comprobante: ${fileName}`,
+            url: result.uri,
+            dialogTitle: 'Compartir PDF'
+          })
+        } catch (shareError) {
+          // Si el usuario cancela el compartir, no es un error
+          console.log('Compartir cancelado o no disponible:', shareError)
+        }
+
         return { success: true, uri: result.uri, fileName, doc }
       } catch (error) {
         console.error('Error al guardar PDF en móvil:', error)
