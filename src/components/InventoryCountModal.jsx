@@ -25,7 +25,7 @@ import { formatCurrency } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import { updateProduct } from '@/services/firestoreService'
 import { updateIngredient } from '@/services/ingredientService'
-import { createStockMovement } from '@/services/warehouseService'
+import { createStockMovement, createInventoryCount } from '@/services/warehouseService'
 import { generateInventoryCountPdf } from '@/utils/inventoryCountPdfGenerator'
 
 export default function InventoryCountModal({
@@ -36,6 +36,8 @@ export default function InventoryCountModal({
   businessId,
   userId,
   companySettings,
+  warehouses = [],
+  defaultWarehouse = null,
   onCountCompleted,
 }) {
   const toast = useToast()
@@ -64,21 +66,41 @@ export default function InventoryCountModal({
   // Ref para controlar si ya se inicializó
   const [initialized, setInitialized] = useState(false)
 
+  // Calcular el stock real de un producto
+  // Prioridad: suma de warehouseStocks > stock general
+  const getRealStock = (product) => {
+    const warehouseStocks = product.warehouseStocks || []
+    if (warehouseStocks.length > 0) {
+      const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      // Si hay datos en warehouseStocks, usar esa suma
+      if (warehouseTotal > 0 || product.stock === 0) {
+        return warehouseTotal
+      }
+    }
+    // Si no hay warehouseStocks o suma 0, usar stock general
+    return product.stock || 0
+  }
+
   // Inicializar datos de conteo solo cuando el modal se ABRE (no cuando products cambia)
   useEffect(() => {
     if (isOpen && !initialized && products.length > 0) {
       const initialCountData = {}
       products.forEach(product => {
         if (product.stock !== null && product.stock !== undefined) {
+          // Usar el stock real (del almacén si existe, o general si no)
+          const realStock = getRealStock(product)
+
           initialCountData[product.id] = {
             productId: product.id,
             productName: product.name,
             productCode: product.code || '-',
             category: product.category,
-            systemStock: product.stock,
+            systemStock: realStock,
             physicalCount: '',
             price: product.price || 0,
             isIngredient: product.isIngredient || false,
+            // Guardar warehouseStocks original para actualizar correctamente
+            warehouseStocks: product.warehouseStocks || [],
           }
         }
       })
@@ -273,15 +295,69 @@ export default function InventoryCountModal({
 
           let result
           if (item.isIngredient) {
-            // Actualizar insumo
+            // Actualizar insumo (los insumos no usan warehouseStocks)
             result = await updateIngredient(businessId, item.productId, {
               stock: newStock,
             })
           } else {
-            // Actualizar producto
-            result = await updateProduct(businessId, item.productId, {
-              stock: newStock,
-            })
+            // Actualizar producto - incluir warehouseStocks si existe almacén por defecto
+            const updateData = { stock: newStock }
+
+            // Si hay almacenes configurados, actualizar también warehouseStocks
+            if (defaultWarehouse && warehouses.length > 0) {
+              // Calcular la diferencia y aplicarla al almacén por defecto
+              // Esto asegura que el stock esté disponible en el POS
+              const currentWarehouseStocks = item.warehouseStocks || []
+              let newWarehouseStocks = [...currentWarehouseStocks]
+
+              // Buscar si el almacén por defecto ya existe en warehouseStocks
+              const defaultIdx = newWarehouseStocks.findIndex(
+                ws => ws.warehouseId === defaultWarehouse.id
+              )
+
+              if (defaultIdx >= 0) {
+                // Aplicar la diferencia al almacén por defecto
+                const currentWarehouseStock = newWarehouseStocks[defaultIdx].stock || 0
+                newWarehouseStocks[defaultIdx] = {
+                  ...newWarehouseStocks[defaultIdx],
+                  stock: Math.max(0, currentWarehouseStock + difference)
+                }
+              } else if (difference > 0) {
+                // Si hay incremento y no existe el almacén, crear entrada
+                newWarehouseStocks.push({
+                  warehouseId: defaultWarehouse.id,
+                  stock: difference,
+                  minStock: 0
+                })
+              } else {
+                // Si hay decremento pero no hay almacén default, distribuir proporcionalmente
+                // o simplemente actualizar stock general (el POS usará getOrphanStock)
+              }
+
+              // Recalcular stock total desde warehouseStocks
+              const totalFromWarehouses = newWarehouseStocks.reduce(
+                (sum, ws) => sum + (ws.stock || 0), 0
+              )
+
+              // Si hay diferencia, ajustar para que coincida con newStock
+              if (totalFromWarehouses !== newStock && newWarehouseStocks.length > 0) {
+                // Ajustar el almacén por defecto para que el total coincida
+                const adjustmentNeeded = newStock - totalFromWarehouses
+                const defIdx = newWarehouseStocks.findIndex(
+                  ws => ws.warehouseId === defaultWarehouse.id
+                )
+                if (defIdx >= 0) {
+                  newWarehouseStocks[defIdx].stock = Math.max(
+                    0,
+                    (newWarehouseStocks[defIdx].stock || 0) + adjustmentNeeded
+                  )
+                }
+              }
+
+              updateData.warehouseStocks = newWarehouseStocks
+            }
+
+            result = await updateProduct(businessId, item.productId, updateData)
           }
 
           if (result.success) {
@@ -309,6 +385,37 @@ export default function InventoryCountModal({
 
       if (successCount > 0) {
         toast.success(`${successCount} item(s) actualizado(s) exitosamente`)
+
+        // Guardar sesión de recuento en el historial
+        try {
+          const countSessionData = {
+            userId: userId,
+            totalProductsCounted: countStats.countedProducts,
+            productsWithDifference: countStats.productsWithDifference,
+            totalMissing: countStats.totalMissing,
+            totalSurplus: countStats.totalSurplus,
+            totalMissingValue: countStats.totalMissingValue,
+            totalSurplusValue: countStats.totalSurplusValue,
+            itemsAdjusted: itemsToUpdate.map(item => ({
+              productId: item.productId,
+              productName: item.productName,
+              productCode: item.productCode,
+              previousStock: item.systemStock,
+              newStock: parseFloat(item.physicalCount),
+              difference: parseFloat(item.physicalCount) - item.systemStock,
+              price: item.price,
+              isIngredient: item.isIngredient || false,
+            })),
+            status: errorCount > 0 ? 'partial' : 'completed',
+            successCount,
+            errorCount,
+          }
+
+          await createInventoryCount(businessId, countSessionData)
+        } catch (historyError) {
+          console.error('Error al guardar historial de recuento:', historyError)
+          // No mostrar error al usuario ya que los ajustes sí se aplicaron
+        }
       }
       if (errorCount > 0) {
         toast.error(`${errorCount} item(s) no pudieron ser actualizados`)

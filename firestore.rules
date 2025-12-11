@@ -329,6 +329,12 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
+
+      // Subcollection: Inventory Counts (Sesiones de Recuento de Inventario)
+      match /inventoryCounts/{countId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
     }
   }
 }

@@ -139,7 +139,34 @@ export const updateWarehouse = async (businessId, warehouseId, warehouseData) =>
  */
 export const deleteWarehouse = async (businessId, warehouseId) => {
   try {
-    // TODO: Verificar que no tenga stock en productos
+    // Verificar que no tenga productos con stock en este almacén
+    const productsRef = collection(db, 'businesses', businessId, 'products')
+    const productsSnapshot = await getDocs(productsRef)
+
+    const productsWithStock = []
+    productsSnapshot.forEach((doc) => {
+      const product = doc.data()
+      const warehouseStocks = product.warehouseStocks || []
+      const stockInWarehouse = warehouseStocks.find(ws => ws.warehouseId === warehouseId)
+
+      if (stockInWarehouse && stockInWarehouse.stock > 0) {
+        productsWithStock.push({
+          id: doc.id,
+          name: product.name,
+          stock: stockInWarehouse.stock
+        })
+      }
+    })
+
+    // Si hay productos con stock, no permitir eliminar
+    if (productsWithStock.length > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar el almacén porque tiene ${productsWithStock.length} producto(s) con stock. Transfiere el stock a otro almacén primero.`,
+        productsWithStock
+      }
+    }
+
     const warehouseRef = doc(db, 'businesses', businessId, 'warehouses', warehouseId)
     await deleteDoc(warehouseRef)
 
@@ -583,6 +610,246 @@ export const getTotalAvailableStock = (product, warehouseId = null) => {
   return product.stock || 0
 }
 
+// =====================================================
+// INVENTORY COUNTS (Sesiones de Recuento)
+// =====================================================
+
+/**
+ * Crear una sesión de recuento de inventario
+ * @param {string} businessId - ID del negocio
+ * @param {Object} countData - Datos del recuento
+ * @returns {Object} - { success: boolean, id?: string, error?: string }
+ */
+/**
+ * Sincronizar stock de todos los productos con sus warehouseStocks
+ * Esto corrige la inconsistencia donde stock != suma de warehouseStocks
+ *
+ * @param {string} businessId - ID del negocio
+ * @param {string} targetWarehouseId - ID del almacén donde asignar el stock huérfano
+ * @returns {Object} - { success: boolean, synced: number, error?: string }
+ */
+export const syncAllProductsStock = async (businessId, targetWarehouseId) => {
+  try {
+    const productsRef = collection(db, 'businesses', businessId, 'products')
+    const snapshot = await getDocs(productsRef)
+
+    let syncedCount = 0
+    let batchCount = 0
+    let batch = writeBatch(db)
+    const MAX_BATCH = 450 // Firestore limit is 500
+
+    for (const docSnap of snapshot.docs) {
+      const product = { id: docSnap.id, ...docSnap.data() }
+
+      // Solo procesar productos con control de stock
+      if (product.stock === null || product.stock === undefined || product.trackStock === false) {
+        continue
+      }
+
+      const currentStock = product.stock || 0
+      const warehouseStocks = product.warehouseStocks || []
+
+      // Calcular suma actual de warehouseStocks
+      const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+      // Si ya están sincronizados, saltar
+      if (currentStock === warehouseTotal && warehouseStocks.length > 0) {
+        continue
+      }
+
+      const productRef = doc(db, 'businesses', businessId, 'products', product.id)
+
+      // CASO 1: Producto tiene warehouseStocks con datos
+      // → El stock del almacén es el correcto, actualizar stock general
+      if (warehouseStocks.length > 0 && warehouseTotal > 0) {
+        batch.update(productRef, {
+          stock: warehouseTotal,
+          updatedAt: serverTimestamp()
+        })
+      }
+      // CASO 2: Producto NO tiene warehouseStocks (huérfano)
+      // → Asignar el stock general al almacén destino
+      else if (warehouseStocks.length === 0 && currentStock > 0) {
+        const newWarehouseStocks = [{
+          warehouseId: targetWarehouseId,
+          stock: currentStock,
+          minStock: 0
+        }]
+        batch.update(productRef, {
+          warehouseStocks: newWarehouseStocks,
+          updatedAt: serverTimestamp()
+        })
+      }
+      // CASO 3: warehouseStocks existe pero suma 0, y stock > 0
+      // → El stock general es el correcto, asignar al almacén
+      else if (warehouseStocks.length > 0 && warehouseTotal === 0 && currentStock > 0) {
+        const newWarehouseStocks = [{
+          warehouseId: targetWarehouseId,
+          stock: currentStock,
+          minStock: 0
+        }]
+        batch.update(productRef, {
+          warehouseStocks: newWarehouseStocks,
+          updatedAt: serverTimestamp()
+        })
+      }
+      else {
+        // No necesita cambios
+        continue
+      }
+
+      syncedCount++
+      batchCount++
+
+      // Commit batch si llegamos al límite
+      if (batchCount >= MAX_BATCH) {
+        await batch.commit()
+        batch = writeBatch(db) // Crear nuevo batch
+        batchCount = 0
+      }
+    }
+
+    // Commit remaining
+    if (batchCount > 0) {
+      await batch.commit()
+    }
+
+    return { success: true, synced: syncedCount }
+  } catch (error) {
+    console.error('Error al sincronizar stock:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Recalcular stock general basándose en la suma de warehouseStocks
+ * Útil cuando warehouseStocks es el valor correcto y stock general está desactualizado
+ *
+ * @param {string} businessId - ID del negocio
+ * @returns {Object} - { success: boolean, updated: number, error?: string }
+ */
+export const recalculateStockFromWarehouses = async (businessId) => {
+  try {
+    const productsRef = collection(db, 'businesses', businessId, 'products')
+    const snapshot = await getDocs(productsRef)
+
+    let updatedCount = 0
+    const batch = writeBatch(db)
+    let batchCount = 0
+    const MAX_BATCH = 450
+
+    for (const docSnap of snapshot.docs) {
+      const product = { id: docSnap.id, ...docSnap.data() }
+
+      // Solo procesar productos con warehouseStocks
+      if (!product.warehouseStocks || product.warehouseStocks.length === 0) {
+        continue
+      }
+
+      if (product.trackStock === false) {
+        continue
+      }
+
+      // Calcular suma de warehouseStocks
+      const warehouseTotal = product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      const currentStock = product.stock || 0
+
+      // Si ya están sincronizados, saltar
+      if (currentStock === warehouseTotal) {
+        continue
+      }
+
+      // Actualizar stock general
+      const productRef = doc(db, 'businesses', businessId, 'products', product.id)
+      batch.update(productRef, {
+        stock: warehouseTotal,
+        updatedAt: serverTimestamp()
+      })
+
+      updatedCount++
+      batchCount++
+
+      if (batchCount >= MAX_BATCH) {
+        await batch.commit()
+        batchCount = 0
+      }
+    }
+
+    if (batchCount > 0) {
+      await batch.commit()
+    }
+
+    return { success: true, updated: updatedCount }
+  } catch (error) {
+    console.error('Error al recalcular stock:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export const createInventoryCount = async (businessId, countData) => {
+  try {
+    const countsRef = collection(db, 'businesses', businessId, 'inventoryCounts')
+
+    const newCount = {
+      ...countData,
+      createdAt: serverTimestamp(),
+    }
+
+    const docRef = await addDoc(countsRef, newCount)
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al crear sesión de recuento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener historial de recuentos de inventario
+ * @param {string} businessId - ID del negocio
+ * @param {Object} filters - Filtros opcionales (dateFrom, dateTo)
+ * @returns {Object} - { success: boolean, data?: Array, error?: string }
+ */
+export const getInventoryCounts = async (businessId, filters = {}) => {
+  try {
+    const countsRef = collection(db, 'businesses', businessId, 'inventoryCounts')
+    const q = query(countsRef, orderBy('createdAt', 'desc'))
+
+    const snapshot = await getDocs(q)
+    let counts = []
+
+    snapshot.forEach((doc) => {
+      counts.push({ id: doc.id, ...doc.data() })
+    })
+
+    return { success: true, data: counts }
+  } catch (error) {
+    console.error('Error al obtener recuentos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener un recuento específico por ID
+ * @param {string} businessId - ID del negocio
+ * @param {string} countId - ID del recuento
+ * @returns {Object} - { success: boolean, data?: Object, error?: string }
+ */
+export const getInventoryCountById = async (businessId, countId) => {
+  try {
+    const countRef = doc(db, 'businesses', businessId, 'inventoryCounts', countId)
+    const countSnap = await getDoc(countRef)
+
+    if (!countSnap.exists()) {
+      return { success: false, error: 'Recuento no encontrado' }
+    }
+
+    return { success: true, data: { id: countSnap.id, ...countSnap.data() } }
+  } catch (error) {
+    console.error('Error al obtener recuento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export default {
   // Warehouses
   getWarehouses,
@@ -605,5 +872,12 @@ export default {
   getOrphanStock,
   getDeletedWarehouseStock,
   migrateOrphanStock,
+  // Stock Sync
+  syncAllProductsStock,
+  recalculateStockFromWarehouses,
   getTotalAvailableStock,
+  // Inventory Counts
+  createInventoryCount,
+  getInventoryCounts,
+  getInventoryCountById,
 }

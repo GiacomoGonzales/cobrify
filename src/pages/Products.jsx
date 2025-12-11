@@ -77,6 +77,25 @@ const getCategoryById = (categories, id) => {
   return categories.find(cat => cat.id === id)
 }
 
+// Función para obtener el stock real de un producto (suma de warehouseStocks o stock general)
+const getRealStockValue = (product) => {
+  // Si no tiene control de stock, retornar null
+  if (product.stock === null || product.stock === undefined) {
+    return null
+  }
+
+  // Si tiene warehouseStocks, usar la suma
+  const warehouseStocks = product.warehouseStocks || []
+  if (warehouseStocks.length > 0) {
+    const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    // Retornar el mayor entre la suma de almacenes y el stock general
+    return Math.max(warehouseTotal, product.stock || 0)
+  }
+
+  // Si no tiene warehouseStocks, usar stock general
+  return product.stock || 0
+}
+
 // Get all descendant category IDs (children, grandchildren, etc.)
 const getAllDescendantCategoryIds = (categories, parentId) => {
   const descendants = []
@@ -575,12 +594,21 @@ export default function Products() {
           productData.trackStock = true // SÍ controlar stock
 
           if (editingProduct) {
-            // Al editar, mantener el stock actual (no lo modificamos aquí)
-            // Solo actualizar initialStock si el usuario es business_owner y lo modificó
-            if (user?.role === 'business_owner' && data.initialStock !== '') {
-              productData.initialStock = parseInt(data.initialStock)
+            // Verificar si el producto antes NO tenía control de stock y ahora SÍ
+            const previouslyHadNoStock = editingProduct.stock === null || editingProduct.stock === undefined
+
+            if (previouslyHadNoStock) {
+              // Activando control de stock por primera vez - inicializar en 0
+              productData.stock = 0
+              productData.initialStock = 0
+              productData.warehouseStocks = []
+            } else {
+              // Ya tenía control de stock - mantener stock actual
+              // Solo actualizar initialStock si el usuario es business_owner y lo modificó
+              if (user?.role === 'business_owner' && data.initialStock !== '') {
+                productData.initialStock = parseInt(data.initialStock)
+              }
             }
-            // No modificar stock actual en edición (se modifica con ventas/compras)
           } else {
             // Al crear, initialStock y stock son el mismo valor inicial
             const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
@@ -1466,8 +1494,10 @@ export default function Products() {
           bValue = b.hasVariants ? b.basePrice : b.price || 0
           break
         case 'stock':
-          aValue = a.stock !== null && a.stock !== undefined ? a.stock : -1
-          bValue = b.stock !== null && b.stock !== undefined ? b.stock : -1
+          const aStock = getRealStockValue(a)
+          const bStock = getRealStockValue(b)
+          aValue = aStock !== null ? aStock : -1
+          bValue = bStock !== null ? bStock : -1
           break
         case 'category':
           aValue = getCategoryPath(categories, a.category) || ''
@@ -1517,13 +1547,17 @@ export default function Products() {
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
     const totalValue = products.reduce((sum, product) => {
-      if (product.stock && product.price) {
-        return sum + product.stock * product.price
+      const realStock = getRealStockValue(product)
+      if (realStock && product.price) {
+        return sum + realStock * product.price
       }
       return sum
     }, 0)
 
-    const lowStockCount = products.filter(product => product.stock !== null && product.stock < 4).length
+    const lowStockCount = products.filter(product => {
+      const realStock = getRealStockValue(product)
+      return realStock !== null && realStock < 4
+    }).length
 
     const expiringProductsCount = products.filter(product => {
       if (!product.trackExpiration || !product.expirationDate) return false
@@ -2038,21 +2072,24 @@ export default function Products() {
                                 <span className="text-xs text-gray-500">
                                   {product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0}
                                 </span>
-                              ) : product.stock !== null && product.stock !== undefined ? (
-                                <span
-                                  className={`font-medium text-sm ${
-                                    product.stock >= 4
-                                      ? 'text-green-600'
-                                      : product.stock > 0
-                                      ? 'text-yellow-600'
-                                      : 'text-red-600'
-                                  }`}
-                                >
-                                  {product.stock}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 text-xs">N/A</span>
-                              )}
+                              ) : (() => {
+                                const realStock = getRealStockValue(product)
+                                return realStock !== null ? (
+                                  <span
+                                    className={`font-medium text-sm ${
+                                      realStock >= 4
+                                        ? 'text-green-600'
+                                        : realStock > 0
+                                        ? 'text-yellow-600'
+                                        : 'text-red-600'
+                                    }`}
+                                  >
+                                    {realStock}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">N/A</span>
+                                )
+                              })()}
                             </div>
                           </div>
                         </TableCell>
@@ -2174,94 +2211,101 @@ export default function Products() {
 
             {/* Controles de paginación */}
             {totalFilteredProducts > 0 && (
-            <div className="px-6 py-4 border-t border-gray-200">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                {/* Info de productos mostrados */}
-                <div className="text-sm text-gray-600">
-                  Mostrando <span className="font-medium">{startIndex + 1}</span> a{' '}
-                  <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span> de{' '}
-                  <span className="font-medium">{totalFilteredProducts}</span> productos
-                </div>
-
-                {/* Controles de paginación */}
-                <div className="flex items-center gap-2">
-                  {/* Selector de items por página */}
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-col gap-3">
+                {/* Fila 1: Info y selector de items por página */}
+                <div className="flex items-center justify-between">
+                  <div className="text-xs sm:text-sm text-gray-600">
+                    <span className="font-medium">{startIndex + 1}</span>-
+                    <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span> de{' '}
+                    <span className="font-medium">{totalFilteredProducts}</span>
+                  </div>
                   <select
                     value={itemsPerPage}
                     onChange={(e) => {
                       setItemsPerPage(Number(e.target.value))
                       setCurrentPage(1)
                     }}
-                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="px-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value={25}>25</option>
                     <option value={50}>50</option>
                     <option value={100}>100</option>
                     <option value={250}>250</option>
                   </select>
+                </div>
 
-                  {/* Botones de navegación */}
+                {/* Fila 2: Navegación */}
+                <div className="flex items-center justify-center gap-1">
+                  {/* Primera y Anterior */}
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Primera"
+                  >
+                    <span className="hidden sm:inline">Primera</span>
+                    <span className="sm:hidden">««</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Anterior"
+                  >
+                    <span className="hidden sm:inline">Anterior</span>
+                    <span className="sm:hidden">«</span>
+                  </button>
+
+                  {/* Números de página - menos en móvil */}
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Primera
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Anterior
-                    </button>
+                    {Array.from({ length: Math.min(totalPages <= 3 ? totalPages : 3, totalPages) }, (_, i) => {
+                      let pageNum
+                      if (totalPages <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 2) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 1) {
+                        pageNum = totalPages - 2 + i
+                      } else {
+                        pageNum = currentPage - 1 + i
+                      }
 
-                    {/* Números de página */}
-                    <div className="flex items-center gap-1 px-2">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum
-                        if (totalPages <= 5) {
-                          pageNum = i + 1
-                        } else if (currentPage <= 3) {
-                          pageNum = i + 1
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i
-                        } else {
-                          pageNum = currentPage - 2 + i
-                        }
-
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => setCurrentPage(pageNum)}
-                            className={`w-8 h-8 text-sm rounded-lg ${
-                              currentPage === pageNum
-                                ? 'bg-primary-600 text-white'
-                                : 'border border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Siguiente
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Última
-                    </button>
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 text-xs sm:text-sm rounded-lg ${
+                            currentPage === pageNum
+                              ? 'bg-primary-600 text-white'
+                              : 'border border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
                   </div>
+
+                  {/* Siguiente y Última */}
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Siguiente"
+                  >
+                    <span className="hidden sm:inline">Siguiente</span>
+                    <span className="sm:hidden">»</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Última"
+                  >
+                    <span className="hidden sm:inline">Última</span>
+                    <span className="sm:hidden">»»</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -3165,13 +3209,18 @@ export default function Products() {
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs font-medium text-gray-500">Stock Total</label>
-                    <p className={`text-2xl font-bold mt-1 ${
-                      (viewingProduct.stock || 0) >= 4 ? 'text-green-600' :
-                      (viewingProduct.stock || 0) > 0 ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
-                      {viewingProduct.stock || 0} {UNITS.find(u => u.value === viewingProduct.unit)?.label?.toLowerCase() || 'unidades'}
-                    </p>
+                    {(() => {
+                      const realStock = getRealStockValue(viewingProduct) || 0
+                      return (
+                        <p className={`text-2xl font-bold mt-1 ${
+                          realStock >= 4 ? 'text-green-600' :
+                          realStock > 0 ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>
+                          {realStock} {UNITS.find(u => u.value === viewingProduct.unit)?.label?.toLowerCase() || 'unidades'}
+                        </p>
+                      )
+                    })()}
                   </div>
 
                   {/* Stock por Almacén */}

@@ -64,6 +64,26 @@ const getCategoryPath = (categories, categoryId) => {
   return parent ? `${parent} > ${category.name}` : category.name
 }
 
+// Función para obtener el stock real de un item (suma de warehouseStocks o stock general)
+const getRealStockValue = (item) => {
+  // Si no tiene control de stock, retornar null
+  if (item.stock === null || item.stock === undefined) {
+    return null
+  }
+
+  // Si tiene warehouseStocks, usar la suma
+  const warehouseStocks = item.warehouseStocks || []
+  if (warehouseStocks.length > 0) {
+    const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    // Retornar el mayor entre la suma de almacenes y el stock general
+    // para no perder datos en caso de inconsistencia
+    return Math.max(warehouseTotal, item.stock || 0)
+  }
+
+  // Si no tiene warehouseStocks, usar stock general
+  return item.stock || 0
+}
+
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
   const toast = useToast()
@@ -417,13 +437,14 @@ export default function Inventory() {
       const matchesCategory =
         filterCategory === 'all' || item.category === filterCategory
 
+      const realStock = getRealStockValue(item)
       let matchesStatus = true
       if (filterStatus === 'low') {
-        matchesStatus = item.stock !== null && item.stock < 4
+        matchesStatus = realStock !== null && realStock < 4
       } else if (filterStatus === 'out') {
-        matchesStatus = item.stock === 0
+        matchesStatus = realStock === 0
       } else if (filterStatus === 'normal') {
-        matchesStatus = item.stock === null || item.stock >= 4
+        matchesStatus = realStock === null || realStock >= 4
       }
 
       return matchesSearch && matchesCategory && matchesStatus
@@ -537,14 +558,18 @@ export default function Inventory() {
 
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
-    const itemsWithStock = allItems.filter(i => i.stock !== null && i.stock !== undefined)
-    const lowStockItems = itemsWithStock.filter(i => i.stock < 4)
-    const outOfStockItems = itemsWithStock.filter(i => i.stock === 0)
+    const itemsWithStock = allItems.filter(i => getRealStockValue(i) !== null)
+    const lowStockItems = itemsWithStock.filter(i => {
+      const realStock = getRealStockValue(i)
+      return realStock !== null && realStock < 4
+    })
+    const outOfStockItems = itemsWithStock.filter(i => getRealStockValue(i) === 0)
     const totalValue = itemsWithStock.reduce((sum, i) => {
+      const realStock = getRealStockValue(i) || 0
       const price = i.itemType === 'ingredient' ? (i.averageCost || 0) : (i.price || 0)
-      return sum + (i.stock * price)
+      return sum + (realStock * price)
     }, 0)
-    const totalUnits = itemsWithStock.reduce((sum, i) => sum + i.stock, 0)
+    const totalUnits = itemsWithStock.reduce((sum, i) => sum + (getRealStockValue(i) || 0), 0)
 
     return {
       productsWithStock: itemsWithStock,
@@ -579,6 +604,9 @@ export default function Inventory() {
   const defaultWarehouse = React.useMemo(() => {
     return warehouses.find(w => w.isDefault) || warehouses[0] || null
   }, [warehouses])
+
+  // Alias para usar la función global dentro del componente
+  const getRealStock = getRealStockValue
 
   // Función para migrar todo el stock huérfano al almacén por defecto
   // También limpia referencias a almacenes eliminados
@@ -635,13 +663,14 @@ export default function Inventory() {
   }
 
   const getStockStatus = product => {
-    if (product.stock === null) {
+    const realStock = getRealStock(product)
+    if (realStock === null) {
       return { status: 'Sin control', variant: 'default', icon: Package }
     }
-    if (product.stock === 0) {
+    if (realStock === 0) {
       return { status: 'Agotado', variant: 'danger', icon: AlertTriangle }
     }
-    if (product.stock < 4) {
+    if (realStock < 4) {
       return { status: 'Stock Bajo', variant: 'warning', icon: TrendingDown }
     }
     return { status: 'Normal', variant: 'success', icon: TrendingUp }
@@ -1052,41 +1081,46 @@ export default function Inventory() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            {/* Botón de expandir/contraer solo si hay almacenes y es producto */}
-                            {warehouses.length > 0 && item.stock !== null && isProduct && (
-                              <button
-                                onClick={() => setExpandedProduct(isExpanded ? null : item.id)}
-                                className="p-1 hover:bg-gray-100 rounded transition-colors"
-                                title={isExpanded ? "Ocultar detalle" : "Ver por almacén"}
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-gray-500" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                          {(() => {
+                            const realStock = getRealStock(item)
+                            return (
+                              <div className="flex items-center justify-end space-x-2">
+                                {/* Botón de expandir/contraer solo si hay almacenes y es producto */}
+                                {warehouses.length > 0 && realStock !== null && isProduct && (
+                                  <button
+                                    onClick={() => setExpandedProduct(isExpanded ? null : item.id)}
+                                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                    title={isExpanded ? "Ocultar detalle" : "Ver por almacén"}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                                    ) : (
+                                      <ChevronRight className="w-4 h-4 text-gray-500" />
+                                    )}
+                                  </button>
                                 )}
-                              </button>
-                            )}
 
-                            {/* Stock total */}
-                            <div>
-                              {item.stock === null || item.stock === undefined ? (
-                                <span className="text-sm text-gray-500">Sin control</span>
-                              ) : (
-                                <span
-                                  className={`font-bold text-sm ${
-                                    item.stock === 0
-                                      ? 'text-red-600'
-                                      : item.stock < 4
-                                      ? 'text-yellow-600'
-                                      : 'text-green-600'
-                                  }`}
-                                >
-                                  {item.stock} {item.itemType === 'ingredient' ? item.purchaseUnit || '' : ''}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                                {/* Stock total */}
+                                <div>
+                                  {realStock === null ? (
+                                    <span className="text-sm text-gray-500">Sin control</span>
+                                  ) : (
+                                    <span
+                                      className={`font-bold text-sm ${
+                                        realStock === 0
+                                          ? 'text-red-600'
+                                          : realStock < 4
+                                          ? 'text-yellow-600'
+                                          : 'text-green-600'
+                                      }`}
+                                    >
+                                      {realStock} {item.itemType === 'ingredient' ? item.purchaseUnit || '' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="text-sm">
@@ -1094,13 +1128,16 @@ export default function Inventory() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          {item.stock !== null && item.stock !== undefined ? (
-                            <span className="font-semibold text-sm">
-                              {formatCurrency(item.stock * (isProduct ? item.price : (item.averageCost || 0)))}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-gray-500">-</span>
-                          )}
+                          {(() => {
+                            const realStock = getRealStock(item)
+                            return realStock !== null ? (
+                              <span className="font-semibold text-sm">
+                                {formatCurrency(realStock * (isProduct ? item.price : (item.averageCost || 0)))}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-500">-</span>
+                            )
+                          })()}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={stockStatus.variant}>{stockStatus.status}</Badge>
@@ -1113,7 +1150,7 @@ export default function Inventory() {
                                   onClick={() => openTransferModal(item)}
                                   className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                   title="Transferir entre almacenes"
-                                  disabled={item.stock === null || item.stock === 0}
+                                  disabled={getRealStock(item) === null || getRealStock(item) === 0}
                                 >
                                   <ArrowRightLeft className="w-4 h-4" />
                                 </button>
@@ -1124,7 +1161,7 @@ export default function Inventory() {
                       </TableRow>
 
                       {/* Fila expandible con detalle por almacén - solo para productos */}
-                      {isExpanded && warehouses.length > 0 && item.stock !== null && isProduct && (
+                      {isExpanded && warehouses.length > 0 && getRealStock(item) !== null && isProduct && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={warehouses.length > 1 ? 8 : 7} className="py-3">
                             <div className="pl-8 space-y-2">
@@ -1439,6 +1476,8 @@ export default function Inventory() {
         businessId={getBusinessId()}
         userId={user?.uid}
         companySettings={companySettings}
+        warehouses={warehouses}
+        defaultWarehouse={defaultWarehouse}
         onCountCompleted={() => {
           loadProducts()
           if (isRetailMode) loadIngredients()

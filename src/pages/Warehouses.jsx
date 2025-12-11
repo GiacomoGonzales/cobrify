@@ -12,6 +12,8 @@ import {
   XCircle,
   Loader2,
   Package,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -26,7 +28,9 @@ import {
   createWarehouse,
   updateWarehouse,
   deleteWarehouse,
+  syncAllProductsStock,
 } from '@/services/warehouseService'
+import { getProducts } from '@/services/firestoreService'
 
 // Schema de validación
 const warehouseSchema = z.object({
@@ -44,6 +48,10 @@ export default function Warehouses() {
   const [editingWarehouse, setEditingWarehouse] = useState(null)
   const [deletingWarehouse, setDeletingWarehouse] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [showSyncModal, setShowSyncModal] = useState(false)
+  const [syncPreview, setSyncPreview] = useState(null)
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
   const {
     register,
@@ -134,7 +142,12 @@ export default function Warehouses() {
     }
   }
 
+  const [deleteError, setDeleteError] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const handleDelete = async (warehouseId) => {
+    setIsDeleting(true)
+    setDeleteError(null)
     try {
       const result = await deleteWarehouse(getBusinessId(), warehouseId)
       if (result.success) {
@@ -142,12 +155,143 @@ export default function Warehouses() {
         setDeletingWarehouse(null)
         loadWarehouses()
       } else {
-        toast.error(result.error || 'Error al eliminar almacén')
+        // Mostrar error con lista de productos si existe
+        if (result.productsWithStock && result.productsWithStock.length > 0) {
+          setDeleteError({
+            message: result.error,
+            products: result.productsWithStock
+          })
+        } else {
+          toast.error(result.error || 'Error al eliminar almacén')
+        }
       }
     } catch (error) {
       console.error('Error al eliminar almacén:', error)
       toast.error('Error al eliminar almacén')
+    } finally {
+      setIsDeleting(false)
     }
+  }
+
+  const handleCloseDeleteModal = () => {
+    setDeletingWarehouse(null)
+    setDeleteError(null)
+  }
+
+  // Analizar qué productos necesitan sincronización
+  const handleAnalyzeSync = async () => {
+    const defaultWarehouse = warehouses.find(w => w.isDefault) || warehouses[0]
+    if (!defaultWarehouse) {
+      toast.error('No hay almacén por defecto para sincronizar')
+      return
+    }
+
+    setIsLoadingPreview(true)
+    setSyncPreview(null)
+
+    try {
+      const result = await getProducts(getBusinessId())
+      if (!result.success) {
+        toast.error('Error al cargar productos')
+        return
+      }
+
+      const products = result.data || []
+      const changes = []
+
+      for (const product of products) {
+        // Solo procesar productos con control de stock
+        if (product.stock === null || product.stock === undefined || product.trackStock === false) {
+          continue
+        }
+
+        const currentStock = product.stock || 0
+        const warehouseStocks = product.warehouseStocks || []
+        const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+        // Si ya están sincronizados, saltar
+        if (currentStock === warehouseTotal && warehouseStocks.length > 0) {
+          continue
+        }
+
+        // Determinar qué cambio se hará
+        let changeType = ''
+        let oldValue = 0
+        let newValue = 0
+
+        if (warehouseStocks.length > 0 && warehouseTotal > 0) {
+          // CASO 1: Actualizar stock general desde almacén
+          changeType = 'update_stock'
+          oldValue = currentStock
+          newValue = warehouseTotal
+        } else if (warehouseStocks.length === 0 && currentStock > 0) {
+          // CASO 2: Asignar stock huérfano al almacén
+          changeType = 'assign_warehouse'
+          oldValue = currentStock
+          newValue = currentStock
+        } else if (warehouseStocks.length > 0 && warehouseTotal === 0 && currentStock > 0) {
+          // CASO 3: Almacén en 0 pero stock > 0
+          changeType = 'assign_warehouse'
+          oldValue = currentStock
+          newValue = currentStock
+        } else {
+          continue
+        }
+
+        changes.push({
+          id: product.id,
+          name: product.name,
+          code: product.code || '-',
+          changeType,
+          oldValue,
+          newValue,
+          warehouseTotal,
+          currentStock,
+        })
+      }
+
+      setSyncPreview({
+        targetWarehouse: defaultWarehouse,
+        changes,
+        totalProducts: products.length,
+      })
+    } catch (error) {
+      console.error('Error al analizar productos:', error)
+      toast.error('Error al analizar productos')
+    } finally {
+      setIsLoadingPreview(false)
+    }
+  }
+
+  // Sincronizar stock de todos los productos al almacén por defecto
+  const handleSyncStock = async () => {
+    if (!syncPreview?.targetWarehouse) {
+      toast.error('No hay almacén por defecto para sincronizar')
+      return
+    }
+
+    setIsSyncing(true)
+    try {
+      const result = await syncAllProductsStock(getBusinessId(), syncPreview.targetWarehouse.id)
+      if (result.success) {
+        toast.success(`Stock sincronizado: ${result.synced} producto(s) actualizado(s)`)
+        setShowSyncModal(false)
+        setSyncPreview(null)
+      } else {
+        toast.error(result.error || 'Error al sincronizar stock')
+      }
+    } catch (error) {
+      console.error('Error al sincronizar stock:', error)
+      toast.error('Error al sincronizar stock')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  // Cerrar modal y limpiar preview
+  const handleCloseSyncModal = () => {
+    setShowSyncModal(false)
+    setSyncPreview(null)
   }
 
   return (
@@ -161,10 +305,22 @@ export default function Warehouses() {
           </h1>
           <p className="text-gray-600 mt-1">Gestiona tus almacenes y puntos de inventario</p>
         </div>
-        <Button onClick={openCreateModal} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Nuevo Almacén
-        </Button>
+        <div className="flex gap-2">
+          {warehouses.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => setShowSyncModal(true)}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Sincronizar Stock
+            </Button>
+          )}
+          <Button onClick={openCreateModal} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Nuevo Almacén
+          </Button>
+        </div>
       </div>
 
       {/* Estadísticas */}
@@ -374,34 +530,253 @@ export default function Warehouses() {
       {/* Modal Eliminar */}
       <Modal
         isOpen={!!deletingWarehouse}
-        onClose={() => setDeletingWarehouse(null)}
+        onClose={handleCloseDeleteModal}
         title="Eliminar Almacén"
+        size={deleteError ? 'lg' : 'md'}
       >
         <div className="space-y-4">
-          <p className="text-gray-600">
-            ¿Estás seguro de eliminar el almacén <strong>{deletingWarehouse?.name}</strong>?
-          </p>
-          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-sm text-yellow-800">
-              ⚠️ Esta acción no se puede deshacer. Asegúrate de que no haya productos con stock
-              en este almacén.
-            </p>
+          {deleteError ? (
+            <>
+              {/* Error: hay productos con stock */}
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex gap-3">
+                  <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">No se puede eliminar</p>
+                    <p className="text-sm text-red-700 mt-1">{deleteError.message}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-right">Stock</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {deleteError.products.map((product) => (
+                      <TableRow key={product.id}>
+                        <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell className="text-right">{product.stock}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <p className="text-sm text-gray-600">
+                Debes transferir el stock de estos productos a otro almacén antes de eliminar este.
+              </p>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseDeleteModal}
+                  className="flex-1"
+                >
+                  Entendido
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Confirmación normal */}
+              <p className="text-gray-600">
+                ¿Estás seguro de eliminar el almacén <strong>{deletingWarehouse?.name}</strong>?
+              </p>
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  Esta acción no se puede deshacer. El sistema verificará que no haya productos con stock en este almacén.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseDeleteModal}
+                  className="flex-1"
+                  disabled={isDeleting}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => handleDelete(deletingWarehouse.id)}
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    'Eliminar'
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      {/* Modal Sincronizar Stock */}
+      <Modal
+        isOpen={showSyncModal}
+        onClose={handleCloseSyncModal}
+        title="Sincronizar Stock de Productos"
+        size={syncPreview ? 'lg' : 'md'}
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">¿Qué hace esta acción?</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  Sincroniza el stock de los productos con el almacén principal: <strong>{warehouses.find(w => w.isDefault)?.name || warehouses[0]?.name}</strong>
+                </p>
+                <ul className="text-sm text-blue-700 mt-2 list-disc list-inside space-y-1">
+                  <li>Si el producto tiene stock en almacén, actualiza el stock general para que coincida</li>
+                  <li>Si el producto tiene stock "huérfano" (sin almacén), lo asigna al almacén principal</li>
+                </ul>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setDeletingWarehouse(null)}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => handleDelete(deletingWarehouse.id)}
-              className="flex-1 bg-red-600 hover:bg-red-700"
-            >
-              Eliminar
-            </Button>
-          </div>
+
+          {/* Vista previa de cambios */}
+          {syncPreview ? (
+            <div className="space-y-4">
+              {syncPreview.changes.length === 0 ? (
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                  <p className="text-sm text-green-800 font-medium">¡Todo está sincronizado!</p>
+                  <p className="text-sm text-green-700 mt-1">
+                    No hay productos que necesiten sincronización.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p className="text-sm text-gray-700">
+                      <strong>{syncPreview.changes.length}</strong> producto(s) de <strong>{syncPreview.totalProducts}</strong> necesitan sincronización.
+                    </p>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Cambio</TableHead>
+                          <TableHead className="text-right">Antes</TableHead>
+                          <TableHead className="text-right">Después</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {syncPreview.changes.map((change) => (
+                          <TableRow key={change.id}>
+                            <TableCell className="font-medium max-w-[150px] truncate" title={change.name}>
+                              {change.name}
+                            </TableCell>
+                            <TableCell className="text-gray-500">{change.code}</TableCell>
+                            <TableCell>
+                              {change.changeType === 'update_stock' ? (
+                                <Badge variant="secondary" className="text-xs">
+                                  Actualizar stock
+                                </Badge>
+                              ) : (
+                                <Badge variant="warning" className="text-xs">
+                                  Asignar almacén
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {change.changeType === 'update_stock' ? (
+                                <span className="text-red-600">{change.oldValue}</span>
+                              ) : (
+                                <span className="text-gray-500">Sin almacén</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="text-green-600 font-medium">{change.newValue}</span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <strong>¿Estás seguro?</strong> Esta acción modificará el stock de {syncPreview.changes.length} producto(s).
+                    </p>
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseSyncModal}
+                  className="flex-1"
+                  disabled={isSyncing}
+                >
+                  Cancelar
+                </Button>
+                {syncPreview.changes.length > 0 && (
+                  <Button
+                    onClick={handleSyncStock}
+                    className="flex-1"
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Confirmar Sincronización
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Botón para analizar */
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={handleCloseSyncModal}
+                className="flex-1"
+                disabled={isLoadingPreview}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleAnalyzeSync}
+                className="flex-1"
+                disabled={isLoadingPreview}
+              >
+                {isLoadingPreview ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Analizando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Analizar Productos
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </Modal>
     </div>

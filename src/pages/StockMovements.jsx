@@ -2,18 +2,16 @@ import { useState, useEffect } from 'react'
 import {
   History,
   Search,
-  Filter,
-  Download,
   ArrowUpCircle,
   ArrowDownCircle,
   ArrowRightLeft,
   Package,
   Loader2,
+  Calendar,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
@@ -31,6 +29,8 @@ export default function StockMovements() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterWarehouse, setFilterWarehouse] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
 
   useEffect(() => {
     loadData()
@@ -138,7 +138,25 @@ export default function StockMovements() {
 
     const matchesType = filterType === 'all' || movement.type === filterType
 
-    return matchesSearch && matchesWarehouse && matchesType
+    // Filtro de fechas
+    let matchesDate = true
+    if (filterDateFrom || filterDateTo) {
+      const movementDate = movement.createdAt?.toDate ? movement.createdAt.toDate() : new Date(movement.createdAt)
+
+      if (filterDateFrom) {
+        const fromDate = new Date(filterDateFrom)
+        fromDate.setHours(0, 0, 0, 0)
+        if (movementDate < fromDate) matchesDate = false
+      }
+
+      if (filterDateTo) {
+        const toDate = new Date(filterDateTo)
+        toDate.setHours(23, 59, 59, 999)
+        if (movementDate > toDate) matchesDate = false
+      }
+    }
+
+    return matchesSearch && matchesWarehouse && matchesType && matchesDate
   })
 
   const getMovementTypeInfo = (type) => {
@@ -152,6 +170,13 @@ export default function StockMovements() {
       },
       exit: {
         label: 'Salida',
+        icon: ArrowDownCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        variant: 'danger',
+      },
+      sale: {
+        label: 'Venta',
         icon: ArrowDownCircle,
         color: 'text-red-600',
         bgColor: 'bg-red-50',
@@ -195,6 +220,17 @@ export default function StockMovements() {
     })
   }
 
+  // Limpiar filtros
+  const clearFilters = () => {
+    setSearchTerm('')
+    setFilterWarehouse('all')
+    setFilterType('all')
+    setFilterDateFrom('')
+    setFilterDateTo('')
+  }
+
+  const hasActiveFilters = searchTerm || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
@@ -213,7 +249,7 @@ export default function StockMovements() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Movimientos de Inventario</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Historial completo de entradas, salidas y transferencias
+            Historial de entradas, salidas, transferencias y ajustes
           </p>
         </div>
       </div>
@@ -221,55 +257,84 @@ export default function StockMovements() {
       {/* Filtros */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
-            {/* Search */}
-            <div className="flex-1 min-w-0">
+          <div className="space-y-4">
+            {/* Primera fila: Búsqueda */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por producto, código o notas..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Segunda fila: Filtros */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* Almacén */}
+              <Select
+                value={filterWarehouse}
+                onChange={e => setFilterWarehouse(e.target.value)}
+              >
+                <option value="all">Todos los almacenes</option>
+                {warehouses.map(warehouse => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </option>
+                ))}
+              </Select>
+
+              {/* Tipo */}
+              <Select
+                value={filterType}
+                onChange={e => setFilterType(e.target.value)}
+              >
+                <option value="all">Todos los tipos</option>
+                <option value="entry">Entradas</option>
+                <option value="exit">Salidas</option>
+                <option value="sale">Ventas</option>
+                <option value="transfer_in">Transferencias Entrada</option>
+                <option value="transfer_out">Transferencias Salida</option>
+                <option value="adjustment">Ajustes</option>
+              </Select>
+
+              {/* Fecha desde */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
-                  type="text"
-                  placeholder="Buscar por producto, código o notas..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={e => setFilterDateFrom(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                  placeholder="Desde"
+                />
+              </div>
+
+              {/* Fecha hasta */}
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={e => setFilterDateTo(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                  placeholder="Hasta"
                 />
               </div>
             </div>
 
-            {/* Filters Group */}
-            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
-              {/* Warehouse Filter */}
-              <div className="w-full sm:w-auto">
-                <Select
-                  value={filterWarehouse}
-                  onChange={e => setFilterWarehouse(e.target.value)}
-                  className="w-full lg:w-56"
+            {/* Botón limpiar filtros */}
+            {hasActiveFilters && (
+              <div className="flex justify-end">
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
                 >
-                  <option value="all">Todos los almacenes</option>
-                  {warehouses.map(warehouse => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </Select>
+                  Limpiar filtros
+                </button>
               </div>
-
-              {/* Type Filter */}
-              <div className="w-full sm:w-auto">
-                <Select
-                  value={filterType}
-                  onChange={e => setFilterType(e.target.value)}
-                  className="w-full lg:w-56"
-                >
-                  <option value="all">Todos los tipos</option>
-                  <option value="entry">Entradas</option>
-                  <option value="exit">Salidas</option>
-                  <option value="transfer_in">Transferencias Entrada</option>
-                  <option value="transfer_out">Transferencias Salida</option>
-                  <option value="adjustment">Ajustes</option>
-                </Select>
-              </div>
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -294,15 +359,15 @@ export default function StockMovements() {
           <CardContent className="p-4">
             <p className="text-xs text-gray-600 mb-1">Salidas</p>
             <p className="text-2xl font-bold text-red-600">
-              {filteredMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out').length}
+              {filteredMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out' || m.type === 'sale').length}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-gray-600 mb-1">Transferencias</p>
-            <p className="text-2xl font-bold text-blue-600">
-              {filteredMovements.filter(m => m.type === 'transfer_in' || m.type === 'transfer_out').length}
+            <p className="text-xs text-gray-600 mb-1">Ajustes</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {filteredMovements.filter(m => m.type === 'adjustment').length}
             </p>
           </CardContent>
         </Card>
@@ -318,12 +383,12 @@ export default function StockMovements() {
             <div className="text-center py-12">
               <History className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchTerm || filterWarehouse !== 'all' || filterType !== 'all'
+                {hasActiveFilters
                   ? 'No se encontraron movimientos'
                   : 'No hay movimientos registrados'}
               </h3>
               <p className="text-gray-600">
-                {searchTerm || filterWarehouse !== 'all' || filterType !== 'all'
+                {hasActiveFilters
                   ? 'Intenta con otros filtros de búsqueda'
                   : 'Los movimientos aparecerán aquí cuando se realicen compras, ventas o transferencias'}
               </p>
