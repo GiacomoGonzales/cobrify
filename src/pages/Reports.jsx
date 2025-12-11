@@ -1142,45 +1142,40 @@ export default function Reports() {
             Análisis detallado de tu negocio
           </p>
         </div>
-        <Select
-          value={dateRange}
-          onChange={e => setDateRange(e.target.value)}
-          className="w-full sm:w-48"
-        >
-          <option value="week">Última semana</option>
-          <option value="month">Último mes</option>
-          <option value="quarter">Último trimestre</option>
-          <option value="year">Último año</option>
-          <option value="all">Todo el período</option>
-          <option value="custom">Personalizado</option>
-        </Select>
-      </div>
-
-      {/* Campos de fecha personalizada */}
-      {dateRange === 'custom' && (
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-end sm:justify-end">
-          <div className="w-full sm:w-auto">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
-            <input
-              type="date"
-              value={customStartDate}
-              onChange={e => setCustomStartDate(e.target.value)}
-              className="w-full sm:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-              style={{ minHeight: '44px' }}
-            />
-          </div>
-          <div className="w-full sm:w-auto">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
-            <input
-              type="date"
-              value={customEndDate}
-              onChange={e => setCustomEndDate(e.target.value)}
-              className="w-full sm:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-              style={{ minHeight: '44px' }}
-            />
-          </div>
+        <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+          <Select
+            value={dateRange}
+            onChange={e => setDateRange(e.target.value)}
+            className="w-full sm:w-48"
+          >
+            <option value="week">Última semana</option>
+            <option value="month">Último mes</option>
+            <option value="quarter">Último trimestre</option>
+            <option value="year">Último año</option>
+            <option value="all">Todo el período</option>
+            <option value="custom">Personalizado</option>
+          </Select>
+          {dateRange === 'custom' && (
+            <>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+                className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                title="Desde"
+              />
+              <span className="hidden sm:inline text-gray-500">-</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+                className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                title="Hasta"
+              />
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Tabs de reportes */}
       <div className="flex gap-2 overflow-x-auto pb-2">
