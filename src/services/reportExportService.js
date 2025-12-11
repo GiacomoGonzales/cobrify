@@ -60,7 +60,7 @@ const saveAndShareExcel = async (workbook, fileName) => {
  * Exportar reporte general a Excel
  */
 export const exportGeneralReport = async (data) => {
-  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats } = data
+  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate } = data
 
   // Crear un nuevo workbook
   const wb = XLSX.utils.book_new()
@@ -68,7 +68,7 @@ export const exportGeneralReport = async (data) => {
   // Hoja 1: Resumen General
   const summaryData = [
     ['REPORTE GENERAL DE VENTAS'],
-    ['Período:', getRangeLabel(dateRange)],
+    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['KPIs PRINCIPALES'],
@@ -214,7 +214,7 @@ export const exportGeneralReport = async (data) => {
   // Generar archivo con nombre atractivo
   const today = new Date()
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
   const fileName = `Reporte_General_${rangeLabel}_${dateStr}.xlsx`
   await saveAndShareExcel(wb, fileName)
 }
@@ -223,14 +223,14 @@ export const exportGeneralReport = async (data) => {
  * Exportar reporte de ventas a Excel
  */
 export const exportSalesReport = async (data) => {
-  const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats } = data
+  const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate } = data
 
   const wb = XLSX.utils.book_new()
 
   // Hoja 1: Resumen de Ventas
   const summaryData = [
     ['REPORTE DE VENTAS'],
-    ['Período:', getRangeLabel(dateRange)],
+    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['RESUMEN FINANCIERO'],
@@ -337,7 +337,7 @@ export const exportSalesReport = async (data) => {
   // Generar archivo con nombre atractivo
   const today = new Date()
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
   const fileName = `Reporte_Ventas_${rangeLabel}_${dateStr}.xlsx`
   await saveAndShareExcel(wb, fileName)
 }
@@ -346,14 +346,14 @@ export const exportSalesReport = async (data) => {
  * Exportar reporte de productos a Excel
  */
 export const exportProductsReport = async (data) => {
-  const { topProducts, dateRange } = data
+  const { topProducts, dateRange, customStartDate, customEndDate } = data
 
   const wb = XLSX.utils.book_new()
 
   // Hoja: Productos
   const productsData = [
     ['REPORTE DE PRODUCTOS MÁS VENDIDOS'],
-    ['Período:', getRangeLabel(dateRange)],
+    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['Posición', 'Producto', 'Cantidad Vendida', 'Ingresos Generados', 'Precio Promedio'],
@@ -390,7 +390,7 @@ export const exportProductsReport = async (data) => {
   // Generar archivo con nombre atractivo
   const today = new Date()
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
   const fileName = `Reporte_Productos_${rangeLabel}_${dateStr}.xlsx`
   await saveAndShareExcel(wb, fileName)
 }
@@ -399,14 +399,14 @@ export const exportProductsReport = async (data) => {
  * Exportar reporte de clientes a Excel
  */
 export const exportCustomersReport = async (data) => {
-  const { topCustomers, dateRange } = data
+  const { topCustomers, dateRange, customStartDate, customEndDate } = data
 
   const wb = XLSX.utils.book_new()
 
   // Hoja: Clientes
   const customersData = [
     ['REPORTE DE CLIENTES TOP'],
-    ['Período:', getRangeLabel(dateRange)],
+    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['Posición', 'Cliente', 'Tipo Doc', 'Número Documento', 'Email', 'Teléfono', 'Cantidad Pedidos', 'Total Gastado', 'Ticket Promedio'],
@@ -451,7 +451,7 @@ export const exportCustomersReport = async (data) => {
   // Generar archivo con nombre atractivo
   const today = new Date()
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
+  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
   const fileName = `Reporte_Clientes_${rangeLabel}_${dateStr}.xlsx`
   await saveAndShareExcel(wb, fileName)
 }
@@ -459,7 +459,7 @@ export const exportCustomersReport = async (data) => {
 /**
  * Helper para obtener etiqueta del rango de fecha
  */
-const getRangeLabel = (dateRange) => {
+const getRangeLabel = (dateRange, customStartDate, customEndDate) => {
   switch (dateRange) {
     case 'week':
       return 'Última semana'
@@ -471,6 +471,11 @@ const getRangeLabel = (dateRange) => {
       return 'Último año'
     case 'all':
       return 'Todo el período'
+    case 'custom':
+      if (customStartDate && customEndDate) {
+        return `${customStartDate}_al_${customEndDate}`
+      }
+      return 'Personalizado'
     default:
       return dateRange
   }

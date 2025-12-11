@@ -133,8 +133,10 @@ export default function Reports() {
   const [recipes, setRecipes] = useState([])
   const [expenses, setExpenses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all
+  const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all, custom
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
 
   useEffect(() => {
     loadData()
@@ -244,6 +246,27 @@ export default function Reports() {
       }
     }
 
+    // Para fechas personalizadas
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) {
+        return validInvoices.map(addCostCalculations)
+      }
+      const startDate = new Date(customStartDate)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(customEndDate)
+      endDate.setHours(23, 59, 59, 999)
+
+      return validInvoices
+        .filter(invoice => {
+          if (!invoice.createdAt) return false
+          const invoiceDate = invoice.createdAt.toDate
+            ? invoice.createdAt.toDate()
+            : new Date(invoice.createdAt)
+          return invoiceDate >= startDate && invoiceDate <= endDate
+        })
+        .map(addCostCalculations)
+    }
+
     switch (dateRange) {
       case 'week':
         filterDate.setDate(now.getDate() - 7)
@@ -272,7 +295,7 @@ export default function Reports() {
         return invoiceDate >= filterDate
       })
       .map(addCostCalculations)
-  }, [invoices, dateRange, calculateItemCost])
+  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -280,25 +303,35 @@ export default function Reports() {
     let startDate = new Date()
     let endDate = new Date()
 
-    switch (dateRange) {
-      case 'week':
-        startDate.setDate(now.getDate() - 14)
-        endDate.setDate(now.getDate() - 7)
-        break
-      case 'month':
-        startDate.setMonth(now.getMonth() - 2)
-        endDate.setMonth(now.getMonth() - 1)
-        break
-      case 'quarter':
-        startDate.setMonth(now.getMonth() - 6)
-        endDate.setMonth(now.getMonth() - 3)
-        break
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 2)
-        endDate.setFullYear(now.getFullYear() - 1)
-        break
-      default:
-        return 0
+    // Para fechas personalizadas, calcular período anterior con la misma duración
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) return 0
+      const customStart = new Date(customStartDate)
+      const customEnd = new Date(customEndDate)
+      const duration = customEnd.getTime() - customStart.getTime()
+      endDate = new Date(customStart.getTime() - 1) // Un día antes del inicio
+      startDate = new Date(endDate.getTime() - duration)
+    } else {
+      switch (dateRange) {
+        case 'week':
+          startDate.setDate(now.getDate() - 14)
+          endDate.setDate(now.getDate() - 7)
+          break
+        case 'month':
+          startDate.setMonth(now.getMonth() - 2)
+          endDate.setMonth(now.getMonth() - 1)
+          break
+        case 'quarter':
+          startDate.setMonth(now.getMonth() - 6)
+          endDate.setMonth(now.getMonth() - 3)
+          break
+        case 'year':
+          startDate.setFullYear(now.getFullYear() - 2)
+          endDate.setFullYear(now.getFullYear() - 1)
+          break
+        default:
+          return 0
+      }
     }
 
     return invoices
@@ -310,7 +343,7 @@ export default function Reports() {
         return invoiceDate >= startDate && invoiceDate <= endDate
       })
       .reduce((sum, inv) => sum + (inv.total || 0), 0)
-  }, [invoices, dateRange])
+  }, [invoices, dateRange, customStartDate, customEndDate])
 
   // Calcular estadísticas generales
   const stats = useMemo(() => {
@@ -532,7 +565,42 @@ export default function Reports() {
     let groupBy = 'month' // 'day', 'week', 'month'
 
     // Determinar agrupación según el rango
-    if (dateRange === 'week') {
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) {
+        return []
+      }
+      const startDate = new Date(customStartDate)
+      const endDate = new Date(customEndDate)
+      const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+
+      // Si el rango es menor a 60 días, agrupar por día; sino por mes
+      if (diffDays <= 60) {
+        groupBy = 'day'
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const date = new Date(d)
+          const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+          periodsData[key] = {
+            period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+            revenue: 0,
+            count: 0,
+          }
+        }
+      } else {
+        groupBy = 'month'
+        // Obtener todos los meses en el rango
+        const currentDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+        const lastDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+        while (currentDate <= lastDate) {
+          const key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
+          periodsData[key] = {
+            period: currentDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+            revenue: 0,
+            count: 0,
+          }
+          currentDate.setMonth(currentDate.getMonth() + 1)
+        }
+      }
+    } else if (dateRange === 'week') {
       groupBy = 'day'
       // Últimos 7 días
       for (let i = 6; i >= 0; i--) {
@@ -623,7 +691,7 @@ export default function Reports() {
     return Object.entries(periodsData)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, value]) => value)
-  }, [filteredInvoices, dateRange, invoices])
+  }, [filteredInvoices, dateRange, customStartDate, customEndDate, invoices])
 
   // Datos para gráfico de torta de tipos de documentos
   const documentTypesData = useMemo(() => {
@@ -677,6 +745,23 @@ export default function Reports() {
     const now = new Date()
     const filterDate = new Date()
 
+    // Para fechas personalizadas
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) {
+        return expenses
+      }
+      const startDate = new Date(customStartDate)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(customEndDate)
+      endDate.setHours(23, 59, 59, 999)
+
+      return expenses.filter(expense => {
+        if (!expense.date) return false
+        const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
+        return expenseDate >= startDate && expenseDate <= endDate
+      })
+    }
+
     switch (dateRange) {
       case 'week':
         filterDate.setDate(now.getDate() - 7)
@@ -701,7 +786,7 @@ export default function Reports() {
       const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
       return expenseDate >= filterDate
     })
-  }, [expenses, dateRange])
+  }, [expenses, dateRange, customStartDate, customEndDate])
 
   // Estadísticas de gastos
   const expenseStats = useMemo(() => {
@@ -757,7 +842,40 @@ export default function Reports() {
     let periodsData = {}
     let groupBy = 'month'
 
-    if (dateRange === 'week') {
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) {
+        return []
+      }
+      const startDate = new Date(customStartDate)
+      const endDate = new Date(customEndDate)
+      const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+
+      if (diffDays <= 60) {
+        groupBy = 'day'
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const date = new Date(d)
+          const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+          periodsData[key] = {
+            period: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+            gastos: 0,
+            count: 0,
+          }
+        }
+      } else {
+        groupBy = 'month'
+        const currentDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+        const lastDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
+        while (currentDate <= lastDate) {
+          const key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
+          periodsData[key] = {
+            period: currentDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+            gastos: 0,
+            count: 0,
+          }
+          currentDate.setMonth(currentDate.getMonth() + 1)
+        }
+      }
+    } else if (dateRange === 'week') {
       groupBy = 'day'
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
@@ -837,7 +955,7 @@ export default function Reports() {
     return Object.entries(periodsData)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, value]) => value)
-  }, [filteredExpenses, dateRange])
+  }, [filteredExpenses, dateRange, customStartDate, customEndDate])
 
   // ========== DATOS COMBINADOS PARA RENTABILIDAD ==========
 
@@ -1024,7 +1142,7 @@ export default function Reports() {
             Análisis detallado de tu negocio
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <Select
             value={dateRange}
             onChange={e => setDateRange(e.target.value)}
@@ -1035,7 +1153,32 @@ export default function Reports() {
             <option value="quarter">Último trimestre</option>
             <option value="year">Último año</option>
             <option value="all">Todo el período</option>
+            <option value="custom">Personalizado</option>
           </Select>
+          {dateRange === 'custom' && (
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-auto">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={e => setCustomStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                  style={{ minHeight: '44px' }}
+                />
+              </div>
+              <div className="w-full sm:w-auto">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={e => setCustomEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                  style={{ minHeight: '44px' }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1132,7 +1275,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats })}
+              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1259,6 +1402,7 @@ export default function Reports() {
                   {dateRange === 'quarter' && ' (Último Trimestre)'}
                   {dateRange === 'year' && ' (Último Año)'}
                   {dateRange === 'all' && ' (Todo el Período)'}
+                  {dateRange === 'custom' && customStartDate && customEndDate && ` (${customStartDate} al ${customEndDate})`}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1391,7 +1535,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats })}
+              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1670,7 +1814,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportProductsReport({ topProducts, dateRange })}
+              onClick={async () => await exportProductsReport({ topProducts, dateRange, customStartDate, customEndDate })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1763,7 +1907,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportCustomersReport({ topCustomers, dateRange })}
+              onClick={async () => await exportCustomersReport({ topCustomers, dateRange, customStartDate, customEndDate })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -2125,6 +2269,7 @@ export default function Reports() {
                   {dateRange === 'quarter' && ' (Último Trimestre)'}
                   {dateRange === 'year' && ' (Último Año)'}
                   {dateRange === 'all' && ' (Todo el Período)'}
+                  {dateRange === 'custom' && customStartDate && customEndDate && ` (${customStartDate} al ${customEndDate})`}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -2415,6 +2560,7 @@ export default function Reports() {
                 {dateRange === 'quarter' && ' (Último Trimestre)'}
                 {dateRange === 'year' && ' (Último Año)'}
                 {dateRange === 'all' && ' (Todo el Período)'}
+                {dateRange === 'custom' && customStartDate && customEndDate && ` (${customStartDate} al ${customEndDate})`}
               </CardTitle>
             </CardHeader>
             <CardContent>
