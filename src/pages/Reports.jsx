@@ -1142,19 +1142,24 @@ export default function Reports() {
             Análisis detallado de tu negocio
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-          <Select
-            value={dateRange}
-            onChange={e => setDateRange(e.target.value)}
-            className="w-full sm:w-48"
-          >
-            <option value="week">Última semana</option>
-            <option value="month">Último mes</option>
-            <option value="quarter">Último trimestre</option>
-            <option value="year">Último año</option>
-            <option value="all">Todo el período</option>
-            <option value="custom">Personalizado</option>
-          </Select>
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          <div className="w-full sm:w-auto">
+            {dateRange === 'custom' && (
+              <label className="block text-sm font-medium text-gray-700 mb-1 sm:invisible">Período</label>
+            )}
+            <Select
+              value={dateRange}
+              onChange={e => setDateRange(e.target.value)}
+              className="w-full sm:w-48"
+            >
+              <option value="week">Última semana</option>
+              <option value="month">Último mes</option>
+              <option value="quarter">Último trimestre</option>
+              <option value="year">Último año</option>
+              <option value="all">Todo el período</option>
+              <option value="custom">Personalizado</option>
+            </Select>
+          </div>
           {dateRange === 'custom' && (
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <div className="w-full sm:w-auto">
