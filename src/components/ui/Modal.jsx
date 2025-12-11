@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth, fullScreenMobile = false }) {
@@ -20,8 +21,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
   // Si se proporciona maxWidth personalizado, usarlo, sino usar el size
   const maxWidthClass = maxWidth ? sizes[maxWidth] || maxWidth : sizes[size]
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+  // Usar Portal para renderizar el modal fuera del árbol DOM normal
+  // Esto soluciona el problema de z-index en iOS Safari
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] overflow-y-auto" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Overlay */}
       <div
         className={cn(
@@ -33,7 +36,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
 
       {/* Modal */}
       <div className={cn(
-        "flex min-h-full items-center justify-center",
+        "flex min-h-full items-center justify-center relative",
         fullScreenMobile ? "p-0 lg:p-4" : "p-4"
       )}>
         <div
@@ -65,6 +68,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
           <div className={title ? "p-6" : ""}>{children}</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
