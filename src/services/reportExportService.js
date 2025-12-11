@@ -1,14 +1,65 @@
 import * as XLSX from 'xlsx'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 /**
  * Servicio para exportar reportes a Excel
  */
 
 /**
+ * Helper para exportar Excel que funciona en iOS/Android
+ */
+const saveAndShareExcel = async (workbook, fileName) => {
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
+
+      const excelDir = 'Reportes'
+      try {
+        await Filesystem.mkdir({
+          path: excelDir,
+          directory: Directory.Documents,
+          recursive: true
+        })
+      } catch (mkdirError) {
+        // Directorio ya existe
+      }
+
+      const result = await Filesystem.writeFile({
+        path: `${excelDir}/${fileName}`,
+        data: excelBuffer,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('Excel guardado en:', result.uri)
+
+      await Share.share({
+        title: fileName,
+        text: `Reporte: ${fileName}`,
+        url: result.uri,
+        dialogTitle: 'Compartir Reporte'
+      })
+
+      return { success: true, uri: result.uri }
+    } catch (error) {
+      console.error('Error al exportar Excel en móvil:', error)
+      throw error
+    }
+  } else {
+    XLSX.writeFile(workbook, fileName)
+    return { success: true }
+  }
+}
+
+/**
  * Exportar reporte general a Excel
  */
-export const exportGeneralReport = (data) => {
+export const exportGeneralReport = async (data) => {
   const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats } = data
 
   // Crear un nuevo workbook
@@ -165,13 +216,13 @@ export const exportGeneralReport = (data) => {
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
   const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
   const fileName = `Reporte_General_${rangeLabel}_${dateStr}.xlsx`
-  XLSX.writeFile(wb, fileName)
+  await saveAndShareExcel(wb, fileName)
 }
 
 /**
  * Exportar reporte de ventas a Excel
  */
-export const exportSalesReport = (data) => {
+export const exportSalesReport = async (data) => {
   const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats } = data
 
   const wb = XLSX.utils.book_new()
@@ -288,13 +339,13 @@ export const exportSalesReport = (data) => {
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
   const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
   const fileName = `Reporte_Ventas_${rangeLabel}_${dateStr}.xlsx`
-  XLSX.writeFile(wb, fileName)
+  await saveAndShareExcel(wb, fileName)
 }
 
 /**
  * Exportar reporte de productos a Excel
  */
-export const exportProductsReport = (data) => {
+export const exportProductsReport = async (data) => {
   const { topProducts, dateRange } = data
 
   const wb = XLSX.utils.book_new()
@@ -341,13 +392,13 @@ export const exportProductsReport = (data) => {
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
   const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
   const fileName = `Reporte_Productos_${rangeLabel}_${dateStr}.xlsx`
-  XLSX.writeFile(wb, fileName)
+  await saveAndShareExcel(wb, fileName)
 }
 
 /**
  * Exportar reporte de clientes a Excel
  */
-export const exportCustomersReport = (data) => {
+export const exportCustomersReport = async (data) => {
   const { topCustomers, dateRange } = data
 
   const wb = XLSX.utils.book_new()
@@ -402,7 +453,7 @@ export const exportCustomersReport = (data) => {
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
   const rangeLabel = getRangeLabel(dateRange).replace(/\s+/g, '_')
   const fileName = `Reporte_Clientes_${rangeLabel}_${dateStr}.xlsx`
-  XLSX.writeFile(wb, fileName)
+  await saveAndShareExcel(wb, fileName)
 }
 
 /**

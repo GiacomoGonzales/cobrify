@@ -37,6 +37,9 @@ import {
 } from '@/services/reportExportService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
 import * as XLSX from 'xlsx'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import {
   BarChart,
   Bar,
@@ -56,6 +59,65 @@ import {
 } from 'recharts'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+
+/**
+ * Helper para exportar Excel que funciona en iOS/Android
+ * En móvil guarda el archivo y abre el menú compartir
+ * En web usa la descarga normal
+ */
+const exportExcelFile = async (workbook, fileName) => {
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      // Generar el archivo como array buffer
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
+
+      // Crear directorio si no existe
+      const excelDir = 'Reportes'
+      try {
+        await Filesystem.mkdir({
+          path: excelDir,
+          directory: Directory.Documents,
+          recursive: true
+        })
+      } catch (mkdirError) {
+        console.log('Directorio ya existe:', mkdirError)
+      }
+
+      // Guardar archivo
+      const result = await Filesystem.writeFile({
+        path: `${excelDir}/${fileName}`,
+        data: excelBuffer,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('Excel guardado en:', result.uri)
+
+      // Abrir menú compartir
+      try {
+        await Share.share({
+          title: fileName,
+          text: `Reporte: ${fileName}`,
+          url: result.uri,
+          dialogTitle: 'Compartir Reporte'
+        })
+      } catch (shareError) {
+        console.log('Compartir cancelado:', shareError)
+      }
+
+      return { success: true, uri: result.uri }
+    } catch (error) {
+      console.error('Error al exportar Excel en móvil:', error)
+      throw error
+    }
+  } else {
+    // En web usar descarga normal
+    XLSX.writeFile(workbook, fileName)
+    return { success: true }
+  }
+}
 
 export default function Reports() {
   const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode } = useAppContext()
@@ -838,7 +900,7 @@ export default function Reports() {
   }, [stats.totalRevenue, expenseStats.total])
 
   // Función para exportar reporte de rentabilidad
-  const exportProfitabilityReport = () => {
+  const exportProfitabilityReport = async () => {
     // Hoja 1: Resumen
     const summaryData = [
       { 'Concepto': 'Total Ingresos', 'Valor': profitabilityStats.totalIngresos },
@@ -881,11 +943,11 @@ export default function Reports() {
       all: 'todo'
     }[dateRange] || 'periodo'
 
-    XLSX.writeFile(wb, `reporte_rentabilidad_${dateRangeText}.xlsx`)
+    await exportExcelFile(wb, `reporte_rentabilidad_${dateRangeText}.xlsx`)
   }
 
   // Función para exportar reporte de gastos
-  const exportExpensesReport = () => {
+  const exportExpensesReport = async () => {
     const data = filteredExpenses.map(e => ({
       'Fecha': e.date instanceof Date ? e.date.toLocaleDateString('es-PE') : new Date(e.date).toLocaleDateString('es-PE'),
       'Descripción': e.description || '',
@@ -919,7 +981,7 @@ export default function Reports() {
       all: 'todo'
     }[dateRange] || 'periodo'
 
-    XLSX.writeFile(wb, `reporte_gastos_${dateRangeText}.xlsx`)
+    await exportExcelFile(wb, `reporte_gastos_${dateRangeText}.xlsx`)
   }
 
   // Custom tooltip para los gráficos
@@ -1070,7 +1132,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={() => exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats })}
+              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1329,7 +1391,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={() => exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats })}
+              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1608,7 +1670,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={() => exportProductsReport({ topProducts, dateRange })}
+              onClick={async () => await exportProductsReport({ topProducts, dateRange })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1701,7 +1763,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={() => exportCustomersReport({ topCustomers, dateRange })}
+              onClick={async () => await exportCustomersReport({ topCustomers, dateRange })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
