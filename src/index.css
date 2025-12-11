@@ -46,6 +46,19 @@
     max-width: 100%;
     -webkit-appearance: none;
     appearance: none;
+    background-color: white;
+    color: #111827;
+    min-height: 44px;
+  }
+
+  /* Placeholder para inputs de fecha vacíos en iOS */
+  input[type="date"]:not(:valid):not(:focus) {
+    color: #9ca3af;
+  }
+
+  /* Asegurar que el texto sea visible cuando hay valor */
+  input[type="date"]:valid {
+    color: #111827;
   }
 }
 
