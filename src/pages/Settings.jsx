@@ -210,6 +210,7 @@ export default function Settings() {
           email: businessData.email || '',
           website: businessData.website || '',
           socialMedia: businessData.socialMedia || '',
+          bankAccounts: businessData.bankAccounts || '',
           address: businessData.address || '',
           urbanization: businessData.urbanization || '',
           district: businessData.district || '',
@@ -448,6 +449,7 @@ export default function Settings() {
         email: data.email,
         website: data.website,
         socialMedia: data.socialMedia || '',
+        bankAccounts: data.bankAccounts || '',
         address: data.address,
         urbanization: data.urbanization,
         district: data.district,
@@ -1181,6 +1183,21 @@ export default function Settings() {
                 {...register('socialMedia')}
                 helperText="Usuario de Facebook, Instagram u otra red social"
               />
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cuentas Bancarias
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  rows={3}
+                  placeholder="BCP: 123-456789-0-12&#10;BBVA: 0011-0123-45-6789012345&#10;Interbank: 123-456789012-34"
+                  {...register('bankAccounts')}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Ingresa tus cuentas bancarias (una por línea). Aparecerán en cotizaciones y facturas.
+                </p>
+              </div>
 
               <div className="md:col-span-2">
                 <Input

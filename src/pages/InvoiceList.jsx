@@ -1314,7 +1314,8 @@ ${companySettings?.website ? companySettings.website : ''}`
                           toast.success('PDF descargado exitosamente')
                         }
                       } catch (error) {
-                        toast.error('Error al generar el PDF')
+                        console.error('Error al generar PDF:', error)
+                        toast.error(`Error al generar el PDF: ${error.message}`)
                       }
                     }}
                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"

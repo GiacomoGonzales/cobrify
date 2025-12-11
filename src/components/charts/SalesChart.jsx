@@ -1,6 +1,11 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function SalesChart({ data }) {
+  // Formateador para el tooltip - redondea a 2 decimales
+  const formatTooltipValue = (value) => {
+    return `S/ ${Number(value).toFixed(2)}`
+  }
+
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data}>
@@ -13,6 +18,8 @@ export default function SalesChart({ data }) {
             border: '1px solid #e5e7eb',
             borderRadius: '8px',
           }}
+          formatter={formatTooltipValue}
+          labelStyle={{ fontWeight: 'bold' }}
         />
         <Line
           type="monotone"

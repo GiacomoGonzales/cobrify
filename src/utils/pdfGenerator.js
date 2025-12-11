@@ -302,8 +302,14 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       const img = new Image()
       img.src = imgData
       await new Promise((resolve, reject) => {
-        img.onload = resolve
-        img.onerror = reject
+        img.onload = () => {
+          console.log('✅ Dimensiones del logo:', img.width, 'x', img.height)
+          resolve()
+        }
+        img.onerror = (err) => {
+          console.error('❌ Error cargando imagen en Image():', err)
+          reject(err)
+        }
       })
 
       const aspectRatio = img.width / img.height
@@ -667,68 +673,79 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(14)
   doc.text((invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 8, currentY + 15, { align: 'right' })
 
-  // ========== MONTO EN LETRAS (a la izquierda de los totales) ==========
-  const letrasBoxWidth = totalsX - MARGIN_LEFT - 10 // Ancho del recuadro de letras
-  const letrasBoxHeight = currentY + totalsRowHeight + 6 - totalsStartY // Misma altura que los totales
+  // ========== MONTO EN LETRAS (a la izquierda de los totales, sin recuadro) ==========
+  const letrasBoxWidth = totalsX - MARGIN_LEFT - 10
   const montoEnLetras = numeroALetras(invoice.total || 0) + ' SOLES'
 
-  // Dibujar recuadro
-  doc.setDrawColor(...BORDER_COLOR)
-  doc.setLineWidth(0.5)
-  doc.rect(MARGIN_LEFT, totalsStartY, letrasBoxWidth, letrasBoxHeight, 'S')
-
-  // Texto "SON:" y monto en letras
+  // Texto "SON:" y monto en letras (sin recuadro)
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text('SON:', MARGIN_LEFT + 5, totalsStartY + 12)
+  doc.text('SON:', MARGIN_LEFT, totalsStartY + 12)
 
   doc.setFont('helvetica', 'normal')
-  // Dividir el texto en líneas si es muy largo
-  const letrasLines = doc.splitTextToSize(montoEnLetras, letrasBoxWidth - 40)
-  doc.text(letrasLines, MARGIN_LEFT + 28, totalsStartY + 12)
+  const letrasLines = doc.splitTextToSize(montoEnLetras, letrasBoxWidth - 25)
+  doc.text(letrasLines, MARGIN_LEFT + 22, totalsStartY + 12)
 
   currentY += totalsRowHeight + 14
 
   // ========== 5. CUENTAS BANCARIAS (si existen) ==========
 
-  if (companySettings?.bankAccounts && companySettings.bankAccounts.length > 0) {
-    // Título con fondo gris
-    doc.setFillColor(...TABLE_HEADER_BG)
-    doc.setDrawColor(...BORDER_COLOR)
-    doc.setLineWidth(0.5)
-    doc.rect(MARGIN_LEFT, currentY, CONTENT_WIDTH, 18, 'FD')
+  if (companySettings?.bankAccounts) {
+    // Convertir a array si es string (formato textarea: "Banco: cuenta\nBanco2: cuenta2")
+    let bankAccountsArray = []
+    if (typeof companySettings.bankAccounts === 'string' && companySettings.bankAccounts.trim()) {
+      bankAccountsArray = companySettings.bankAccounts.split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          const parts = line.split(':')
+          if (parts.length >= 2) {
+            return {
+              bankName: parts[0].trim(),
+              accountNumber: parts.slice(1).join(':').trim()
+            }
+          }
+          return { bankName: line.trim(), accountNumber: '' }
+        })
+    } else if (Array.isArray(companySettings.bankAccounts)) {
+      bankAccountsArray = companySettings.bankAccounts
+    }
 
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...BLACK)
-    doc.text('CUENTAS BANCARIAS', MARGIN_LEFT + CONTENT_WIDTH / 2, currentY + 12, { align: 'center' })
-    currentY += 18
+    if (bankAccountsArray.length > 0) {
+      // Cuentas bancarias a la derecha, mitad del ancho
+      const bankBoxWidth = CONTENT_WIDTH * 0.5
+      const bankBoxX = MARGIN_LEFT + CONTENT_WIDTH - bankBoxWidth
 
-    // Contenido
-    const accountsStartY = currentY
-    currentY += 10
+      // Título con fondo gris
+      doc.setFillColor(...TABLE_HEADER_BG)
+      doc.setDrawColor(...BORDER_COLOR)
+      doc.setLineWidth(0.5)
+      doc.rect(bankBoxX, currentY, bankBoxWidth, 16, 'FD')
 
-    companySettings.bankAccounts.forEach((account) => {
+      doc.setFontSize(8)
       doc.setFont('helvetica', 'bold')
-      doc.text(account.bankName || 'Banco', MARGIN_LEFT + 10, currentY)
-      doc.text(account.accountNumber || '', MARGIN_LEFT + CONTENT_WIDTH - 10, currentY, { align: 'right' })
-      currentY += 12
-
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...MEDIUM_GRAY)
-      doc.text(`${account.currency || 'PEN'} (S/)`, MARGIN_LEFT + 10, currentY)
-      if (account.cci) {
-        doc.text(`CCI: ${account.cci}`, MARGIN_LEFT + CONTENT_WIDTH - 10, currentY, { align: 'right' })
-      }
       doc.setTextColor(...BLACK)
-      currentY += 15
-    })
+      doc.text('CUENTAS BANCARIAS', bankBoxX + bankBoxWidth / 2, currentY + 11, { align: 'center' })
+      currentY += 16
 
-    // Borde del contenido
-    doc.setDrawColor(...BORDER_COLOR)
-    doc.rect(MARGIN_LEFT, accountsStartY, CONTENT_WIDTH, currentY - accountsStartY + 5)
-    currentY += 15
+      // Contenido
+      const accountsStartY = currentY
+      currentY += 8
+
+      bankAccountsArray.forEach((account) => {
+        doc.setFontSize(8)
+        doc.setFont('helvetica', 'bold')
+        doc.text(account.bankName || 'Banco', bankBoxX + 8, currentY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(account.accountNumber || '', bankBoxX + bankBoxWidth - 8, currentY, { align: 'right' })
+        currentY += 11
+      })
+
+      // Borde del contenido
+      doc.setDrawColor(...BORDER_COLOR)
+      doc.rect(bankBoxX, accountsStartY, bankBoxWidth, currentY - accountsStartY + 3)
+      currentY += 10
+    }
   }
 
   // ========== 6. QR Y HASH (encerrado en recuadro) ==========

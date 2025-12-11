@@ -558,6 +558,74 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     currentY += 10 * notesLines.length
   }
 
+  // Cuentas bancarias
+  if (companySettings?.bankAccounts) {
+    // Convertir a array si es string (formato textarea: "Banco: cuenta\nBanco2: cuenta2")
+    let bankAccountsArray = []
+    if (typeof companySettings.bankAccounts === 'string' && companySettings.bankAccounts.trim()) {
+      bankAccountsArray = companySettings.bankAccounts.split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          const parts = line.split(':')
+          if (parts.length >= 2) {
+            return {
+              bankName: parts[0].trim(),
+              accountNumber: parts.slice(1).join(':').trim()
+            }
+          }
+          return { bankName: line.trim(), accountNumber: '' }
+        })
+    } else if (Array.isArray(companySettings.bankAccounts)) {
+      bankAccountsArray = companySettings.bankAccounts
+    }
+
+    if (bankAccountsArray.length > 0) {
+      currentY += 5
+      const bankBoxWidth = CONTENT_WIDTH * 0.6 // 60% del ancho
+      const bankBoxX = MARGIN_LEFT + (CONTENT_WIDTH - bankBoxWidth) / 2 // Centrado
+      const rowHeight = 12
+      const headerHeight = 16
+      const bankBoxHeight = headerHeight + (bankAccountsArray.length * rowHeight) + 5
+
+      // Fondo del header
+      doc.setFillColor(240, 240, 240)
+      doc.rect(bankBoxX, currentY, bankBoxWidth, headerHeight, 'F')
+
+      // Borde del recuadro completo
+      doc.setDrawColor(...BORDER_COLOR)
+      doc.setLineWidth(0.5)
+      doc.rect(bankBoxX, currentY, bankBoxWidth, bankBoxHeight)
+
+      // Línea separadora bajo el header
+      doc.line(bankBoxX, currentY + headerHeight, bankBoxX + bankBoxWidth, currentY + headerHeight)
+
+      // Título centrado
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...BLACK)
+      doc.text('CUENTAS BANCARIAS', bankBoxX + bankBoxWidth / 2, currentY + 11, { align: 'center' })
+
+      // Contenido de las cuentas
+      let bankY = currentY + headerHeight + 10
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(...DARK_GRAY)
+
+      bankAccountsArray.forEach(account => {
+        // Nombre del banco a la izquierda
+        doc.setFont('helvetica', 'bold')
+        doc.text(account.bankName || '', bankBoxX + 8, bankY)
+
+        // Número de cuenta a la derecha
+        doc.setFont('helvetica', 'normal')
+        doc.text(account.accountNumber || '', bankBoxX + bankBoxWidth - 8, bankY, { align: 'right' })
+        bankY += rowHeight
+      })
+
+      currentY += bankBoxHeight + 10
+    }
+  }
+
   // ========== 6. FOOTER ==========
 
   const footerY = PAGE_HEIGHT - 40

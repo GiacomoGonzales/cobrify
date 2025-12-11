@@ -278,6 +278,7 @@ export const companySettingsSchema = z.object({
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   website: z.string().url('URL inválida').optional().or(z.literal('')),
   socialMedia: z.string().optional(), // Redes sociales (Facebook, Instagram, etc.)
+  bankAccounts: z.string().optional(), // Cuentas bancarias (BCP, BBVA, Interbank, etc.)
   logo: z.string().optional(),
 })
 
