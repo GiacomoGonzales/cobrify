@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion } from 'firebase/firestore'
 import { PLANS, updateUserFeatures } from '@/services/subscriptionService'
+import { notifyPaymentReceived } from '@/services/notificationService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -678,6 +679,15 @@ export default function AdminUsers() {
         paymentHistory: arrayUnion(paymentRecord),
         updatedAt: Timestamp.now()
       })
+
+      // Enviar notificación al usuario
+      try {
+        await notifyPaymentReceived(userId, parseFloat(amount), plan.name, newEndDate)
+        console.log('✅ Notificación de pago enviada al usuario')
+      } catch (notifError) {
+        console.error('Error al enviar notificación:', notifError)
+        // No fallar si la notificación falla
+      }
 
       toast.success(`Pago registrado. Nuevo vencimiento: ${newEndDate.toLocaleDateString('es-PE')}`)
       setShowPaymentModal(false)
