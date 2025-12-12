@@ -8,6 +8,7 @@ import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCo
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus } from './src/utils/sunatClient.js'
+import { voidBoletaViaQPse } from './src/services/qpseService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -3009,6 +3010,408 @@ export const voidBoleta = onRequest(
 
     } catch (error) {
       console.error('❌ Error al anular boleta:', error)
+      res.status(500).json({ error: error.message || 'Error interno del servidor' })
+    }
+  }
+)
+
+// ========================================
+// VOID BOLETA VIA QPSE
+// ========================================
+
+/**
+ * Anula una boleta en SUNAT usando QPse como proveedor de firma
+ *
+ * Las boletas deben anularse mediante Resumen Diario (SummaryDocuments) con ConditionCode 3.
+ * QPse se encarga de firmar y enviar el documento a SUNAT.
+ *
+ * Requisitos:
+ * - La boleta debe estar aceptada por SUNAT
+ * - No debe haber sido entregada al cliente
+ * - Debe estar dentro del plazo de 7 días
+ * - El negocio debe tener QPse configurado
+ */
+export const voidBoletaQPse = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      // Obtener datos del body
+      const { userId, invoiceId, reason } = req.body
+
+      if (!userId || !invoiceId) {
+        res.status(400).json({ error: 'userId e invoiceId son requeridos' })
+        return
+      }
+
+      // Verificar autorización
+      if (authenticatedUserId !== userId) {
+        const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+        if (!userDoc.exists || userDoc.data().ownerId !== userId) {
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`🗑️ [QPse] Iniciando anulación de boleta - Usuario: ${userId}, Boleta: ${invoiceId}`)
+
+      // 1. Obtener datos de la boleta
+      const boletaRef = db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId)
+      const boletaDoc = await boletaRef.get()
+
+      if (!boletaDoc.exists) {
+        res.status(404).json({ error: 'Boleta no encontrada' })
+        return
+      }
+
+      const boletaData = boletaDoc.data()
+
+      // 2. Validar que sea una boleta (serie empieza con B)
+      const series = boletaData.series || boletaData.number?.split('-')[0] || ''
+      if (!series.toUpperCase().startsWith('B')) {
+        res.status(400).json({
+          error: 'Este documento no es una boleta. Use la función voidInvoice para facturas.',
+          documentType: boletaData.documentType,
+          series: series
+        })
+        return
+      }
+
+      // 3. Validar que se puede anular
+      const validationResult = canVoidBoleta({
+        sunatStatus: boletaData.sunatStatus,
+        delivered: boletaData.delivered || false,
+        issueDate: boletaData.issueDate,
+        documentType: boletaData.documentType,
+        series: series
+      })
+
+      if (!validationResult.canVoid) {
+        res.status(400).json({
+          error: validationResult.reason,
+          canVoid: false
+        })
+        return
+      }
+
+      // 4. Obtener datos del negocio
+      const businessDoc = await db.collection('businesses').doc(userId).get()
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      // Obtener configuración de QPse
+      const emissionConfig = businessData.emissionConfig || {}
+      let qpseConfig = null
+
+      if (emissionConfig.method === 'qpse' && emissionConfig.qpse) {
+        qpseConfig = {
+          usuario: emissionConfig.qpse.usuario,
+          password: emissionConfig.qpse.password,
+          environment: emissionConfig.qpse.environment || 'demo'
+        }
+      } else if (businessData.qpse?.enabled) {
+        qpseConfig = {
+          usuario: businessData.qpse.usuario,
+          password: businessData.qpse.password,
+          environment: businessData.qpse.environment || 'demo'
+        }
+      }
+
+      if (!qpseConfig || !qpseConfig.usuario || !qpseConfig.password) {
+        res.status(400).json({ error: 'QPse no está configurado para este negocio' })
+        return
+      }
+
+      console.log(`✅ [QPse] Configuración encontrada - Usuario: ${qpseConfig.usuario}, Ambiente: ${qpseConfig.environment}`)
+
+      // 5. Generar correlativo para el resumen diario
+      // Usar zona horaria de Perú (UTC-5)
+      const nowUTC = new Date()
+      const peruOffset = -5 * 60
+      const today = new Date(nowUTC.getTime() + (peruOffset - nowUTC.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha actual en Perú:', today.toISOString())
+
+      const summaryDocsRef = db.collection('businesses').doc(userId).collection('summaryDocuments')
+
+      const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
+
+      // Usar documento contador para el día
+      const counterDocRef = summaryDocsRef.doc(`counter_${todayStr}`)
+
+      let correlativo = 1
+      const counterDoc = await counterDocRef.get()
+      if (counterDoc.exists) {
+        correlativo = (counterDoc.data().lastCorrelativo || 0) + 1
+      }
+
+      // Actualizar contador
+      await counterDocRef.set({
+        dateStr: todayStr,
+        lastCorrelativo: correlativo,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      const summaryDocId = generateSummaryDocumentId(today, correlativo)
+
+      console.log(`📄 [QPse] Generando resumen diario de baja: ${summaryDocId}`)
+
+      // 6. Preparar fecha de referencia (fecha de emisión de la boleta)
+      let issueDate
+      console.log('📅 boletaData.issueDate:', boletaData.issueDate, 'tipo:', typeof boletaData.issueDate)
+
+      if (boletaData.issueDate?.toDate) {
+        issueDate = boletaData.issueDate.toDate()
+      } else if (boletaData.issueDate?._seconds) {
+        issueDate = new Date(boletaData.issueDate._seconds * 1000)
+      } else if (typeof boletaData.issueDate === 'string') {
+        issueDate = new Date(boletaData.issueDate)
+      } else if (boletaData.issueDate instanceof Date) {
+        issueDate = boletaData.issueDate
+      } else if (boletaData.createdAt?.toDate) {
+        console.log('⚠️ Usando createdAt como fecha de emisión')
+        issueDate = boletaData.createdAt.toDate()
+      } else {
+        console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
+        issueDate = new Date()
+      }
+
+      if (isNaN(issueDate.getTime())) {
+        console.error('❌ Fecha inválida:', boletaData.issueDate)
+        res.status(400).json({ error: 'Fecha de emisión de la boleta inválida' })
+        return
+      }
+
+      const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
+      const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+
+      // 7. Preparar datos del cliente
+      const customerIdentityType = getIdentityTypeCode(boletaData.customer?.documentType || boletaData.customer?.identityType || '1')
+      const customerIdentityNumber = boletaData.customer?.documentNumber || boletaData.customer?.identityNumber || '00000000'
+
+      // 8. Calcular montos
+      const total = boletaData.total || 0
+      const igv = boletaData.igv || boletaData.tax || (total - total / 1.18)
+      const taxableAmount = boletaData.subtotal || boletaData.taxableAmount || (total / 1.18)
+
+      // 9. Generar XML de Resumen Diario con ConditionCode 3 (Anular)
+      const documentId = `${boletaData.series}-${boletaData.correlativeNumber}`
+
+      const summaryXmlData = {
+        id: summaryDocId,
+        referenceDate: referenceDateStr,
+        issueDate: issueDateStr,
+        supplier: {
+          ruc: businessData.ruc,
+          name: businessData.businessName || businessData.name
+        },
+        documents: [{
+          lineId: 1,
+          documentType: '03', // Boleta
+          documentId: documentId,
+          conditionCode: CONDITION_CODES.VOID, // Código 3 = Anular
+          customer: {
+            identityType: customerIdentityType,
+            identityNumber: customerIdentityNumber
+          },
+          currency: boletaData.currency || 'PEN',
+          total: total,
+          taxableAmount: taxableAmount,
+          igv: igv
+        }]
+      }
+
+      const summaryXml = generateSummaryDocumentsXML(summaryXmlData)
+
+      console.log('✅ [QPse] XML de resumen diario generado')
+      console.log('📄 XML preview:', summaryXml.substring(0, 500))
+
+      // 10. Marcar boleta como "anulando" antes de enviar
+      await boletaRef.update({
+        sunatStatus: 'voiding',
+        voidMethod: 'qpse',
+        voidReason: reason || 'ANULACION DE OPERACION',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      // 11. Enviar a QPse para firma y envío a SUNAT
+      console.log('📤 [QPse] Enviando a QPse para firma y envío a SUNAT...')
+
+      const qpseResult = await voidBoletaViaQPse(
+        summaryXml,
+        businessData.ruc,
+        summaryDocId,
+        qpseConfig
+      )
+
+      console.log('📋 [QPse] Resultado:', JSON.stringify(qpseResult, null, 2))
+
+      // 12. Guardar documento de resumen
+      const summaryDocRef = await summaryDocsRef.add({
+        summaryDocId,
+        dateStr: todayStr,
+        correlativo,
+        invoiceId,
+        invoiceSeries: boletaData.series,
+        invoiceNumber: boletaData.correlativeNumber,
+        documentType: 'boleta',
+        action: 'void',
+        method: 'qpse',
+        reason: reason || 'ANULACION DE OPERACION',
+        status: qpseResult.accepted ? 'accepted' : (qpseResult.responseCode === '98' ? 'pending' : 'failed'),
+        ticket: qpseResult.ticket || null,
+        responseCode: qpseResult.responseCode || null,
+        responseDescription: qpseResult.description || null,
+        notes: qpseResult.notes || null,
+        cdrUrl: qpseResult.cdrUrl || null,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      // 13. Actualizar boleta según resultado
+      if (qpseResult.accepted) {
+        // Anulación aceptada
+        await boletaRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          summaryDocumentId: summaryDocRef.id
+        })
+
+        // Devolver stock de los productos
+        if (boletaData.items && boletaData.items.length > 0) {
+          console.log('📦 Devolviendo stock de productos...')
+          for (const item of boletaData.items) {
+            if (item.productId && !item.productId.startsWith('custom-')) {
+              try {
+                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                const productDoc = await productRef.get()
+                if (productDoc.exists) {
+                  const currentStock = productDoc.data().stock || 0
+                  await productRef.update({
+                    stock: currentStock + (item.quantity || 0),
+                    updatedAt: FieldValue.serverTimestamp()
+                  })
+                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+                }
+              } catch (stockError) {
+                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+              }
+            }
+          }
+        }
+
+        // Actualizar estadísticas del cliente
+        if (boletaData.customer?.documentNumber) {
+          try {
+            const customersRef = db.collection('businesses').doc(userId).collection('customers')
+            const customerQuery = await customersRef
+              .where('documentNumber', '==', boletaData.customer.documentNumber)
+              .limit(1)
+              .get()
+
+            if (!customerQuery.empty) {
+              const customerDoc = customerQuery.docs[0]
+              const customerData = customerDoc.data()
+              const newOrdersCount = Math.max(0, (customerData.ordersCount || 1) - 1)
+              const newTotalSpent = Math.max(0, (customerData.totalSpent || boletaData.total) - (boletaData.total || 0))
+
+              await customerDoc.ref.update({
+                ordersCount: newOrdersCount,
+                totalSpent: newTotalSpent,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+              console.log(`👤 Estadísticas de cliente actualizadas: ${boletaData.customer.documentNumber}`)
+            }
+          } catch (customerError) {
+            console.error('❌ Error actualizando estadísticas del cliente:', customerError.message)
+          }
+        }
+
+        console.log(`✅ [QPse] Boleta ${boletaData.series}-${boletaData.correlativeNumber} anulada exitosamente`)
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'Boleta anulada exitosamente en SUNAT vía QPse',
+          summaryDocumentId: summaryDocRef.id
+        })
+        return
+      }
+
+      // Si está pendiente (código 98)
+      if (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO') {
+        await boletaRef.update({
+          sunatStatus: 'voiding',
+          voidingTicket: qpseResult.ticket || null,
+          summaryDocumentId: summaryDocRef.id,
+          updatedAt: FieldValue.serverTimestamp()
+        })
+
+        res.status(202).json({
+          success: true,
+          status: 'pending',
+          ticket: qpseResult.ticket,
+          summaryDocumentId: summaryDocRef.id,
+          message: 'El resumen diario está siendo procesado por SUNAT. Consulte el estado más tarde.'
+        })
+        return
+      }
+
+      // Error en la anulación
+      await boletaRef.update({
+        sunatStatus: 'accepted', // Volver al estado anterior
+        voidError: qpseResult.description || qpseResult.notes || 'Error al anular',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      res.status(400).json({
+        success: false,
+        error: qpseResult.description || qpseResult.notes || 'Error al anular la boleta',
+        responseCode: qpseResult.responseCode
+      })
+
+    } catch (error) {
+      console.error('❌ [QPse] Error al anular boleta:', error)
       res.status(500).json({ error: error.message || 'Error interno del servidor' })
     }
   }

@@ -565,23 +565,78 @@ export const canVoidBoleta = (boleta) => {
 }
 
 /**
+ * Anula una boleta en SUNAT usando QPSe como proveedor de firma
+ *
+ * @param {string} userId - ID del usuario/negocio
+ * @param {string} invoiceId - ID de la boleta
+ * @param {string} reason - Motivo de la anulación
+ * @param {string} idToken - Token de autenticación
+ * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
+ */
+export const voidBoletaQPse = async (userId, invoiceId, reason, idToken) => {
+  try {
+    // URL de Cloud Functions para QPSe
+    const voidBoletaQPseUrl = import.meta.env.VITE_VOID_BOLETA_QPSE_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/voidBoletaQPse'
+
+    const response = await axios.post(
+      voidBoletaQPseUrl,
+      {
+        userId,
+        invoiceId,
+        reason: reason || 'ANULACION DE OPERACION'
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        timeout: 120000 // 2 minutos
+      }
+    )
+
+    return response.data
+  } catch (error) {
+    console.error('Error al anular boleta vía QPse:', error)
+
+    if (error.response?.data) {
+      return {
+        success: false,
+        error: error.response.data.error || 'Error al anular la boleta vía QPse'
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message || 'Error de conexión'
+    }
+  }
+}
+
+/**
  * Función unificada para anular documentos (detecta automáticamente si es factura o boleta)
  *
  * @param {Object} invoice - Datos del documento
  * @param {string} userId - ID del usuario/negocio
  * @param {string} reason - Motivo de la anulación
  * @param {string} idToken - Token de autenticación
+ * @param {string} emissionMethod - Método de emisión ('qpse', 'sunat_direct', etc.) - opcional
  * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
  */
-export const voidDocument = async (invoice, userId, reason, idToken) => {
+export const voidDocument = async (invoice, userId, reason, idToken, emissionMethod = null) => {
   const series = invoice.series || invoice.number?.split('-')[0] || ''
 
-  // Si es boleta (serie empieza con B), usar voidBoleta
+  // Si es boleta (serie empieza con B)
   if (series.toUpperCase().startsWith('B')) {
+    // Si el método de emisión es QPSe, usar la función específica
+    if (emissionMethod === 'qpse') {
+      return await voidBoletaQPse(userId, invoice.id, reason, idToken)
+    }
+    // Default: usar SUNAT directo
     return await voidBoleta(userId, invoice.id, reason, idToken)
   }
 
-  // Si es factura, usar voidInvoice
+  // Si es factura, usar voidInvoice (solo SUNAT directo soportado por ahora)
+  // Nota: QPSe no tiene endpoint para Comunicación de Baja de facturas
   return await voidInvoice(userId, invoice.id, reason, idToken)
 }
 
@@ -613,6 +668,7 @@ export default {
   getSunatErrorMessage,
   voidInvoice,
   voidBoleta,
+  voidBoletaQPse,
   voidDocument,
   checkVoidStatus,
   canVoidInvoice,

@@ -447,4 +447,145 @@ export async function registrarEmpresa(ruc, razonSocial, token, environment = 'd
   }
 }
 
+/**
+ * Anula una boleta vía QPse usando Resumen Diario (SummaryDocuments)
+ *
+ * Las boletas no pueden usar Comunicación de Baja como las facturas.
+ * Se debe enviar un Resumen Diario con ConditionCode 3 (Anular).
+ *
+ * @param {string} summaryXml - XML del Resumen Diario sin firmar
+ * @param {string} ruc - RUC del emisor
+ * @param {string} summaryId - ID del resumen (RC-YYYYMMDD-correlativo)
+ * @param {Object} config - Configuración de QPse
+ * @returns {Promise<Object>} Resultado de la anulación
+ */
+export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
+  try {
+    console.log('🗑️ Iniciando anulación de boleta vía QPse...')
+    console.log(`RUC: ${ruc}`)
+    console.log(`Resumen ID: ${summaryId}`)
+
+    // 1. Obtener token
+    const token = await obtenerToken(config)
+
+    // 2. Construir nombre de archivo para el Resumen Diario
+    // Formato: RUC-RC-YYYYMMDD-correlativo
+    // Ejemplo: 10417844398-RC-20241211-1
+    const nombreArchivo = `${ruc}-${summaryId}`
+    console.log(`📄 Nombre archivo: ${nombreArchivo}`)
+
+    // 3. Firmar XML del Resumen Diario
+    const resultadoFirma = await firmarXML(
+      nombreArchivo,
+      summaryXml,
+      token,
+      config.environment || 'demo'
+    )
+
+    console.log('🔍 Respuesta de firmar XML:', JSON.stringify(resultadoFirma, null, 2))
+
+    // Validar que la firma fue exitosa
+    if (!resultadoFirma.xml && !resultadoFirma.xml_firmado && !resultadoFirma.contenido_xml_firmado) {
+      console.error('❌ Campos en respuesta:', Object.keys(resultadoFirma))
+      throw new Error('QPse no devolvió XML firmado')
+    }
+
+    const xmlFirmado = resultadoFirma.xml || resultadoFirma.xml_firmado || resultadoFirma.contenido_xml_firmado
+
+    // 4. Enviar a SUNAT (devuelve ticket porque es asíncrono)
+    let resultadoEnvio
+    try {
+      resultadoEnvio = await enviarASunat(
+        nombreArchivo,
+        xmlFirmado,
+        token,
+        config.environment || 'demo'
+      )
+    } catch (errorEnvio) {
+      console.error('❌ Error al enviar Resumen Diario a SUNAT:', errorEnvio.message)
+      return {
+        accepted: false,
+        responseCode: 'ERROR_ENVIO',
+        description: 'Error al enviar el Resumen Diario a SUNAT',
+        notes: errorEnvio.message,
+        nombreArchivo: nombreArchivo,
+        xmlFirmado: xmlFirmado
+      }
+    }
+
+    console.log('🔍 Respuesta de enviar a SUNAT:', JSON.stringify(resultadoEnvio, null, 2))
+
+    // 5. Obtener el ticket para consulta posterior
+    const ticket = resultadoEnvio.ticket || resultadoEnvio.numero_ticket || resultadoEnvio.nroTicket || ''
+
+    if (!ticket) {
+      console.warn('⚠️ No se recibió ticket de SUNAT')
+    }
+
+    // 6. Esperar y consultar estado (el Resumen Diario es asíncrono)
+    let estadoFinal = null
+    if (ticket) {
+      console.log(`🎫 Ticket recibido: ${ticket}`)
+      console.log('⏳ Esperando respuesta de SUNAT...')
+
+      // Esperar un poco antes de consultar (SUNAT necesita tiempo para procesar)
+      await new Promise(resolve => setTimeout(resolve, 3000))
+
+      // Intentar consultar el estado hasta 5 veces
+      for (let intento = 1; intento <= 5; intento++) {
+        try {
+          console.log(`🔍 Intento ${intento}/5 - Consultando estado del ticket...`)
+          estadoFinal = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
+          console.log(`📋 Estado recibido:`, JSON.stringify(estadoFinal, null, 2))
+
+          // Si ya tenemos respuesta definitiva, salir del bucle
+          const codigo = estadoFinal.codigo || estadoFinal.code || estadoFinal.estado || ''
+          if (codigo === '0' || codigo === '0000' || estadoFinal.sunat_success === true) {
+            console.log('✅ SUNAT aceptó la anulación')
+            break
+          } else if (codigo && codigo !== '98' && codigo !== 'PROCESANDO') {
+            // Si hay un código de error diferente a "procesando", salir
+            console.log(`❌ SUNAT rechazó con código: ${codigo}`)
+            break
+          }
+
+          // Esperar antes del siguiente intento
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        } catch (errorConsulta) {
+          console.warn(`⚠️ Error en consulta (intento ${intento}):`, errorConsulta.message)
+          if (intento < 5) {
+            await new Promise(resolve => setTimeout(resolve, 2000))
+          }
+        }
+      }
+    }
+
+    // 7. Parsear respuesta final
+    const responseCode = estadoFinal?.codigo || estadoFinal?.code || resultadoEnvio.codigo || '98'
+    const accepted = responseCode === '0' || responseCode === '0000' || estadoFinal?.sunat_success === true
+    const description = estadoFinal?.descripcion || estadoFinal?.description || resultadoEnvio.descripcion ||
+      (accepted ? 'Boleta anulada correctamente' : 'Pendiente de confirmación de SUNAT')
+
+    return {
+      accepted: accepted,
+      responseCode: responseCode,
+      description: description,
+      notes: estadoFinal?.observaciones || estadoFinal?.errores?.join(' | ') || '',
+      ticket: ticket,
+      nombreArchivo: nombreArchivo,
+      xmlFirmado: xmlFirmado,
+      cdrUrl: estadoFinal?.url_cdr || '',
+      rawResponse: {
+        firma: resultadoFirma,
+        envio: resultadoEnvio,
+        estado: estadoFinal
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error en anulación de boleta vía QPse:', error)
+    throw error
+  }
+}
+
 export { obtenerToken, consultarEstado }

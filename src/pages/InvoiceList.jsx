@@ -389,12 +389,17 @@ ${companySettings?.website ? companySettings.website : ''}`
       const isBoleta = series.toUpperCase().startsWith('B')
       const docTypeName = isBoleta ? 'Boleta' : 'Factura'
 
+      // Obtener método de emisión desde businessSettings
+      const emissionMethod = businessSettings?.emissionConfig?.method || null
+
       // Llamar al servicio de anulación unificado (detecta automáticamente factura o boleta)
+      // Pasa el método de emisión para usar QPSe si corresponde
       const result = await voidDocument(
         voidingSunatInvoice,
         businessId,
         voidSunatReason || 'ANULACION DE OPERACION',
-        idToken
+        idToken,
+        emissionMethod
       )
 
       if (result.success || result.status === 'voided') {
