@@ -11,6 +11,9 @@ import {
   Package,
   DollarSign,
   Calendar,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -31,6 +34,10 @@ export default function Purchases() {
   const [viewingPurchase, setViewingPurchase] = useState(null)
   const [deletingPurchase, setDeletingPurchase] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Ordenamiento
+  const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
+  const [sortDirection, setSortDirection] = useState('desc') // 'asc', 'desc'
 
   useEffect(() => {
     loadPurchases()
@@ -90,17 +97,55 @@ export default function Purchases() {
     }
   }
 
-  const filteredPurchases = purchases.filter(purchase => {
-    // Si no hay término de búsqueda, mostrar todas las compras
-    if (!searchTerm || searchTerm.trim() === '') return true
+  // Función para cambiar ordenamiento
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('desc')
+    }
+  }
 
-    const search = searchTerm.toLowerCase()
-    return (
-      purchase.invoiceNumber?.toLowerCase().includes(search) ||
-      purchase.supplier?.businessName?.toLowerCase().includes(search) ||
-      purchase.supplier?.documentNumber?.includes(search)
-    )
-  })
+  // Icono de ordenamiento
+  const getSortIcon = (field) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="w-4 h-4 text-primary-600" />
+      : <ArrowDown className="w-4 h-4 text-primary-600" />
+  }
+
+  const filteredPurchases = purchases
+    .filter(purchase => {
+      // Si no hay término de búsqueda, mostrar todas las compras
+      if (!searchTerm || searchTerm.trim() === '') return true
+
+      const search = searchTerm.toLowerCase()
+      return (
+        purchase.invoiceNumber?.toLowerCase().includes(search) ||
+        purchase.supplier?.businessName?.toLowerCase().includes(search) ||
+        purchase.supplier?.documentNumber?.includes(search)
+      )
+    })
+    .sort((a, b) => {
+      let comparison = 0
+
+      if (sortField === 'date') {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+        comparison = dateA - dateB
+      } else if (sortField === 'amount') {
+        comparison = (a.total || 0) - (b.total || 0)
+      } else if (sortField === 'supplier') {
+        const supplierA = a.supplier?.businessName?.toLowerCase() || ''
+        const supplierB = b.supplier?.businessName?.toLowerCase() || ''
+        comparison = supplierA.localeCompare(supplierB)
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
 
   const stats = {
     total: purchases.length,
@@ -231,10 +276,34 @@ export default function Purchases() {
               <TableHeader>
                 <TableRow>
                   <TableHead>N° Factura</TableHead>
-                  <TableHead>Proveedor</TableHead>
-                  <TableHead>Fecha</TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => handleSort('supplier')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                    >
+                      Proveedor
+                      {getSortIcon('supplier')}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => handleSort('date')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                    >
+                      Fecha
+                      {getSortIcon('date')}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-center hidden md:table-cell">Productos</TableHead>
-                  <TableHead className="text-right">Monto</TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      onClick={() => handleSort('amount')}
+                      className="flex items-center gap-1 hover:text-primary-600 transition-colors ml-auto"
+                    >
+                      Monto
+                      {getSortIcon('amount')}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
