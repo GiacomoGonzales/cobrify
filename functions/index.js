@@ -616,10 +616,31 @@ export const sendInvoiceToSunat = onRequest(
       if (emissionResult.accepted === true) {
         try {
           const subscriptionRef = db.collection('subscriptions').doc(userId)
-          await subscriptionRef.update({
-            'usage.invoicesThisMonth': FieldValue.increment(1)
-          })
-          console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+          const subscriptionDoc = await subscriptionRef.get()
+
+          if (subscriptionDoc.exists) {
+            const subscriptionData = subscriptionDoc.data()
+
+            // Si no tiene el campo usage, inicializarlo primero
+            if (!subscriptionData.usage) {
+              await subscriptionRef.update({
+                usage: {
+                  invoicesThisMonth: 1,
+                  totalCustomers: 0,
+                  totalProducts: 0
+                }
+              })
+              console.log(`📊 Campo usage inicializado y contador en 1 - Usuario: ${userId}`)
+            } else {
+              // Si ya tiene usage, incrementar normalmente
+              await subscriptionRef.update({
+                'usage.invoicesThisMonth': FieldValue.increment(1)
+              })
+              console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+            }
+          } else {
+            console.warn(`⚠️ No existe suscripción para usuario: ${userId}`)
+          }
         } catch (counterError) {
           console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
           // No fallar la operación si el contador falla
@@ -1064,10 +1085,31 @@ export const sendCreditNoteToSunat = onRequest(
       if (emissionResult.accepted === true) {
         try {
           const subscriptionRef = db.collection('subscriptions').doc(userId)
-          await subscriptionRef.update({
-            'usage.invoicesThisMonth': FieldValue.increment(1)
-          })
-          console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+          const subscriptionDoc = await subscriptionRef.get()
+
+          if (subscriptionDoc.exists) {
+            const subscriptionData = subscriptionDoc.data()
+
+            // Si no tiene el campo usage, inicializarlo primero
+            if (!subscriptionData.usage) {
+              await subscriptionRef.update({
+                usage: {
+                  invoicesThisMonth: 1,
+                  totalCustomers: 0,
+                  totalProducts: 0
+                }
+              })
+              console.log(`📊 Campo usage inicializado y contador en 1 - Usuario: ${userId}`)
+            } else {
+              // Si ya tiene usage, incrementar normalmente
+              await subscriptionRef.update({
+                'usage.invoicesThisMonth': FieldValue.increment(1)
+              })
+              console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+            }
+          } else {
+            console.warn(`⚠️ No existe suscripción para usuario: ${userId}`)
+          }
         } catch (counterError) {
           console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
         }
@@ -1334,6 +1376,159 @@ export const initializeUsageCounters = onRequest(
 
     } catch (error) {
       console.error('❌ Error al inicializar contadores:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+/**
+ * Cloud Function HTTP: Sincronizar contadores de uso con comprobantes reales
+ *
+ * Esta función cuenta los comprobantes SUNAT aceptados de cada usuario
+ * en el período actual y actualiza el contador usage.invoicesThisMonth
+ *
+ * Ejecutar con: curl https://[tu-url]/syncUsageCounters
+ */
+export const syncUsageCounters = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 540, // 9 minutos para procesar muchos usuarios
+    memory: '512MiB',
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    try {
+      console.log('🔄 Sincronizando contadores de uso con comprobantes reales...')
+
+      const subscriptionsSnapshot = await db.collection('subscriptions').get()
+
+      let updated = 0
+      let errors = 0
+      const results = []
+
+      for (const subDoc of subscriptionsSnapshot.docs) {
+        const subscription = subDoc.data()
+        const userId = subDoc.id
+
+        // Saltar usuarios secundarios (tienen ownerId)
+        if (subscription.ownerId) {
+          continue
+        }
+
+        try {
+          // Obtener fecha de inicio del período actual
+          const periodStart = subscription.currentPeriodStart?.toDate?.() ||
+                             subscription.currentPeriodStart ||
+                             new Date(new Date().setDate(1)) // Primer día del mes si no hay fecha
+
+          // Contar facturas/boletas aceptadas en el período
+          const invoicesRef = db.collection('businesses').doc(userId).collection('invoices')
+          const invoicesQuery = await invoicesRef
+            .where('sunatStatus', 'in', ['accepted', 'ACEPTADO'])
+            .get()
+
+          // Filtrar por fecha de emisión >= periodStart
+          let invoiceCount = 0
+          for (const invDoc of invoicesQuery.docs) {
+            const invData = invDoc.data()
+            const issueDate = invData.issueDate?.toDate?.() || invData.createdAt?.toDate?.() || null
+
+            if (issueDate && issueDate >= periodStart) {
+              // Solo contar facturas y boletas (no notas de venta)
+              const docType = invData.documentType?.toLowerCase() || ''
+              if (docType === 'factura' || docType === 'boleta' ||
+                  invData.series?.startsWith('F') || invData.series?.startsWith('B')) {
+                invoiceCount++
+              }
+            }
+          }
+
+          // Contar notas de crédito aceptadas en el período
+          const creditNotesRef = db.collection('businesses').doc(userId).collection('creditNotes')
+          const creditNotesQuery = await creditNotesRef
+            .where('sunatStatus', 'in', ['accepted', 'ACEPTADO'])
+            .get()
+
+          let creditNoteCount = 0
+          for (const cnDoc of creditNotesQuery.docs) {
+            const cnData = cnDoc.data()
+            const issueDate = cnData.issueDate?.toDate?.() || cnData.createdAt?.toDate?.() || null
+
+            if (issueDate && issueDate >= periodStart) {
+              creditNoteCount++
+            }
+          }
+
+          const totalCount = invoiceCount + creditNoteCount
+          const currentCount = subscription.usage?.invoicesThisMonth || 0
+
+          // Actualizar solo si hay diferencia
+          if (totalCount !== currentCount) {
+            await subDoc.ref.update({
+              usage: {
+                invoicesThisMonth: totalCount,
+                totalCustomers: subscription.usage?.totalCustomers || 0,
+                totalProducts: subscription.usage?.totalProducts || 0
+              }
+            })
+
+            results.push({
+              userId,
+              email: subscription.email || 'N/A',
+              previousCount: currentCount,
+              newCount: totalCount,
+              invoices: invoiceCount,
+              creditNotes: creditNoteCount,
+              status: 'updated'
+            })
+            updated++
+
+            console.log(`✅ ${subscription.email}: ${currentCount} → ${totalCount} (${invoiceCount} facturas/boletas + ${creditNoteCount} NC)`)
+          } else {
+            results.push({
+              userId,
+              email: subscription.email || 'N/A',
+              count: totalCount,
+              status: 'unchanged'
+            })
+          }
+
+        } catch (userError) {
+          console.error(`❌ Error procesando usuario ${userId}:`, userError.message)
+          results.push({
+            userId,
+            email: subscription.email || 'N/A',
+            status: 'error',
+            error: userError.message
+          })
+          errors++
+        }
+      }
+
+      console.log(`✅ Sincronización completada: ${updated} actualizados, ${errors} errores`)
+
+      res.status(200).json({
+        success: true,
+        message: 'Contadores sincronizados con comprobantes reales',
+        stats: {
+          updated,
+          errors,
+          total: subscriptionsSnapshot.size
+        },
+        details: results.filter(r => r.status === 'updated' || r.status === 'error')
+      })
+
+    } catch (error) {
+      console.error('❌ Error al sincronizar contadores:', error)
       res.status(500).json({
         success: false,
         error: error.message
