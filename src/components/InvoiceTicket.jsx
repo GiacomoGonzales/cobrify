@@ -589,6 +589,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 <span className="info-label">Nombre:</span>
                 <span>{customerData.name}</span>
               </div>
+              {customerData.address && (
+                <div className="info-row">
+                  <span className="info-label">Dirección:</span>
+                  <span>{customerData.address}</span>
+                </div>
+              )}
             </>
           )}
 

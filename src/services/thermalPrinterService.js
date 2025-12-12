@@ -1653,9 +1653,15 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
     if (isInvoice) {
       builder.text(`RUC: ${invoice.customer?.documentNumber || '-'}`).newLine()
         .text(`Razon Social: ${invoice.customer?.businessName || '-'}`).newLine();
+      if (invoice.customer?.address) {
+        builder.text(`Direccion: ${invoice.customer.address}`).newLine();
+      }
     } else {
       builder.text(`DNI: ${invoice.customer?.documentNumber || '-'}`).newLine()
         .text(`Nombre: ${invoice.customer?.name || 'Cliente'}`).newLine();
+      if (invoice.customer?.address || invoice.customerAddress) {
+        builder.text(`Direccion: ${invoice.customer?.address || invoice.customerAddress}`).newLine();
+      }
     }
 
     builder.text(format.separator).newLine()
