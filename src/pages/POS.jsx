@@ -20,6 +20,9 @@ import {
   X,
   Check,
   Calendar,
+  ChevronDown,
+  ChevronUp,
+  Settings2,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -214,6 +217,9 @@ export default function POS() {
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
   const [editingPrice, setEditingPrice] = useState('')
 
+  // Panel de cliente/documento colapsable
+  const [showCustomerPanel, setShowCustomerPanel] = useState(false)
+
   // Datos del cliente para captura inline
   const [customerData, setCustomerData] = useState({
     documentType: ID_TYPES.DNI,
@@ -228,6 +234,16 @@ export default function POS() {
   // Estados para pagos parciales (solo notas de venta)
   const [enablePartialPayment, setEnablePartialPayment] = useState(false)
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('')
+
+  // Estados para forma de pago (solo facturas) - Contado/Crédito
+  const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
+  const [paymentDueDate, setPaymentDueDate] = useState('') // Fecha de vencimiento
+  const [paymentInstallments, setPaymentInstallments] = useState([]) // Cuotas: [{number, amount, dueDate}]
+
+  // Campos opcionales de referencia
+  const [guideNumber, setGuideNumber] = useState('') // N° de Guía de Remisión
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState('') // N° de Orden de Compra
+  const [orderNumber, setOrderNumber] = useState('') // N° de Pedido
 
   // Ref para controlar si ya se cargó el borrador
   const draftLoadedRef = useRef(false)
@@ -845,6 +861,14 @@ export default function POS() {
     setLastInvoiceData(null)
     setDiscountAmount('')
     setDiscountPercentage('')
+    // Reset forma de pago
+    setPaymentType('contado')
+    setPaymentDueDate('')
+    setPaymentInstallments([])
+    // Reset campos de referencia
+    setGuideNumber('')
+    setPurchaseOrderNumber('')
+    setOrderNumber('')
     clearDraft() // Limpiar borrador de localStorage
   }
 
@@ -1138,8 +1162,10 @@ export default function POS() {
       }
     }
 
-    // Detectar si es venta al crédito (pago parcial habilitado con monto 0)
-    const isCreditSale = enablePartialPayment && amountToPay === 0
+    // Detectar si es venta al crédito:
+    // 1. Nota de venta con pago parcial habilitado y monto 0
+    // 2. Factura con forma de pago "crédito"
+    const isCreditSale = (enablePartialPayment && amountToPay === 0) || (documentType === 'factura' && paymentType === 'credito')
 
     // Si hidePaymentMethods está activo, usar efectivo automáticamente
     const isHidePaymentMethods = hasFeature('hidePaymentMethods')
@@ -1301,7 +1327,9 @@ export default function POS() {
       // 3. Crear factura
       // Calcular datos de pago parcial y ventas al crédito
       const partialAmount = parseFloat(partialPaymentAmount) || 0
-      const isCreditSaleForInvoice = enablePartialPayment && partialAmount === 0 && documentType === 'nota_venta'
+      const isCreditSaleForNotaVenta = enablePartialPayment && partialAmount === 0 && documentType === 'nota_venta'
+      const isCreditSaleForFactura = documentType === 'factura' && paymentType === 'credito'
+      const isCreditSaleForInvoice = isCreditSaleForNotaVenta || isCreditSaleForFactura
       const isPartialPayment = enablePartialPayment && partialAmount > 0 && documentType === 'nota_venta'
 
       const amountPaid = isCreditSaleForInvoice ? 0 : (isPartialPayment ? partialAmount : amounts.total)
@@ -1381,6 +1409,20 @@ export default function POS() {
         sellerId: selectedSeller?.id || null,
         sellerName: selectedSeller?.name || null,
         sellerCode: selectedSeller?.code || null,
+        // Forma de pago (solo para facturas) - Contado/Crédito con cuotas
+        ...(documentType === 'factura' && {
+          paymentType: paymentType, // 'contado' o 'credito'
+          paymentDueDate: paymentType === 'credito' ? paymentDueDate : null,
+          paymentInstallments: paymentType === 'credito' ? paymentInstallments.map(inst => ({
+            number: inst.number,
+            amount: parseFloat(inst.amount) || 0,
+            dueDate: inst.dueDate
+          })) : [],
+          // Campos opcionales de referencia
+          guideNumber: guideNumber || null,
+          purchaseOrderNumber: purchaseOrderNumber || null,
+          orderNumber: orderNumber || null,
+        }),
       }
 
       const result = await createInvoice(businessId, invoiceData)
@@ -1907,572 +1949,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
           </div>
 
-          {/* Customer and Document Type Selection */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="space-y-4">
-                {/* Tipo de Comprobante */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de Comprobante
-                  </label>
-                  <Select
-                    value={documentType}
-                    onChange={e => {
-                      setDocumentType(e.target.value)
-                      // Resetear pago parcial si cambia de nota de venta a otro tipo
-                      if (e.target.value !== 'nota_venta') {
-                        setEnablePartialPayment(false)
-                        setPartialPaymentAmount('')
-                      }
-                    }}
-                  >
-                    <option value="boleta">Boleta de Venta</option>
-                    <option value="factura">Factura Electrónica</option>
-                    <option value="nota_venta">Nota de Venta</option>
-                  </Select>
-                </div>
-
-                {/* Fecha de Emisión - Solo si está habilitado en configuración */}
-                {businessSettings?.allowCustomEmissionDate && (
-                  <div className="overflow-hidden">
-                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      Fecha de Emisión
-                    </label>
-                    <input
-                      type="date"
-                      value={emissionDate}
-                      max={getLocalDateString()}
-                      min={(() => {
-                        const today = new Date()
-                        const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
-                        const minDate = new Date(today)
-                        minDate.setDate(today.getDate() - maxDaysBack)
-                        return getLocalDateString(minDate)
-                      })()}
-                      onChange={e => setEmissionDate(e.target.value)}
-                      className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 appearance-none bg-white"
-                      style={{ minWidth: 0 }}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      {documentType === 'factura' && 'Máximo 3 días anteriores según SUNAT'}
-                      {documentType === 'boleta' && 'Máximo 7 días anteriores según SUNAT'}
-                      {documentType === 'nota_venta' && 'Sin límite de antigüedad'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Tipo de Pedido - Solo para modo restaurant */}
-                {businessMode === 'restaurant' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tipo de Pedido
-                    </label>
-                    <Select
-                      value={orderType}
-                      onChange={e => setOrderType(e.target.value)}
-                      disabled={tableData?.fromTable} // Deshabilitar si viene de mesa
-                    >
-                      {Object.entries(ORDER_TYPES).map(([key, label]) => (
-                        <option key={key} value={key}>
-                          {label}
-                        </option>
-                      ))}
-                    </Select>
-                    {tableData?.fromTable && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        Pedido de Mesa {tableData.tableNumber}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Selector de Almacén */}
-                {warehouses.length > 0 && businessMode !== 'restaurant' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Almacén de Venta
-                    </label>
-                    <Select
-                      value={selectedWarehouse?.id || ''}
-                      onChange={e => {
-                        const warehouse = warehouses.find(w => w.id === e.target.value)
-                        setSelectedWarehouse(warehouse)
-                      }}
-                    >
-                      {warehouses.filter(w => w.isActive).map(warehouse => (
-                        <option key={warehouse.id} value={warehouse.id}>
-                          {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      El stock se descontará de este almacén
-                    </p>
-                  </div>
-                )}
-
-                {/* Buscador de Cliente Registrado */}
-                {customers.length > 0 && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Buscar Cliente Registrado (Opcional)
-                    </label>
-                    <div className="relative">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                          type="text"
-                          value={customerSearchTerm}
-                          onChange={e => {
-                            setCustomerSearchTerm(e.target.value)
-                            setShowCustomerDropdown(true)
-                          }}
-                          onFocus={() => setShowCustomerDropdown(true)}
-                          placeholder="Buscar por nombre o documento..."
-                          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        {(customerSearchTerm || selectedCustomer) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomerSearchTerm('')
-                              setSelectedCustomer(null)
-                              setShowCustomerDropdown(false)
-                              setCustomerData({
-                                documentType: documentType === 'factura' ? ID_TYPES.RUC : ID_TYPES.DNI,
-                                documentNumber: '',
-                                name: '',
-                                businessName: '',
-                                address: '',
-                                email: '',
-                                phone: ''
-                              })
-                            }}
-                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Dropdown de resultados */}
-                      {showCustomerDropdown && customerSearchTerm && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {filteredCustomers.length === 0 ? (
-                            <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                              No se encontraron clientes
-                            </div>
-                          ) : (
-                            filteredCustomers.map(customer => (
-                              <button
-                                key={customer.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomer(customer)
-                                  setCustomerSearchTerm(customer.name || customer.businessName || customer.documentNumber)
-                                  setShowCustomerDropdown(false)
-                                  setCustomerData({
-                                    documentType: customer.documentType || ID_TYPES.DNI,
-                                    documentNumber: customer.documentNumber || '',
-                                    name: customer.name || '',
-                                    businessName: customer.businessName || '',
-                                    address: customer.address || '',
-                                    email: customer.email || '',
-                                    phone: customer.phone || ''
-                                  })
-                                }}
-                                className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b last:border-b-0"
-                              >
-                                <div className="font-medium text-gray-900">
-                                  {customer.name || customer.businessName || 'Sin nombre'}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {customer.documentNumber}
-                                  {customer.email && ` • ${customer.email}`}
-                                </div>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {selectedCustomer && (
-                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                            <span className="text-green-800 font-medium">
-                              Cliente seleccionado: {selectedCustomer.name || selectedCustomer.businessName}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <p className="text-xs text-gray-500 mt-2">
-                      Busca y selecciona un cliente registrado o deja vacío para ingresar datos manualmente
-                    </p>
-                  </div>
-                )}
-
-                {/* Selector de Vendedor */}
-                {sellers.length > 0 && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Vendedor (Opcional)
-                    </label>
-                    <select
-                      value={selectedSeller?.id || ''}
-                      onChange={e => {
-                        const seller = sellers.find(s => s.id === e.target.value)
-                        setSelectedSeller(seller || null)
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">Sin vendedor</option>
-                      {sellers.map(seller => (
-                        <option key={seller.id} value={seller.id}>
-                          {seller.code} - {seller.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    {selectedSeller && (
-                      <div className="mt-2 p-2 bg-purple-100 border border-purple-200 rounded text-sm">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-purple-600" />
-                          <span className="text-purple-800 font-medium">
-                            Vendedor: {selectedSeller.code} - {selectedSeller.name}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    <p className="text-xs text-gray-500 mt-2">
-                      Selecciona el vendedor que realizará esta venta
-                    </p>
-                  </div>
-                )}
-
-                {/* Campos para BOLETA */}
-                {documentType === 'boleta' && (
-                  <>
-                    {/* Primera fila: Tipo de Doc y Documento con botón */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Selector de tipo de documento */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Tipo de Documento
-                        </label>
-                        <select
-                          value={customerData.documentType}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            documentType: e.target.value,
-                            documentNumber: '',
-                            name: '',
-                            businessName: ''
-                          })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value={ID_TYPES.DNI}>DNI</option>
-                          <option value={ID_TYPES.RUC}>RUC</option>
-                          <option value={ID_TYPES.CE}>Carnet de Extranjería</option>
-                        </select>
-                      </div>
-
-                      {/* Campo de documento con botón de búsqueda */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {customerData.documentType === ID_TYPES.RUC ? 'RUC' : customerData.documentType === ID_TYPES.CE ? 'CE' : 'DNI'}
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            maxLength={customerData.documentType === ID_TYPES.RUC ? 11 : customerData.documentType === ID_TYPES.CE ? 12 : 8}
-                            value={customerData.documentNumber}
-                            onChange={e => setCustomerData({
-                              ...customerData,
-                              documentNumber: customerData.documentType === ID_TYPES.CE
-                                ? e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-                                : e.target.value.replace(/\D/g, '')
-                            })}
-                            placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789' : customerData.documentType === ID_TYPES.CE ? 'CE123456789' : '12345678'}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleLookupDocument}
-                            disabled={isLookingUp || !customerData.documentNumber ||
-                              (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 :
-                               customerData.documentType === ID_TYPES.CE ? customerData.documentNumber.length < 9 :
-                               customerData.documentNumber.length !== 8)}
-                            className="flex-shrink-0"
-                          >
-                            {isLookingUp ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Search className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Segunda fila: Nombre / Razón Social */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
-                      </label>
-                      <input
-                        type="text"
-                        value={customerData.documentType === ID_TYPES.RUC ? customerData.businessName : customerData.name}
-                        onChange={e => setCustomerData({
-                          ...customerData,
-                          ...(customerData.documentType === ID_TYPES.RUC
-                            ? { businessName: e.target.value }
-                            : { name: e.target.value }
-                          )
-                        })}
-                        placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social (opcional)' : 'Nombre (opcional)'}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={customerData.email}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            email: e.target.value
-                          })}
-                          placeholder="email@ejemplo.com (opcional)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Teléfono
-                        </label>
-                        <input
-                          type="tel"
-                          value={customerData.phone}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            phone: e.target.value
-                          })}
-                          placeholder="987654321 (opcional)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Dirección
-                      </label>
-                      <input
-                        type="text"
-                        value={customerData.address}
-                        onChange={e => setCustomerData({
-                          ...customerData,
-                          address: e.target.value
-                        })}
-                        placeholder="Av. Principal 123 (opcional)"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Campos para FACTURA */}
-                {documentType === 'factura' && (
-                  <>
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          RUC <span className="text-red-500">*</span>
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            maxLength={11}
-                            value={customerData.documentNumber}
-                            onChange={e => setCustomerData({
-                              ...customerData,
-                              documentNumber: e.target.value.replace(/\D/g, '')
-                            })}
-                            placeholder="20123456789"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleLookupDocument}
-                            disabled={isLookingUp || !customerData.documentNumber || customerData.documentNumber.length !== 11}
-                            className="flex-shrink-0"
-                          >
-                            {isLookingUp ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Search className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Razón Social <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={customerData.businessName}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            businessName: e.target.value
-                          })}
-                          placeholder="MI EMPRESA SAC"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nombre Comercial
-                      </label>
-                      <input
-                        type="text"
-                        value={customerData.name}
-                        onChange={e => setCustomerData({
-                          ...customerData,
-                          name: e.target.value
-                        })}
-                        placeholder="Mi Empresa (opcional)"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Dirección
-                        </label>
-                        <input
-                          type="text"
-                          value={customerData.address}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            address: e.target.value
-                          })}
-                          placeholder="Av. Principal 123, Lima"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Teléfono
-                        </label>
-                        <input
-                          type="tel"
-                          value={customerData.phone}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            phone: e.target.value
-                          })}
-                          placeholder="01-1234567"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={customerData.email}
-                        onChange={e => setCustomerData({
-                          ...customerData,
-                          email: e.target.value
-                        })}
-                        placeholder="contacto@miempresa.com"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Campos para NOTA DE VENTA */}
-                {documentType === 'nota_venta' && (
-                  <>
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-blue-800">
-                        <strong>Nota de Venta:</strong> Documento interno para ventas menores. No requiere datos del cliente.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          DNI / RUC
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            maxLength={11}
-                            value={customerData.documentNumber}
-                            onChange={e => setCustomerData({
-                              ...customerData,
-                              documentNumber: e.target.value.replace(/\D/g, '')
-                            })}
-                            placeholder="12345678 (opcional)"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleLookupDocument}
-                            disabled={isLookingUp || !customerData.documentNumber || (customerData.documentNumber.length !== 8 && customerData.documentNumber.length !== 11)}
-                            className="flex-shrink-0"
-                          >
-                            {isLookingUp ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Search className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Nombre / Razón Social
-                        </label>
-                        <input
-                          type="text"
-                          value={customerData.name}
-                          onChange={e => setCustomerData({
-                            ...customerData,
-                            name: e.target.value
-                          })}
-                          placeholder="Cliente (opcional)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -2681,21 +2157,544 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         {/* Cart Panel */}
         <div className="lg:sticky lg:top-4 lg:self-start">
           <Card className="flex flex-col h-full">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center">
-                  <ShoppingCart className="w-5 h-5 mr-2" />
-                  Carrito
-                </CardTitle>
-                {cart.length > 0 && (
-                  <span className="bg-primary-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                    {cart.length}
-                  </span>
+            <CardContent className="p-4 space-y-3">
+              {/* Tipo de Comprobante */}
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Tipo de Comprobante
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={documentType}
+                    onChange={e => {
+                      setDocumentType(e.target.value)
+                      if (e.target.value !== 'nota_venta') {
+                        setEnablePartialPayment(false)
+                        setPartialPaymentAmount('')
+                      }
+                      // Reset forma de pago cuando no es factura
+                      if (e.target.value !== 'factura') {
+                        setPaymentType('contado')
+                        setPaymentDueDate('')
+                        setPaymentInstallments([])
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="boleta">Boleta de Venta</option>
+                    <option value="factura">Factura Electrónica</option>
+                    <option value="nota_venta">Nota de Venta</option>
+                  </select>
+                  {cart.length > 0 && (
+                    <span className="bg-primary-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      {cart.length}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Panel de Cliente - Siempre Visible */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+                  <User className="w-3.5 h-3.5" />
+                  Datos del Cliente
+                </label>
+                {/* Buscador de cliente registrado */}
+                {customers.length > 0 && (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={customerSearchTerm}
+                        onChange={e => {
+                          setCustomerSearchTerm(e.target.value)
+                          setShowCustomerDropdown(true)
+                        }}
+                        onFocus={() => setShowCustomerDropdown(true)}
+                        placeholder="Buscar cliente registrado..."
+                        className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      {(customerSearchTerm || selectedCustomer) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerSearchTerm('')
+                            setSelectedCustomer(null)
+                            setShowCustomerDropdown(false)
+                            setCustomerData({
+                              documentType: documentType === 'factura' ? ID_TYPES.RUC : ID_TYPES.DNI,
+                              documentNumber: '',
+                              name: '',
+                              businessName: '',
+                              address: '',
+                              email: '',
+                              phone: ''
+                            })
+                          }}
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {showCustomerDropdown && customerSearchTerm && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                        {filteredCustomers.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-gray-500 text-center">
+                            No encontrado
+                          </div>
+                        ) : (
+                          filteredCustomers.slice(0, 5).map(customer => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomer(customer)
+                                setCustomerSearchTerm('')
+                                setShowCustomerDropdown(false)
+                                setCustomerData({
+                                  documentType: customer.documentType || (customer.documentNumber?.length === 11 ? ID_TYPES.RUC : ID_TYPES.DNI),
+                                  documentNumber: customer.documentNumber || '',
+                                  name: customer.name || '',
+                                  businessName: customer.businessName || '',
+                                  address: customer.address || '',
+                                  email: customer.email || '',
+                                  phone: customer.phone || ''
+                                })
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                            >
+                              <p className="font-medium text-gray-900 truncate">{customer.name || customer.businessName}</p>
+                              <p className="text-xs text-gray-500">{customer.documentNumber}</p>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Campos de documento según tipo */}
+                {documentType === 'factura' ? (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={11}
+                        value={customerData.documentNumber}
+                        onChange={e => setCustomerData({
+                          ...customerData,
+                          documentNumber: e.target.value.replace(/\D/g, '')
+                        })}
+                        placeholder="RUC *"
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLookupDocument}
+                        disabled={isLookingUp || !customerData.documentNumber || customerData.documentNumber.length !== 11}
+                        className="px-2"
+                      >
+                        {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                    <input
+                      type="text"
+                      value={customerData.businessName}
+                      onChange={e => setCustomerData({ ...customerData, businessName: e.target.value })}
+                      placeholder="Razón Social *"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <input
+                      type="text"
+                      value={customerData.address}
+                      onChange={e => setCustomerData({ ...customerData, address: e.target.value })}
+                      placeholder="Dirección"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={customerData.email}
+                        onChange={e => setCustomerData({ ...customerData, email: e.target.value })}
+                        placeholder="Email"
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      <input
+                        type="tel"
+                        value={customerData.phone}
+                        onChange={e => setCustomerData({ ...customerData, phone: e.target.value })}
+                        placeholder="Teléfono"
+                        className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+
+                    {/* Forma de Pago - Solo Facturas */}
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
+                        <CreditCard className="w-3.5 h-3.5" />
+                        Forma de Pago
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentType('contado')
+                            setPaymentDueDate('')
+                            setPaymentInstallments([])
+                          }}
+                          className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
+                            paymentType === 'contado'
+                              ? 'bg-primary-50 border-primary-500 text-primary-700'
+                              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Contado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentType('credito')
+                            // Establecer fecha de vencimiento por defecto a 30 días
+                            const defaultDueDate = new Date()
+                            defaultDueDate.setDate(defaultDueDate.getDate() + 30)
+                            setPaymentDueDate(getLocalDateString(defaultDueDate))
+                          }}
+                          className={`flex-1 py-1.5 px-2 text-xs font-medium rounded-lg border transition-colors ${
+                            paymentType === 'credito'
+                              ? 'bg-primary-50 border-primary-500 text-primary-700'
+                              : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          Crédito
+                        </button>
+                      </div>
+
+                      {/* Campos adicionales para Crédito */}
+                      {paymentType === 'credito' && (
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <label className="text-xs text-gray-500 mb-0.5 block">Fecha de Vencimiento</label>
+                            <input
+                              type="date"
+                              value={paymentDueDate}
+                              onChange={e => setPaymentDueDate(e.target.value)}
+                              min={emissionDate}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                          </div>
+
+                          {/* Cuotas */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs text-gray-500">Cuotas (opcional)</label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newInstallment = {
+                                    number: paymentInstallments.length + 1,
+                                    amount: '',
+                                    dueDate: paymentDueDate || getLocalDateString(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+                                  }
+                                  setPaymentInstallments([...paymentInstallments, newInstallment])
+                                }}
+                                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                              >
+                                + Agregar cuota
+                              </button>
+                            </div>
+
+                            {paymentInstallments.length > 0 && (
+                              <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                {paymentInstallments.map((installment, index) => (
+                                  <div key={index} className="flex items-center gap-1.5 bg-gray-50 p-1.5 rounded">
+                                    <span className="text-xs text-gray-500 w-12">Cuota {installment.number}</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={installment.amount}
+                                      onChange={e => {
+                                        const updated = [...paymentInstallments]
+                                        updated[index].amount = e.target.value
+                                        setPaymentInstallments(updated)
+                                      }}
+                                      placeholder="Monto"
+                                      className="flex-1 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    />
+                                    <input
+                                      type="date"
+                                      value={installment.dueDate}
+                                      onChange={e => {
+                                        const updated = [...paymentInstallments]
+                                        updated[index].dueDate = e.target.value
+                                        setPaymentInstallments(updated)
+                                      }}
+                                      min={emissionDate}
+                                      className="w-28 px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = paymentInstallments.filter((_, i) => i !== index)
+                                          .map((inst, i) => ({ ...inst, number: i + 1 }))
+                                        setPaymentInstallments(updated)
+                                      }}
+                                      className="text-red-500 hover:text-red-700 p-0.5"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Campos opcionales de referencia */}
+                      <div className="mt-3 pt-2 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 mb-2">Referencias (opcional)</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-400 mb-0.5 block">N° Guía</label>
+                            <input
+                              type="text"
+                              value={guideNumber}
+                              onChange={e => setGuideNumber(e.target.value.toUpperCase())}
+                              placeholder="T001-0001"
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-400 mb-0.5 block">N° O/C</label>
+                            <input
+                              type="text"
+                              value={purchaseOrderNumber}
+                              onChange={e => setPurchaseOrderNumber(e.target.value.toUpperCase())}
+                              placeholder="OC-001"
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-400 mb-0.5 block">N° Pedido</label>
+                            <input
+                              type="text"
+                              value={orderNumber}
+                              onChange={e => setOrderNumber(e.target.value.toUpperCase())}
+                              placeholder="PED-001"
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : documentType === 'boleta' ? (
+                  <>
+                    <div className="flex gap-2">
+                      <select
+                        value={customerData.documentType}
+                        onChange={e => setCustomerData({
+                          ...customerData,
+                          documentType: e.target.value,
+                          documentNumber: '',
+                          name: '',
+                          businessName: ''
+                        })}
+                        className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      >
+                        <option value={ID_TYPES.DNI}>DNI</option>
+                        <option value={ID_TYPES.RUC}>RUC</option>
+                        <option value={ID_TYPES.CE}>CE</option>
+                      </select>
+                      <input
+                        type="text"
+                        maxLength={customerData.documentType === ID_TYPES.RUC ? 11 : customerData.documentType === ID_TYPES.CE ? 12 : 8}
+                        value={customerData.documentNumber}
+                        onChange={e => setCustomerData({
+                          ...customerData,
+                          documentNumber: customerData.documentType === ID_TYPES.CE
+                            ? e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+                            : e.target.value.replace(/\D/g, '')
+                        })}
+                        placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789' : '12345678'}
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLookupDocument}
+                        disabled={isLookingUp || !customerData.documentNumber ||
+                          (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 :
+                           customerData.documentType === ID_TYPES.CE ? customerData.documentNumber.length < 9 :
+                           customerData.documentNumber.length !== 8)}
+                        className="px-2"
+                      >
+                        {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                    <input
+                      type="text"
+                      value={customerData.documentType === ID_TYPES.RUC ? customerData.businessName : customerData.name}
+                      onChange={e => setCustomerData({
+                        ...customerData,
+                        ...(customerData.documentType === ID_TYPES.RUC
+                          ? { businessName: e.target.value }
+                          : { name: e.target.value }
+                        )
+                      })}
+                      placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <input
+                      type="text"
+                      value={customerData.address}
+                      onChange={e => setCustomerData({ ...customerData, address: e.target.value })}
+                      placeholder="Dirección"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={customerData.email}
+                        onChange={e => setCustomerData({ ...customerData, email: e.target.value })}
+                        placeholder="Email"
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      <input
+                        type="tel"
+                        value={customerData.phone}
+                        onChange={e => setCustomerData({ ...customerData, phone: e.target.value })}
+                        placeholder="Teléfono"
+                        className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  /* Nota de venta - campos mínimos */
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={11}
+                      value={customerData.documentNumber}
+                      onChange={e => setCustomerData({
+                        ...customerData,
+                        documentNumber: e.target.value.replace(/\D/g, '')
+                      })}
+                      placeholder="DNI/RUC (opcional)"
+                      className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <input
+                      type="text"
+                      value={customerData.name}
+                      onChange={e => setCustomerData({ ...customerData, name: e.target.value })}
+                      placeholder="Nombre"
+                      className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                  </div>
+                )}
+
+                {selectedCustomer && (
+                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded text-xs">
+                    <CheckCircle className="w-3 h-3 text-green-600" />
+                    <span className="text-green-800">Cliente: {selectedCustomer.name || selectedCustomer.businessName}</span>
+                  </div>
                 )}
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col p-4 sm:p-6">
+
+              {/* Opciones Avanzadas (Almacén, Fecha, Vendedor) */}
+              {(warehouses.length > 0 || businessSettings?.allowCustomEmissionDate || sellers.length > 0) && (
+                <details className="group">
+                  <summary className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700 list-none">
+                    <Settings2 className="w-3 h-3" />
+                    <span>Opciones avanzadas</span>
+                    <ChevronDown className="w-3 h-3 ml-auto group-open:rotate-180 transition-transform" />
+                  </summary>
+                  <div className="pt-2 space-y-2">
+                    {/* Almacén */}
+                    {warehouses.length > 0 && businessMode !== 'restaurant' && (
+                      <select
+                        value={selectedWarehouse?.id || ''}
+                        onChange={e => {
+                          const warehouse = warehouses.find(w => w.id === e.target.value)
+                          setSelectedWarehouse(warehouse)
+                        }}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      >
+                        {warehouses.filter(w => w.isActive).map(warehouse => (
+                          <option key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {/* Fecha de Emisión */}
+                    {businessSettings?.allowCustomEmissionDate && (
+                      <input
+                        type="date"
+                        value={emissionDate}
+                        max={getLocalDateString()}
+                        min={(() => {
+                          const today = new Date()
+                          const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
+                          const minDate = new Date(today)
+                          minDate.setDate(today.getDate() - maxDaysBack)
+                          return getLocalDateString(minDate)
+                        })()}
+                        onChange={e => setEmissionDate(e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
+                    {/* Vendedor */}
+                    {sellers.length > 0 && (
+                      <select
+                        value={selectedSeller?.id || ''}
+                        onChange={e => {
+                          const seller = sellers.find(s => s.id === e.target.value)
+                          setSelectedSeller(seller || null)
+                        }}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      >
+                        <option value="">Sin vendedor</option>
+                        {sellers.map(seller => (
+                          <option key={seller.id} value={seller.id}>
+                            {seller.code} - {seller.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </details>
+              )}
+
+              {/* Tipo de pedido para restaurante */}
+              {businessMode === 'restaurant' && (
+                <select
+                  value={orderType}
+                  onChange={e => setOrderType(e.target.value)}
+                  disabled={tableData?.fromTable}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  {Object.entries(ORDER_TYPES).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              )}
+            </CardContent>
+
+            <CardContent className="flex-1 flex flex-col p-4 pt-0 sm:p-6 sm:pt-0">
               {/* Cart Items */}
+              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2">
+                <ShoppingCart className="w-3.5 h-3.5" />
+                Carrito de Compras
+              </label>
               <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar mb-4 max-h-[300px] lg:max-h-[400px]">
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400 py-8">
@@ -3012,8 +3011,30 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {/* Payment Methods Section */}
               {cart.length > 0 && (
                 <div className="border-t pt-4 mt-4 space-y-3">
-                  {/* Si es venta al crédito (pago adelantado = 0), mostrar mensaje en lugar de métodos de pago */}
-                  {enablePartialPayment && amountToPay === 0 ? (
+                  {/* Si es factura al crédito, mostrar mensaje en lugar de métodos de pago */}
+                  {documentType === 'factura' && paymentType === 'credito' ? (
+                    <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <CreditCard className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-amber-900">
+                            Factura al Crédito
+                          </p>
+                          <p className="text-xs text-amber-700 mt-1">
+                            No requiere pago inmediato. El cliente pagará según las condiciones de crédito.
+                          </p>
+                          <p className="text-xs text-amber-700 mt-2">
+                            <strong>Monto pendiente:</strong> {formatCurrency(amounts.total)}
+                          </p>
+                          {paymentDueDate && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              <strong>Vencimiento:</strong> {new Date(paymentDueDate + 'T00:00:00').toLocaleDateString('es-PE')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (enablePartialPayment && amountToPay === 0) ? (
                     <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg">
                       <div className="flex items-start gap-3">
                         <CreditCard className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
