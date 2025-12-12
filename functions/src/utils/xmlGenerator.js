@@ -315,10 +315,52 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
   // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
-  // Según ejemplos de Greenter y especificación SUNAT
-  const paymentTerms = root.ele('cac:PaymentTerms')
-  paymentTerms.ele('cbc:ID').txt('FormaPago')
-  paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
+  // Según ejemplos de Greenter y especificación SUNAT (Resolución Nº 000193-2020/SUNAT)
+  // Vigente desde 01/04/2021
+
+  const paymentType = invoiceData.paymentType || 'contado' // 'contado' o 'credito'
+  console.log(`📋 Forma de pago en XML: paymentType=${paymentType}, invoiceData.paymentType=${invoiceData.paymentType}`)
+  const paymentDueDate = invoiceData.paymentDueDate || null
+  const paymentInstallments = invoiceData.paymentInstallments || []
+
+  // Monto total para PaymentTerms (usar el total de la factura directamente)
+  const paymentTotalAmount = parseFloat(invoiceData.total) || 0
+
+  if (paymentType === 'credito') {
+    // Pago al Crédito - Primer bloque indica el tipo y monto total pendiente
+    const paymentTermsCredito = root.ele('cac:PaymentTerms')
+    paymentTermsCredito.ele('cbc:ID').txt('FormaPago')
+    paymentTermsCredito.ele('cbc:PaymentMeansID').txt('Credito')
+    paymentTermsCredito.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(paymentTotalAmount.toFixed(2))
+
+    // Si hay cuotas definidas, agregar cada una
+    if (paymentInstallments.length > 0) {
+      paymentInstallments.forEach((cuota, index) => {
+        const cuotaTerms = root.ele('cac:PaymentTerms')
+        cuotaTerms.ele('cbc:ID').txt('FormaPago')
+        cuotaTerms.ele('cbc:PaymentMeansID').txt(`Cuota${String(index + 1).padStart(3, '0')}`)
+        cuotaTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+          .txt(parseFloat(cuota.amount || 0).toFixed(2))
+        if (cuota.dueDate) {
+          cuotaTerms.ele('cbc:PaymentDueDate').txt(cuota.dueDate)
+        }
+      })
+    } else if (paymentDueDate) {
+      // Si no hay cuotas pero sí fecha de vencimiento, crear una sola cuota con el total
+      const cuotaTerms = root.ele('cac:PaymentTerms')
+      cuotaTerms.ele('cbc:ID').txt('FormaPago')
+      cuotaTerms.ele('cbc:PaymentMeansID').txt('Cuota001')
+      cuotaTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+        .txt(paymentTotalAmount.toFixed(2))
+      cuotaTerms.ele('cbc:PaymentDueDate').txt(paymentDueDate)
+    }
+  } else {
+    // Pago al Contado (por defecto)
+    const paymentTerms = root.ele('cac:PaymentTerms')
+    paymentTerms.ele('cbc:ID').txt('FormaPago')
+    paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
+  }
 
   // === DESCUENTO ===
   // IMPORTANTE: El descuento viene CON IGV desde el POS
