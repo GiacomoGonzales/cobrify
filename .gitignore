@@ -59,3 +59,14 @@ android/app/*.keystore
 android/app/*.jks
 *.keystore
 *.jks
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Temporary files
+logs_temp.txt
+*_temp.txt
+
+# Postman collections
+*.postman_collection.json
+*.postman_collection*.zip
