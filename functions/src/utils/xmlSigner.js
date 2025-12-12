@@ -82,11 +82,13 @@ export async function signXML(xmlContent, certificateConfig) {
     console.log(`📄 Tipo de documento detectado: ${rootElement}`)
 
     // Crear firma XMLDSig usando xml-crypto
+    // IMPORTANTE: idAttribute debe ser 'Id' para que xml-crypto use ese atributo
     const sig = new SignedXml({
       privateKey: privateKeyPem,
       publicCert: certPem,
       signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
-      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315' // C14N básico (no exclusive)
+      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315', // C14N básico (no exclusive)
+      idAttribute: 'Id' // Atributo para identificar elementos
     })
 
     // Agregar referencia al documento completo con URI vacío (sin IDs)

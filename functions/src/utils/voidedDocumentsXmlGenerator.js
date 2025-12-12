@@ -32,64 +32,63 @@ export function generateVoidedDocumentsXML(data) {
     throw new Error('Faltan datos requeridos para generar XML de baja')
   }
 
-  // Generar líneas de documentos a dar de baja
-  const documentLines = documents.map(doc => `
-  <sac:VoidedDocumentsLine>
-    <cbc:LineID>${doc.lineId}</cbc:LineID>
-    <cbc:DocumentTypeCode>${doc.documentType}</cbc:DocumentTypeCode>
-    <sac:DocumentSerialID>${doc.series}</sac:DocumentSerialID>
-    <sac:DocumentNumberID>${doc.number}</sac:DocumentNumberID>
-    <sac:VoidReasonDescription><![CDATA[${doc.reason || 'ANULACION DE OPERACION'}]]></sac:VoidReasonDescription>
-  </sac:VoidedDocumentsLine>`).join('')
+  // Generar líneas de documentos a dar de baja (sin espacios adicionales)
+  const documentLines = documents.map(doc =>
+    `<sac:VoidedDocumentsLine>` +
+    `<cbc:LineID>${doc.lineId}</cbc:LineID>` +
+    `<cbc:DocumentTypeCode>${doc.documentType}</cbc:DocumentTypeCode>` +
+    `<sac:DocumentSerialID>${doc.series}</sac:DocumentSerialID>` +
+    `<sac:DocumentNumberID>${doc.number}</sac:DocumentNumberID>` +
+    `<sac:VoidReasonDescription><![CDATA[${doc.reason || 'ANULACION DE OPERACION'}]]></sac:VoidReasonDescription>` +
+    `</sac:VoidedDocumentsLine>`
+  ).join('')
 
-  const xml = `<?xml version="1.0" encoding="utf-8"?>
-<VoidedDocuments xmlns="urn:sunat:names:specification:ubl:peru:schema:xsd:VoidedDocuments-1"
-  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
-  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
-  xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
-  xmlns:sac="urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1"
-  xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
-
-  <ext:UBLExtensions>
-    <ext:UBLExtension>
-      <ext:ExtensionContent/>
-    </ext:UBLExtension>
-  </ext:UBLExtensions>
-
-  <cbc:UBLVersionID>2.0</cbc:UBLVersionID>
-  <cbc:CustomizationID>1.0</cbc:CustomizationID>
-  <cbc:ID>${id}</cbc:ID>
-  <cbc:ReferenceDate>${referenceDate}</cbc:ReferenceDate>
-  <cbc:IssueDate>${issueDate}</cbc:IssueDate>
-
-  <cac:Signature>
-    <cbc:ID>${supplier.ruc}</cbc:ID>
-    <cac:SignatoryParty>
-      <cac:PartyIdentification>
-        <cbc:ID>${supplier.ruc}</cbc:ID>
-      </cac:PartyIdentification>
-      <cac:PartyName>
-        <cbc:Name><![CDATA[${supplier.name}]]></cbc:Name>
-      </cac:PartyName>
-    </cac:SignatoryParty>
-    <cac:DigitalSignatureAttachment>
-      <cac:ExternalReference>
-        <cbc:URI>#EMPRESA-SIGN</cbc:URI>
-      </cac:ExternalReference>
-    </cac:DigitalSignatureAttachment>
-  </cac:Signature>
-
-  <cac:AccountingSupplierParty>
-    <cbc:CustomerAssignedAccountID>${supplier.ruc}</cbc:CustomerAssignedAccountID>
-    <cbc:AdditionalAccountID>6</cbc:AdditionalAccountID>
-    <cac:Party>
-      <cac:PartyLegalEntity>
-        <cbc:RegistrationName><![CDATA[${supplier.name}]]></cbc:RegistrationName>
-      </cac:PartyLegalEntity>
-    </cac:Party>
-  </cac:AccountingSupplierParty>
-${documentLines}
-</VoidedDocuments>`
+  // Generar XML sin espacios innecesarios (como lo hace Greenter con spaceless)
+  // El ID de la firma debe ser SIGN + RUC según el template de Greenter
+  const xml = `<?xml version="1.0" encoding="utf-8"?>` +
+    `<VoidedDocuments xmlns="urn:sunat:names:specification:ubl:peru:schema:xsd:VoidedDocuments-1" ` +
+    `xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" ` +
+    `xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" ` +
+    `xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" ` +
+    `xmlns:sac="urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1" ` +
+    `xmlns:ds="http://www.w3.org/2000/09/xmldsig#">` +
+    `<ext:UBLExtensions>` +
+    `<ext:UBLExtension>` +
+    `<ext:ExtensionContent/>` +
+    `</ext:UBLExtension>` +
+    `</ext:UBLExtensions>` +
+    `<cbc:UBLVersionID>2.0</cbc:UBLVersionID>` +
+    `<cbc:CustomizationID>1.0</cbc:CustomizationID>` +
+    `<cbc:ID>${id}</cbc:ID>` +
+    `<cbc:ReferenceDate>${referenceDate}</cbc:ReferenceDate>` +
+    `<cbc:IssueDate>${issueDate}</cbc:IssueDate>` +
+    `<cac:Signature>` +
+    `<cbc:ID>SIGN${supplier.ruc}</cbc:ID>` +
+    `<cac:SignatoryParty>` +
+    `<cac:PartyIdentification>` +
+    `<cbc:ID>${supplier.ruc}</cbc:ID>` +
+    `</cac:PartyIdentification>` +
+    `<cac:PartyName>` +
+    `<cbc:Name><![CDATA[${supplier.name}]]></cbc:Name>` +
+    `</cac:PartyName>` +
+    `</cac:SignatoryParty>` +
+    `<cac:DigitalSignatureAttachment>` +
+    `<cac:ExternalReference>` +
+    `<cbc:URI>#FACTUYA-SIGN</cbc:URI>` +
+    `</cac:ExternalReference>` +
+    `</cac:DigitalSignatureAttachment>` +
+    `</cac:Signature>` +
+    `<cac:AccountingSupplierParty>` +
+    `<cbc:CustomerAssignedAccountID>${supplier.ruc}</cbc:CustomerAssignedAccountID>` +
+    `<cbc:AdditionalAccountID>6</cbc:AdditionalAccountID>` +
+    `<cac:Party>` +
+    `<cac:PartyLegalEntity>` +
+    `<cbc:RegistrationName><![CDATA[${supplier.name}]]></cbc:RegistrationName>` +
+    `</cac:PartyLegalEntity>` +
+    `</cac:Party>` +
+    `</cac:AccountingSupplierParty>` +
+    documentLines +
+    `</VoidedDocuments>`
 
   return xml
 }

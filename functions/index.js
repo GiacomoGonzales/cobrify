@@ -2082,7 +2082,13 @@ export const voidInvoice = onRequest(
       }
 
       // 4. Generar correlativo para la comunicación de baja
-      const today = new Date()
+      // IMPORTANTE: Usar zona horaria de Perú (UTC-5) para evitar errores de SUNAT
+      // "La fecha del IssueDate no debe ser mayor a la fecha de recepción"
+      const nowUTC = new Date()
+      const peruOffset = -5 * 60 // UTC-5 en minutos
+      const today = new Date(nowUTC.getTime() + (peruOffset - nowUTC.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha actual en Perú:', today.toISOString())
+
       const voidedDocsRef = db.collection('businesses').doc(userId).collection('voidedDocuments')
 
       // Buscar el último correlativo del día usando transaction para evitar race conditions
@@ -2109,9 +2115,41 @@ export const voidInvoice = onRequest(
       console.log(`📄 Generando comunicación de baja: ${voidedDocId}`)
 
       // 5. Generar XML de baja
-      const issueDate = invoiceData.issueDate?.toDate ? invoiceData.issueDate.toDate() : new Date(invoiceData.issueDate)
+      // Manejar diferentes formatos de fecha de la factura
+      let issueDate
+      console.log('📅 invoiceData.issueDate:', invoiceData.issueDate, 'tipo:', typeof invoiceData.issueDate)
+
+      if (invoiceData.issueDate?.toDate) {
+        // Firestore Timestamp
+        issueDate = invoiceData.issueDate.toDate()
+      } else if (invoiceData.issueDate?._seconds) {
+        // Firestore Timestamp serializado
+        issueDate = new Date(invoiceData.issueDate._seconds * 1000)
+      } else if (typeof invoiceData.issueDate === 'string') {
+        // String de fecha
+        issueDate = new Date(invoiceData.issueDate)
+      } else if (invoiceData.issueDate instanceof Date) {
+        issueDate = invoiceData.issueDate
+      } else if (invoiceData.createdAt?.toDate) {
+        // Fallback a createdAt si issueDate no está disponible
+        console.log('⚠️ Usando createdAt como fecha de emisión')
+        issueDate = invoiceData.createdAt.toDate()
+      } else {
+        // Último fallback: usar la fecha actual (no debería llegar aquí)
+        console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
+        issueDate = new Date()
+      }
+
+      // Validar que la fecha sea válida
+      if (isNaN(issueDate.getTime())) {
+        console.error('❌ Fecha inválida:', invoiceData.issueDate)
+        res.status(400).json({ error: 'Fecha de emisión de la factura inválida' })
+        return
+      }
+
       const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
 
       const voidedXmlData = {
         id: voidedDocId,
@@ -2209,25 +2247,51 @@ export const voidInvoice = onRequest(
         updatedAt: FieldValue.serverTimestamp()
       })
 
-      // 10. Consultar estado del ticket (puede tomar unos segundos)
-      // Esperamos un poco y consultamos
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // 10. Consultar estado del ticket con reintentos automáticos
+      // SUNAT procesa las comunicaciones de baja de forma asíncrona
+      // Reintentamos cada 10 segundos hasta obtener respuesta final o timeout
+      const MAX_RETRIES = 6 // Máximo 6 intentos (60 segundos total)
+      const RETRY_INTERVAL = 10000 // 10 segundos entre intentos
+      let statusResult = null
+      let retryCount = 0
 
-      const statusResult = await getStatus(sendResult.ticket, {
-        ruc: businessData.ruc,
-        solUser: businessData.sunatCredentials.solUser,
-        solPassword: businessData.sunatCredentials.solPassword,
-        environment
-      })
+      console.log('⏳ Consultando estado del ticket con reintentos automáticos...')
 
+      while (retryCount < MAX_RETRIES) {
+        // Esperar antes de consultar (primera vez 5s, luego 10s)
+        const waitTime = retryCount === 0 ? 5000 : RETRY_INTERVAL
+        console.log(`⏳ Esperando ${waitTime / 1000}s antes de consultar (intento ${retryCount + 1}/${MAX_RETRIES})...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+
+        statusResult = await getStatus(sendResult.ticket, {
+          ruc: businessData.ruc,
+          solUser: businessData.sunatCredentials.solUser,
+          solPassword: businessData.sunatCredentials.solPassword,
+          environment
+        })
+
+        console.log(`📋 Resultado intento ${retryCount + 1}:`, JSON.stringify(statusResult))
+
+        // Si ya no está pendiente (sea aceptado o rechazado), salimos del loop
+        if (!statusResult.pending) {
+          console.log('✅ SUNAT respondió con resultado final')
+          break
+        }
+
+        retryCount++
+        console.log(`⏳ Aún en proceso (código 98), reintentando...`)
+      }
+
+      // Si después de todos los reintentos sigue pendiente
       if (statusResult.pending) {
+        console.log('⚠️ Timeout: SUNAT no respondió después de 60 segundos')
         // Aún en proceso, el usuario deberá consultar después
         res.status(202).json({
           success: true,
           status: 'pending',
           ticket: sendResult.ticket,
           voidedDocumentId: voidedDocRef.id,
-          message: 'La comunicación de baja está siendo procesada por SUNAT. Consulte el estado en unos minutos.'
+          message: 'La comunicación de baja está siendo procesada por SUNAT. El proceso puede tomar unos minutos. Consulte el estado más tarde.'
         })
         return
       }

@@ -551,6 +551,34 @@ function findTicketInObject(obj) {
 }
 
 /**
+ * Busca recursivamente un valor por nombre de campo en un objeto
+ * Útil para encontrar ResponseCode, Description, etc. en estructuras XML anidadas
+ */
+function findValueInObject(obj, fieldName) {
+  if (!obj || typeof obj !== 'object') return null
+
+  // Buscar directamente
+  if (obj[fieldName] !== undefined) return obj[fieldName]
+
+  // Buscar en claves que contengan el nombre del campo
+  for (const key of Object.keys(obj)) {
+    if (key.toLowerCase().includes(fieldName.toLowerCase())) {
+      return obj[key]
+    }
+  }
+
+  // Buscar recursivamente
+  for (const key of Object.keys(obj)) {
+    if (typeof obj[key] === 'object') {
+      const found = findValueInObject(obj[key], fieldName)
+      if (found !== null && found !== undefined) return found
+    }
+  }
+
+  return null
+}
+
+/**
  * Consulta el estado de un ticket en SUNAT
  * Se usa para obtener el CDR de comunicaciones de baja y resúmenes
  *
@@ -710,25 +738,83 @@ async function parseGetStatusResponse(soapResponse) {
       const zip = new JSZip()
       const cdrZip = await zip.loadAsync(cdrZipBuffer)
 
-      // Buscar XML del CDR
-      const cdrFileName = Object.keys(cdrZip.files).find(name => name.startsWith('R-') && name.endsWith('.xml'))
+      // Buscar XML del CDR - puede empezar con R- (respuesta normal)
+      const cdrFileName = Object.keys(cdrZip.files).find(name => name.endsWith('.xml'))
+      console.log('📋 Archivos en ZIP del CDR:', Object.keys(cdrZip.files))
+      console.log('📋 Archivo CDR encontrado:', cdrFileName)
 
       if (cdrFileName) {
         const cdrXML = await cdrZip.files[cdrFileName].async('text')
-        const cdr = parser.parse(cdrXML)
+        console.log('📋 CDR XML (primeros 500 chars):', cdrXML.substring(0, 500))
 
-        const responseCode = cdr.ApplicationResponse?.['cbc:ResponseCode'] || '0'
-        const description = cdr.ApplicationResponse?.['cbc:Note'] || 'Procesado por SUNAT'
+        // Parsear CDR con removeNSPrefix para simplificar
+        const cdrParser = new XMLParser({
+          ignoreAttributes: false,
+          attributeNamePrefix: '@_',
+          removeNSPrefix: true
+        })
+        const cdr = cdrParser.parse(cdrXML)
 
-        const accepted = responseCode === '0' || responseCode === 0
+        console.log('📋 CDR parsed structure:', JSON.stringify(cdr, null, 2).substring(0, 1500))
 
-        console.log(`📋 CDR de baja: code=${responseCode}, accepted=${accepted}`)
+        // Buscar ResponseCode en diferentes ubicaciones posibles
+        let responseCode = null
+        let description = null
+
+        // Intentar diferentes rutas según la estructura del CDR
+        if (cdr.ApplicationResponse) {
+          // Ruta 1: DocumentResponse/Response (común en facturas)
+          const docResponse = cdr.ApplicationResponse.DocumentResponse
+          if (docResponse?.Response) {
+            responseCode = docResponse.Response.ResponseCode
+            description = docResponse.Response.Description
+          }
+
+          // Ruta 2: Directamente en ApplicationResponse
+          if (responseCode === null || responseCode === undefined) {
+            responseCode = cdr.ApplicationResponse.ResponseCode
+            description = cdr.ApplicationResponse.Note
+          }
+
+          // Ruta 3: En cac:DocumentResponse/cac:Response (para comunicaciones de baja)
+          if (responseCode === null || responseCode === undefined) {
+            // Buscar recursivamente
+            responseCode = findValueInObject(cdr, 'ResponseCode')
+            description = findValueInObject(cdr, 'Description') || findValueInObject(cdr, 'Note')
+          }
+        }
+
+        // Si el responseCode es un objeto con #text (viene de XML con atributos)
+        if (responseCode && typeof responseCode === 'object') {
+          responseCode = responseCode['#text'] || responseCode['_'] || Object.values(responseCode)[0]
+        }
+
+        // Si no encontramos código, asumir 0 si hay CDR (SUNAT envió respuesta)
+        if (responseCode === null || responseCode === undefined) {
+          // Si hay CDR y no hay statusCode de error, asumir aceptado
+          responseCode = statusCode || '0'
+        }
+
+        console.log(`📋 CDR de baja: statusCode=${statusCode}, responseCode=${responseCode}, description=${description}`)
+
+        // statusCode 99 = proceso con errores, aunque el CDR diga otra cosa
+        if (statusCode === '99' || statusCode === 99) {
+          return {
+            success: false,
+            accepted: false,
+            code: String(responseCode || '99'),
+            error: description || 'SUNAT rechazó la comunicación de baja',
+            cdrData: cdrXML
+          }
+        }
+
+        const accepted = (responseCode === '0' || responseCode === 0) && (statusCode === '0' || statusCode === 0 || !statusCode)
 
         return {
           success: true,
           accepted,
           code: String(responseCode),
-          description,
+          description: description || 'Procesado por SUNAT',
           cdrData: cdrXML
         }
       }
@@ -738,7 +824,7 @@ async function parseGetStatusResponse(soapResponse) {
     if (statusCode === '99' || statusCode === 99) {
       return {
         success: false,
-        error: 'SUNAT rechazó la comunicación de baja'
+        error: 'SUNAT rechazó la comunicación de baja (sin CDR)'
       }
     }
 
