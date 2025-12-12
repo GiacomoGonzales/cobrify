@@ -359,25 +359,36 @@ export function generateInvoiceXML(invoiceData, businessData) {
     const taxAffectation = item.taxAffectation || (igvExempt ? '20' : '10')
     const isGravado = taxAffectation === '10'
     const originalPriceWithIGV = item.unitPrice
-    const originalPriceWithoutIGV = isGravado ? originalPriceWithIGV / (1 + igvMultiplier) : originalPriceWithIGV
 
-    // Aplicar descuento proporcional al precio unitario
-    // Esto asegura que: LineExtensionAmount = cantidad × precio sin IGV (ajustado)
-    const adjustedPriceWithoutIGV = originalPriceWithoutIGV * (1 - discountFactor)
+    // Para calcular correctamente, trabajamos desde el total con IGV
+    // y calculamos el subtotal de forma que subtotal + IGV = total exacto
+    const lineTotalWithIGV = item.quantity * originalPriceWithIGV
+
+    // Si hay descuento, aplicarlo al total con IGV
+    const adjustedLineTotalWithIGV = lineTotalWithIGV * (1 - discountFactor)
+
+    // Calcular subtotal sin IGV (base imponible) con 10 decimales de precisión
+    // y luego redondear a 2 decimales
+    const lineTotal = isGravado
+      ? Math.round((adjustedLineTotalWithIGV / (1 + igvMultiplier)) * 100) / 100
+      : Math.round(adjustedLineTotalWithIGV * 100) / 100
+
+    // IGV = Total con IGV - Subtotal sin IGV (esto garantiza que cuadre)
+    const lineIGV = isGravado
+      ? Math.round((adjustedLineTotalWithIGV - lineTotal) * 100) / 100
+      : 0
+
+    // Precio unitario ajustado (para el XML)
+    const adjustedPriceWithoutIGV = lineTotal / item.quantity
     const adjustedPriceWithIGV = isGravado
-      ? adjustedPriceWithoutIGV * (1 + igvMultiplier)
+      ? (lineTotal + lineIGV) / item.quantity
       : adjustedPriceWithoutIGV
 
-    // Calcular LineExtensionAmount usando el precio ajustado
-    const lineTotal = Math.round(item.quantity * adjustedPriceWithoutIGV * 100) / 100
-
     lineExtensions.push(lineTotal)
-    linePricesWithIGV.push(Math.round(adjustedPriceWithIGV * 100) / 100)
-    linePricesWithoutIGV.push(Math.round(adjustedPriceWithoutIGV * 100) / 100)
+    linePricesWithIGV.push(Math.round(adjustedPriceWithIGV * 1000000) / 1000000) // 6 decimales para precio
+    linePricesWithoutIGV.push(Math.round(adjustedPriceWithoutIGV * 1000000) / 1000000) // 6 decimales para precio
     sumLineExtension += lineTotal
 
-    // IGV de la línea (calculado sobre el valor YA descontado)
-    const lineIGV = isGravado ? Math.round(lineTotal * igvMultiplier * 100) / 100 : 0
     lineIGVs.push(lineIGV)
     sumLineIGV += lineIGV
   })
