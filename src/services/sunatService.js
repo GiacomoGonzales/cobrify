@@ -565,6 +565,54 @@ export const canVoidBoleta = (boleta) => {
 }
 
 /**
+ * Anula una factura en SUNAT usando QPSe como proveedor de firma
+ *
+ * @param {string} userId - ID del usuario/negocio
+ * @param {string} invoiceId - ID de la factura
+ * @param {string} reason - Motivo de la anulación
+ * @param {string} idToken - Token de autenticación
+ * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
+ */
+export const voidInvoiceQPse = async (userId, invoiceId, reason, idToken) => {
+  try {
+    // URL de Cloud Functions para QPSe
+    const voidInvoiceQPseUrl = import.meta.env.VITE_VOID_INVOICE_QPSE_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/voidInvoiceQPse'
+
+    const response = await axios.post(
+      voidInvoiceQPseUrl,
+      {
+        userId,
+        invoiceId,
+        reason: reason || 'ANULACION DE OPERACION'
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        timeout: 120000 // 2 minutos
+      }
+    )
+
+    return response.data
+  } catch (error) {
+    console.error('Error al anular factura vía QPse:', error)
+
+    if (error.response?.data) {
+      return {
+        success: false,
+        error: error.response.data.error || 'Error al anular la factura vía QPse'
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message || 'Error de conexión'
+    }
+  }
+}
+
+/**
  * Anula una boleta en SUNAT usando QPSe como proveedor de firma
  *
  * @param {string} userId - ID del usuario/negocio
@@ -635,8 +683,11 @@ export const voidDocument = async (invoice, userId, reason, idToken, emissionMet
     return await voidBoleta(userId, invoice.id, reason, idToken)
   }
 
-  // Si es factura, usar voidInvoice (solo SUNAT directo soportado por ahora)
-  // Nota: QPSe no tiene endpoint para Comunicación de Baja de facturas
+  // Si es factura (serie empieza con F)
+  if (emissionMethod === 'qpse') {
+    return await voidInvoiceQPse(userId, invoice.id, reason, idToken)
+  }
+  // Default: usar SUNAT directo
   return await voidInvoice(userId, invoice.id, reason, idToken)
 }
 
@@ -667,6 +718,7 @@ export default {
   getInvoiceStatus,
   getSunatErrorMessage,
   voidInvoice,
+  voidInvoiceQPse,
   voidBoleta,
   voidBoletaQPse,
   voidDocument,

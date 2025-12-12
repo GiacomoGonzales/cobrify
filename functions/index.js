@@ -8,7 +8,7 @@ import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCo
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus } from './src/utils/sunatClient.js'
-import { voidBoletaViaQPse } from './src/services/qpseService.js'
+import { voidBoletaViaQPse, voidInvoiceViaQPse } from './src/services/qpseService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -3412,6 +3412,389 @@ export const voidBoletaQPse = onRequest(
 
     } catch (error) {
       console.error('❌ [QPse] Error al anular boleta:', error)
+      res.status(500).json({ error: error.message || 'Error interno del servidor' })
+    }
+  }
+)
+
+// ========================================
+// VOID INVOICE VIA QPSE (Comunicación de Baja)
+// ========================================
+
+/**
+ * Anula una factura en SUNAT usando QPse como proveedor de firma
+ *
+ * Las facturas deben anularse mediante Comunicación de Baja (VoidedDocuments).
+ * QPse se encarga de firmar y enviar el documento a SUNAT.
+ *
+ * Requisitos:
+ * - La factura debe estar aceptada por SUNAT
+ * - No debe haber sido entregada al cliente
+ * - Debe estar dentro del plazo de 7 días
+ * - El negocio debe tener QPse configurado
+ */
+export const voidInvoiceQPse = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      // Obtener datos del body
+      const { userId, invoiceId, reason } = req.body
+
+      if (!userId || !invoiceId) {
+        res.status(400).json({ error: 'userId e invoiceId son requeridos' })
+        return
+      }
+
+      // Verificar autorización
+      if (authenticatedUserId !== userId) {
+        const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+        if (!userDoc.exists || userDoc.data().ownerId !== userId) {
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`🗑️ [QPse] Iniciando anulación de factura - Usuario: ${userId}, Factura: ${invoiceId}`)
+
+      // 1. Obtener datos de la factura
+      const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId)
+      const invoiceDoc = await invoiceRef.get()
+
+      if (!invoiceDoc.exists) {
+        res.status(404).json({ error: 'Factura no encontrada' })
+        return
+      }
+
+      const invoiceData = invoiceDoc.data()
+
+      // 2. Validar que sea una factura (serie empieza con F)
+      const series = invoiceData.series || invoiceData.number?.split('-')[0] || ''
+      if (!series.toUpperCase().startsWith('F')) {
+        res.status(400).json({
+          error: 'Este documento no es una factura. Use voidBoletaQPse para boletas.',
+          documentType: invoiceData.documentType,
+          series: series
+        })
+        return
+      }
+
+      // 3. Validar que se puede anular
+      const validationResult = canVoidDocument({
+        sunatStatus: invoiceData.sunatStatus,
+        delivered: invoiceData.delivered || false,
+        issueDate: invoiceData.issueDate,
+        documentType: invoiceData.documentType || 'factura'
+      })
+
+      if (!validationResult.canVoid) {
+        res.status(400).json({
+          error: validationResult.reason,
+          canVoid: false
+        })
+        return
+      }
+
+      // 4. Obtener datos del negocio
+      const businessDoc = await db.collection('businesses').doc(userId).get()
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      // Obtener configuración de QPse
+      const emissionConfig = businessData.emissionConfig || {}
+      let qpseConfig = null
+
+      if (emissionConfig.method === 'qpse' && emissionConfig.qpse) {
+        qpseConfig = {
+          usuario: emissionConfig.qpse.usuario,
+          password: emissionConfig.qpse.password,
+          environment: emissionConfig.qpse.environment || 'demo'
+        }
+      } else if (businessData.qpse?.enabled) {
+        qpseConfig = {
+          usuario: businessData.qpse.usuario,
+          password: businessData.qpse.password,
+          environment: businessData.qpse.environment || 'demo'
+        }
+      }
+
+      if (!qpseConfig || !qpseConfig.usuario || !qpseConfig.password) {
+        res.status(400).json({ error: 'QPse no está configurado para este negocio' })
+        return
+      }
+
+      console.log(`✅ [QPse] Configuración encontrada - Usuario: ${qpseConfig.usuario}, Ambiente: ${qpseConfig.environment}`)
+
+      // 5. Generar correlativo para la comunicación de baja
+      // Usar zona horaria de Perú (UTC-5)
+      const nowUTC = new Date()
+      const peruOffset = -5 * 60
+      const today = new Date(nowUTC.getTime() + (peruOffset - nowUTC.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha actual en Perú:', today.toISOString())
+
+      const voidedDocsRef = db.collection('businesses').doc(userId).collection('voidedDocuments')
+
+      const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
+
+      // Usar documento contador para el día
+      const counterDocRef = voidedDocsRef.doc(`counter_${todayStr}`)
+
+      let correlativo = 1
+      const counterDoc = await counterDocRef.get()
+      if (counterDoc.exists) {
+        correlativo = (counterDoc.data().lastCorrelativo || 0) + 1
+      }
+
+      // Actualizar contador
+      await counterDocRef.set({
+        dateStr: todayStr,
+        lastCorrelativo: correlativo,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      const voidedDocId = generateVoidedDocumentId(today, correlativo)
+
+      console.log(`📄 [QPse] Generando comunicación de baja: ${voidedDocId}`)
+
+      // 6. Preparar fecha de referencia (fecha de emisión de la factura)
+      let issueDate
+      console.log('📅 invoiceData.issueDate:', invoiceData.issueDate, 'tipo:', typeof invoiceData.issueDate)
+
+      if (invoiceData.issueDate?.toDate) {
+        issueDate = invoiceData.issueDate.toDate()
+      } else if (invoiceData.issueDate?._seconds) {
+        issueDate = new Date(invoiceData.issueDate._seconds * 1000)
+      } else if (typeof invoiceData.issueDate === 'string') {
+        issueDate = new Date(invoiceData.issueDate)
+      } else if (invoiceData.issueDate instanceof Date) {
+        issueDate = invoiceData.issueDate
+      } else if (invoiceData.createdAt?.toDate) {
+        console.log('⚠️ Usando createdAt como fecha de emisión')
+        issueDate = invoiceData.createdAt.toDate()
+      } else {
+        console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
+        issueDate = new Date()
+      }
+
+      if (isNaN(issueDate.getTime())) {
+        console.error('❌ Fecha inválida:', invoiceData.issueDate)
+        res.status(400).json({ error: 'Fecha de emisión de la factura inválida' })
+        return
+      }
+
+      const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
+      const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+
+      // 7. Generar XML de Comunicación de Baja
+      const voidedXmlData = {
+        id: voidedDocId,
+        referenceDate: referenceDateStr,
+        issueDate: issueDateStr,
+        supplier: {
+          ruc: businessData.ruc,
+          name: businessData.businessName || businessData.name
+        },
+        documents: [{
+          lineId: 1,
+          documentType: getVoidDocTypeCode(invoiceData.documentType || 'factura'),
+          series: invoiceData.series,
+          number: invoiceData.correlativeNumber,
+          reason: reason || 'ANULACION DE OPERACION'
+        }]
+      }
+
+      const voidedXml = generateVoidedDocumentsXML(voidedXmlData)
+
+      console.log('✅ [QPse] XML de comunicación de baja generado')
+      console.log('📄 XML preview:', voidedXml.substring(0, 500))
+
+      // 8. Marcar factura como "anulando" antes de enviar
+      await invoiceRef.update({
+        sunatStatus: 'voiding',
+        voidMethod: 'qpse',
+        voidReason: reason || 'ANULACION DE OPERACION',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      // 9. Enviar a QPse para firma y envío a SUNAT
+      console.log('📤 [QPse] Enviando a QPse para firma y envío a SUNAT...')
+
+      const qpseResult = await voidInvoiceViaQPse(
+        voidedXml,
+        businessData.ruc,
+        voidedDocId,
+        qpseConfig
+      )
+
+      console.log('📋 [QPse] Resultado:', JSON.stringify(qpseResult, null, 2))
+
+      // 10. Guardar documento de comunicación de baja
+      const voidedDocRef = await voidedDocsRef.add({
+        voidedDocId,
+        dateStr: todayStr,
+        correlativo,
+        invoiceId,
+        invoiceSeries: invoiceData.series,
+        invoiceNumber: invoiceData.correlativeNumber,
+        documentType: 'factura',
+        action: 'void',
+        method: 'qpse',
+        reason: reason || 'ANULACION DE OPERACION',
+        status: qpseResult.accepted ? 'accepted' : (qpseResult.responseCode === '98' ? 'pending' : 'failed'),
+        ticket: qpseResult.ticket || null,
+        responseCode: qpseResult.responseCode || null,
+        responseDescription: qpseResult.description || null,
+        notes: qpseResult.notes || null,
+        cdrUrl: qpseResult.cdrUrl || null,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      // 11. Actualizar factura según resultado
+      if (qpseResult.accepted) {
+        // Anulación aceptada
+        await invoiceRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          voidedDocumentId: voidedDocRef.id
+        })
+
+        // Devolver stock de los productos
+        if (invoiceData.items && invoiceData.items.length > 0) {
+          console.log('📦 Devolviendo stock de productos...')
+          for (const item of invoiceData.items) {
+            if (item.productId && !item.productId.startsWith('custom-')) {
+              try {
+                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                const productDoc = await productRef.get()
+                if (productDoc.exists) {
+                  const currentStock = productDoc.data().stock || 0
+                  await productRef.update({
+                    stock: currentStock + (item.quantity || 0),
+                    updatedAt: FieldValue.serverTimestamp()
+                  })
+                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+                }
+              } catch (stockError) {
+                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+              }
+            }
+          }
+        }
+
+        // Actualizar estadísticas del cliente
+        if (invoiceData.customer?.documentNumber) {
+          try {
+            const customersRef = db.collection('businesses').doc(userId).collection('customers')
+            const customerQuery = await customersRef
+              .where('documentNumber', '==', invoiceData.customer.documentNumber)
+              .limit(1)
+              .get()
+
+            if (!customerQuery.empty) {
+              const customerDoc = customerQuery.docs[0]
+              const customerData = customerDoc.data()
+              const newOrdersCount = Math.max(0, (customerData.ordersCount || 1) - 1)
+              const newTotalSpent = Math.max(0, (customerData.totalSpent || invoiceData.total) - (invoiceData.total || 0))
+
+              await customerDoc.ref.update({
+                ordersCount: newOrdersCount,
+                totalSpent: newTotalSpent,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+              console.log(`👤 Estadísticas de cliente actualizadas: ${invoiceData.customer.documentNumber}`)
+            }
+          } catch (customerError) {
+            console.error('❌ Error actualizando estadísticas del cliente:', customerError.message)
+          }
+        }
+
+        console.log(`✅ [QPse] Factura ${invoiceData.series}-${invoiceData.correlativeNumber} anulada exitosamente`)
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'Factura anulada exitosamente en SUNAT vía QPse',
+          voidedDocumentId: voidedDocRef.id
+        })
+        return
+      }
+
+      // Si está pendiente (código 98)
+      if (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO') {
+        await invoiceRef.update({
+          sunatStatus: 'voiding',
+          voidingTicket: qpseResult.ticket || null,
+          voidedDocumentId: voidedDocRef.id,
+          updatedAt: FieldValue.serverTimestamp()
+        })
+
+        res.status(202).json({
+          success: true,
+          status: 'pending',
+          ticket: qpseResult.ticket,
+          voidedDocumentId: voidedDocRef.id,
+          message: 'La comunicación de baja está siendo procesada por SUNAT. Consulte el estado más tarde.'
+        })
+        return
+      }
+
+      // Error en la anulación
+      await invoiceRef.update({
+        sunatStatus: 'accepted', // Volver al estado anterior
+        voidError: qpseResult.description || qpseResult.notes || 'Error al anular',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      res.status(400).json({
+        success: false,
+        error: qpseResult.description || qpseResult.notes || 'Error al anular la factura',
+        responseCode: qpseResult.responseCode
+      })
+
+    } catch (error) {
+      console.error('❌ [QPse] Error al anular factura:', error)
       res.status(500).json({ error: error.message || 'Error interno del servidor' })
     }
   }
