@@ -40,7 +40,7 @@ import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
 import { generateInvoicePDF } from '@/utils/pdfGenerator'
-import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidInvoice as voidInvoiceSunat, canVoidInvoice, checkVoidStatus } from '@/services/sunatService'
+import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
@@ -362,7 +362,7 @@ ${companySettings?.website ? companySettings.website : ''}`
     }
   }
 
-  // Función para anular factura en SUNAT (Comunicación de Baja)
+  // Función para anular factura/boleta en SUNAT (Comunicación de Baja o Resumen Diario)
   const handleVoidSunatInvoice = async () => {
     if (!voidingSunatInvoice || !user?.uid) return
 
@@ -384,16 +384,21 @@ ${companySettings?.website ? companySettings.website : ''}`
         throw new Error('No se pudo obtener el token de autenticación')
       }
 
-      // Llamar al servicio de anulación
-      const result = await voidInvoiceSunat(
+      // Detectar tipo de documento para mensaje apropiado
+      const series = voidingSunatInvoice.series || voidingSunatInvoice.number?.split('-')[0] || ''
+      const isBoleta = series.toUpperCase().startsWith('B')
+      const docTypeName = isBoleta ? 'Boleta' : 'Factura'
+
+      // Llamar al servicio de anulación unificado (detecta automáticamente factura o boleta)
+      const result = await voidDocument(
+        voidingSunatInvoice,
         businessId,
-        voidingSunatInvoice.id,
         voidSunatReason || 'ANULACION DE OPERACION',
         idToken
       )
 
       if (result.success || result.status === 'voided') {
-        toast.success('Factura anulada exitosamente en SUNAT')
+        toast.success(`${docTypeName} anulada exitosamente en SUNAT`)
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
         loadInvoices()
@@ -403,11 +408,11 @@ ${companySettings?.website ? companySettings.website : ''}`
         setVoidSunatReason('')
         loadInvoices()
       } else {
-        throw new Error(result.error || 'Error al anular la factura')
+        throw new Error(result.error || `Error al anular la ${docTypeName.toLowerCase()}`)
       }
     } catch (error) {
-      console.error('Error al anular factura en SUNAT:', error)
-      toast.error(error.message || 'Error al anular la factura. Inténtalo nuevamente.')
+      console.error('Error al anular documento en SUNAT:', error)
+      toast.error(error.message || 'Error al anular el documento. Inténtalo nuevamente.')
     } finally {
       setIsVoidingSunat(false)
     }
@@ -1461,12 +1466,12 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </>
                   )}
 
-                  {/* Anular en SUNAT - Solo para facturas aceptadas dentro del plazo */}
-                  {invoice.documentType === 'factura' &&
+                  {/* Anular en SUNAT - Para facturas y boletas aceptadas dentro del plazo */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
                    invoice.sunatStatus === 'accepted' &&
                    invoice.status !== 'cancelled' &&
                    (() => {
-                     const validation = canVoidInvoice(invoice)
+                     const validation = canVoidDocument(invoice)
                      return validation.canVoid
                    })() && (
                     <>

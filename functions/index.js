@@ -5,6 +5,7 @@ import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { emitirComprobante, emitirNotaCredito, emitirGuiaRemision } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
+import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus } from './src/utils/sunatClient.js'
 
@@ -2533,6 +2534,482 @@ export const checkVoidStatus = onRequest(
     } catch (error) {
       console.error('❌ Error al consultar estado:', error)
       res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+/**
+ * Anula una boleta de venta mediante Resumen Diario con ConditionCode 3
+ *
+ * Las boletas se anulan con SummaryDocuments (Resumen Diario), NO con VoidedDocuments.
+ * Esto es diferente a las facturas que usan Comunicación de Baja.
+ *
+ * Requisitos:
+ * - La boleta debe estar aceptada por SUNAT
+ * - No debe haber sido entregada al cliente
+ * - Debe estar dentro del plazo de 7 días
+ */
+export const voidBoleta = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      // Obtener datos del body
+      const { userId, invoiceId, reason } = req.body
+
+      if (!userId || !invoiceId) {
+        res.status(400).json({ error: 'userId e invoiceId son requeridos' })
+        return
+      }
+
+      // Verificar autorización
+      if (authenticatedUserId !== userId) {
+        const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+        if (!userDoc.exists || userDoc.data().ownerId !== userId) {
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`🗑️ Iniciando anulación de boleta - Usuario: ${userId}, Boleta: ${invoiceId}`)
+
+      // 1. Obtener datos de la boleta
+      const boletaRef = db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId)
+      const boletaDoc = await boletaRef.get()
+
+      if (!boletaDoc.exists) {
+        res.status(404).json({ error: 'Boleta no encontrada' })
+        return
+      }
+
+      const boletaData = boletaDoc.data()
+
+      // 2. Validar que sea una boleta (serie empieza con B)
+      const series = boletaData.series || boletaData.number?.split('-')[0] || ''
+      if (!series.toUpperCase().startsWith('B')) {
+        res.status(400).json({
+          error: 'Este documento no es una boleta. Use la función voidInvoice para facturas.',
+          documentType: boletaData.documentType,
+          series: series
+        })
+        return
+      }
+
+      // 3. Validar que se puede anular
+      const validationResult = canVoidBoleta({
+        sunatStatus: boletaData.sunatStatus,
+        delivered: boletaData.delivered || false,
+        issueDate: boletaData.issueDate,
+        documentType: boletaData.documentType,
+        series: series
+      })
+
+      if (!validationResult.canVoid) {
+        res.status(400).json({
+          error: validationResult.reason,
+          canVoid: false
+        })
+        return
+      }
+
+      // 4. Obtener datos del negocio
+      const businessDoc = await db.collection('businesses').doc(userId).get()
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      // Obtener configuración de emisión
+      const emissionConfig = businessData.emissionConfig || {}
+      const sunatConfig = emissionConfig.sunat || businessData.sunat || {}
+
+      // Verificar credenciales SUNAT
+      if (!sunatConfig.solUser || !sunatConfig.solPassword) {
+        res.status(400).json({ error: 'Faltan credenciales SOL de SUNAT' })
+        return
+      }
+
+      // Obtener certificado
+      const certificate = sunatConfig.certificateData || sunatConfig.certificate
+      if (!certificate) {
+        res.status(400).json({ error: 'Falta certificado digital para firmar' })
+        return
+      }
+
+      // Guardar credenciales para uso posterior
+      businessData.sunatCredentials = {
+        solUser: sunatConfig.solUser,
+        solPassword: sunatConfig.solPassword,
+        certificate: certificate,
+        certificatePassword: sunatConfig.certificatePassword || '',
+        environment: sunatConfig.environment || 'beta'
+      }
+
+      // 5. Generar correlativo para el resumen diario
+      // Usar zona horaria de Perú (UTC-5)
+      const nowUTC = new Date()
+      const peruOffset = -5 * 60
+      const today = new Date(nowUTC.getTime() + (peruOffset - nowUTC.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha actual en Perú:', today.toISOString())
+
+      const summaryDocsRef = db.collection('businesses').doc(userId).collection('summaryDocuments')
+
+      const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
+
+      // Usar documento contador para el día
+      const counterDocRef = summaryDocsRef.doc(`counter_${todayStr}`)
+
+      let correlativo = 1
+      const counterDoc = await counterDocRef.get()
+      if (counterDoc.exists) {
+        correlativo = (counterDoc.data().lastCorrelativo || 0) + 1
+      }
+
+      // Actualizar contador
+      await counterDocRef.set({
+        dateStr: todayStr,
+        lastCorrelativo: correlativo,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      const summaryDocId = generateSummaryDocumentId(today, correlativo)
+
+      console.log(`📄 Generando resumen diario de baja: ${summaryDocId}`)
+
+      // 6. Preparar fecha de referencia (fecha de emisión de la boleta)
+      let issueDate
+      console.log('📅 boletaData.issueDate:', boletaData.issueDate, 'tipo:', typeof boletaData.issueDate)
+
+      if (boletaData.issueDate?.toDate) {
+        issueDate = boletaData.issueDate.toDate()
+      } else if (boletaData.issueDate?._seconds) {
+        issueDate = new Date(boletaData.issueDate._seconds * 1000)
+      } else if (typeof boletaData.issueDate === 'string') {
+        issueDate = new Date(boletaData.issueDate)
+      } else if (boletaData.issueDate instanceof Date) {
+        issueDate = boletaData.issueDate
+      } else if (boletaData.createdAt?.toDate) {
+        console.log('⚠️ Usando createdAt como fecha de emisión')
+        issueDate = boletaData.createdAt.toDate()
+      } else {
+        console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
+        issueDate = new Date()
+      }
+
+      if (isNaN(issueDate.getTime())) {
+        console.error('❌ Fecha inválida:', boletaData.issueDate)
+        res.status(400).json({ error: 'Fecha de emisión de la boleta inválida' })
+        return
+      }
+
+      const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
+      const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+
+      // 7. Preparar datos del cliente
+      const customerIdentityType = getIdentityTypeCode(boletaData.customer?.documentType || boletaData.customer?.identityType || '1')
+      const customerIdentityNumber = boletaData.customer?.documentNumber || boletaData.customer?.identityNumber || '00000000'
+
+      // 8. Calcular montos
+      const total = boletaData.total || 0
+      const igv = boletaData.igv || boletaData.tax || (total - total / 1.18)
+      const taxableAmount = boletaData.subtotal || boletaData.taxableAmount || (total / 1.18)
+
+      // 9. Generar XML de Resumen Diario con ConditionCode 3 (Anular)
+      const documentId = `${boletaData.series}-${boletaData.correlativeNumber}`
+
+      const summaryXmlData = {
+        id: summaryDocId,
+        referenceDate: referenceDateStr,
+        issueDate: issueDateStr,
+        supplier: {
+          ruc: businessData.ruc,
+          name: businessData.businessName || businessData.name
+        },
+        documents: [{
+          lineId: 1,
+          documentType: '03', // Boleta
+          documentId: documentId,
+          conditionCode: CONDITION_CODES.VOID, // Código 3 = Anular
+          customer: {
+            identityType: customerIdentityType,
+            identityNumber: customerIdentityNumber
+          },
+          currency: boletaData.currency || 'PEN',
+          total: total,
+          taxableAmount: taxableAmount,
+          igv: igv
+        }]
+      }
+
+      const summaryXml = generateSummaryDocumentsXML(summaryXmlData)
+
+      console.log('✅ XML de resumen diario generado')
+      console.log('📄 XML preview:', summaryXml.substring(0, 500))
+
+      // 10. Firmar XML
+      const signedXml = await signXML(summaryXml, {
+        certificate: businessData.sunatCredentials.certificate,
+        certificatePassword: businessData.sunatCredentials.certificatePassword
+      })
+
+      console.log('✅ XML firmado')
+
+      // 11. Enviar a SUNAT
+      const environment = businessData.sunatCredentials.environment
+
+      const sendResult = await sendSummary(signedXml, {
+        ruc: businessData.ruc,
+        solUser: businessData.sunatCredentials.solUser,
+        solPassword: businessData.sunatCredentials.solPassword,
+        environment,
+        fileName: summaryDocId
+      })
+
+      if (!sendResult.success) {
+        console.error('❌ Error al enviar a SUNAT:', sendResult.error)
+        if (sendResult.rawResponse) {
+          console.error('📄 Respuesta raw:', sendResult.rawResponse)
+        }
+
+        // Guardar intento fallido
+        await summaryDocsRef.add({
+          summaryDocId,
+          dateStr: todayStr,
+          correlativo,
+          invoiceId,
+          invoiceSeries: boletaData.series,
+          invoiceNumber: boletaData.correlativeNumber,
+          documentType: 'boleta',
+          action: 'void',
+          reason: reason || 'ANULACION DE OPERACION',
+          status: 'failed',
+          error: sendResult.error,
+          rawResponse: sendResult.rawResponse || null,
+          createdAt: FieldValue.serverTimestamp()
+        })
+
+        res.status(500).json({
+          error: sendResult.error || 'Error al enviar resumen diario a SUNAT',
+          rawResponse: sendResult.rawResponse || null
+        })
+        return
+      }
+
+      console.log(`🎫 Ticket recibido: ${sendResult.ticket}`)
+
+      // 12. Guardar documento de resumen con ticket
+      const summaryDocRef = await summaryDocsRef.add({
+        summaryDocId,
+        dateStr: todayStr,
+        correlativo,
+        invoiceId,
+        invoiceSeries: boletaData.series,
+        invoiceNumber: boletaData.correlativeNumber,
+        documentType: 'boleta',
+        action: 'void',
+        reason: reason || 'ANULACION DE OPERACION',
+        status: 'pending',
+        ticket: sendResult.ticket,
+        xmlSent: summaryXml,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      // 13. Marcar boleta como "anulando"
+      await boletaRef.update({
+        sunatStatus: 'voiding',
+        voidingTicket: sendResult.ticket,
+        summaryDocumentId: summaryDocRef.id,
+        voidReason: reason || 'ANULACION DE OPERACION',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      // 14. Consultar estado del ticket con reintentos automáticos
+      const MAX_RETRIES = 6
+      const RETRY_INTERVAL = 10000
+      let statusResult = null
+      let retryCount = 0
+
+      console.log('⏳ Consultando estado del ticket con reintentos automáticos...')
+
+      while (retryCount < MAX_RETRIES) {
+        const waitTime = retryCount === 0 ? 5000 : RETRY_INTERVAL
+        console.log(`⏳ Esperando ${waitTime / 1000}s antes de consultar (intento ${retryCount + 1}/${MAX_RETRIES})...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+
+        statusResult = await getStatus(sendResult.ticket, {
+          ruc: businessData.ruc,
+          solUser: businessData.sunatCredentials.solUser,
+          solPassword: businessData.sunatCredentials.solPassword,
+          environment
+        })
+
+        console.log(`📋 Resultado intento ${retryCount + 1}:`, JSON.stringify(statusResult))
+
+        if (!statusResult.pending) {
+          console.log('✅ SUNAT respondió con resultado final')
+          break
+        }
+
+        retryCount++
+        console.log(`⏳ Aún en proceso (código 98), reintentando...`)
+      }
+
+      // Si después de todos los reintentos sigue pendiente
+      if (statusResult.pending) {
+        console.log('⚠️ Timeout: SUNAT no respondió después de 60 segundos')
+        res.status(202).json({
+          success: true,
+          status: 'pending',
+          ticket: sendResult.ticket,
+          summaryDocumentId: summaryDocRef.id,
+          message: 'El resumen diario está siendo procesado por SUNAT. Consulte el estado más tarde.'
+        })
+        return
+      }
+
+      if (statusResult.success && statusResult.accepted) {
+        // Anulación aceptada
+        await summaryDocsRef.doc(summaryDocRef.id).update({
+          status: 'accepted',
+          cdrData: statusResult.cdrData || null,
+          responseCode: statusResult.code || null,
+          responseDescription: statusResult.description || null,
+          processedAt: FieldValue.serverTimestamp()
+        })
+
+        // Actualizar boleta
+        await boletaRef.update({
+          sunatStatus: 'voided',
+          status: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          voidCdrData: statusResult.cdrData || null
+        })
+
+        // Devolver stock de los productos
+        if (boletaData.items && boletaData.items.length > 0) {
+          console.log('📦 Devolviendo stock de productos...')
+          for (const item of boletaData.items) {
+            if (item.productId && !item.productId.startsWith('custom-')) {
+              try {
+                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                const productDoc = await productRef.get()
+                if (productDoc.exists) {
+                  const currentStock = productDoc.data().stock || 0
+                  await productRef.update({
+                    stock: currentStock + (item.quantity || 0),
+                    updatedAt: FieldValue.serverTimestamp()
+                  })
+                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+                }
+              } catch (stockError) {
+                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+              }
+            }
+          }
+        }
+
+        // Actualizar estadísticas del cliente
+        if (boletaData.customer?.documentNumber) {
+          try {
+            const customersRef = db.collection('businesses').doc(userId).collection('customers')
+            const customerQuery = await customersRef
+              .where('documentNumber', '==', boletaData.customer.documentNumber)
+              .limit(1)
+              .get()
+
+            if (!customerQuery.empty) {
+              const customerDoc = customerQuery.docs[0]
+              const customerData = customerDoc.data()
+              const newOrdersCount = Math.max(0, (customerData.ordersCount || 1) - 1)
+              const newTotalSpent = Math.max(0, (customerData.totalSpent || boletaData.total) - (boletaData.total || 0))
+
+              await customerDoc.ref.update({
+                ordersCount: newOrdersCount,
+                totalSpent: newTotalSpent,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+              console.log(`👤 Estadísticas de cliente actualizadas: ${boletaData.customer.documentNumber}`)
+            }
+          } catch (customerError) {
+            console.error('❌ Error actualizando estadísticas del cliente:', customerError.message)
+          }
+        }
+
+        console.log(`✅ Boleta ${boletaData.series}-${boletaData.correlativeNumber} anulada exitosamente`)
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'Boleta anulada exitosamente en SUNAT',
+          summaryDocumentId: summaryDocRef.id
+        })
+        return
+      }
+
+      // Error en la anulación
+      const errorMsg = statusResult.error || 'SUNAT rechazó el resumen diario'
+
+      await summaryDocsRef.doc(summaryDocRef.id).update({
+        status: 'rejected',
+        error: errorMsg,
+        responseCode: statusResult.code || null,
+        processedAt: FieldValue.serverTimestamp()
+      })
+
+      await boletaRef.update({
+        sunatStatus: 'accepted',
+        voidingTicket: null,
+        voidError: errorMsg,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      res.status(400).json({
+        success: false,
+        error: errorMsg
+      })
+
+    } catch (error) {
+      console.error('❌ Error al anular boleta:', error)
+      res.status(500).json({ error: error.message || 'Error interno del servidor' })
     }
   }
 )

@@ -445,6 +445,164 @@ export const canVoidInvoice = (invoice) => {
   }
 }
 
+/**
+ * Anula una boleta mediante Resumen Diario a SUNAT
+ *
+ * @param {string} userId - ID del usuario/negocio
+ * @param {string} invoiceId - ID de la boleta a anular
+ * @param {string} reason - Motivo de la anulación
+ * @param {string} idToken - Token de autenticación
+ * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
+ */
+export const voidBoleta = async (userId, invoiceId, reason, idToken) => {
+  try {
+    // URL de Cloud Functions
+    const voidBoletaUrl = import.meta.env.VITE_VOID_BOLETA_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/voidBoleta'
+
+    const response = await axios.post(
+      voidBoletaUrl,
+      {
+        userId,
+        invoiceId,
+        reason: reason || 'ANULACION DE OPERACION'
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        timeout: 120000 // 2 minutos
+      }
+    )
+
+    return response.data
+  } catch (error) {
+    console.error('Error al anular boleta:', error)
+
+    if (error.response?.data) {
+      return {
+        success: false,
+        error: error.response.data.error || 'Error al anular la boleta'
+      }
+    }
+
+    return {
+      success: false,
+      error: error.message || 'Error de conexión'
+    }
+  }
+}
+
+/**
+ * Valida si una boleta puede ser anulada
+ *
+ * @param {Object} boleta - Datos de la boleta
+ * @returns {Object} { canVoid: boolean, reason: string }
+ */
+export const canVoidBoleta = (boleta) => {
+  // Verificar que sea una boleta (serie empieza con B)
+  const series = boleta.series || boleta.number?.split('-')[0] || ''
+  if (!series.toUpperCase().startsWith('B')) {
+    return {
+      canVoid: false,
+      reason: 'Este documento no es una boleta. Use la función de anulación de facturas.'
+    }
+  }
+
+  // Debe tener estado aceptado o en proceso de anulación (para reintentos)
+  const validStatuses = ['ACEPTADO', 'accepted', 'voiding']
+  if (!validStatuses.includes(boleta.sunatStatus)) {
+    return {
+      canVoid: false,
+      reason: 'Solo se pueden anular boletas aceptadas por SUNAT'
+    }
+  }
+
+  // No debe haber sido entregada
+  if (boleta.delivered === true) {
+    return {
+      canVoid: false,
+      reason: 'La boleta ya fue entregada al cliente. Debe emitir una Nota de Crédito.'
+    }
+  }
+
+  // Debe estar dentro del plazo de 7 días
+  const issueDate = boleta.issueDate?.toDate ? boleta.issueDate.toDate() : new Date(boleta.issueDate)
+  const today = new Date()
+  const diffTime = Math.abs(today - issueDate)
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays > 7) {
+    return {
+      canVoid: false,
+      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. Debe emitir una Nota de Crédito.`
+    }
+  }
+
+  // Si está en proceso de anulación, permitir reintentar
+  if (boleta.sunatStatus === 'voiding') {
+    return {
+      canVoid: true,
+      reason: 'La boleta está en proceso de anulación. Puede reintentar.',
+      isRetry: true,
+      daysRemaining: 7 - diffDays
+    }
+  }
+
+  // Ya está anulada
+  if (boleta.sunatStatus === 'voided') {
+    return {
+      canVoid: false,
+      reason: 'La boleta ya fue anulada'
+    }
+  }
+
+  return {
+    canVoid: true,
+    reason: 'La boleta puede ser anulada',
+    daysRemaining: 7 - diffDays
+  }
+}
+
+/**
+ * Función unificada para anular documentos (detecta automáticamente si es factura o boleta)
+ *
+ * @param {Object} invoice - Datos del documento
+ * @param {string} userId - ID del usuario/negocio
+ * @param {string} reason - Motivo de la anulación
+ * @param {string} idToken - Token de autenticación
+ * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
+ */
+export const voidDocument = async (invoice, userId, reason, idToken) => {
+  const series = invoice.series || invoice.number?.split('-')[0] || ''
+
+  // Si es boleta (serie empieza con B), usar voidBoleta
+  if (series.toUpperCase().startsWith('B')) {
+    return await voidBoleta(userId, invoice.id, reason, idToken)
+  }
+
+  // Si es factura, usar voidInvoice
+  return await voidInvoice(userId, invoice.id, reason, idToken)
+}
+
+/**
+ * Función unificada para validar si un documento puede ser anulado
+ *
+ * @param {Object} document - Datos del documento
+ * @returns {Object} { canVoid: boolean, reason: string }
+ */
+export const canVoidDocument = (document) => {
+  const series = document.series || document.number?.split('-')[0] || ''
+
+  // Si es boleta, usar validación de boletas
+  if (series.toUpperCase().startsWith('B')) {
+    return canVoidBoleta(document)
+  }
+
+  // Si es factura, usar validación de facturas
+  return canVoidInvoice(document)
+}
+
 export default {
   isSunatConfigured,
   prepareInvoiceXML,
@@ -454,6 +612,10 @@ export default {
   getInvoiceStatus,
   getSunatErrorMessage,
   voidInvoice,
+  voidBoleta,
+  voidDocument,
   checkVoidStatus,
   canVoidInvoice,
+  canVoidBoleta,
+  canVoidDocument,
 }
