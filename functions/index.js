@@ -1551,6 +1551,7 @@ export const getUserByEmail = onRequest(
     timeoutSeconds: 30,
     memory: '256MiB',
     invoker: 'public',
+    cors: true,
   },
   async (req, res) => {
     setCorsHeaders(res)
@@ -1644,6 +1645,7 @@ export const createReseller = onRequest(
     timeoutSeconds: 30,
     memory: '256MiB',
     invoker: 'public',
+    cors: true,
   },
   async (req, res) => {
     setCorsHeaders(res)
