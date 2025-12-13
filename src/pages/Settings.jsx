@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -969,6 +969,7 @@ export default function Settings() {
   // Tabs configuration
   const tabs = [
     { id: 'informacion', label: 'Información', icon: Building2 },
+    { id: 'personalizacion', label: 'Personalización', icon: Palette },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'series', label: 'Series', icon: FileText },
     { id: 'impresora', label: 'Impresora', icon: Printer },
@@ -1114,46 +1115,6 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* PDF Accent Color Section */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Color de Acento del PDF
-                </label>
-                <p className="text-xs text-gray-500 mb-3">
-                  Este color se usará en los encabezados de tablas y secciones de tus facturas
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {[
-                    { color: '#464646', name: 'Gris Oscuro' },
-                    { color: '#1E40AF', name: 'Azul' },
-                    { color: '#065F46', name: 'Verde' },
-                    { color: '#7C2D12', name: 'Marrón' },
-                    { color: '#581C87', name: 'Púrpura' },
-                    { color: '#0F172A', name: 'Negro' },
-                    { color: '#B91C1C', name: 'Rojo' },
-                    { color: '#0E7490', name: 'Cyan' },
-                  ].map((option) => (
-                    <button
-                      key={option.color}
-                      type="button"
-                      onClick={() => setPdfAccentColor(option.color)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
-                        pdfAccentColor === option.color
-                          ? 'border-primary-500 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      title={option.name}
-                    >
-                      <div
-                        className="w-10 h-10 rounded-md shadow-sm"
-                        style={{ backgroundColor: option.color }}
-                      />
-                      <span className="text-xs text-gray-600">{option.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -1244,115 +1205,6 @@ export default function Settings() {
               />
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cuentas Bancarias
-                </label>
-
-                {/* Lista de cuentas bancarias */}
-                {bankAccounts.length > 0 && (
-                  <div className="mb-3 border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Banco</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Moneda</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Cta. Corriente</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">CCI</th>
-                          <th className="px-3 py-2 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {bankAccounts.map((account, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-3 py-2">{account.bank}</td>
-                            <td className="px-3 py-2">{account.currency === 'PEN' ? 'Soles' : 'Dólares'}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{account.accountNumber}</td>
-                            <td className="px-3 py-2 font-mono text-xs">{account.cci || '-'}</td>
-                            <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => setBankAccounts(bankAccounts.filter((_, i) => i !== index))}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Formulario para agregar nueva cuenta */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 bg-gray-50 rounded-lg">
-                  <select
-                    id="newBankName"
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>Banco</option>
-                    <option value="BCP">BCP</option>
-                    <option value="BBVA">BBVA</option>
-                    <option value="Interbank">Interbank</option>
-                    <option value="Scotiabank">Scotiabank</option>
-                    <option value="BanBif">BanBif</option>
-                    <option value="Pichincha">Pichincha</option>
-                    <option value="Banco de la Nación">Banco de la Nación</option>
-                    <option value="Otro">Otro</option>
-                  </select>
-                  <select
-                    id="newBankCurrency"
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                    defaultValue="PEN"
-                  >
-                    <option value="PEN">Soles</option>
-                    <option value="USD">Dólares</option>
-                  </select>
-                  <input
-                    id="newBankAccount"
-                    type="text"
-                    placeholder="Nº Cuenta"
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  />
-                  <input
-                    id="newBankCci"
-                    type="text"
-                    placeholder="CCI (opcional)"
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const bank = document.getElementById('newBankName').value
-                      const currency = document.getElementById('newBankCurrency').value
-                      const accountNumber = document.getElementById('newBankAccount').value
-                      const cci = document.getElementById('newBankCci').value
-
-                      if (!bank || !accountNumber) {
-                        toast.error('Ingresa el banco y número de cuenta')
-                        return
-                      }
-
-                      setBankAccounts([...bankAccounts, { bank, currency, accountNumber, cci }])
-
-                      // Limpiar campos
-                      document.getElementById('newBankName').value = ''
-                      document.getElementById('newBankCurrency').value = 'PEN'
-                      document.getElementById('newBankAccount').value = ''
-                      document.getElementById('newBankCci').value = ''
-                    }}
-                    className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
-                  >
-                    Agregar
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Agrega tus cuentas bancarias. Aparecerán en cotizaciones y facturas.
-                </p>
-              </div>
-
-              <div className="md:col-span-2">
                 <Input
                   label="Dirección"
                   required
@@ -1425,6 +1277,195 @@ export default function Settings() {
           </Button>
         </div>
         </form>
+      )}
+
+      {/* Tab Content - Personalización */}
+      {activeTab === 'personalizacion' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Palette className="w-5 h-5 text-primary-600" />
+              <CardTitle>Personalización de Documentos</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Color de Acento del PDF */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Color de Acento del PDF
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Este color se usará en los encabezados de tablas y secciones de tus facturas, boletas y cotizaciones.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { color: '#464646', name: 'Gris Oscuro' },
+                    { color: '#1E40AF', name: 'Azul' },
+                    { color: '#065F46', name: 'Verde' },
+                    { color: '#7C2D12', name: 'Marrón' },
+                    { color: '#581C87', name: 'Púrpura' },
+                    { color: '#0F172A', name: 'Negro' },
+                    { color: '#B91C1C', name: 'Rojo' },
+                    { color: '#0E7490', name: 'Cyan' },
+                  ].map((option) => (
+                    <button
+                      key={option.color}
+                      type="button"
+                      onClick={() => setPdfAccentColor(option.color)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                        pdfAccentColor === option.color
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      title={option.name}
+                    >
+                      <div
+                        className="w-10 h-10 rounded-md shadow-sm"
+                        style={{ backgroundColor: option.color }}
+                      />
+                      <span className="text-xs text-gray-600">{option.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Cuentas Bancarias */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cuentas Bancarias
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Estas cuentas aparecerán en tus facturas, boletas y cotizaciones.
+                </p>
+
+                {/* Lista de cuentas bancarias */}
+                {bankAccounts.length > 0 && (
+                  <div className="mb-3 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Banco</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Moneda</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Cta. Corriente</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">CCI</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {bankAccounts.map((account, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">{account.bank}</td>
+                            <td className="px-3 py-2">{account.currency === 'PEN' ? 'Soles' : 'Dólares'}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{account.accountNumber}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{account.cci || '-'}</td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => setBankAccounts(bankAccounts.filter((_, i) => i !== index))}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Formulario para agregar nueva cuenta */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 bg-gray-50 rounded-lg">
+                  <select
+                    id="newBankNamePersonalizacion"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Banco</option>
+                    <option value="BCP">BCP</option>
+                    <option value="BBVA">BBVA</option>
+                    <option value="Interbank">Interbank</option>
+                    <option value="Scotiabank">Scotiabank</option>
+                    <option value="BanBif">BanBif</option>
+                    <option value="Pichincha">Pichincha</option>
+                    <option value="Banco de la Nación">Banco de la Nación</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                  <select
+                    id="newBankCurrencyPersonalizacion"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue="PEN"
+                  >
+                    <option value="PEN">Soles</option>
+                    <option value="USD">Dólares</option>
+                  </select>
+                  <input
+                    id="newBankAccountPersonalizacion"
+                    type="text"
+                    placeholder="Nº Cuenta"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <input
+                    id="newBankCciPersonalizacion"
+                    type="text"
+                    placeholder="CCI (opcional)"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const bank = document.getElementById('newBankNamePersonalizacion').value
+                      const currency = document.getElementById('newBankCurrencyPersonalizacion').value
+                      const accountNumber = document.getElementById('newBankAccountPersonalizacion').value
+                      const cci = document.getElementById('newBankCciPersonalizacion').value
+
+                      if (!bank || !accountNumber) {
+                        toast.error('Ingresa el banco y número de cuenta')
+                        return
+                      }
+
+                      setBankAccounts([...bankAccounts, { bank, currency, accountNumber, cci }])
+
+                      // Limpiar campos
+                      document.getElementById('newBankNamePersonalizacion').value = ''
+                      document.getElementById('newBankCurrencyPersonalizacion').value = 'PEN'
+                      document.getElementById('newBankAccountPersonalizacion').value = ''
+                      document.getElementById('newBankCciPersonalizacion').value = ''
+                    }}
+                    className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+
+          {/* Botón Guardar */}
+          <div className="px-6 py-4 border-t border-gray-100">
+            <Button
+              onClick={handleSubmit(onSubmit)}
+              disabled={isSaving}
+              className="w-full sm:w-auto"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Guardar Cambios
+                </>
+              )}
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* Tab Content - Preferencias */}

@@ -1315,7 +1315,7 @@ export default function POS() {
       // 2. Preparar items de la factura
       const items = cart.map(item => ({
         productId: item.id,
-        code: item.code || item.id, // Si no tiene código asignado, usar el ID
+        code: item.sku || item.code || '', // Priorizar SKU, luego código, vacío si no hay
         name: item.name,
         quantity: item.quantity,
         unit: item.unit || 'UNIDAD',
