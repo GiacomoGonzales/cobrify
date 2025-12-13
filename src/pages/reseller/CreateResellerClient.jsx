@@ -221,23 +221,22 @@ export default function CreateResellerClient() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="h-full">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <button
           onClick={() => navigate('/reseller/clients')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-2"
         >
           <ArrowLeft className="w-5 h-5" />
           Volver a clientes
         </button>
         <h1 className="text-2xl font-bold text-gray-900">Crear Nuevo Cliente</h1>
-        <p className="text-gray-500">Completa los datos para crear una cuenta de cliente</p>
       </div>
 
       {/* Balance Warning */}
       {!hasEnoughBalance && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-start gap-3">
           <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
           <div>
             <p className="font-medium text-red-800">Saldo insuficiente</p>
@@ -254,233 +253,243 @@ export default function CreateResellerClient() {
         </div>
       )}
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Credentials */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Lock className="w-5 h-5 text-gray-400" />
-            Credenciales de Acceso
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="cliente@empresa.com"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Contraseña <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  required
-                  minLength={6}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Business Info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-gray-400" />
-            Datos del Negocio
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nombre del Negocio <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  name="businessName"
-                  value={formData.businessName}
-                  onChange={handleChange}
-                  placeholder="Ej: Bodega María"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                RUC (opcional)
-              </label>
-              <div className="relative">
-                <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  name="ruc"
-                  value={formData.ruc}
-                  onChange={handleChange}
-                  placeholder="20123456789"
-                  maxLength={11}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Teléfono (opcional)
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="987654321"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Dirección (opcional)
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  placeholder="Av. Principal 123, Lima"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Plan Selection */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Tag className="w-5 h-5 text-gray-400" />
-            Seleccionar Plan ({resellerDiscount > 1 ? resellerDiscount : resellerDiscount * 100}% descuento)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {Object.entries(PLAN_ORIGINAL_PRICES).map(([planKey, originalPrice]) => {
-              const plan = PLANS[planKey]
-              if (!plan) return null
-
-              const prices = getResellerPrice(planKey, resellerDiscount)
-              const isSelected = formData.plan === planKey
-              const savings = originalPrice - prices.price
-
-              return (
-                <label
-                  key={planKey}
-                  className={`relative flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    isSelected
-                      ? 'border-emerald-500 bg-emerald-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="plan"
-                    value={planKey}
-                    checked={isSelected}
-                    onChange={handleChange}
-                    className="sr-only"
-                  />
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-gray-900">{plan.name}</span>
-                    {isSelected && <CheckCircle className="w-5 h-5 text-emerald-600" />}
+      {/* Form - 2 Column Layout */}
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Left Column - Form Fields */}
+          <div className="space-y-4">
+            {/* Credentials */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
+                <Lock className="w-4 h-4 text-gray-400" />
+                Credenciales de Acceso
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="cliente@empresa.com"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      required
+                    />
                   </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-gray-900">S/ {prices.price.toFixed(2)}</span>
-                    <span className="text-sm text-gray-400 line-through">S/ {originalPrice.toFixed(2)}</span>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Contraseña <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="password"
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      required
+                      minLength={6}
+                    />
                   </div>
-                  <span className="text-xs text-emerald-600 font-medium mt-1">
-                    Ahorras S/ {savings.toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Business Info */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
+                <Building2 className="w-4 h-4 text-gray-400" />
+                Datos del Negocio
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Nombre del Negocio <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      name="businessName"
+                      value={formData.businessName}
+                      onChange={handleChange}
+                      placeholder="Ej: Bodega María"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      RUC (opcional)
+                    </label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        name="ruc"
+                        value={formData.ruc}
+                        onChange={handleChange}
+                        placeholder="20123456789"
+                        maxLength={11}
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Teléfono (opcional)
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        placeholder="987654321"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Dirección (opcional)
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleChange}
+                      placeholder="Av. Principal 123, Lima"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Plans & Summary */}
+          <div className="lg:sticky lg:top-4 space-y-4 self-start">
+            {/* Plan Selection */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
+                <Tag className="w-4 h-4 text-gray-400" />
+                Plan ({resellerDiscount > 1 ? resellerDiscount : resellerDiscount * 100}% desc.)
+              </h3>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(PLAN_ORIGINAL_PRICES).map(([planKey, originalPrice]) => {
+                  const plan = PLANS[planKey]
+                  if (!plan) return null
+
+                  const prices = getResellerPrice(planKey, resellerDiscount)
+                  const isSelected = formData.plan === planKey
+                  const isQPse = planKey.startsWith('qpse')
+
+                  return (
+                    <label
+                      key={planKey}
+                      className={`relative flex flex-col p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="plan"
+                        value={planKey}
+                        checked={isSelected}
+                        onChange={handleChange}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-medium ${isQPse ? 'text-blue-600' : 'text-purple-600'}`}>
+                          {isQPse ? 'QPse' : 'SUNAT'}
+                        </span>
+                        {isSelected && <CheckCircle className="w-4 h-4 text-emerald-600" />}
+                      </div>
+                      <span className="text-xs text-gray-600 mb-1">
+                        {plan.months === 1 ? '1 Mes' : plan.months === 6 ? '6 Meses' : '12 Meses'}
+                      </span>
+                      <span className="text-lg font-bold text-gray-900">S/ {prices.price.toFixed(0)}</span>
+                      <span className="text-xs text-gray-400 line-through">S/ {originalPrice.toFixed(0)}</span>
+                      <span className="text-xs text-gray-500 mt-1">
+                        {planKey.startsWith('sunat_direct') ? 'Ilimitado' : '200/mes'}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 text-sm">Resumen</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Plan</span>
+                  <span className="font-medium">{selectedPlan?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Tu saldo</span>
+                  <span className="font-medium">S/ {currentBalance.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Costo</span>
+                  <span className="font-medium text-red-600">- S/ {(resellerPrice?.price || 0).toFixed(2)}</span>
+                </div>
+                <hr className="my-2 border-emerald-200" />
+                <div className="flex justify-between">
+                  <span className="font-medium text-gray-900">Saldo final</span>
+                  <span className={`font-bold text-lg ${hasEnoughBalance ? 'text-emerald-600' : 'text-red-600'}`}>
+                    S/ {(currentBalance - (resellerPrice?.price || 0)).toFixed(2)}
                   </span>
-                  <span className="text-xs text-gray-500 mt-2">
-                    {planKey.startsWith('sunat_direct') ? 'Documentos ilimitados' : '200 docs/mes'}
-                  </span>
-                </label>
-              )
-            })}
+                </div>
+              </div>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading || !hasEnoughBalance}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5" />
+                  Crear Cliente
+                </>
+              )}
+            </button>
           </div>
         </div>
-
-        {/* Summary */}
-        <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Resumen</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Plan seleccionado</span>
-              <span className="font-medium">{selectedPlan?.name}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Tu saldo actual</span>
-              <span className="font-medium">S/ {currentBalance.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Costo del plan</span>
-              <span className="font-medium text-red-600">- S/ {(resellerPrice?.price || 0).toFixed(2)}</span>
-            </div>
-            <hr className="my-2" />
-            <div className="flex justify-between">
-              <span className="font-medium text-gray-900">Saldo después</span>
-              <span className={`font-bold ${hasEnoughBalance ? 'text-emerald-600' : 'text-red-600'}`}>
-                S/ {(currentBalance - (resellerPrice?.price || 0)).toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
-            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
-            <p className="text-red-700">{error}</p>
-          </div>
-        )}
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading || !hasEnoughBalance}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Creando cliente...
-            </>
-          ) : (
-            <>
-              <CheckCircle className="w-5 h-5" />
-              Crear Cliente
-            </>
-          )}
-        </button>
       </form>
     </div>
   )
