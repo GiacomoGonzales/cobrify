@@ -1937,14 +1937,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 {tableData ? `Generando comprobante para Mesa ${tableData.tableNumber}` : 'Selecciona productos para la venta'}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
               {companySettings?.allowCustomProducts && (
-                <Button onClick={() => setShowCustomProductModal(true)}>
+                <Button onClick={() => setShowCustomProductModal(true)} className="w-[70%] sm:w-auto">
                   <Plus className="w-4 h-4 mr-2" />
-                  Producto Personalizado
+                  <span className="hidden sm:inline">Producto Personalizado</span>
+                  <span className="sm:hidden">Personalizado</span>
                 </Button>
               )}
-              <Button variant="outline" onClick={clearCart} disabled={cart.length === 0}>
+              <Button variant="outline" onClick={clearCart} disabled={cart.length === 0} className="w-[30%] sm:w-auto">
                 <Trash2 className="w-4 h-4 mr-2" />
                 Limpiar
               </Button>
