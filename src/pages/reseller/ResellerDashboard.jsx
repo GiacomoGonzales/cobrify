@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getResellerTierInfo, getAllPrices } from '@/services/resellerTierService'
 import {
   Users,
   UserCheck,
@@ -13,7 +14,9 @@ import {
   ArrowDownRight,
   RefreshCw,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  Award,
+  ChevronRight
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -27,6 +30,7 @@ export default function ResellerDashboard() {
     expiredClients: 0,
     expiringClients: 0
   })
+  const [tierInfo, setTierInfo] = useState(null)
   const [recentTransactions, setRecentTransactions] = useState([])
   const [recentClients, setRecentClients] = useState([])
 
@@ -92,6 +96,14 @@ export default function ResellerDashboard() {
       })
 
       setRecentClients(clients.slice(0, 5))
+
+      // Cargar información del tier
+      try {
+        const tier = await getResellerTierInfo(resellerId, resellerData?.discountOverride)
+        setTierInfo(tier)
+      } catch (e) {
+        console.error('Error loading tier info:', e)
+      }
 
       // Cargar transacciones recientes
       const transactionsQuery = query(
@@ -213,6 +225,70 @@ export default function ResellerDashboard() {
           <p className="text-gray-500 text-sm mt-1">Por vencer (7 días)</p>
         </div>
       </div>
+
+      {/* Tier Progress Card */}
+      {tierInfo && (
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl p-5 text-white">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            {/* Current Tier */}
+            <div className="flex items-center gap-4">
+              <div className="text-4xl">{tierInfo.currentTier.icon}</div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-bold">Nivel {tierInfo.currentTier.name}</h3>
+                  {tierInfo.hasOverride && (
+                    <span className="text-xs bg-purple-500 px-2 py-0.5 rounded-full">VIP</span>
+                  )}
+                </div>
+                <p className="text-slate-300">
+                  {tierInfo.effectiveDiscount}% de descuento en todos los planes
+                </p>
+              </div>
+            </div>
+
+            {/* Progress to Next Tier */}
+            {tierInfo.progress ? (
+              <div className="flex-1 max-w-md">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="text-slate-300">
+                    {tierInfo.activeClients} clientes activos
+                  </span>
+                  <span className="text-slate-300 flex items-center gap-1">
+                    {tierInfo.nextTier.icon} {tierInfo.progress.remaining} más para {tierInfo.nextTier.name}
+                  </span>
+                </div>
+                <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500"
+                    style={{ width: `${tierInfo.progress.percentage}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Award className="w-5 h-5" />
+                <span className="font-medium">¡Nivel máximo alcanzado!</span>
+              </div>
+            )}
+
+            {/* Prices Preview */}
+            <div className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-2">
+              <div className="text-center">
+                <p className="text-xs text-slate-400">1 Mes</p>
+                <p className="font-bold">S/ {Math.round(20 * (1 - tierInfo.effectiveDiscount / 100))}</p>
+              </div>
+              <div className="text-center border-l border-white/20 pl-3">
+                <p className="text-xs text-slate-400">6 Meses</p>
+                <p className="font-bold">S/ {Math.round(100 * (1 - tierInfo.effectiveDiscount / 100))}</p>
+              </div>
+              <div className="text-center border-l border-white/20 pl-3">
+                <p className="text-xs text-slate-400">12 Meses</p>
+                <p className="font-bold">S/ {Math.round(150 * (1 - tierInfo.effectiveDiscount / 100))}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Alert if clients expiring */}
       {stats.expiringClients > 0 && (

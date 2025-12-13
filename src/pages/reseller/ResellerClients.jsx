@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { PLANS } from '@/services/subscriptionService'
+import { getResellerTierInfo, calculatePrice, BASE_PRICES } from '@/services/resellerTierService'
 import {
   Users,
   Search,
@@ -25,30 +26,14 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-// Precios originales y meses de los planes
-const PLAN_INFO = {
-  qpse_1_month: { originalPrice: 20, months: 1 },
-  qpse_6_months: { originalPrice: 100, months: 6 },
-  qpse_12_months: { originalPrice: 150, months: 12 },
-  sunat_direct_1_month: { originalPrice: 20, months: 1 },
-  sunat_direct_6_months: { originalPrice: 100, months: 6 },
-  sunat_direct_12_months: { originalPrice: 150, months: 12 },
-}
-
-// Función para calcular precio con descuento del reseller
-// discount puede ser decimal (0.30) o porcentaje (30)
-function getResellerPrice(plan, discount = 30) {
-  const info = PLAN_INFO[plan]
-  if (!info) return null
-  // Si el descuento es menor a 1, es decimal (0.30), convertir a porcentaje
-  const discountPercent = discount < 1 ? discount * 100 : discount
-  const price = Math.round(info.originalPrice * (1 - discountPercent / 100))
-  return {
-    price,
-    originalPrice: info.originalPrice,
-    months: info.months,
-    discountPercent
-  }
+// Meses por plan
+const PLAN_MONTHS = {
+  qpse_1_month: 1,
+  qpse_6_months: 6,
+  qpse_12_months: 12,
+  sunat_direct_1_month: 1,
+  sunat_direct_6_months: 6,
+  sunat_direct_12_months: 12,
 }
 
 const STATUS_COLORS = {
@@ -73,17 +58,28 @@ export default function ResellerClients() {
   const [renewalClient, setRenewalClient] = useState(null)
   const [renewalPlan, setRenewalPlan] = useState('qpse_1_month')
   const [renewalLoading, setRenewalLoading] = useState(false)
+  const [tierInfo, setTierInfo] = useState(null)
 
-  // Obtener el ID del reseller y su descuento
+  // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
   const currentBalance = resellerData?.balance || 0
-  const resellerDiscount = resellerData?.discount || 30 // Por defecto 30%
+  const effectiveDiscount = tierInfo?.effectiveDiscount || 20
 
   useEffect(() => {
     if (user && resellerId) {
       loadClients()
+      loadTierInfo()
     }
   }, [user, resellerId])
+
+  async function loadTierInfo() {
+    try {
+      const info = await getResellerTierInfo(resellerId, resellerData?.discountOverride)
+      setTierInfo(info)
+    } catch (e) {
+      console.error('Error loading tier info:', e)
+    }
+  }
 
   useEffect(() => {
     filterClients()
@@ -199,14 +195,16 @@ export default function ResellerClients() {
   async function handleRenewal() {
     if (!renewalClient || !renewalPlan) return
 
-    const planPrice = getResellerPrice(renewalPlan, resellerDiscount)
-    if (!planPrice) {
+    const planPrice = calculatePrice(renewalPlan, effectiveDiscount)
+    const planMonths = PLAN_MONTHS[renewalPlan]
+
+    if (!planMonths) {
       alert('Plan no válido')
       return
     }
 
-    if (currentBalance < planPrice.price) {
-      alert(`Saldo insuficiente. Necesitas S/ ${planPrice.price.toFixed(2)} pero tienes S/ ${currentBalance.toFixed(2)}`)
+    if (currentBalance < planPrice) {
+      alert(`Saldo insuficiente. Necesitas S/ ${planPrice} pero tienes S/ ${currentBalance.toFixed(2)}`)
       return
     }
 
@@ -219,7 +217,7 @@ export default function ResellerClients() {
       // Si ya venció, empezar desde hoy; si no, extender desde la fecha actual
       const startFrom = currentEnd && currentEnd > now ? currentEnd : now
       const newPeriodEnd = new Date(startFrom)
-      newPeriodEnd.setMonth(newPeriodEnd.getMonth() + planPrice.months)
+      newPeriodEnd.setMonth(newPeriodEnd.getMonth() + planMonths)
 
       // 1. Actualizar suscripción del cliente
       // QPse = 200 docs/mes, SUNAT Directo = ilimitado
@@ -236,7 +234,7 @@ export default function ResellerClients() {
       })
 
       // 2. Deducir saldo del reseller
-      const newBalance = currentBalance - planPrice.price
+      const newBalance = currentBalance - planPrice
       await updateDoc(doc(db, 'resellers', resellerId), {
         balance: newBalance,
         updatedAt: Timestamp.now()
@@ -246,7 +244,7 @@ export default function ResellerClients() {
       await addDoc(collection(db, 'resellerTransactions'), {
         resellerId: resellerId,
         type: 'renewal',
-        amount: -planPrice.price,
+        amount: -planPrice,
         description: `Renovación ${PLANS[renewalPlan]?.name || renewalPlan} - ${renewalClient.businessName || renewalClient.email}`,
         clientId: renewalClient.id,
         clientEmail: renewalClient.email,
@@ -635,39 +633,37 @@ export default function ResellerClients() {
                   disabled={renewalLoading}
                 >
                   <optgroup label="Planes QPse">
-                    <option value="qpse_1_month">QPse 1 Mes - S/ {getResellerPrice('qpse_1_month', resellerDiscount)?.price.toFixed(2)}</option>
-                    <option value="qpse_6_months">QPse 6 Meses - S/ {getResellerPrice('qpse_6_months', resellerDiscount)?.price.toFixed(2)}</option>
-                    <option value="qpse_12_months">QPse 12 Meses - S/ {getResellerPrice('qpse_12_months', resellerDiscount)?.price.toFixed(2)}</option>
+                    <option value="qpse_1_month">QPse 1 Mes - S/ {calculatePrice('qpse_1_month', effectiveDiscount)}</option>
+                    <option value="qpse_6_months">QPse 6 Meses - S/ {calculatePrice('qpse_6_months', effectiveDiscount)}</option>
+                    <option value="qpse_12_months">QPse 12 Meses - S/ {calculatePrice('qpse_12_months', effectiveDiscount)}</option>
                   </optgroup>
                   <optgroup label="Planes SUNAT Directo">
-                    <option value="sunat_direct_1_month">SUNAT Directo 1 Mes - S/ {getResellerPrice('sunat_direct_1_month', resellerDiscount)?.price.toFixed(2)}</option>
-                    <option value="sunat_direct_6_months">SUNAT Directo 6 Meses - S/ {getResellerPrice('sunat_direct_6_months', resellerDiscount)?.price.toFixed(2)}</option>
-                    <option value="sunat_direct_12_months">SUNAT Directo 12 Meses - S/ {getResellerPrice('sunat_direct_12_months', resellerDiscount)?.price.toFixed(2)}</option>
+                    <option value="sunat_direct_1_month">SUNAT Directo 1 Mes - S/ {calculatePrice('sunat_direct_1_month', effectiveDiscount)}</option>
+                    <option value="sunat_direct_6_months">SUNAT Directo 6 Meses - S/ {calculatePrice('sunat_direct_6_months', effectiveDiscount)}</option>
+                    <option value="sunat_direct_12_months">SUNAT Directo 12 Meses - S/ {calculatePrice('sunat_direct_12_months', effectiveDiscount)}</option>
                   </optgroup>
                 </select>
               </div>
 
               {/* Resumen del costo */}
-              {getResellerPrice(renewalPlan, resellerDiscount) && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Precio reseller ({resellerDiscount > 1 ? resellerDiscount : resellerDiscount * 100}% desc.):</span>
-                    <span className="text-xl font-bold text-gray-900">
-                      S/ {getResellerPrice(renewalPlan, resellerDiscount).price.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm text-gray-500 mt-1">
-                    <span>Precio normal:</span>
-                    <span className="line-through">S/ {getResellerPrice(renewalPlan, resellerDiscount).originalPrice.toFixed(2)}</span>
-                  </div>
-                  {currentBalance < getResellerPrice(renewalPlan, resellerDiscount).price && (
-                    <div className="mt-3 p-2 bg-red-50 rounded text-sm text-red-600 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      Saldo insuficiente
-                    </div>
-                  )}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Precio reseller ({effectiveDiscount}% desc.):</span>
+                  <span className="text-xl font-bold text-gray-900">
+                    S/ {calculatePrice(renewalPlan, effectiveDiscount)}
+                  </span>
                 </div>
-              )}
+                <div className="flex justify-between items-center text-sm text-gray-500 mt-1">
+                  <span>Precio normal:</span>
+                  <span className="line-through">S/ {BASE_PRICES[renewalPlan]}</span>
+                </div>
+                {currentBalance < calculatePrice(renewalPlan, effectiveDiscount) && (
+                  <div className="mt-3 p-2 bg-red-50 rounded text-sm text-red-600 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Saldo insuficiente
+                  </div>
+                )}
+              </div>
 
               {/* Botones */}
               <div className="flex gap-3 pt-2">
@@ -683,7 +679,7 @@ export default function ResellerClients() {
                 </button>
                 <button
                   onClick={handleRenewal}
-                  disabled={renewalLoading || currentBalance < (getResellerPrice(renewalPlan, resellerDiscount)?.price || 0)}
+                  disabled={renewalLoading || currentBalance < calculatePrice(renewalPlan, effectiveDiscount)}
                   className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {renewalLoading ? (

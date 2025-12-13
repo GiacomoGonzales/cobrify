@@ -12,6 +12,7 @@ import {
   query,
   where
 } from 'firebase/firestore'
+import { getTiersConfig, calculateTier } from '@/services/resellerTierService'
 import {
   Users,
   Plus,
@@ -34,7 +35,9 @@ import {
   DollarSign,
   TrendingUp,
   AlertTriangle,
-  UserCheck
+  UserCheck,
+  Award,
+  Crown
 } from 'lucide-react'
 
 // URL de las Cloud Functions (Cloud Run)
@@ -64,7 +67,7 @@ export default function AdminResellers() {
     ruc: '',
     phone: '',
     contactName: '',
-    discount: 30,
+    discountOverride: '',  // Vacío = usar tier automático
     balance: 0,
     isActive: true
   })
@@ -79,23 +82,45 @@ export default function AdminResellers() {
   async function loadResellers() {
     setLoading(true)
     try {
-      const resellersSnapshot = await getDocs(collection(db, 'resellers'))
+      const [resellersSnapshot, tiers] = await Promise.all([
+        getDocs(collection(db, 'resellers')),
+        getTiersConfig()
+      ])
       const resellersList = []
 
       for (const docSnap of resellersSnapshot.docs) {
         const data = docSnap.data()
 
-        // Contar clientes del reseller
+        // Contar clientes activos del reseller
         const clientsQuery = query(
           collection(db, 'subscriptions'),
           where('resellerId', '==', docSnap.id)
         )
-        const clientsSnapshot = await getDocs(clientsQuery)
+        const activeClientsQuery = query(
+          collection(db, 'subscriptions'),
+          where('resellerId', '==', docSnap.id),
+          where('status', '==', 'active')
+        )
+        const [clientsSnapshot, activeClientsSnapshot] = await Promise.all([
+          getDocs(clientsQuery),
+          getDocs(activeClientsQuery)
+        ])
+
+        // Calcular tier basado en clientes activos
+        const activeCount = activeClientsSnapshot.size
+        const currentTier = calculateTier(activeCount, tiers)
+        const effectiveDiscount = data.discountOverride !== undefined && data.discountOverride !== null
+          ? data.discountOverride
+          : currentTier.discount
 
         resellersList.push({
           id: docSnap.id,
           ...data,
-          clientsCount: clientsSnapshot.size
+          clientsCount: clientsSnapshot.size,
+          activeClientsCount: activeCount,
+          currentTier,
+          effectiveDiscount,
+          hasOverride: data.discountOverride !== undefined && data.discountOverride !== null
         })
       }
 
@@ -117,7 +142,7 @@ export default function AdminResellers() {
       ruc: '',
       phone: '',
       contactName: '',
-      discount: 30,
+      discountOverride: '',
       balance: 0,
       isActive: true
     })
@@ -180,7 +205,9 @@ export default function AdminResellers() {
       ruc: reseller.ruc || '',
       phone: reseller.phone || '',
       contactName: reseller.contactName || '',
-      discount: (reseller.discount || 0.30) * 100,
+      discountOverride: reseller.discountOverride !== undefined && reseller.discountOverride !== null
+        ? reseller.discountOverride.toString()
+        : '',
       balance: reseller.balance || 0,
       isActive: reseller.isActive !== false
     })
@@ -208,13 +235,18 @@ export default function AdminResellers() {
 
     setSaving(true)
     try {
+      // discountOverride: vacío = null (usar tier automático), número = override manual
+      const discountOverride = formData.discountOverride.trim() === ''
+        ? null
+        : parseInt(formData.discountOverride)
+
       const resellerData = {
         email: formData.email,
         companyName: formData.companyName,
         ruc: formData.ruc,
         phone: formData.phone,
         contactName: formData.contactName,
-        discount: formData.discount / 100,
+        discountOverride: discountOverride,
         balance: parseFloat(formData.balance) || 0,
         isActive: formData.isActive
       }
@@ -455,11 +487,13 @@ export default function AdminResellers() {
                   </div>
                   <div className="flex items-center justify-between text-xs mb-2">
                     <div className="flex items-center gap-3">
+                      <span className="text-lg">{reseller.currentTier?.icon}</span>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">
                         <Percent className="w-3 h-3" />
-                        {((reseller.discount || 0.30) * 100).toFixed(0)}%
+                        {reseller.effectiveDiscount}%
+                        {reseller.hasOverride && <Crown className="w-3 h-3 text-purple-500" />}
                       </span>
-                      <span className="text-gray-500">{reseller.clientsCount || 0} clientes</span>
+                      <span className="text-gray-500">{reseller.activeClientsCount || 0} activos</span>
                     </div>
                     <span className="font-bold text-gray-900">S/ {(reseller.balance || 0).toFixed(2)}</span>
                   </div>
@@ -502,7 +536,7 @@ export default function AdminResellers() {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contacto</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descuento</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nivel</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clientes</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
@@ -528,10 +562,18 @@ export default function AdminResellers() {
                         <p className="text-sm text-gray-500">{reseller.email}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                          <Percent className="w-3 h-3" />
-                          {((reseller.discount || 0.30) * 100).toFixed(0)}%
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{reseller.currentTier?.icon}</span>
+                          <div>
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium text-gray-900">{reseller.currentTier?.name}</span>
+                              {reseller.hasOverride && (
+                                <Crown className="w-3 h-3 text-purple-500" title="Descuento manual" />
+                              )}
+                            </div>
+                            <span className="text-sm text-green-600 font-medium">{reseller.effectiveDiscount}% desc.</span>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -546,7 +588,10 @@ export default function AdminResellers() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-medium text-gray-900">{reseller.clientsCount || 0}</span>
+                        <div>
+                          <span className="font-medium text-gray-900">{reseller.activeClientsCount || 0}</span>
+                          <span className="text-gray-400 text-sm"> / {reseller.clientsCount || 0}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
@@ -748,16 +793,22 @@ export default function AdminResellers() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descuento (%)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Descuento Manual (%)
+                        <span className="text-xs text-gray-400 ml-1">Opcional</span>
+                      </label>
                       <input
                         type="number"
-                        value={formData.discount}
-                        onChange={e => setFormData({ ...formData, discount: parseFloat(e.target.value) || 0 })}
+                        value={formData.discountOverride}
+                        onChange={e => setFormData({ ...formData, discountOverride: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                         min="0"
                         max="100"
+                        placeholder="Automático por nivel"
                       />
-                      <p className="text-xs text-gray-500 mt-1">% de descuento en suscripciones</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Vacío = automático (Bronce 20%, Plata 30%, Oro 40%)
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Saldo Inicial</label>

@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { doc, setDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { db, auth } from '@/lib/firebase'
 import { PLANS } from '@/services/subscriptionService'
+import { getResellerTierInfo, calculatePrice, BASE_PRICES } from '@/services/resellerTierService'
 import {
   ArrowLeft,
   Building2,
@@ -18,43 +19,21 @@ import {
   AlertTriangle,
   Loader2,
   Wallet,
-  Tag
+  Tag,
+  Award
 } from 'lucide-react'
-
-// Precios originales (números redondos)
-const ORIGINAL_PRICES = {
-  qpse_1_month: 20,
-  qpse_6_months: 100,
-  qpse_12_months: 150,
-  sunat_direct_1_month: 20,
-  sunat_direct_6_months: 100,
-  sunat_direct_12_months: 150,
-}
-
-// Función para calcular precio con descuento del reseller
-// discount puede ser decimal (0.30) o porcentaje (30)
-function getResellerPrice(plan, discount = 30) {
-  const originalPrice = ORIGINAL_PRICES[plan] || 0
-  // Si el descuento es menor a 1, es decimal (0.30), convertir a porcentaje
-  const discountPercent = discount < 1 ? discount * 100 : discount
-  const price = Math.round(originalPrice * (1 - discountPercent / 100))
-  return {
-    price,
-    originalPrice,
-    discountPercent
-  }
-}
 
 export default function CreateResellerClient() {
   const { user, resellerData, refreshResellerData } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [loadingTier, setLoadingTier] = useState(true)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
+  const [tierInfo, setTierInfo] = useState(null)
 
-  // Obtener el ID del reseller y su descuento
+  // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
-  const resellerDiscount = resellerData?.discount || 30 // Por defecto 30%
 
   const [formData, setFormData] = useState({
     email: '',
@@ -66,10 +45,27 @@ export default function CreateResellerClient() {
     plan: 'qpse_1_month'
   })
 
+  // Cargar info del tier al montar
+  useEffect(() => {
+    async function loadTierInfo() {
+      if (!resellerId) return
+      try {
+        const info = await getResellerTierInfo(resellerId, resellerData?.discountOverride)
+        setTierInfo(info)
+      } catch (e) {
+        console.error('Error loading tier info:', e)
+      } finally {
+        setLoadingTier(false)
+      }
+    }
+    loadTierInfo()
+  }, [resellerId, resellerData?.discountOverride])
+
   const selectedPlan = PLANS[formData.plan]
-  const resellerPrice = getResellerPrice(formData.plan, resellerDiscount)
+  const effectiveDiscount = tierInfo?.effectiveDiscount || 20
+  const planPrice = calculatePrice(formData.plan, effectiveDiscount)
   const currentBalance = resellerData?.balance || 0
-  const hasEnoughBalance = currentBalance >= (resellerPrice?.price || 0)
+  const hasEnoughBalance = currentBalance >= planPrice
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -139,7 +135,7 @@ export default function CreateResellerClient() {
         // Reseller info
         createdByReseller: true,
         resellerId: resellerId,
-        resellerPricePaid: resellerPrice.price
+        resellerPricePaid: planPrice
       })
 
       // 4. Create business document
@@ -155,17 +151,17 @@ export default function CreateResellerClient() {
       })
 
       // 5. Deduct from reseller balance
-      const newBalance = currentBalance - resellerPrice.price
+      const newBalance = currentBalance - planPrice
       await updateDoc(doc(db, 'resellers', resellerId), {
         balance: newBalance,
-        totalSpent: (resellerData?.totalSpent || 0) + resellerPrice.price
+        totalSpent: (resellerData?.totalSpent || 0) + planPrice
       })
 
       // 6. Record transaction
       await addDoc(collection(db, 'resellerTransactions'), {
         resellerId: resellerId,
         type: 'client_creation',
-        amount: -resellerPrice.price,
+        amount: -planPrice,
         description: `Nuevo cliente: ${formData.businessName}`,
         clientId: newUserId,
         clientEmail: formData.email,
@@ -242,7 +238,7 @@ export default function CreateResellerClient() {
           <div>
             <p className="font-medium text-red-800">Saldo insuficiente</p>
             <p className="text-sm text-red-700">
-              Tu saldo actual es S/ {currentBalance.toFixed(2)}. Necesitas S/ {(resellerPrice?.price || 0).toFixed(2)} para este plan.
+              Tu saldo actual es S/ {currentBalance.toFixed(2)}. Necesitas S/ {planPrice} para este plan.
             </p>
             <button
               onClick={() => navigate('/reseller/balance')}
@@ -389,14 +385,15 @@ export default function CreateResellerClient() {
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
                 <Tag className="w-4 h-4 text-gray-400" />
-                Plan ({resellerPrice.discountPercent}% desc.)
+                Plan ({effectiveDiscount}% desc.)
               </h3>
               <div className="grid grid-cols-3 gap-2">
-                {Object.entries(ORIGINAL_PRICES).map(([planKey]) => {
+                {Object.entries(BASE_PRICES).map(([planKey]) => {
                   const plan = PLANS[planKey]
                   if (!plan) return null
 
-                  const prices = getResellerPrice(planKey, resellerDiscount)
+                  const basePrice = BASE_PRICES[planKey]
+                  const finalPrice = calculatePrice(planKey, effectiveDiscount)
                   const isSelected = formData.plan === planKey
                   const isQPse = planKey.startsWith('qpse')
 
@@ -426,8 +423,8 @@ export default function CreateResellerClient() {
                       <span className="text-xs text-gray-600 mb-1">
                         {plan.months === 1 ? '1 Mes' : plan.months === 6 ? '6 Meses' : '12 Meses'}
                       </span>
-                      <span className="text-lg font-bold text-gray-900">S/ {prices.price.toFixed(0)}</span>
-                      <span className="text-xs text-gray-400 line-through">S/ {prices.originalPrice}</span>
+                      <span className="text-lg font-bold text-gray-900">S/ {finalPrice}</span>
+                      <span className="text-xs text-gray-400 line-through">S/ {basePrice}</span>
                       <span className="text-xs text-gray-500 mt-1">
                         {planKey.startsWith('sunat_direct') ? 'Ilimitado' : '200/mes'}
                       </span>
@@ -451,13 +448,13 @@ export default function CreateResellerClient() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Costo</span>
-                  <span className="font-medium text-red-600">- S/ {(resellerPrice?.price || 0).toFixed(2)}</span>
+                  <span className="font-medium text-red-600">- S/ {planPrice}</span>
                 </div>
                 <hr className="my-2 border-emerald-200" />
                 <div className="flex justify-between">
                   <span className="font-medium text-gray-900">Saldo final</span>
                   <span className={`font-bold text-lg ${hasEnoughBalance ? 'text-emerald-600' : 'text-red-600'}`}>
-                    S/ {(currentBalance - (resellerPrice?.price || 0)).toFixed(2)}
+                    S/ {(currentBalance - planPrice).toFixed(2)}
                   </span>
                 </div>
               </div>
