@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
 import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
@@ -86,8 +87,9 @@ function App() {
       }}
     >
       <AuthProvider>
-        <ToastProvider>
-          <Routes>
+        <BrandingProvider>
+          <ToastProvider>
+            <Routes>
             {/* Landing Page / Splash - En móvil muestra splash primero */}
             <Route path="/" element={isNative ? <SplashScreen /> : <LandingPage />} />
 
@@ -240,7 +242,8 @@ function App() {
             {/* Ruta 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </ToastProvider>
+          </ToastProvider>
+        </BrandingProvider>
       </AuthProvider>
     </Router>
   )

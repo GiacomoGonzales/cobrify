@@ -4,6 +4,12 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Logos de resellers (marca blanca)
+    match /reseller-logos/{resellerId}/{allImages=**} {
+      allow read: if true; // Lectura pública para mostrar logos
+      allow write: if request.auth != null && request.auth.uid == resellerId;
+    }
+
     // Permitir lectura pública de logos de empresas (path: businesses/{businessId}/logo)
     match /businesses/{businessId}/logo {
       allow read: if true; // Acceso público de lectura para logos

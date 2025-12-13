@@ -43,10 +43,12 @@ import {
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useBranding } from '@/contexts/BrandingContext'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
   const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
+  const { branding } = useBranding()
   const location = useLocation()
 
   // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
@@ -564,18 +566,34 @@ function Sidebar() {
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
       >
-      {/* Logo */}
+      {/* Logo - Dinámico según branding del reseller */}
       <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200">
         <div className="flex items-center space-x-2">
-          <img
-            src="/logo.png"
-            alt="Cobrify - Sistema de facturación electrónica"
-            className="w-8 h-8 object-contain"
-            width="32"
-            height="32"
-            loading="eager"
-          />
-          <span className="text-xl font-bold text-gray-900">Cobrify</span>
+          {branding.logoUrl ? (
+            <img
+              src={branding.logoUrl}
+              alt={`${branding.companyName} - Sistema de facturación electrónica`}
+              className="w-8 h-8 object-contain"
+              width="32"
+              height="32"
+              loading="eager"
+            />
+          ) : (
+            <img
+              src="/logo.png"
+              alt={`${branding.companyName} - Sistema de facturación electrónica`}
+              className="w-8 h-8 object-contain"
+              width="32"
+              height="32"
+              loading="eager"
+            />
+          )}
+          <span
+            className="text-xl font-bold"
+            style={{ color: branding.primaryColor || '#111827' }}
+          >
+            {branding.companyName}
+          </span>
         </div>
       </div>
 
@@ -600,17 +618,20 @@ function Sidebar() {
             className={({ isActive }) =>
               `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
                 isActive
-                  ? 'bg-primary-50 text-primary-600'
+                  ? ''
                   : 'text-gray-700 hover:bg-gray-100'
               }`
             }
+            style={({ isActive }) => isActive ? {
+              backgroundColor: `${branding.primaryColor}15`,
+              color: branding.primaryColor
+            } : {}}
           >
             {({ isActive }) => (
               <>
                 <item.icon
-                  className={`w-5 h-5 flex-shrink-0 ${
-                    isActive ? 'text-primary-600' : 'text-gray-500 group-hover:text-gray-700'
-                  }`}
+                  className="w-5 h-5 flex-shrink-0"
+                  style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
                 />
                 <span className="font-medium text-sm">{item.label}</span>
               </>
@@ -630,17 +651,20 @@ function Sidebar() {
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
                     isActive
-                      ? 'bg-primary-50 text-primary-600'
+                      ? ''
                       : 'text-gray-700 hover:bg-gray-100'
                   }`
                 }
+                style={({ isActive }) => isActive ? {
+                  backgroundColor: `${branding.primaryColor}15`,
+                  color: branding.primaryColor
+                } : {}}
               >
                 {({ isActive }) => (
                   <>
                     <item.icon
-                      className={`w-5 h-5 flex-shrink-0 ${
-                        isActive ? 'text-primary-600' : 'text-gray-500 group-hover:text-gray-700'
-                      }`}
+                      className="w-5 h-5 flex-shrink-0"
+                      style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
                     />
                     <span className="font-medium text-sm">{item.label}</span>
                     {item.adminOnly && (

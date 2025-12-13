@@ -1,7 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { doc, updateDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import {
+  updateResellerBranding,
+  uploadResellerLogo,
+  PRESET_COLORS
+} from '@/services/brandingService'
 import {
   Building2,
   Mail,
@@ -18,26 +24,24 @@ import {
   Shield,
   Palette,
   Type,
-  Eye
+  Eye,
+  Upload,
+  Image,
+  X,
+  Copy,
+  ExternalLink
 } from 'lucide-react'
 
-// Colores predefinidos para elegir
-const BRAND_COLORS = [
-  { name: 'Esmeralda', value: '#10B981' },
-  { name: 'Azul', value: '#3B82F6' },
-  { name: 'Púrpura', value: '#8B5CF6' },
-  { name: 'Rosa', value: '#EC4899' },
-  { name: 'Naranja', value: '#F97316' },
-  { name: 'Rojo', value: '#EF4444' },
-  { name: 'Índigo', value: '#6366F1' },
-  { name: 'Cyan', value: '#06B6D4' },
-]
-
 export default function ResellerSettings() {
-  const { user, resellerData, refreshResellerData } = useAuth()
+  const { user, resellerData, refreshResellerData, loading: authLoading } = useAuth()
+  const { refreshBranding } = useBranding()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState('empresa') // 'empresa' | 'branding'
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const fileInputRef = useRef(null)
 
   // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
@@ -51,10 +55,49 @@ export default function ResellerSettings() {
   })
 
   const [brandingData, setBrandingData] = useState({
-    brandName: resellerData?.brandName || resellerData?.companyName || '',
-    brandColor: resellerData?.brandColor || '#10B981',
-    brandTagline: resellerData?.brandTagline || ''
+    companyName: resellerData?.branding?.companyName || resellerData?.companyName || '',
+    logoUrl: resellerData?.branding?.logoUrl || null,
+    primaryColor: resellerData?.branding?.primaryColor || '#10B981',
+    secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
   })
+
+  // Sincronizar formData y brandingData cuando resellerData se cargue
+  React.useEffect(() => {
+    if (resellerData) {
+      setFormData({
+        companyName: resellerData.companyName || '',
+        ruc: resellerData.ruc || '',
+        phone: resellerData.phone || '',
+        address: resellerData.address || '',
+        contactName: resellerData.contactName || ''
+      })
+      setBrandingData({
+        companyName: resellerData.branding?.companyName || resellerData.companyName || '',
+        logoUrl: resellerData.branding?.logoUrl || null,
+        primaryColor: resellerData.branding?.primaryColor || '#10B981',
+        secondaryColor: resellerData.branding?.secondaryColor || '#059669',
+      })
+      setDataLoaded(true)
+    }
+  }, [resellerData])
+
+  // Mostrar loading mientras se cargan los datos
+  if (authLoading || !dataLoaded) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
+          <p className="text-gray-500">Gestiona los datos de tu cuenta de reseller</p>
+        </div>
+        <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+            <p className="text-gray-500 text-sm">Cargando datos...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -68,24 +111,85 @@ export default function ResellerSettings() {
     setSaved(false)
   }
 
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo de archivo
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona una imagen')
+      return
+    }
+
+    // Validar tamaño (máx 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen debe ser menor a 2MB')
+      return
+    }
+
+    setUploadingLogo(true)
+    try {
+      // Usar user.uid para storage (coincide con auth.uid en las reglas de Firebase Storage)
+      const logoUrl = await uploadResellerLogo(user.uid, file)
+      setBrandingData(prev => ({ ...prev, logoUrl }))
+      setSaved(false)
+    } catch (error) {
+      console.error('Error uploading logo:', error)
+      alert('Error al subir el logo')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  function removeLogo() {
+    setBrandingData(prev => ({ ...prev, logoUrl: null }))
+    setSaved(false)
+  }
+
   async function handleSave() {
     setSaving(true)
+
+    // Debug: mostrar los IDs que estamos usando
+    console.log('🔍 Saving reseller settings...')
+    console.log('   user.uid:', user?.uid)
+    console.log('   resellerData.docId:', resellerData?.docId)
+    console.log('   resellerId used:', resellerId)
+    console.log('   formData:', formData)
+    console.log('   brandingData:', brandingData)
+
     try {
+      // Guardar datos de empresa
+      console.log('📝 Updating reseller document...')
       await updateDoc(doc(db, 'resellers', resellerId), {
         ...formData,
-        ...brandingData,
         updatedAt: Timestamp.now()
       })
+      console.log('✅ Reseller document updated')
+
+      // Guardar branding
+      console.log('🎨 Updating branding...')
+      await updateResellerBranding(resellerId, brandingData)
+      console.log('✅ Branding updated')
 
       if (refreshResellerData) {
+        console.log('🔄 Refreshing reseller data...')
         await refreshResellerData()
+      }
+
+      // Refrescar branding en el contexto
+      if (refreshBranding) {
+        console.log('🔄 Refreshing branding context...')
+        await refreshBranding()
       }
 
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+      console.log('✅ All saved successfully!')
     } catch (error) {
-      console.error('Error saving settings:', error)
-      alert('Error al guardar los cambios')
+      console.error('❌ Error saving settings:', error)
+      console.error('   Error code:', error.code)
+      console.error('   Error message:', error.message)
+      alert(`Error al guardar: ${error.message}`)
     } finally {
       setSaving(false)
     }
@@ -97,356 +201,478 @@ export default function ResellerSettings() {
     if (!d) return 'N/A'
     return d.toLocaleDateString('es-PE', {
       day: '2-digit',
-      month: 'long',
+      month: 'short',
       year: 'numeric'
     })
   }
 
+  function copyToClipboard(text) {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Calcular descuento correctamente
+  const discount = resellerData?.discountOverride || resellerData?.discount || 0
+  const discountPercent = discount < 1 ? discount * 100 : discount
+
+  // URL de login con branding del reseller
+  const loginUrl = `${window.location.origin}/login?ref=${resellerId}`
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
         <p className="text-gray-500">Gestiona los datos de tu cuenta de reseller</p>
       </div>
 
-      {/* Account Info */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 bg-emerald-100 rounded-xl flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-emerald-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">{resellerData?.companyName || 'Mi Empresa'}</h2>
-            <p className="text-gray-500">{user?.email}</p>
-            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
+      {/* Layout de 2 columnas */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Columna Izquierda - Info de cuenta */}
+        <div className="lg:col-span-1 space-y-4">
+          {/* Account Card */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <Building2 className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-bold text-gray-900 truncate">{resellerData?.companyName || 'Mi Empresa'}</h2>
+                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">
               <Shield className="w-3 h-3" />
               Reseller Activo
             </span>
-          </div>
-        </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y border-gray-100">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">S/ {(resellerData?.balance || 0).toFixed(2)}</p>
-            <p className="text-xs text-gray-500">Saldo</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">S/ {(resellerData?.totalSpent || 0).toFixed(2)}</p>
-            <p className="text-xs text-gray-500">Total gastado</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{((resellerData?.discount || 0.30) * 100).toFixed(0)}%</p>
-            <p className="text-xs text-gray-500">Descuento</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{formatDate(resellerData?.createdAt)}</p>
-            <p className="text-xs text-gray-500">Desde</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="border-b border-gray-200">
-          <nav className="flex">
-            <button
-              onClick={() => setActiveTab('empresa')}
-              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'empresa'
-                  ? 'border-emerald-500 text-emerald-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Building2 className="w-4 h-4 inline mr-2" />
-              Datos de Empresa
-            </button>
-            <button
-              onClick={() => setActiveTab('branding')}
-              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'branding'
-                  ? 'border-emerald-500 text-emerald-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Palette className="w-4 h-4 inline mr-2" />
-              Mi Marca (White-Label)
-            </button>
-          </nav>
-        </div>
-
-        <div className="p-6">
-          {activeTab === 'empresa' ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre de Empresa
-                  </label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="companyName"
-                      value={formData.companyName}
-                      onChange={handleChange}
-                      placeholder="Mi Empresa SAC"
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    RUC
-                  </label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="ruc"
-                      value={formData.ruc}
-                      onChange={handleChange}
-                      placeholder="20123456789"
-                      maxLength={11}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre de Contacto
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="contactName"
-                      value={formData.contactName}
-                      onChange={handleChange}
-                      placeholder="Juan Pérez"
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Teléfono
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="987654321"
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dirección
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleChange}
-                      placeholder="Av. Principal 123, Lima"
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-gray-900">S/ {(resellerData?.balance || 0).toFixed(2)}</p>
+                <p className="text-xs text-gray-500">Saldo</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-emerald-600">{discountPercent.toFixed(0)}%</p>
+                <p className="text-xs text-gray-500">Descuento</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-lg font-bold text-gray-900">S/ {(resellerData?.totalSpent || 0).toFixed(0)}</p>
+                <p className="text-xs text-gray-500">Invertido</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <p className="text-sm font-medium text-gray-700">{formatDate(resellerData?.createdAt)}</p>
+                <p className="text-xs text-gray-500">Miembro desde</p>
               </div>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Branding Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>White-Label:</strong> Personaliza la marca que verán tus clientes cuando usen la aplicación.
-                  En lugar de "Cobrify", verán el nombre y colores de tu marca.
-                </p>
-              </div>
+          </div>
 
-              {/* Brand Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre de tu Marca
-                </label>
-                <p className="text-xs text-gray-500 mb-2">Este nombre verán tus clientes en lugar de "Cobrify"</p>
-                <div className="relative">
-                  <Type className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="brandName"
-                    value={brandingData.brandName}
-                    onChange={handleBrandingChange}
-                    placeholder="Mi Sistema de Facturación"
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  />
-                </div>
+          {/* Account Details */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="font-semibold text-gray-900 mb-3 text-sm">Detalles de Cuenta</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-gray-500">Email</span>
+                <span className="font-medium text-gray-900 truncate ml-2 max-w-[140px]">{user?.email}</span>
               </div>
-
-              {/* Brand Tagline */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Eslogan (opcional)
-                </label>
-                <p className="text-xs text-gray-500 mb-2">Un texto corto que aparece debajo del nombre</p>
-                <input
-                  type="text"
-                  name="brandTagline"
-                  value={brandingData.brandTagline}
-                  onChange={handleBrandingChange}
-                  placeholder="Facturación fácil y rápida"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                />
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-gray-500">ID</span>
+                <span className="font-mono text-xs text-gray-500 truncate ml-2 max-w-[140px]">{user?.uid?.slice(0, 12)}...</span>
               </div>
-
-              {/* Brand Color */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color de tu Marca
-                </label>
-                <p className="text-xs text-gray-500 mb-2">Este color se usará en el menú lateral y acentos</p>
-                <div className="flex flex-wrap gap-3">
-                  {BRAND_COLORS.map(color => (
-                    <button
-                      key={color.value}
-                      onClick={() => setBrandingData(prev => ({ ...prev, brandColor: color.value }))}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                        brandingData.brandColor === color.value
-                          ? 'border-gray-900 scale-110'
-                          : 'border-transparent hover:scale-105'
-                      }`}
-                      style={{ backgroundColor: color.value }}
-                      title={color.name}
-                    />
-                  ))}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={brandingData.brandColor}
-                      onChange={(e) => setBrandingData(prev => ({ ...prev, brandColor: e.target.value }))}
-                      className="w-10 h-10 rounded-lg cursor-pointer"
-                    />
-                    <span className="text-xs text-gray-500">Personalizado</span>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-gray-500">Estado</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                  <CheckCircle className="w-3 h-3" />
+                  Activo
+                </span>
               </div>
+            </div>
+          </div>
 
-              {/* Preview */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  <Eye className="w-4 h-4 inline mr-1" />
-                  Vista Previa
-                </label>
-                <div
-                  className="rounded-xl p-6 text-white"
-                  style={{ background: `linear-gradient(135deg, ${brandingData.brandColor}, ${brandingData.brandColor}dd)` }}
+          {/* Link de Login */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h3 className="font-semibold text-blue-800 mb-2 text-sm flex items-center gap-2">
+              <ExternalLink className="w-4 h-4" />
+              Link de Login para tus Clientes
+            </h3>
+            <p className="text-xs text-blue-700 mb-3">
+              Comparte este link con tus clientes para que inicien sesión con tu marca
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={loginUrl}
+                readOnly
+                className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-600"
+              />
+              <button
+                onClick={() => copyToClipboard(loginUrl)}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1"
+              >
+                {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </button>
+            </div>
+          </div>
+
+          {/* Help */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <h3 className="font-semibold text-emerald-800 mb-1 text-sm">¿Necesitas ayuda?</h3>
+            <p className="text-xs text-emerald-700 mb-3">
+              Contacta soporte para consultas sobre tu cuenta o descuentos especiales.
+            </p>
+            <a
+              href="https://wa.me/51987654321?text=Hola,%20soy%20reseller%20y%20necesito%20ayuda"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-xs"
+            >
+              Contactar Soporte
+            </a>
+          </div>
+        </div>
+
+        {/* Columna Derecha - Formularios */}
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-xl border border-gray-200">
+            {/* Tabs */}
+            <div className="border-b border-gray-200">
+              <nav className="flex">
+                <button
+                  onClick={() => setActiveTab('empresa')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'empresa'
+                      ? 'border-emerald-500 text-emerald-600 bg-emerald-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-                      <span className="text-2xl font-bold" style={{ color: brandingData.brandColor }}>
-                        {brandingData.brandName?.charAt(0) || 'M'}
-                      </span>
-                    </div>
+                  <Building2 className="w-4 h-4 inline mr-2" />
+                  Datos de Empresa
+                </button>
+                <button
+                  onClick={() => setActiveTab('branding')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'branding'
+                      ? 'border-emerald-500 text-emerald-600 bg-emerald-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Palette className="w-4 h-4 inline mr-2" />
+                  Mi Marca (White-Label)
+                </button>
+              </nav>
+            </div>
+
+            <div className="p-5">
+              {activeTab === 'empresa' ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <h3 className="text-xl font-bold">{brandingData.brandName || 'Mi Marca'}</h3>
-                      {brandingData.brandTagline && (
-                        <p className="text-sm opacity-80">{brandingData.brandTagline}</p>
-                      )}
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nombre de Empresa
+                      </label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="companyName"
+                          value={formData.companyName}
+                          onChange={handleChange}
+                          placeholder="Mi Empresa SAC"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        RUC
+                      </label>
+                      <div className="relative">
+                        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="ruc"
+                          value={formData.ruc}
+                          onChange={handleChange}
+                          placeholder="20123456789"
+                          maxLength={11}
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nombre de Contacto
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="contactName"
+                          value={formData.contactName}
+                          onChange={handleChange}
+                          placeholder="Juan Pérez"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Teléfono
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="tel"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleChange}
+                          placeholder="987654321"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Dirección
+                      </label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="address"
+                          value={formData.address}
+                          onChange={handleChange}
+                          placeholder="Av. Principal 123, Lima"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Así se verá el menú lateral para tus clientes
-                </p>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Columna izquierda - Configuración */}
+                  <div className="space-y-5">
+                    {/* Info */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-xs text-blue-800">
+                        <strong>Marca Blanca:</strong> Personaliza la marca que verán tus clientes en lugar de "Cobrify".
+                      </p>
+                    </div>
+
+                    {/* Logo Upload */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Logo de tu Marca
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">PNG o JPG, máx 2MB</p>
+
+                      <div className="flex items-center gap-3">
+                        {/* Logo Preview */}
+                        <div className="relative flex-shrink-0">
+                          {brandingData.logoUrl ? (
+                            <div className="relative">
+                              <img
+                                src={brandingData.logoUrl}
+                                alt="Logo"
+                                className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200"
+                              />
+                              <button
+                                onClick={removeLogo}
+                                className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                              <Image className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Upload Button */}
+                        <div>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploadingLogo}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+                          >
+                            {uploadingLogo ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Subiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-3.5 h-3.5" />
+                                Subir
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Brand Name */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nombre de tu Marca
+                      </label>
+                      <div className="relative">
+                        <Type className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="companyName"
+                          value={brandingData.companyName}
+                          onChange={handleBrandingChange}
+                          placeholder="Mi Sistema de Facturación"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Brand Colors */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Color Principal
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {PRESET_COLORS.map(color => (
+                          <button
+                            key={color.primary}
+                            onClick={() => setBrandingData(prev => ({
+                              ...prev,
+                              primaryColor: color.primary,
+                              secondaryColor: color.secondary
+                            }))}
+                            className={`w-8 h-8 rounded-lg border-2 transition-all ${
+                              brandingData.primaryColor === color.primary
+                                ? 'border-gray-900 scale-110 ring-2 ring-offset-1 ring-gray-400'
+                                : 'border-transparent hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: color.primary }}
+                            title={color.name}
+                          />
+                        ))}
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="color"
+                            value={brandingData.primaryColor}
+                            onChange={(e) => setBrandingData(prev => ({
+                              ...prev,
+                              primaryColor: e.target.value,
+                              secondaryColor: e.target.value
+                            }))}
+                            className="w-8 h-8 rounded-lg cursor-pointer border border-gray-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Columna derecha - Preview */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <Eye className="w-4 h-4 inline mr-1" />
+                      Vista Previa
+                    </label>
+                    <div
+                      className="rounded-xl p-4 text-white h-[280px]"
+                      style={{ background: `linear-gradient(135deg, ${brandingData.primaryColor}, ${brandingData.secondaryColor})` }}
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        {brandingData.logoUrl ? (
+                          <img
+                            src={brandingData.logoUrl}
+                            alt="Logo"
+                            className="w-10 h-10 rounded-lg object-cover bg-white"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                            <span className="text-xl font-bold" style={{ color: brandingData.primaryColor }}>
+                              {brandingData.companyName?.charAt(0) || 'M'}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="font-bold">{brandingData.companyName || 'Mi Marca'}</h3>
+                          <p className="text-xs opacity-80">Sistema de Facturación</p>
+                        </div>
+                      </div>
+
+                      {/* Simulated Menu Items */}
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg">
+                          <div className="w-4 h-4 bg-white/60 rounded" />
+                          <span className="text-sm">Dashboard</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg">
+                          <div className="w-4 h-4 bg-white/40 rounded" />
+                          <span className="text-sm opacity-80">Facturación</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg">
+                          <div className="w-4 h-4 bg-white/40 rounded" />
+                          <span className="text-sm opacity-80">Clientes</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/10 rounded-lg">
+                          <div className="w-4 h-4 bg-white/40 rounded" />
+                          <span className="text-sm opacity-80">Productos</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs opacity-60 mt-4 text-center">
+                        Así verán tus clientes la app
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Save Button */}
+              <div className="pt-5 mt-5 border-t border-gray-200 flex items-center gap-3">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Guardar Cambios
+                    </>
+                  )}
+                </button>
+
+                {saved && (
+                  <span className="flex items-center gap-1 text-green-600 text-sm">
+                    <CheckCircle className="w-4 h-4" />
+                    Guardado
+                  </span>
+                )}
               </div>
             </div>
-          )}
-
-          {/* Save Button */}
-          <div className="pt-6 mt-6 border-t border-gray-200 flex items-center gap-4">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-5 h-5" />
-                  Guardar Cambios
-                </>
-              )}
-            </button>
-
-            {saved && (
-              <span className="flex items-center gap-1 text-green-600 text-sm">
-                <CheckCircle className="w-4 h-4" />
-                Guardado correctamente
-              </span>
-            )}
           </div>
         </div>
-      </div>
-
-      {/* Account Details */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Detalles de Cuenta</h3>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">Email</span>
-            <span className="font-medium text-gray-900">{user?.email}</span>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">ID de Reseller</span>
-            <span className="font-mono text-sm text-gray-600">{user?.uid}</span>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b border-gray-100">
-            <span className="text-gray-500">Descuento asignado</span>
-            <span className="font-medium text-emerald-600">{((resellerData?.discount || 0.30) * 100).toFixed(0)}%</span>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-gray-500">Estado de cuenta</span>
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-              <CheckCircle className="w-4 h-4" />
-              Activo
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Help */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
-        <h3 className="font-semibold text-emerald-800 mb-2">¿Necesitas ayuda?</h3>
-        <p className="text-sm text-emerald-700 mb-4">
-          Si tienes preguntas sobre tu cuenta de reseller, descuentos especiales o necesitas soporte técnico,
-          no dudes en contactarnos.
-        </p>
-        <a
-          href="https://wa.me/51987654321?text=Hola,%20soy%20reseller%20y%20necesito%20ayuda"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
-        >
-          Contactar Soporte
-        </a>
       </div>
     </div>
   )

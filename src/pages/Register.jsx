@@ -131,7 +131,6 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-primary-600 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        {/* Logo y título */}
         <div className="text-center mb-6">
           <img
             src="/logo.png"
@@ -144,7 +143,6 @@ export default function Register() {
           <p className="text-sm text-primary-100">Sistema de facturación para Perú</p>
         </div>
 
-        {/* Progress indicator */}
         <div className="flex items-center justify-center gap-2 mb-4">
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
             step === 1 ? 'bg-white text-primary-600' : 'bg-primary-500 text-white'
