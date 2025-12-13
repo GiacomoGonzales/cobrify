@@ -21,26 +21,35 @@ import {
   Tag
 } from 'lucide-react'
 
-// Precios originales de los planes
-const PLAN_ORIGINAL_PRICES = {
-  qpse_1_month: 19.90,
-  qpse_6_months: 99.90,
-  qpse_12_months: 149.90,
-  sunat_direct_1_month: 19.90,
-  sunat_direct_6_months: 99.90,
-  sunat_direct_12_months: 149.90,
+// Precios fijos para resellers (números redondos)
+const RESELLER_PRICES = {
+  qpse_1_month: 14,
+  qpse_6_months: 70,
+  qpse_12_months: 105,
+  sunat_direct_1_month: 14,
+  sunat_direct_6_months: 70,
+  sunat_direct_12_months: 105,
 }
 
-// Función para calcular precio con descuento del reseller
-// discount puede ser decimal (0.30) o porcentaje (30)
-function getResellerPrice(plan, discount = 0.30) {
-  const originalPrice = PLAN_ORIGINAL_PRICES[plan] || 0
-  // Si el descuento es mayor a 1, es porcentaje (30), convertir a decimal
-  const discountDecimal = discount > 1 ? discount / 100 : discount
+// Precios originales para mostrar tachado
+const ORIGINAL_PRICES = {
+  qpse_1_month: 20,
+  qpse_6_months: 100,
+  qpse_12_months: 150,
+  sunat_direct_1_month: 20,
+  sunat_direct_6_months: 100,
+  sunat_direct_12_months: 150,
+}
+
+// Función para obtener precio del reseller (precio fijo)
+function getResellerPrice(plan) {
+  const price = RESELLER_PRICES[plan] || 0
+  const originalPrice = ORIGINAL_PRICES[plan] || 0
+  const discountPercent = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0
   return {
-    price: Number((originalPrice * (1 - discountDecimal)).toFixed(2)),
+    price,
     originalPrice,
-    discountPercent: discountDecimal * 100
+    discountPercent
   }
 }
 
@@ -66,7 +75,7 @@ export default function CreateResellerClient() {
   })
 
   const selectedPlan = PLANS[formData.plan]
-  const resellerPrice = getResellerPrice(formData.plan, resellerDiscount)
+  const resellerPrice = getResellerPrice(formData.plan)
   const currentBalance = resellerData?.balance || 0
   const hasEnoughBalance = currentBalance >= (resellerPrice?.price || 0)
 
@@ -388,14 +397,14 @@ export default function CreateResellerClient() {
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
                 <Tag className="w-4 h-4 text-gray-400" />
-                Plan ({resellerDiscount > 1 ? resellerDiscount : resellerDiscount * 100}% desc.)
+                Plan (30% desc.)
               </h3>
               <div className="grid grid-cols-3 gap-2">
-                {Object.entries(PLAN_ORIGINAL_PRICES).map(([planKey, originalPrice]) => {
+                {Object.entries(RESELLER_PRICES).map(([planKey]) => {
                   const plan = PLANS[planKey]
                   if (!plan) return null
 
-                  const prices = getResellerPrice(planKey, resellerDiscount)
+                  const prices = getResellerPrice(planKey)
                   const isSelected = formData.plan === planKey
                   const isQPse = planKey.startsWith('qpse')
 
@@ -426,7 +435,7 @@ export default function CreateResellerClient() {
                         {plan.months === 1 ? '1 Mes' : plan.months === 6 ? '6 Meses' : '12 Meses'}
                       </span>
                       <span className="text-lg font-bold text-gray-900">S/ {prices.price.toFixed(0)}</span>
-                      <span className="text-xs text-gray-400 line-through">S/ {originalPrice.toFixed(0)}</span>
+                      <span className="text-xs text-gray-400 line-through">S/ {prices.originalPrice}</span>
                       <span className="text-xs text-gray-500 mt-1">
                         {planKey.startsWith('sunat_direct') ? 'Ilimitado' : '200/mes'}
                       </span>
