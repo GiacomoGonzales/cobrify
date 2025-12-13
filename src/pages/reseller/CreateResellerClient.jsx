@@ -21,17 +21,7 @@ import {
   Tag
 } from 'lucide-react'
 
-// Precios fijos para resellers (números redondos)
-const RESELLER_PRICES = {
-  qpse_1_month: 14,
-  qpse_6_months: 70,
-  qpse_12_months: 105,
-  sunat_direct_1_month: 14,
-  sunat_direct_6_months: 70,
-  sunat_direct_12_months: 105,
-}
-
-// Precios originales para mostrar tachado
+// Precios originales (números redondos)
 const ORIGINAL_PRICES = {
   qpse_1_month: 20,
   qpse_6_months: 100,
@@ -41,11 +31,13 @@ const ORIGINAL_PRICES = {
   sunat_direct_12_months: 150,
 }
 
-// Función para obtener precio del reseller (precio fijo)
-function getResellerPrice(plan) {
-  const price = RESELLER_PRICES[plan] || 0
+// Función para calcular precio con descuento del reseller
+// discount puede ser decimal (0.30) o porcentaje (30)
+function getResellerPrice(plan, discount = 30) {
   const originalPrice = ORIGINAL_PRICES[plan] || 0
-  const discountPercent = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0
+  // Si el descuento es menor a 1, es decimal (0.30), convertir a porcentaje
+  const discountPercent = discount < 1 ? discount * 100 : discount
+  const price = Math.round(originalPrice * (1 - discountPercent / 100))
   return {
     price,
     originalPrice,
@@ -75,7 +67,7 @@ export default function CreateResellerClient() {
   })
 
   const selectedPlan = PLANS[formData.plan]
-  const resellerPrice = getResellerPrice(formData.plan)
+  const resellerPrice = getResellerPrice(formData.plan, resellerDiscount)
   const currentBalance = resellerData?.balance || 0
   const hasEnoughBalance = currentBalance >= (resellerPrice?.price || 0)
 
@@ -397,14 +389,14 @@ export default function CreateResellerClient() {
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
                 <Tag className="w-4 h-4 text-gray-400" />
-                Plan (30% desc.)
+                Plan ({resellerPrice.discountPercent}% desc.)
               </h3>
               <div className="grid grid-cols-3 gap-2">
-                {Object.entries(RESELLER_PRICES).map(([planKey]) => {
+                {Object.entries(ORIGINAL_PRICES).map(([planKey]) => {
                   const plan = PLANS[planKey]
                   if (!plan) return null
 
-                  const prices = getResellerPrice(planKey)
+                  const prices = getResellerPrice(planKey, resellerDiscount)
                   const isSelected = formData.plan === planKey
                   const isQPse = planKey.startsWith('qpse')
 
