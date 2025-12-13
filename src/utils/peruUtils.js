@@ -79,6 +79,67 @@ export function calculateInvoiceAmounts(items, igvRate = 18) {
 }
 
 /**
+ * Calcula los montos de una factura con productos mixtos (gravados, exonerados, inafectos)
+ * Los precios de los items YA incluyen IGV (para productos gravados)
+ * @param {Array} items - Array de items con precio, cantidad y taxAffectation
+ * @param {number} igvRate - Tasa de IGV para productos gravados (por defecto 18)
+ * @returns {Object} - Objeto con montos separados por tipo de afectación
+ */
+export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
+  const igvMultiplier = igvRate / 100
+
+  let totalGravado = 0      // Total con IGV de productos gravados
+  let totalExonerado = 0    // Total de productos exonerados (sin IGV)
+  let totalInafecto = 0     // Total de productos inafectos (sin IGV)
+
+  items.forEach(item => {
+    const lineTotal = item.price * item.quantity
+    const taxAffectation = item.taxAffectation || '10' // Default: Gravado
+
+    switch (taxAffectation) {
+      case '10': // Gravado
+        totalGravado += lineTotal
+        break
+      case '20': // Exonerado
+        totalExonerado += lineTotal
+        break
+      case '30': // Inafecto
+        totalInafecto += lineTotal
+        break
+      default:
+        totalGravado += lineTotal // Default a gravado
+    }
+  })
+
+  // Calcular subtotal e IGV solo de productos gravados
+  const subtotalGravado = totalGravado / (1 + igvMultiplier)
+  const igvGravado = totalGravado - subtotalGravado
+
+  // El subtotal total es la suma de todos los subtotales
+  const subtotalTotal = subtotalGravado + totalExonerado + totalInafecto
+  const totalFinal = totalGravado + totalExonerado + totalInafecto
+
+  return {
+    // Montos por tipo de afectación
+    gravado: {
+      subtotal: Number(subtotalGravado.toFixed(2)),
+      igv: Number(igvGravado.toFixed(2)),
+      total: Number(totalGravado.toFixed(2)),
+    },
+    exonerado: {
+      total: Number(totalExonerado.toFixed(2)),
+    },
+    inafecto: {
+      total: Number(totalInafecto.toFixed(2)),
+    },
+    // Totales generales
+    subtotal: Number(subtotalTotal.toFixed(2)),
+    igv: Number(igvGravado.toFixed(2)),
+    total: Number(totalFinal.toFixed(2)),
+  }
+}
+
+/**
  * Valida un número de RUC peruano
  * @param {string} ruc - Número de RUC a validar
  * @returns {boolean} - true si es válido

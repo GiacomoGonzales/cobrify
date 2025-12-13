@@ -815,6 +815,43 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
     }
 
+    // ========== Condiciones de Crédito para Facturas ==========
+    if (invoice.documentType === 'factura' && invoice.paymentType === 'credito') {
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+
+      printer = printer
+        .align('left')
+        .bold()
+        .text('CONDICIONES DE CREDITO\n')
+        .clearFormatting();
+
+      printer = printer.text(convertSpanishText('Forma de Pago: CREDITO\n'));
+
+      // Si hay fecha de vencimiento y no hay cuotas
+      if (invoice.paymentDueDate && (!invoice.paymentInstallments || invoice.paymentInstallments.length === 0)) {
+        const dueDate = new Date(invoice.paymentDueDate + 'T00:00:00');
+        const dueDateStr = dueDate.toLocaleDateString('es-PE');
+        printer = printer.text(convertSpanishText(`Fecha Vencimiento: ${dueDateStr}\n`));
+      }
+
+      // Si hay cuotas
+      if (invoice.paymentInstallments && invoice.paymentInstallments.length > 0) {
+        printer = printer
+          .bold()
+          .text('CUOTAS:\n')
+          .clearFormatting();
+
+        invoice.paymentInstallments.forEach((cuota, index) => {
+          const cuotaNum = cuota.number || index + 1;
+          const cuotaAmount = parseFloat(cuota.amount || 0).toFixed(2);
+          const cuotaDueDate = cuota.dueDate
+            ? new Date(cuota.dueDate + 'T00:00:00').toLocaleDateString('es-PE')
+            : '-';
+          printer = printer.text(convertSpanishText(`  Cuota ${cuotaNum}: S/ ${cuotaAmount} - Vence: ${cuotaDueDate}\n`));
+        });
+      }
+    }
+
     // ========== Observaciones (ticket-section) ==========
     if (invoice.notes) {
       printer = addSeparator(printer, format.separator, paperWidth, 'center');

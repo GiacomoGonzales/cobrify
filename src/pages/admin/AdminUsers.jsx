@@ -89,7 +89,8 @@ export default function AdminUsers() {
     sunatEnvironment: 'beta',
     // Configuración tributaria
     igvExempt: false,
-    igvRate: 18
+    igvRate: 18,
+    taxType: 'standard' // 'standard' (18%), 'reduced' (8% Ley 31556), 'exempt' (0% Ley 27037)
   })
   const [showPasswords, setShowPasswords] = useState({
     qpse: false,
@@ -404,7 +405,10 @@ export default function AdminUsers() {
           sunatEnvironment: normalizeSunatEnv(sunatData.environment),
           // Configuración tributaria
           igvExempt: taxConfig.igvExempt || false,
-          igvRate: taxConfig.igvRate || 18
+          igvRate: taxConfig.igvRate || 18,
+          // Determinar taxType basado en configuración existente
+          // Nota: 10% = Ley 31556 (8% IGV + 2% IPM), también aceptar 8% por compatibilidad
+          taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')
         })
       } else {
         console.warn('⚠️ No se encontró documento de negocio para:', user.id)
@@ -420,7 +424,8 @@ export default function AdminUsers() {
           certificateName: '',
           sunatEnvironment: 'beta',
           igvExempt: false,
-          igvRate: 18
+          igvRate: 18,
+          taxType: 'standard'
         })
       }
     } catch (error) {
@@ -437,7 +442,8 @@ export default function AdminUsers() {
         certificateName: '',
         sunatEnvironment: 'beta',
         igvExempt: false,
-        igvRate: 18
+        igvRate: 18,
+        taxType: 'standard'
       })
     } finally {
       setLoadingSunatConfig(false)
@@ -487,13 +493,23 @@ export default function AdminUsers() {
         updatedAt: Timestamp.now()
       }
 
+      // Determinar igvExempt e igvRate basado en taxType
+      // Nota: Ley 31556 es 10% (8% IGV + 2% IPM), pero en el XML se declara junto como 10%
+      const taxTypeConfig = {
+        standard: { igvExempt: false, igvRate: 18 },
+        reduced: { igvExempt: false, igvRate: 10 }, // Ley 31556: 8% IGV + 2% IPM = 10%
+        exempt: { igvExempt: true, igvRate: 0 }
+      }
+      const selectedTaxConfig = taxTypeConfig[sunatForm.taxType] || taxTypeConfig.standard
+
       // Construir emissionConfig
       const emissionConfig = {
         method: sunatForm.emissionMethod,
         taxConfig: {
-          igvExempt: sunatForm.igvExempt,
-          igvRate: sunatForm.igvRate,
-          includeIgv: !sunatForm.igvExempt
+          igvExempt: selectedTaxConfig.igvExempt,
+          igvRate: selectedTaxConfig.igvRate,
+          includeIgv: !selectedTaxConfig.igvExempt,
+          taxType: sunatForm.taxType // Guardar también el tipo para referencia
         }
       }
 
@@ -1337,44 +1353,72 @@ export default function AdminUsers() {
                   <span className="font-medium">Configuración Tributaria</span>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Exonerado de IGV</label>
-                    <p className="text-xs text-gray-500">Marcar si la empresa está exonerada del IGV</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={sunatForm.igvExempt}
-                      onChange={e => setSunatForm({ ...sunatForm, igvExempt: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Régimen de IGV
                   </label>
-                </div>
-
-                {sunatForm.igvExempt && (
-                  <div className="flex items-center gap-2 p-2 bg-green-100 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm text-green-700 font-medium">Esta empresa NO cobra IGV en sus ventas</span>
-                  </div>
-                )}
-
-                {!sunatForm.igvExempt && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tasa de IGV (%)
+                  <div className="space-y-2">
+                    {/* IGV Estándar 18% */}
+                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      sunatForm.taxType === 'standard'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="taxType"
+                        value="standard"
+                        checked={sunatForm.taxType === 'standard'}
+                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
+                        className="mt-1 text-green-600 focus:ring-green-500"
+                      />
+                      <div>
+                        <span className="font-medium text-gray-900">IGV Estándar (18%)</span>
+                        <p className="text-xs text-gray-500">Régimen general para la mayoría de empresas</p>
+                      </div>
                     </label>
-                    <input
-                      type="number"
-                      value={sunatForm.igvRate}
-                      onChange={e => setSunatForm({ ...sunatForm, igvRate: parseFloat(e.target.value) || 18 })}
-                      min="0"
-                      max="100"
-                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    />
+
+                    {/* IGV Reducido 10% - Ley 31556 */}
+                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      sunatForm.taxType === 'reduced'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="taxType"
+                        value="reduced"
+                        checked={sunatForm.taxType === 'reduced'}
+                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
+                        className="mt-1 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <span className="font-medium text-gray-900">IGV Reducido (10%) - Ley N° 31556</span>
+                        <p className="text-xs text-gray-500">8% IGV + 2% IPM. MYPES de restaurantes, hoteles y alojamientos turísticos (ventas ≤ S/ 7.8M anuales). Vigente hasta 31/12/2026.</p>
+                      </div>
+                    </label>
+
+                    {/* Exonerado 0% - Ley 27037 */}
+                    <label className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      sunatForm.taxType === 'exempt'
+                        ? 'border-amber-500 bg-amber-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="taxType"
+                        value="exempt"
+                        checked={sunatForm.taxType === 'exempt'}
+                        onChange={e => setSunatForm({ ...sunatForm, taxType: e.target.value })}
+                        className="mt-1 text-amber-600 focus:ring-amber-500"
+                      />
+                      <div>
+                        <span className="font-medium text-gray-900">Exonerado (0%) - Ley N° 27037</span>
+                        <p className="text-xs text-gray-500">Ley de Promoción de la Inversión en la Amazonía. Para empresas ubicadas en Loreto, Ucayali, Madre de Dios, Amazonas y San Martín.</p>
+                      </div>
+                    </label>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Selector de método */}

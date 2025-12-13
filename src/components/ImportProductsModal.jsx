@@ -134,7 +134,14 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         therapeuticAction: String(row.accion_terapeutica || row.Accion_Terapeutica || row.ACCION_TERAPEUTICA || row.accionTerapeutica || row.therapeutic_action || '').trim() || null,
         saleCondition: String(row.condicion_venta || row.Condicion_Venta || row.CONDICION_VENTA || row.condicionVenta || row.sale_condition || '').trim().toLowerCase() || null,
         sanitaryRegistry: String(row.registro_sanitario || row.Registro_Sanitario || row.REGISTRO_SANITARIO || row.registroSanitario || row.sanitary_registry || '').trim() || null,
-        location: String(row.ubicacion || row.Ubicacion || row.UBICACION || row.location || '').trim() || null
+        location: String(row.ubicacion || row.Ubicacion || row.UBICACION || row.location || '').trim() || null,
+        // Afectación IGV: GRAVADO (10), EXONERADO (20), INAFECTO (30)
+        taxAffectation: (() => {
+          const rawValue = String(row.afectacion_igv || row.Afectacion_Igv || row.AFECTACION_IGV || row.afectacionIgv || row.tax_affectation || row.taxAffectation || '').trim().toUpperCase()
+          if (rawValue === 'EXONERADO' || rawValue === '20') return '20'
+          if (rawValue === 'INAFECTO' || rawValue === '30') return '30'
+          return '10' // Default: GRAVADO
+        })()
       }
 
       // Validar y convertir costo si existe
@@ -244,7 +251,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Analgésicos',
-          almacen: 'Almacén Principal'
+          almacen: 'Almacén Principal',
+          afectacion_igv: 'GRAVADO'
         },
         {
           sku: 'MED-002',
@@ -266,7 +274,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Antibióticos',
-          almacen: 'Almacén Principal'
+          almacen: 'Almacén Principal',
+          afectacion_igv: 'GRAVADO'
         },
         {
           sku: 'MED-003',
@@ -288,7 +297,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Psicotrópicos',
-          almacen: 'Almacén Principal'
+          almacen: 'Almacén Principal',
+          afectacion_igv: 'EXONERADO'
         }
       ]
     } else {
@@ -305,7 +315,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Categoría Ejemplo',
-          almacen: 'Almacén Principal'
+          almacen: 'Almacén Principal',
+          afectacion_igv: 'GRAVADO'
         },
         {
           sku: 'SKU-002',
@@ -318,7 +329,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'NO',
           unidad: 'SERVICIO',
           categoria: 'Servicios',
-          almacen: ''
+          almacen: '',
+          afectacion_igv: 'EXONERADO'
         },
         {
           sku: '',
@@ -331,7 +343,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: '',
-          almacen: 'Almacén Sucursal 2'
+          almacen: 'Almacén Sucursal 2',
+          afectacion_igv: 'INAFECTO'
         }
       ]
     }
@@ -362,7 +375,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 10 }, // trackStock
         { wch: 10 }, // unidad
         { wch: 15 }, // categoria
-        { wch: 20 }  // almacen
+        { wch: 20 }, // almacen
+        { wch: 15 }  // afectacion_igv
       ]
     } else {
       ws['!cols'] = [
@@ -376,7 +390,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 15 }, // trackStock
         { wch: 15 }, // unidad
         { wch: 20 }, // categoria
-        { wch: 25 }  // almacen
+        { wch: 25 }, // almacen
+        { wch: 15 }  // afectacion_igv
       ]
     }
 
@@ -412,7 +427,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, stock, trackStock (SI/NO), unidad, categoria, almacen
+            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, stock, trackStock (SI/NO), unidad, categoria, almacen, afectacion_igv (GRAVADO/EXONERADO/INAFECTO)
           </p>
         </div>
 
@@ -487,6 +502,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Precio</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stock</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Control</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">IGV</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -502,6 +518,15 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
                           <span className="text-green-600 font-medium">SÍ</span>
                         ) : (
                           <span className="text-gray-400">NO</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-sm">
+                        {product.taxAffectation === '20' ? (
+                          <span className="text-blue-600 font-medium">EXO</span>
+                        ) : product.taxAffectation === '30' ? (
+                          <span className="text-orange-600 font-medium">INA</span>
+                        ) : (
+                          <span className="text-green-600 font-medium">GRA</span>
                         )}
                       </td>
                     </tr>

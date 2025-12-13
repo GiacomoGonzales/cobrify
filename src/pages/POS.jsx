@@ -1223,6 +1223,7 @@ export default function POS() {
           unit: item.unit || 'UNIDAD',
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
+          taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
         }))
 
         // Crear datos simulados de factura
@@ -1321,6 +1322,7 @@ export default function POS() {
         unit: item.unit || 'UNIDAD',
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
+        taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
       }))
 
@@ -2087,16 +2089,24 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {isExpired ? 'VENCIDO' : `${expirationStatus.days}d`}
                     </div>
                   )}
-                  <div className="flex gap-3 h-full">
-                    {/* Product Image - Square on the left */}
+                  <div className="flex gap-2 sm:gap-3 h-full">
+                    {/* Product Image + Stock below */}
                     {product.imageUrl && (
-                      <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
+                      <div className="flex-shrink-0 flex flex-col items-center">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-gray-100">
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                        {/* Stock debajo de la imagen */}
+                        {!product.hasVariants && (
+                          <div className="mt-1">
+                            {getStockBadge(product)}
+                          </div>
+                        )}
                       </div>
                     )}
                     {/* Product Info - Right side */}
@@ -2127,7 +2137,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             : formatCurrency(product.price)
                           }
                         </p>
-                        {!product.hasVariants && getStockBadge(product)}
+                        {/* Stock al lado del precio solo si NO hay imagen */}
+                        {!product.imageUrl && !product.hasVariants && getStockBadge(product)}
                         {product.hasVariants && (
                           <span className="text-xs text-gray-500">Ver opciones</span>
                         )}

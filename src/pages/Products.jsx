@@ -189,6 +189,9 @@ export default function Products() {
   // Modifiers state (for restaurant mode)
   const [modifiers, setModifiers] = useState([])
 
+  // Tax affectation state (IGV: Gravado, Exonerado, Inafecto)
+  const [taxAffectation, setTaxAffectation] = useState('10') // '10' = Gravado (default), '20' = Exonerado, '30' = Inafecto
+
   // Pharmacy mode state
   const [pharmacyData, setPharmacyData] = useState({
     genericName: '',           // Denominación Común Internacional (DCI)
@@ -360,6 +363,7 @@ export default function Products() {
       expirationDate: '',
     })
     setModifiers([]) // Limpiar modificadores
+    setTaxAffectation('10') // Default: Gravado
     // Resetear datos de farmacia
     setPharmacyData({
       genericName: '',
@@ -420,6 +424,9 @@ export default function Products() {
       sanitaryRegistry: product.sanitaryRegistry || '',
       location: product.location || '',
     })
+
+    // Load tax affectation (default to '10' = Gravado if not set for backwards compatibility)
+    setTaxAffectation(product.taxAffectation || '10')
 
     // Load product image if exists
     setProductImage(null)
@@ -542,6 +549,7 @@ export default function Products() {
         trackExpiration: trackExpiration,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
+        taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add pharmacy data if in pharmacy mode
@@ -2321,131 +2329,175 @@ export default function Products() {
         title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
         size="lg"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Image upload section - only shown if feature is enabled */}
-          {hasFeature('productImages') && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Imagen del producto
-              </label>
-              <div className="flex items-start gap-4">
-                {/* Preview */}
-                <div className="relative">
-                  {productImagePreview ? (
-                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
-                      <img
-                        src={productImagePreview}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleImageRemove}
-                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
-                      <Package className="w-8 h-8 text-gray-400" />
-                    </div>
-                  )}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECCIÓN 1: INFORMACIÓN BÁSICA
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Información Básica
+            </h3>
+
+            {/* Nombre del producto */}
+            <Input
+              label="Nombre"
+              required
+              placeholder="Nombre del producto o servicio"
+              error={errors.name?.message}
+              {...register('name')}
+            />
+
+            {/* Imagen y Descripción en fila */}
+            <div className="flex gap-4">
+              {/* Image upload - only shown if feature is enabled */}
+              {hasFeature('productImages') && (
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
+                  <div className="relative">
+                    {productImagePreview ? (
+                      <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
+                        <img
+                          src={productImagePreview}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleImageRemove}
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        {/* Botón para cambiar imagen */}
+                        <label className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                          Cambiar
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer block w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
+                        <div className="text-center">
+                          <Camera className="w-8 h-8 text-gray-400 mx-auto" />
+                          <span className="text-xs text-gray-500 mt-1 block">Subir foto</span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={handleImageSelect}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                    {uploadingImage && (
+                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {/* Upload button */}
-                <div className="flex-1">
-                  <label className="cursor-pointer">
-                    <div className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors w-fit">
-                      <Camera className="w-4 h-4 text-gray-600" />
-                      <span className="text-sm text-gray-700">
-                        {productImagePreview ? 'Cambiar imagen' : 'Subir imagen'}
-                      </span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      onChange={handleImageSelect}
-                      className="hidden"
-                    />
-                  </label>
-                  <p className="mt-1 text-xs text-gray-500">
-                    JPG, PNG, WebP o GIF. Máximo 5MB.
-                  </p>
-                  {uploadingImage && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-primary-600">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Subiendo imagen...
-                    </div>
-                  )}
-                </div>
+              )}
+
+              {/* Descripción */}
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descripción (Opcional)
+                </label>
+                <textarea
+                  {...register('description')}
+                  rows={hasFeature('productImages') ? 3 : 2}
+                  placeholder="Descripción breve del producto o servicio"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+                />
               </div>
             </div>
-          )}
 
-          <Input
-            label="Nombre"
-            required
-            placeholder="Nombre del producto o servicio"
-            error={errors.name?.message}
-            {...register('name')}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="SKU / Código Interno"
-              placeholder="SKU-001"
-              error={errors.sku?.message}
-              {...register('sku')}
-              helperText="Código interno de tu negocio"
-            />
-
-            <Input
-              label="Código de Barras"
-              placeholder="7501234567890"
-              error={errors.code?.message}
-              {...register('code')}
-              helperText="EAN, UPC u otro"
-            />
-
-            <Select
-              label="Unidad de Medida"
-              required
-              error={errors.unit?.message}
-              {...register('unit')}
-            >
-              {UNITS.map(unit => (
-                <option key={unit.value} value={unit.value}>
-                  {unit.label}
-                </option>
-              ))}
-            </Select>
+            {/* Códigos en línea */}
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="SKU / Código Interno"
+                placeholder="SKU-001"
+                error={errors.sku?.message}
+                {...register('sku')}
+                helperText="Código interno de tu negocio"
+              />
+              <Input
+                label="Código de Barras"
+                placeholder="7501234567890"
+                error={errors.code?.message}
+                {...register('code')}
+                helperText="EAN, UPC u otro"
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECCIÓN 2: PRECIOS Y CLASIFICACIÓN
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Precios y Clasificación
+            </h3>
+
+            {/* Precios */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <Input
+                  label="Costo"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  error={errors.cost?.message}
+                  {...register('cost')}
+                />
+                <p className="text-xs text-gray-500 mt-1">Opcional</p>
+              </div>
+
               <Input
-                label="Costo"
+                label="Precio de Venta"
                 type="number"
                 step="0.01"
+                required
                 placeholder="0.00"
-                error={errors.cost?.message}
-                {...register('cost')}
+                error={errors.price?.message}
+                {...register('price')}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Opcional. Para platos con receta, el costo se calcula automáticamente.
-              </p>
+
+              <Select
+                label="Unidad"
+                required
+                error={errors.unit?.message}
+                {...register('unit')}
+              >
+                {UNITS.map(unit => (
+                  <option key={unit.value} value={unit.value}>
+                    {unit.label}
+                  </option>
+                ))}
+              </Select>
+
+              {/* Afectación IGV */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Afectación IGV
+                </label>
+                <select
+                  value={taxAffectation}
+                  onChange={(e) => setTaxAffectation(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="10">Gravado</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                </select>
+              </div>
             </div>
 
-            <Input
-              label="Precio de Venta"
-              type="number"
-              step="0.01"
-              required
-              placeholder="0.00"
-              error={errors.price?.message}
-              {...register('price')}
-            />
-
+            {/* Categoría */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Categoría (Opcional)
@@ -2455,168 +2507,140 @@ export default function Products() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">Sin categoría</option>
-                {/* Render root categories and their subcategories */}
                 {getRootCategories(categories).map(cat => (
                   <React.Fragment key={cat.id}>
-                    <option value={cat.id}>
-                      {cat.name}
-                    </option>
+                    <option value={cat.id}>{cat.name}</option>
                     {getSubcategories(categories, cat.id).map(subcat => (
-                      <option key={subcat.id} value={subcat.id}>
-                        └─ {subcat.name}
-                      </option>
+                      <option key={subcat.id} value={subcat.id}>└─ {subcat.name}</option>
                     ))}
                   </React.Fragment>
                 ))}
               </select>
-              {errors.category && (
-                <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>
-              )}
               {categories.length === 0 && (
-                <p className="mt-1 text-sm text-gray-500">
-                  Crea categorías desde el botón "Categorías" para organizarlos mejor
+                <p className="mt-1 text-xs text-gray-500">
+                  Crea categorías desde el botón "Categorías"
                 </p>
               )}
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Control de Stock
-            </label>
-            <div className="space-y-3">
-              <div className="flex items-center">
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECCIÓN 3: INVENTARIO
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Inventario
+            </h3>
+
+            {/* Checkboxes de opciones */}
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              <label className="flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  id="noStock"
                   checked={noStock}
                   onChange={e => {
-                    const checked = e.target.checked
-                    setNoStock(checked)
-                    if (checked) {
-                      setValue('stock', '')
-                    }
+                    setNoStock(e.target.checked)
+                    if (e.target.checked) setValue('stock', '')
                   }}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
-                <label htmlFor="noStock" className="ml-2 text-sm text-gray-700">
-                  No manejar stock (servicios o productos sin control)
-                </label>
-              </div>
+                <span className="ml-2 text-sm text-gray-700">No manejar stock</span>
+              </label>
 
-              <div className="flex items-center">
+              <label className="flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  id="allowDecimalQuantity"
                   checked={allowDecimalQuantity}
                   onChange={e => setAllowDecimalQuantity(e.target.checked)}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
-                <label htmlFor="allowDecimalQuantity" className="ml-2 text-sm text-gray-700">
-                  Vender por peso (permite cantidades decimales: 1.5 kg, 0.250 kg)
-                </label>
-              </div>
+                <span className="ml-2 text-sm text-gray-700">Vender por peso</span>
+              </label>
 
-              {!noStock && (
-                <div className="space-y-4">
-                  {/* Stock Actual - Solo informativo cuando se edita */}
-                  {editingProduct && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock Actual
-                      </label>
-                      <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-semibold">
-                        {editingProduct.stock ?? 0} unidades
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Este valor se actualiza automáticamente con las ventas y compras
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Stock Inicial - Editable solo por Business Owner cuando se edita */}
-                  <Input
-                    label="Stock Inicial"
-                    type="number"
-                    placeholder="Ingresa la cantidad inicial"
-                    error={errors.initialStock?.message}
-                    {...register('initialStock')}
-                    disabled={editingProduct && user?.role !== 'business_owner'}
-                    helperText={
-                      editingProduct && user?.role !== 'business_owner'
-                        ? "Solo el propietario puede modificar el stock inicial"
-                        : editingProduct
-                        ? "Stock con el que comenzó el producto (dato histórico)"
-                        : "Ingresa la cantidad inicial de unidades"
-                    }
-                  />
-
-                  {/* Selector de Almacén - Solo al crear nuevo producto */}
-                  {!editingProduct && warehouses.length > 0 && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Almacén de Stock Inicial
-                      </label>
-                      <select
-                        value={selectedWarehouse}
-                        onChange={(e) => setSelectedWarehouse(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="">Seleccionar almacén...</option>
-                        {warehouses.filter(wh => wh.isActive).map((wh) => (
-                          <option key={wh.id} value={wh.id}>
-                            {wh.name} {wh.isDefault ? '(Predeterminado)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Selecciona el almacén donde se registrará el stock inicial
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Control de Vencimiento */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Control de Vencimiento
-            </label>
-            <div className="space-y-3">
-              <div className="flex items-center">
+              <label className="flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  id="trackExpiration"
                   checked={trackExpiration}
                   onChange={e => {
-                    const checked = e.target.checked
-                    setTrackExpiration(checked)
-                    if (!checked) {
-                      setValue('expirationDate', '')
-                    }
+                    setTrackExpiration(e.target.checked)
+                    if (!e.target.checked) setValue('expirationDate', '')
                   }}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
-                <label htmlFor="trackExpiration" className="ml-2 text-sm text-gray-700">
-                  Controlar fecha de vencimiento del producto
-                </label>
-              </div>
+                <span className="ml-2 text-sm text-gray-700">Control de vencimiento</span>
+              </label>
+            </div>
 
-              {trackExpiration && (
-                <div>
+            {/* Campos de Stock (solo si controla stock) */}
+            {!noStock && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
+                {/* Stock Actual (solo al editar) */}
+                {editingProduct && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Stock Actual
+                    </label>
+                    <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 font-semibold">
+                      {editingProduct.stock ?? 0} unidades
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">Se actualiza con ventas y compras</p>
+                  </div>
+                )}
+
+                {/* Stock Inicial */}
+                <Input
+                  label="Stock Inicial"
+                  type="number"
+                  placeholder="0"
+                  error={errors.initialStock?.message}
+                  {...register('initialStock')}
+                  disabled={editingProduct && user?.role !== 'business_owner'}
+                  helperText={editingProduct ? "Dato histórico" : "Cantidad inicial"}
+                />
+
+                {/* Almacén (solo al crear) */}
+                {!editingProduct && warehouses.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Almacén
+                    </label>
+                    <select
+                      value={selectedWarehouse}
+                      onChange={(e) => setSelectedWarehouse(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {warehouses.filter(wh => wh.isActive).map((wh) => (
+                        <option key={wh.id} value={wh.id}>
+                          {wh.name} {wh.isDefault ? '(Predeterminado)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Fecha de Vencimiento (solo si está activado) */}
+                {trackExpiration && (
                   <Input
                     label="Fecha de Vencimiento"
                     type="date"
-                    placeholder="Selecciona la fecha de vencimiento"
                     error={errors.expirationDate?.message}
                     {...register('expirationDate')}
-                    helperText="Fecha en la que este producto vence o caduca"
                   />
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
+
+            {/* Fecha de vencimiento fuera del bloque de stock si no controla stock pero sí vencimiento */}
+            {noStock && trackExpiration && (
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <Input
+                  label="Fecha de Vencimiento"
+                  type="date"
+                  error={errors.expirationDate?.message}
+                  {...register('expirationDate')}
+                />
+              </div>
+            )}
           </div>
 
           {/* Campos específicos de Farmacia */}
@@ -2813,42 +2837,30 @@ export default function Products() {
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción
-            </label>
-            <textarea
-              {...register('description')}
-              rows={3}
-              placeholder="Descripción del producto o servicio"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            {errors.description && (
-              <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
-            )}
-          </div>
-
-          {/* Variant System Toggle */}
-          <div className="border-t border-gray-200 pt-4">
-            <div className="flex items-center mb-3">
-              <input
-                type="checkbox"
-                id="hasVariants"
-                checked={hasVariants}
-                onChange={e => {
-                  const checked = e.target.checked
-                  setHasVariants(checked)
-                  if (!checked) {
-                    setVariantAttributes([])
-                    setVariants([])
-                    setNewAttributeName('')
-                    setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
-                  }
-                }}
-                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-              />
-              <label htmlFor="hasVariants" className="ml-2 text-sm font-medium text-gray-700">
-                Este producto tiene variantes (tallas, colores, presentaciones, etc.)
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECCIÓN 4: VARIANTES (Opcional)
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Variantes
+              </h3>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasVariants}
+                  onChange={e => {
+                    setHasVariants(e.target.checked)
+                    if (!e.target.checked) {
+                      setVariantAttributes([])
+                      setVariants([])
+                      setNewAttributeName('')
+                      setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+                    }
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Tiene variantes</span>
               </label>
             </div>
 

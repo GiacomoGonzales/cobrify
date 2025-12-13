@@ -776,6 +776,33 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         })()}
       </div>
 
+      {/* Condiciones de Pago para Facturas al Crédito */}
+      {invoice.documentType === 'factura' && invoice.paymentType === 'credito' && (
+        <div className="ticket-section" style={{ borderTop: '2px dashed #000', paddingTop: '8px', marginTop: '8px' }}>
+          <div className="section-title">CONDICIONES DE CRÉDITO</div>
+          <div className="info-row">
+            <span className="info-label">Forma de Pago:</span>
+            <span style={{ fontWeight: 'bold' }}>CRÉDITO</span>
+          </div>
+          {invoice.paymentDueDate && !invoice.paymentInstallments?.length && (
+            <div className="info-row">
+              <span className="info-label">Fecha Vencimiento:</span>
+              <span>{new Date(invoice.paymentDueDate + 'T00:00:00').toLocaleDateString('es-PE')}</span>
+            </div>
+          )}
+          {invoice.paymentInstallments && invoice.paymentInstallments.length > 0 && (
+            <div style={{ marginTop: '8px' }}>
+              <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '4px' }}>CUOTAS:</div>
+              {invoice.paymentInstallments.map((cuota, index) => (
+                <div key={index} style={{ fontSize: '8px', marginBottom: '2px', paddingLeft: '4px' }}>
+                  • Cuota {cuota.number || index + 1}: {formatCurrency(cuota.amount || 0)} - Vence: {cuota.dueDate ? new Date(cuota.dueDate + 'T00:00:00').toLocaleDateString('es-PE') : '-'}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Observaciones */}
       {invoice.notes && (
         <div className="ticket-section">
