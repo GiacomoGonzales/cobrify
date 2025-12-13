@@ -6,7 +6,10 @@ import { db } from '@/lib/firebase'
 import {
   updateResellerBranding,
   uploadResellerLogo,
-  PRESET_COLORS
+  PRESET_COLORS,
+  BASE_DOMAIN,
+  generateSubdomain,
+  isSubdomainAvailable
 } from '@/services/brandingService'
 import {
   Building2,
@@ -29,7 +32,9 @@ import {
   Image,
   X,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Globe,
+  Link2
 } from 'lucide-react'
 
 export default function ResellerSettings() {
@@ -51,7 +56,8 @@ export default function ResellerSettings() {
     ruc: resellerData?.ruc || '',
     phone: resellerData?.phone || '',
     address: resellerData?.address || '',
-    contactName: resellerData?.contactName || ''
+    contactName: resellerData?.contactName || '',
+    subdomain: resellerData?.subdomain || ''
   })
 
   const [brandingData, setBrandingData] = useState({
@@ -61,6 +67,8 @@ export default function ResellerSettings() {
     secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
   })
 
+  const [subdomainStatus, setSubdomainStatus] = useState('') // '' | 'checking' | 'available' | 'taken'
+
   // Sincronizar formData y brandingData cuando resellerData se cargue
   React.useEffect(() => {
     if (resellerData) {
@@ -69,7 +77,8 @@ export default function ResellerSettings() {
         ruc: resellerData.ruc || '',
         phone: resellerData.phone || '',
         address: resellerData.address || '',
-        contactName: resellerData.contactName || ''
+        contactName: resellerData.contactName || '',
+        subdomain: resellerData.subdomain || ''
       })
       setBrandingData({
         companyName: resellerData.branding?.companyName || resellerData.companyName || '',
@@ -80,6 +89,23 @@ export default function ResellerSettings() {
       setDataLoaded(true)
     }
   }, [resellerData])
+
+  // Verificar disponibilidad del subdominio cuando cambia
+  React.useEffect(() => {
+    if (!formData.subdomain || formData.subdomain === resellerData?.subdomain) {
+      setSubdomainStatus('')
+      return
+    }
+
+    const checkSubdomain = async () => {
+      setSubdomainStatus('checking')
+      const available = await isSubdomainAvailable(formData.subdomain, resellerId)
+      setSubdomainStatus(available ? 'available' : 'taken')
+    }
+
+    const timeout = setTimeout(checkSubdomain, 500)
+    return () => clearTimeout(timeout)
+  }, [formData.subdomain, resellerId, resellerData?.subdomain])
 
   // Mostrar loading mientras se cargan los datos
   if (authLoading || !dataLoaded) {
@@ -147,6 +173,18 @@ export default function ResellerSettings() {
   }
 
   async function handleSave() {
+    // Validar subdomain si se cambió
+    if (formData.subdomain && formData.subdomain !== resellerData?.subdomain) {
+      if (subdomainStatus === 'taken') {
+        alert('El subdominio no está disponible. Por favor elige otro.')
+        return
+      }
+      if (subdomainStatus === 'checking') {
+        alert('Espera mientras verificamos la disponibilidad del subdominio.')
+        return
+      }
+    }
+
     setSaving(true)
 
     // Debug: mostrar los IDs que estamos usando
@@ -158,10 +196,15 @@ export default function ResellerSettings() {
     console.log('   brandingData:', brandingData)
 
     try {
-      // Guardar datos de empresa
+      // Guardar datos de empresa (incluyendo subdomain)
       console.log('📝 Updating reseller document...')
       await updateDoc(doc(db, 'resellers', resellerId), {
-        ...formData,
+        companyName: formData.companyName,
+        ruc: formData.ruc,
+        phone: formData.phone,
+        address: formData.address,
+        contactName: formData.contactName,
+        subdomain: formData.subdomain || null,
         updatedAt: Timestamp.now()
       })
       console.log('✅ Reseller document updated')
@@ -216,8 +259,14 @@ export default function ResellerSettings() {
   const discount = resellerData?.discountOverride || resellerData?.discount || 0
   const discountPercent = discount < 1 ? discount * 100 : discount
 
-  // URL de login con branding del reseller
-  const loginUrl = `${window.location.origin}/login?ref=${resellerId}`
+  // URLs de login para clientes
+  const subdomainUrl = formData.subdomain
+    ? `https://${formData.subdomain}.${BASE_DOMAIN}/login`
+    : null
+  const customDomainUrl = resellerData?.customDomain
+    ? `https://${resellerData.customDomain}/login`
+    : null
+  const legacyLoginUrl = `${window.location.origin}/login?ref=${resellerId}`
 
   return (
     <div className="space-y-6">
@@ -291,29 +340,84 @@ export default function ResellerSettings() {
             </div>
           </div>
 
-          {/* Link de Login */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <h3 className="font-semibold text-blue-800 mb-2 text-sm flex items-center gap-2">
-              <ExternalLink className="w-4 h-4" />
-              Link de Login para tus Clientes
+          {/* Links de Login para Clientes */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+            <h3 className="font-semibold text-blue-800 text-sm flex items-center gap-2">
+              <Globe className="w-4 h-4" />
+              Links de Acceso para Clientes
             </h3>
-            <p className="text-xs text-blue-700 mb-3">
-              Comparte este link con tus clientes para que inicien sesión con tu marca
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={loginUrl}
-                readOnly
-                className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-600"
-              />
-              <button
-                onClick={() => copyToClipboard(loginUrl)}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1"
-              >
-                {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copied ? 'Copiado' : 'Copiar'}
-              </button>
+
+            {/* Subdominio (principal) */}
+            {subdomainUrl ? (
+              <div>
+                <p className="text-xs text-blue-700 mb-1.5 flex items-center gap-1">
+                  <Link2 className="w-3 h-3" />
+                  Tu subdominio personalizado:
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={subdomainUrl}
+                    readOnly
+                    className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-600 font-medium"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(subdomainUrl)}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1"
+                  >
+                    {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2.5">
+                <p className="text-xs text-yellow-700">
+                  Configura tu subdominio en la pestaña "Datos de Empresa" para obtener tu URL personalizada.
+                </p>
+              </div>
+            )}
+
+            {/* Dominio personalizado (si está configurado por admin) */}
+            {customDomainUrl && (
+              <div>
+                <p className="text-xs text-green-700 mb-1.5 flex items-center gap-1">
+                  <Globe className="w-3 h-3" />
+                  Tu dominio personalizado:
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customDomainUrl}
+                    readOnly
+                    className="flex-1 text-xs bg-white border border-green-200 rounded px-2 py-1.5 text-gray-600 font-medium"
+                  />
+                  <button
+                    onClick={() => copyToClipboard(customDomainUrl)}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 flex items-center gap-1"
+                  >
+                    {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Link legacy (siempre disponible como backup) */}
+            <div className="pt-2 border-t border-blue-200">
+              <p className="text-xs text-blue-600 mb-1.5">Link alternativo:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={legacyLoginUrl}
+                  readOnly
+                  className="flex-1 text-xs bg-white border border-blue-100 rounded px-2 py-1.5 text-gray-500"
+                />
+                <button
+                  onClick={() => copyToClipboard(legacyLoginUrl)}
+                  className="px-3 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 flex items-center gap-1"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -453,6 +557,69 @@ export default function ResellerSettings() {
                           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                         />
                       </div>
+                    </div>
+
+                    {/* Subdominio */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <Globe className="w-4 h-4 inline mr-1" />
+                        Subdominio Personalizado
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Tu URL de acceso será: <strong>{formData.subdomain || 'tuempresa'}.{BASE_DOMAIN}</strong>
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            name="subdomain"
+                            value={formData.subdomain}
+                            onChange={(e) => {
+                              // Limpiar el valor: solo letras minúsculas y números
+                              const value = e.target.value
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]/g, '')
+                                .slice(0, 20)
+                              setFormData(prev => ({ ...prev, subdomain: value }))
+                              setSaved(false)
+                            }}
+                            placeholder="tuempresa"
+                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-emerald-500 ${
+                              subdomainStatus === 'taken'
+                                ? 'border-red-300 bg-red-50'
+                                : subdomainStatus === 'available'
+                                ? 'border-green-300 bg-green-50'
+                                : 'border-gray-300'
+                            }`}
+                          />
+                          {subdomainStatus === 'checking' && (
+                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
+                          )}
+                          {subdomainStatus === 'available' && (
+                            <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                          )}
+                          {subdomainStatus === 'taken' && (
+                            <X className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" />
+                          )}
+                        </div>
+                        <span className="text-sm text-gray-500">.{BASE_DOMAIN}</span>
+                      </div>
+                      {subdomainStatus === 'taken' && (
+                        <p className="text-xs text-red-500 mt-1">Este subdominio ya está en uso</p>
+                      )}
+                      {!formData.subdomain && formData.companyName && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const suggested = generateSubdomain(formData.companyName)
+                            setFormData(prev => ({ ...prev, subdomain: suggested }))
+                            setSaved(false)
+                          }}
+                          className="text-xs text-emerald-600 hover:text-emerald-700 mt-1"
+                        >
+                          Sugerencia: {generateSubdomain(formData.companyName)}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

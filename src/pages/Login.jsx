@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { loginSchema } from '@/utils/schemas'
-import { getResellerBranding } from '@/services/brandingService'
+import { getResellerBranding, getResellerByHostname } from '@/services/brandingService'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -14,20 +14,49 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [customBranding, setCustomBranding] = useState(null) // null = usar Cobrify
-  const [isLoadingBranding, setIsLoadingBranding] = useState(false)
+  const [isLoadingBranding, setIsLoadingBranding] = useState(true) // Empezar en true para esperar la detección
   const [searchParams] = useSearchParams()
   const { login } = useAuth()
 
   const refId = searchParams.get('ref')
 
-  // Cargar branding del reseller SOLO si hay un parámetro ref en la URL
+  // Cargar branding del reseller por hostname (subdominio o dominio personalizado) o por parámetro ref
   useEffect(() => {
-    if (refId) {
+    async function loadBranding() {
       setIsLoadingBranding(true)
-      getResellerBranding(refId)
-        .then(setCustomBranding)
-        .finally(() => setIsLoadingBranding(false))
+
+      try {
+        // Prioridad 1: Parámetro ?ref= en la URL
+        if (refId) {
+          console.log('🔍 Loading branding by ref param:', refId)
+          const branding = await getResellerBranding(refId)
+          setCustomBranding(branding)
+          return
+        }
+
+        // Prioridad 2: Detectar por hostname (subdominio o dominio personalizado)
+        const hostname = window.location.hostname
+        console.log('🔍 Checking hostname for reseller:', hostname)
+
+        const resellerData = await getResellerByHostname(hostname)
+        if (resellerData) {
+          console.log('✅ Found reseller branding by hostname:', resellerData.branding.companyName)
+          setCustomBranding(resellerData.branding)
+          return
+        }
+
+        // No se encontró branding personalizado, usar Cobrify por defecto
+        console.log('ℹ️ Using default Cobrify branding')
+        setCustomBranding(null)
+      } catch (error) {
+        console.error('Error loading branding:', error)
+        setCustomBranding(null)
+      } finally {
+        setIsLoadingBranding(false)
+      }
     }
+
+    loadBranding()
   }, [refId])
 
   const {
@@ -53,8 +82,8 @@ export default function Login() {
     }
   }
 
-  // Mostrar spinner mientras carga el branding del reseller
-  if (refId && isLoadingBranding) {
+  // Mostrar spinner mientras carga el branding (hostname o ref)
+  if (isLoadingBranding) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />

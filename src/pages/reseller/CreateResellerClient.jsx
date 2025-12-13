@@ -135,7 +135,15 @@ export default function CreateResellerClient() {
         // Reseller info
         createdByReseller: true,
         resellerId: resellerId,
-        resellerPricePaid: planPrice
+        resellerPricePaid: planPrice,
+        // Branding del reseller (copiado para que el cliente pueda leerlo)
+        resellerBranding: {
+          companyName: resellerData?.branding?.companyName || resellerData?.companyName || 'Cobrify',
+          logoUrl: resellerData?.branding?.logoUrl || null,
+          primaryColor: resellerData?.branding?.primaryColor || '#2563eb',
+          secondaryColor: resellerData?.branding?.secondaryColor || '#1d4ed8',
+          accentColor: resellerData?.branding?.accentColor || '#3b82f6',
+        }
       })
 
       // 4. Create business document

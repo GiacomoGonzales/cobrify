@@ -78,13 +78,21 @@ service cloud.firestore {
 
     // Resellers collection
     match /resellers/{resellerId} {
-      // Resellers pueden leer/escribir sus propios datos (por UID)
-      allow read, write: if isAuthenticated() && isOwner(resellerId);
-      // Usuarios autenticados pueden leer/escribir si su email coincide con el del reseller
-      // Esto permite que resellers creados con docId diferente al uid puedan acceder
-      allow read, write: if isAuthenticated() && resource.data.email == request.auth.token.email;
       // Admins pueden leer/escribir cualquier reseller
       allow read, write: if isAdmin();
+
+      // Resellers pueden leer/escribir sus propios datos (por UID)
+      allow read, write: if isAuthenticated() && isOwner(resellerId);
+
+      // Usuarios autenticados pueden leer si su email coincide con el del reseller
+      // Esto permite que resellers creados con docId diferente al uid puedan acceder
+      allow read: if isAuthenticated() && resource.data.email == request.auth.token.email;
+
+      // Para update: verificar que el email del documento existente coincida con el del usuario
+      allow update: if isAuthenticated() && resource.data.email == request.auth.token.email;
+
+      // Clientes pueden leer datos del reseller (para branding)
+      allow read: if isAuthenticated();
     }
 
     // Reseller Transactions collection

@@ -62,6 +62,7 @@ export default function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller'
   const [sortField, setSortField] = useState('createdAt')
   const [sortDirection, setSortDirection] = useState('desc')
   const [selectedUser, setSelectedUser] = useState(null)
@@ -123,12 +124,20 @@ export default function AdminUsers() {
   async function loadUsers() {
     setLoading(true)
     try {
-      // Obtener subscriptions, businesses y users en paralelo
-      const [subscriptionsSnapshot, businessesSnapshot, usersSnapshot] = await Promise.all([
+      // Obtener subscriptions, businesses, users y resellers en paralelo
+      const [subscriptionsSnapshot, businessesSnapshot, usersSnapshot, resellersSnapshot] = await Promise.all([
         getDocs(collection(db, 'subscriptions')),
         getDocs(collection(db, 'businesses')),
-        getDocs(collection(db, 'users'))
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'resellers'))
       ])
+
+      // Crear mapa de resellers por ID para obtener nombres
+      const resellersMap = {}
+      resellersSnapshot.forEach(doc => {
+        const data = doc.data()
+        resellersMap[doc.id] = data.branding?.companyName || data.companyName || data.email || doc.id
+      })
 
       // Crear mapa de businesses por ID para acceso rápido
       const businessesMap = {}
@@ -228,7 +237,11 @@ export default function AdminUsers() {
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
           subUsersCount: subUsersCountMap[doc.id] || 0,
           subUsers: subUsersByOwner[doc.id] || [],
-          features: data.features || { productImages: false }
+          features: data.features || { productImages: false },
+          // Origen del cliente (Cobrify directo o Reseller)
+          createdByReseller: data.createdByReseller || false,
+          resellerId: data.resellerId || null,
+          resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null
         })
       })
 
@@ -264,6 +277,13 @@ export default function AdminUsers() {
       result = result.filter(u => u.plan === planFilter)
     }
 
+    // Filtro de origen (Cobrify vs Reseller)
+    if (sourceFilter === 'cobrify') {
+      result = result.filter(u => !u.createdByReseller)
+    } else if (sourceFilter === 'reseller') {
+      result = result.filter(u => u.createdByReseller)
+    }
+
     // Ordenar
     result.sort((a, b) => {
       let aVal = a[sortField]
@@ -278,7 +298,7 @@ export default function AdminUsers() {
     })
 
     return result
-  }, [users, searchTerm, statusFilter, planFilter, sortField, sortDirection])
+  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, sortField, sortDirection])
 
   // Estadísticas rápidas
   const stats = useMemo(() => {
@@ -287,7 +307,9 @@ export default function AdminUsers() {
       active: users.filter(u => u.status === 'active').length,
       trial: users.filter(u => u.status === 'trial').length,
       suspended: users.filter(u => u.status === 'suspended').length,
-      expired: users.filter(u => u.status === 'expired').length
+      expired: users.filter(u => u.status === 'expired').length,
+      cobrify: users.filter(u => !u.createdByReseller).length,
+      reseller: users.filter(u => u.createdByReseller).length
     }
   }, [users])
 
@@ -854,6 +876,16 @@ export default function AdminUsers() {
               ))}
             </select>
 
+            <select
+              value={sourceFilter}
+              onChange={e => setSourceFilter(e.target.value)}
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">Origen ({stats.cobrify}+{stats.reseller})</option>
+              <option value="cobrify">Cobrify ({stats.cobrify})</option>
+              <option value="reseller">Resellers ({stats.reseller})</option>
+            </select>
+
             <button
               onClick={loadUsers}
               disabled={loading}
@@ -1004,12 +1036,22 @@ export default function AdminUsers() {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-indigo-600" />
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                          <Building2 className={`w-5 h-5 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{user.businessName}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900">{user.businessName}</p>
+                            {user.createdByReseller && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
+                                R
+                              </span>
+                            )}
+                          </div>
                           {user.ruc && <p className="text-xs text-gray-500">RUC: {user.ruc}</p>}
+                          {user.createdByReseller && (
+                            <p className="text-[10px] text-purple-600">via {user.resellerName}</p>
+                          )}
                         </div>
                       </div>
                     </td>
