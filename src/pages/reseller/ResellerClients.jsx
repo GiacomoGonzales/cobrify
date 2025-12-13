@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { PLANS } from '@/services/subscriptionService'
 import {
@@ -19,9 +19,36 @@ import {
   Mail,
   Calendar,
   X,
-  CreditCard
+  CreditCard,
+  Wallet,
+  Loader2
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+
+// Precios originales y meses de los planes
+const PLAN_INFO = {
+  qpse_1_month: { originalPrice: 19.90, months: 1 },
+  qpse_6_months: { originalPrice: 99.90, months: 6 },
+  qpse_12_months: { originalPrice: 149.90, months: 12 },
+  sunat_direct_1_month: { originalPrice: 19.90, months: 1 },
+  sunat_direct_6_months: { originalPrice: 99.90, months: 6 },
+  sunat_direct_12_months: { originalPrice: 149.90, months: 12 },
+}
+
+// Función para calcular precio con descuento del reseller
+// discount puede ser decimal (0.30) o porcentaje (30)
+function getResellerPrice(plan, discount = 0.30) {
+  const info = PLAN_INFO[plan]
+  if (!info) return null
+  // Si el descuento es mayor a 1, es porcentaje (30), convertir a decimal
+  const discountDecimal = discount > 1 ? discount / 100 : discount
+  return {
+    price: Number((info.originalPrice * (1 - discountDecimal)).toFixed(2)),
+    originalPrice: info.originalPrice,
+    months: info.months,
+    discountPercent: discountDecimal * 100
+  }
+}
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-800',
@@ -31,7 +58,7 @@ const STATUS_COLORS = {
 }
 
 export default function ResellerClients() {
-  const { user, resellerData } = useAuth()
+  const { user, resellerData, refreshResellerData } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [clients, setClients] = useState([])
@@ -40,8 +67,16 @@ export default function ResellerClients() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedClient, setSelectedClient] = useState(null)
 
-  // Obtener el ID del reseller
+  // Estados para renovación
+  const [showRenewalModal, setShowRenewalModal] = useState(false)
+  const [renewalClient, setRenewalClient] = useState(null)
+  const [renewalPlan, setRenewalPlan] = useState('qpse_1_month')
+  const [renewalLoading, setRenewalLoading] = useState(false)
+
+  // Obtener el ID del reseller y su descuento
   const resellerId = resellerData?.docId || user?.uid
+  const currentBalance = resellerData?.balance || 0
+  const resellerDiscount = resellerData?.discount || 30 // Por defecto 30%
 
   useEffect(() => {
     if (user && resellerId) {
@@ -148,6 +183,89 @@ export default function ResellerClients() {
     } catch (error) {
       console.error('Error updating client:', error)
       alert('Error al actualizar el cliente')
+    }
+  }
+
+  // Abrir modal de renovación
+  function openRenewalModal(client) {
+    setRenewalClient(client)
+    setRenewalPlan(client.plan || 'qpse_1_month')
+    setShowRenewalModal(true)
+    setSelectedClient(null)
+  }
+
+  // Procesar renovación
+  async function handleRenewal() {
+    if (!renewalClient || !renewalPlan) return
+
+    const planPrice = getResellerPrice(renewalPlan, resellerDiscount)
+    if (!planPrice) {
+      alert('Plan no válido')
+      return
+    }
+
+    if (currentBalance < planPrice.price) {
+      alert(`Saldo insuficiente. Necesitas S/ ${planPrice.price.toFixed(2)} pero tienes S/ ${currentBalance.toFixed(2)}`)
+      return
+    }
+
+    setRenewalLoading(true)
+
+    try {
+      // Calcular nueva fecha de vencimiento
+      const now = new Date()
+      const currentEnd = renewalClient.periodEnd
+      // Si ya venció, empezar desde hoy; si no, extender desde la fecha actual
+      const startFrom = currentEnd && currentEnd > now ? currentEnd : now
+      const newPeriodEnd = new Date(startFrom)
+      newPeriodEnd.setMonth(newPeriodEnd.getMonth() + planPrice.months)
+
+      // 1. Actualizar suscripción del cliente
+      // Mantener límite de 200 comprobantes para clientes de resellers
+      await updateDoc(doc(db, 'subscriptions', renewalClient.id), {
+        plan: renewalPlan,
+        currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
+        status: 'active',
+        accessBlocked: false,
+        'limits.maxInvoicesPerMonth': 200,
+        updatedAt: Timestamp.now(),
+        lastRenewalAt: Timestamp.now(),
+        lastRenewalBy: resellerId
+      })
+
+      // 2. Deducir saldo del reseller
+      const newBalance = currentBalance - planPrice.price
+      await updateDoc(doc(db, 'resellers', resellerId), {
+        balance: newBalance,
+        updatedAt: Timestamp.now()
+      })
+
+      // 3. Registrar transacción
+      await addDoc(collection(db, 'resellerTransactions'), {
+        resellerId: resellerId,
+        type: 'renewal',
+        amount: -planPrice.price,
+        description: `Renovación ${PLANS[renewalPlan]?.name || renewalPlan} - ${renewalClient.businessName || renewalClient.email}`,
+        clientId: renewalClient.id,
+        clientEmail: renewalClient.email,
+        plan: renewalPlan,
+        balanceBefore: currentBalance,
+        balanceAfter: newBalance,
+        createdAt: Timestamp.now()
+      })
+
+      // 4. Refrescar datos
+      await refreshResellerData()
+      await loadClients()
+
+      setShowRenewalModal(false)
+      setRenewalClient(null)
+      alert('¡Renovación exitosa!')
+    } catch (error) {
+      console.error('Error en renovación:', error)
+      alert('Error al procesar la renovación: ' + error.message)
+    } finally {
+      setRenewalLoading(false)
     }
   }
 
@@ -423,10 +541,7 @@ export default function ResellerClients() {
               <div className="flex gap-3">
                 {selectedClient.displayStatus === 'expired' || selectedClient.displayStatus === 'expiring' ? (
                   <button
-                    onClick={() => {
-                      // TODO: Implement renewal
-                      alert('Función de renovación próximamente')
-                    }}
+                    onClick={() => openRenewalModal(selectedClient)}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
                   >
                     <RotateCcw className="w-5 h-5" />
@@ -451,6 +566,136 @@ export default function ResellerClients() {
                     Reactivar
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Renovación */}
+      {showRenewalModal && renewalClient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Renovar Suscripción</h2>
+              <button
+                onClick={() => {
+                  setShowRenewalModal(false)
+                  setRenewalClient(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+                disabled={renewalLoading}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Info del cliente */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">{renewalClient.businessName || 'Sin nombre'}</p>
+                    <p className="text-sm text-gray-500">{renewalClient.email}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-200 text-sm">
+                  <p className="text-gray-600">
+                    <span className="font-medium">Plan actual:</span> {PLANS[renewalClient.plan]?.name || renewalClient.plan}
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-medium">Vence:</span> {formatDate(renewalClient.periodEnd)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Saldo disponible */}
+              <div className="flex items-center gap-3 bg-emerald-50 rounded-lg p-4">
+                <Wallet className="w-6 h-6 text-emerald-600" />
+                <div>
+                  <p className="text-sm text-emerald-700">Tu saldo disponible</p>
+                  <p className="text-xl font-bold text-emerald-700">S/ {currentBalance.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Selección de plan */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selecciona el plan de renovación
+                </label>
+                <select
+                  value={renewalPlan}
+                  onChange={e => setRenewalPlan(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  disabled={renewalLoading}
+                >
+                  <optgroup label="Planes QPse">
+                    <option value="qpse_1_month">QPse 1 Mes - S/ {getResellerPrice('qpse_1_month', resellerDiscount)?.price.toFixed(2)}</option>
+                    <option value="qpse_6_months">QPse 6 Meses - S/ {getResellerPrice('qpse_6_months', resellerDiscount)?.price.toFixed(2)}</option>
+                    <option value="qpse_12_months">QPse 12 Meses - S/ {getResellerPrice('qpse_12_months', resellerDiscount)?.price.toFixed(2)}</option>
+                  </optgroup>
+                  <optgroup label="Planes SUNAT Directo">
+                    <option value="sunat_direct_1_month">SUNAT Directo 1 Mes - S/ {getResellerPrice('sunat_direct_1_month', resellerDiscount)?.price.toFixed(2)}</option>
+                    <option value="sunat_direct_6_months">SUNAT Directo 6 Meses - S/ {getResellerPrice('sunat_direct_6_months', resellerDiscount)?.price.toFixed(2)}</option>
+                    <option value="sunat_direct_12_months">SUNAT Directo 12 Meses - S/ {getResellerPrice('sunat_direct_12_months', resellerDiscount)?.price.toFixed(2)}</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Resumen del costo */}
+              {getResellerPrice(renewalPlan, resellerDiscount) && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Precio reseller ({resellerDiscount > 1 ? resellerDiscount : resellerDiscount * 100}% desc.):</span>
+                    <span className="text-xl font-bold text-gray-900">
+                      S/ {getResellerPrice(renewalPlan, resellerDiscount).price.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-gray-500 mt-1">
+                    <span>Precio normal:</span>
+                    <span className="line-through">S/ {getResellerPrice(renewalPlan, resellerDiscount).originalPrice.toFixed(2)}</span>
+                  </div>
+                  {currentBalance < getResellerPrice(renewalPlan, resellerDiscount).price && (
+                    <div className="mt-3 p-2 bg-red-50 rounded text-sm text-red-600 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      Saldo insuficiente
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botones */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowRenewalModal(false)
+                    setRenewalClient(null)
+                  }}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  disabled={renewalLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleRenewal}
+                  disabled={renewalLoading || currentBalance < (getResellerPrice(renewalPlan, resellerDiscount)?.price || 0)}
+                  className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {renewalLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Confirmar Renovación
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
