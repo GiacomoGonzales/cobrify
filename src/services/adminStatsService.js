@@ -3,6 +3,9 @@ import {
   collection,
   query,
   getDocs,
+  getDoc,
+  doc,
+  updateDoc,
   where,
   orderBy,
   limit,
@@ -225,7 +228,8 @@ export async function getAllPayments(filters = {}) {
 
           allPayments.push({
             id: `${doc.id}-${index}`,
-            oderId: doc.id,
+            subscriptionId: doc.id,
+            paymentIndex: index,
             email: data.email,
             businessName: data.businessName,
             amount: payment.amount || 0,
@@ -450,6 +454,86 @@ export async function getSystemAlerts() {
     return alerts
   } catch (error) {
     console.error('Error al obtener alertas:', error)
+    throw error
+  }
+}
+
+/**
+ * Actualiza un pago existente
+ * @param {string} subscriptionId - ID de la suscripción
+ * @param {number} paymentIndex - Índice del pago en el array
+ * @param {object} updatedPayment - Datos actualizados del pago
+ */
+export async function updatePayment(subscriptionId, paymentIndex, updatedPayment) {
+  try {
+    const subscriptionRef = doc(db, 'subscriptions', subscriptionId)
+    const subscriptionSnap = await getDoc(subscriptionRef)
+
+    if (!subscriptionSnap.exists()) {
+      throw new Error('Suscripción no encontrada')
+    }
+
+    const data = subscriptionSnap.data()
+    const paymentHistory = data.paymentHistory || []
+
+    if (paymentIndex < 0 || paymentIndex >= paymentHistory.length) {
+      throw new Error('Índice de pago inválido')
+    }
+
+    // Actualizar el pago en el índice especificado
+    paymentHistory[paymentIndex] = {
+      ...paymentHistory[paymentIndex],
+      ...updatedPayment,
+      date: updatedPayment.date instanceof Date
+        ? Timestamp.fromDate(updatedPayment.date)
+        : updatedPayment.date,
+      updatedAt: Timestamp.now()
+    }
+
+    await updateDoc(subscriptionRef, {
+      paymentHistory,
+      updatedAt: Timestamp.now()
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar pago:', error)
+    throw error
+  }
+}
+
+/**
+ * Elimina un pago
+ * @param {string} subscriptionId - ID de la suscripción
+ * @param {number} paymentIndex - Índice del pago en el array
+ */
+export async function deletePayment(subscriptionId, paymentIndex) {
+  try {
+    const subscriptionRef = doc(db, 'subscriptions', subscriptionId)
+    const subscriptionSnap = await getDoc(subscriptionRef)
+
+    if (!subscriptionSnap.exists()) {
+      throw new Error('Suscripción no encontrada')
+    }
+
+    const data = subscriptionSnap.data()
+    const paymentHistory = data.paymentHistory || []
+
+    if (paymentIndex < 0 || paymentIndex >= paymentHistory.length) {
+      throw new Error('Índice de pago inválido')
+    }
+
+    // Eliminar el pago del array
+    paymentHistory.splice(paymentIndex, 1)
+
+    await updateDoc(subscriptionRef, {
+      paymentHistory,
+      updatedAt: Timestamp.now()
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar pago:', error)
     throw error
   }
 }

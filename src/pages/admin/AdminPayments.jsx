@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { getAllPayments } from '@/services/adminStatsService'
+import { getAllPayments, updatePayment, deletePayment } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 import {
   CreditCard,
@@ -16,7 +16,11 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Building2
+  Building2,
+  Pencil,
+  Trash2,
+  Save,
+  Loader2
 } from 'lucide-react'
 
 const PAYMENT_METHODS = {
@@ -38,6 +42,13 @@ export default function AdminPayments() {
   const [sortDirection, setSortDirection] = useState('desc')
   const [totalAmount, setTotalAmount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
+
+  // Estados para editar/eliminar
+  const [editingPayment, setEditingPayment] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deletingPayment, setDeletingPayment] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     loadPayments()
@@ -167,6 +178,65 @@ export default function AdminPayments() {
     setSearchTerm('')
     setMethodFilter('all')
     setDateRange({ start: '', end: '' })
+  }
+
+  // Funciones para editar pago
+  function openEditModal(payment) {
+    setEditingPayment(payment)
+    setEditForm({
+      amount: payment.amount,
+      method: payment.method,
+      status: payment.status,
+      notes: payment.notes || '',
+      date: payment.date instanceof Date
+        ? payment.date.toISOString().split('T')[0]
+        : new Date(payment.date).toISOString().split('T')[0]
+    })
+  }
+
+  async function handleSaveEdit() {
+    if (!editingPayment) return
+
+    setSavingEdit(true)
+    try {
+      await updatePayment(editingPayment.subscriptionId, editingPayment.paymentIndex, {
+        amount: parseFloat(editForm.amount),
+        method: editForm.method,
+        status: editForm.status,
+        notes: editForm.notes,
+        date: new Date(editForm.date)
+      })
+      setEditingPayment(null)
+      loadPayments()
+    } catch (error) {
+      console.error('Error al actualizar pago:', error)
+      alert('Error al actualizar el pago: ' + error.message)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // Funciones para eliminar pago
+  function openDeleteConfirm(payment) {
+    setDeletingPayment(payment)
+    setConfirmDelete(true)
+  }
+
+  async function handleDeletePayment() {
+    if (!deletingPayment) return
+
+    setSavingEdit(true)
+    try {
+      await deletePayment(deletingPayment.subscriptionId, deletingPayment.paymentIndex)
+      setConfirmDelete(false)
+      setDeletingPayment(null)
+      loadPayments()
+    } catch (error) {
+      console.error('Error al eliminar pago:', error)
+      alert('Error al eliminar el pago: ' + error.message)
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const hasFilters = searchTerm || methodFilter !== 'all' || dateRange.start || dateRange.end
@@ -395,6 +465,21 @@ export default function AdminPayments() {
                     {payment.notes}
                   </div>
                 )}
+                {/* Botones móvil */}
+                <div className="mt-2 flex items-center justify-end gap-2 border-t pt-2">
+                  <button
+                    onClick={() => openEditModal(payment)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  >
+                    <Pencil className="w-3 h-3" /> Editar
+                  </button>
+                  <button
+                    onClick={() => openDeleteConfirm(payment)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" /> Eliminar
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -441,6 +526,9 @@ export default function AdminPayments() {
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Notas
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
                   </th>
                 </tr>
               </thead>
@@ -494,6 +582,24 @@ export default function AdminPayments() {
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
                       {payment.notes || '-'}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEditModal(payment)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Editar pago"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openDeleteConfirm(payment)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Eliminar pago"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -501,6 +607,197 @@ export default function AdminPayments() {
           </div>
         )}
       </div>
+
+      {/* Modal de Editar Pago */}
+      {editingPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Editar Pago</h3>
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Info del negocio */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">{editingPayment.businessName}</span>
+                  <br />
+                  <span className="text-xs text-gray-500">{editingPayment.email}</span>
+                </p>
+              </div>
+
+              {/* Monto */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monto (S/)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editForm.amount}
+                  onChange={e => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Método */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Método de Pago
+                </label>
+                <select
+                  value={editForm.method}
+                  onChange={e => setEditForm({ ...editForm, method: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  {Object.entries(PAYMENT_METHODS).map(([key, method]) => (
+                    <option key={key} value={key}>{method.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Fecha */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha
+                </label>
+                <input
+                  type="date"
+                  value={editForm.date}
+                  onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Estado */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estado
+                </label>
+                <select
+                  value={editForm.status}
+                  onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="completed">Completado</option>
+                  <option value="pending">Pendiente</option>
+                  <option value="failed">Fallido</option>
+                </select>
+              </div>
+
+              {/* Notas */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notas
+                </label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Notas adicionales..."
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                disabled={savingEdit}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {savingEdit ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Guardar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmar Eliminación */}
+      {confirmDelete && deletingPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Eliminar Pago</h3>
+            </div>
+
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">
+                    ¿Estás seguro de eliminar este pago?
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                <p><span className="font-medium">Negocio:</span> {deletingPayment.businessName}</p>
+                <p><span className="font-medium">Monto:</span> {formatCurrency(deletingPayment.amount)}</p>
+                <p><span className="font-medium">Fecha:</span> {formatDate(deletingPayment.date)}</p>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => {
+                  setConfirmDelete(false)
+                  setDeletingPayment(null)
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                disabled={savingEdit}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeletePayment}
+                disabled={savingEdit}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {savingEdit ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
