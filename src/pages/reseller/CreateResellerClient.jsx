@@ -114,10 +114,11 @@ export default function CreateResellerClient() {
       periodEnd.setMonth(periodEnd.getMonth() + periodMonths)
 
       // 3. Create subscription document
-      // Clientes de resellers tienen límite de 200 comprobantes/mes
+      // Clientes de resellers: QPse = 200 docs/mes, SUNAT Directo = ilimitado
+      const isSunatDirect = formData.plan.startsWith('sunat_direct')
       const resellerLimits = {
         ...selectedPlan.limits,
-        maxInvoicesPerMonth: 200
+        maxInvoicesPerMonth: isSunatDirect ? -1 : 200
       }
 
       await setDoc(doc(db, 'subscriptions', newUserId), {
@@ -420,7 +421,7 @@ export default function CreateResellerClient() {
                     Ahorras S/ {savings.toFixed(2)}
                   </span>
                   <span className="text-xs text-gray-500 mt-2">
-                    200 docs/mes
+                    {planKey.startsWith('sunat_direct') ? 'Documentos ilimitados' : '200 docs/mes'}
                   </span>
                 </label>
               )

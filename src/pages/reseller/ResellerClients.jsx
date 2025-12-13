@@ -221,13 +221,14 @@ export default function ResellerClients() {
       newPeriodEnd.setMonth(newPeriodEnd.getMonth() + planPrice.months)
 
       // 1. Actualizar suscripción del cliente
-      // Mantener límite de 200 comprobantes para clientes de resellers
+      // QPse = 200 docs/mes, SUNAT Directo = ilimitado
+      const isSunatDirect = renewalPlan.startsWith('sunat_direct')
       await updateDoc(doc(db, 'subscriptions', renewalClient.id), {
         plan: renewalPlan,
         currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
         status: 'active',
         accessBlocked: false,
-        'limits.maxInvoicesPerMonth': 200,
+        'limits.maxInvoicesPerMonth': isSunatDirect ? -1 : 200,
         updatedAt: Timestamp.now(),
         lastRenewalAt: Timestamp.now(),
         lastRenewalBy: resellerId
