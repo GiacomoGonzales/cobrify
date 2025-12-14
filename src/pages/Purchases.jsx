@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Plus,
@@ -14,6 +14,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Filter,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -38,6 +39,11 @@ export default function Purchases() {
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
   const [sortDirection, setSortDirection] = useState('desc') // 'asc', 'desc'
+
+  // Filtro de fechas
+  const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
 
   useEffect(() => {
     loadPurchases()
@@ -117,7 +123,55 @@ export default function Purchases() {
       : <ArrowDown className="w-4 h-4 text-primary-600" />
   }
 
+  // Obtener rango de fechas basado en el filtro
+  const getDateRange = () => {
+    const now = new Date()
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+
+    switch (dateFilter) {
+      case 'today':
+        return { start: startOfDay, end: endOfDay }
+      case '3days':
+        const threeDaysAgo = new Date(startOfDay)
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 2)
+        return { start: threeDaysAgo, end: endOfDay }
+      case '7days':
+        const sevenDaysAgo = new Date(startOfDay)
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+        return { start: sevenDaysAgo, end: endOfDay }
+      case '30days':
+        const thirtyDaysAgo = new Date(startOfDay)
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+        return { start: thirtyDaysAgo, end: endOfDay }
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          const start = new Date(customStartDate)
+          start.setHours(0, 0, 0, 0)
+          const end = new Date(customEndDate)
+          end.setHours(23, 59, 59, 999)
+          return { start, end }
+        }
+        return null
+      default:
+        return null
+    }
+  }
+
+  // Filtrar por fecha
+  const filterByDate = (purchase) => {
+    const dateRange = getDateRange()
+    if (!dateRange) return true // 'all' o custom sin fechas
+
+    const purchaseDate = purchase.createdAt?.toDate
+      ? purchase.createdAt.toDate()
+      : new Date(purchase.createdAt || 0)
+
+    return purchaseDate >= dateRange.start && purchaseDate <= dateRange.end
+  }
+
   const filteredPurchases = purchases
+    .filter(filterByDate) // Primero filtrar por fecha
     .filter(purchase => {
       // Si no hay término de búsqueda, mostrar todas las compras
       if (!searchTerm || searchTerm.trim() === '') return true
@@ -147,15 +201,31 @@ export default function Purchases() {
       return sortDirection === 'asc' ? comparison : -comparison
     })
 
+  // Compras filtradas solo por fecha (para las estadísticas, sin búsqueda de texto)
+  const dateFilteredPurchases = useMemo(() => {
+    return purchases.filter(filterByDate)
+  }, [purchases, dateFilter, customStartDate, customEndDate])
+
   const stats = {
-    total: purchases.length,
-    totalAmount: purchases.reduce((sum, p) => sum + (p.total || 0), 0),
-    thisMonth: purchases.filter(p => {
-      if (!p.createdAt) return false
-      const date = p.createdAt.toDate ? p.createdAt.toDate() : new Date(p.createdAt)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    }).length,
+    total: dateFilteredPurchases.length,
+    totalAmount: dateFilteredPurchases.reduce((sum, p) => sum + (p.total || 0), 0),
+    totalAll: purchases.length,
+  }
+
+  // Etiqueta del filtro actual
+  const getFilterLabel = () => {
+    switch (dateFilter) {
+      case 'today': return 'Hoy'
+      case '3days': return 'Últimos 3 días'
+      case '7days': return 'Últimos 7 días'
+      case '30days': return 'Últimos 30 días'
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          return `${customStartDate} - ${customEndDate}`
+        }
+        return 'Personalizado'
+      default: return 'Todo el tiempo'
+    }
   }
 
   if (isLoading) {
@@ -187,9 +257,10 @@ export default function Purchases() {
         </Link>
       </div>
 
-      {/* Search */}
+      {/* Search and Filters */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Búsqueda */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -200,6 +271,60 @@ export default function Purchases() {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
+
+          {/* Filtro de fechas */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600 font-medium">Período:</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'Todo' },
+                { value: 'today', label: 'Hoy' },
+                { value: '3days', label: '3 días' },
+                { value: '7days', label: '7 días' },
+                { value: '30days', label: '30 días' },
+                { value: 'custom', label: 'Personalizado' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setDateFilter(option.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    dateFilter === option.value
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Fechas personalizadas */}
+          {dateFilter === 'custom' && (
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Desde:</label>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Hasta:</label>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -209,8 +334,13 @@ export default function Purchases() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Compras</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Compras {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
+                </p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
+                {dateFilter !== 'all' && (
+                  <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
+                )}
               </div>
               <div className="p-3 bg-primary-100 rounded-lg">
                 <ShoppingBag className="w-6 h-6 text-primary-600" />
@@ -222,8 +352,11 @@ export default function Purchases() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Este Mes</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{stats.thisMonth}</p>
+                <p className="text-sm font-medium text-gray-600">Período</p>
+                <p className="text-lg font-bold text-gray-900 mt-2">{getFilterLabel()}</p>
+                {dateFilter === 'all' && (
+                  <p className="text-xs text-gray-500 mt-1">Todas las compras</p>
+                )}
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
                 <Calendar className="w-6 h-6 text-blue-600" />
@@ -235,7 +368,9 @@ export default function Purchases() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Monto Total</p>
+                <p className="text-sm font-medium text-gray-600">
+                  Monto Total {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
+                </p>
                 <p className="text-xl font-bold text-gray-900 mt-2">
                   {formatCurrency(stats.totalAmount)}
                 </p>
