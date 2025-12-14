@@ -18,6 +18,7 @@ import {
   CheckCircle,
   CreditCard,
   Clock,
+  List,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -42,6 +43,11 @@ export default function Purchases() {
   // Estado para marcar como pagado
   const [markingAsPaid, setMarkingAsPaid] = useState(null)
   const [isMarkingPaid, setIsMarkingPaid] = useState(false)
+
+  // Estado para ver/pagar cuotas
+  const [viewingInstallments, setViewingInstallments] = useState(null)
+  const [payingInstallment, setPayingInstallment] = useState(null) // {purchaseId, installmentIndex}
+  const [isPayingInstallment, setIsPayingInstallment] = useState(false)
 
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
@@ -143,6 +149,54 @@ export default function Purchases() {
       toast.error('Error al actualizar la compra')
     } finally {
       setIsMarkingPaid(false)
+    }
+  }
+
+  // Pagar una cuota individual
+  const handlePayInstallment = async (purchase, installmentIndex) => {
+    if (!purchase || !user?.uid) return
+
+    if (isDemoMode) {
+      toast.error('No se pueden modificar compras en modo demo')
+      return
+    }
+
+    setIsPayingInstallment(true)
+    try {
+      const updatedInstallments = [...purchase.installments]
+      updatedInstallments[installmentIndex] = {
+        ...updatedInstallments[installmentIndex],
+        status: 'paid',
+        paidAt: new Date(),
+        paidAmount: updatedInstallments[installmentIndex].amount
+      }
+
+      const paidInstallments = updatedInstallments.filter(i => i.status === 'paid').length
+      const totalPaid = updatedInstallments.reduce((sum, i) => sum + (i.paidAmount || 0), 0)
+      const allPaid = paidInstallments === updatedInstallments.length
+
+      const result = await updatePurchase(getBusinessId(), purchase.id, {
+        installments: updatedInstallments,
+        paidInstallments: paidInstallments,
+        paidAmount: totalPaid,
+        paymentStatus: allPaid ? 'paid' : 'pending',
+        ...(allPaid && { paidAt: new Date() }),
+      })
+
+      if (result.success) {
+        toast.success(`Cuota ${installmentIndex + 1} pagada exitosamente`)
+        loadPurchases()
+        // Actualizar el modal
+        const updatedPurchase = { ...purchase, installments: updatedInstallments }
+        setViewingInstallments(updatedPurchase)
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al pagar cuota:', error)
+      toast.error('Error al registrar el pago de la cuota')
+    } finally {
+      setIsPayingInstallment(false)
     }
   }
 
@@ -578,16 +632,34 @@ export default function Purchases() {
                     </TableCell>
                     <TableCell className="text-center">
                       {purchase.paymentType === 'credito' ? (
-                        purchase.paymentStatus === 'paid' ? (
-                          <Badge variant="success" className="text-xs">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Pagado
-                          </Badge>
+                        purchase.creditType === 'cuotas' ? (
+                          // Compra en cuotas
+                          <div className="flex flex-col items-center">
+                            {purchase.paymentStatus === 'paid' ? (
+                              <Badge variant="success" className="text-xs">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Pagado
+                              </Badge>
+                            ) : (
+                              <Badge variant="warning" className="text-xs">
+                                <List className="w-3 h-3 mr-1" />
+                                {purchase.paidInstallments || 0}/{purchase.totalInstallments} cuotas
+                              </Badge>
+                            )}
+                          </div>
                         ) : (
-                          <Badge variant="danger" className="text-xs">
-                            <Clock className="w-3 h-3 mr-1" />
-                            Pendiente
-                          </Badge>
+                          // Pago único
+                          purchase.paymentStatus === 'paid' ? (
+                            <Badge variant="success" className="text-xs">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Pagado
+                            </Badge>
+                          ) : (
+                            <Badge variant="danger" className="text-xs">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Pendiente
+                            </Badge>
+                          )
                         )
                       ) : (
                         <Badge variant="default" className="text-xs bg-gray-100 text-gray-700">
@@ -597,8 +669,20 @@ export default function Purchases() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end space-x-1">
-                        {/* Botón marcar como pagado (solo para crédito pendiente) */}
-                        {purchase.paymentType === 'credito' && purchase.paymentStatus === 'pending' && (
+                        {/* Botón ver cuotas (solo para compras en cuotas) */}
+                        {purchase.creditType === 'cuotas' && purchase.installments?.length > 0 && (
+                          <button
+                            onClick={() => setViewingInstallments(purchase)}
+                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="Ver cuotas"
+                          >
+                            <List className="w-4 h-4" />
+                          </button>
+                        )}
+                        {/* Botón marcar como pagado (solo para crédito pendiente con pago único) */}
+                        {purchase.paymentType === 'credito' &&
+                         purchase.paymentStatus === 'pending' &&
+                         purchase.creditType !== 'cuotas' && (
                           <button
                             onClick={() => setMarkingAsPaid(purchase)}
                             className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -840,6 +924,108 @@ export default function Purchases() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal Ver/Pagar Cuotas */}
+      <Modal
+        isOpen={!!viewingInstallments}
+        onClose={() => setViewingInstallments(null)}
+        title="Cronograma de Cuotas"
+        size="lg"
+      >
+        {viewingInstallments && (
+          <div className="space-y-4">
+            {/* Resumen */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Proveedor</p>
+                  <p className="font-medium">{viewingInstallments.supplier?.businessName || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total de la Compra</p>
+                  <p className="font-bold text-lg">{formatCurrency(viewingInstallments.total)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Pagado</p>
+                  <p className="font-medium text-green-600">{formatCurrency(viewingInstallments.paidAmount || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Pendiente</p>
+                  <p className="font-medium text-red-600">
+                    {formatCurrency((viewingInstallments.total || 0) - (viewingInstallments.paidAmount || 0))}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de cuotas */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-gray-900">Detalle de Cuotas</h4>
+              {viewingInstallments.installments?.map((inst, idx) => {
+                const dueDate = inst.dueDate?.toDate ? inst.dueDate.toDate() : new Date(inst.dueDate)
+                const isOverdue = inst.status === 'pending' && dueDate < new Date()
+
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      inst.status === 'paid'
+                        ? 'bg-green-50 border-green-200'
+                        : isOverdue
+                        ? 'bg-red-50 border-red-200'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        inst.status === 'paid' ? 'bg-green-500' : isOverdue ? 'bg-red-500' : 'bg-gray-300'
+                      }`}>
+                        {inst.status === 'paid' ? (
+                          <CheckCircle className="w-4 h-4 text-white" />
+                        ) : (
+                          <span className="text-white text-sm font-medium">{inst.number}</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium">Cuota {inst.number}</p>
+                        <p className={`text-sm ${isOverdue ? 'text-red-600' : 'text-gray-500'}`}>
+                          Vence: {formatDate(dueDate)}
+                          {isOverdue && ' (Vencida)'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold">{formatCurrency(inst.amount)}</span>
+                      {inst.status === 'pending' && (
+                        <Button
+                          size="sm"
+                          onClick={() => handlePayInstallment(viewingInstallments, idx)}
+                          disabled={isPayingInstallment}
+                        >
+                          {isPayingInstallment ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            'Pagar'
+                          )}
+                        </Button>
+                      )}
+                      {inst.status === 'paid' && (
+                        <Badge variant="success" className="text-xs">Pagado</Badge>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex justify-end pt-4">
+              <Button variant="outline" onClick={() => setViewingInstallments(null)}>
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
