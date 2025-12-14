@@ -1092,102 +1092,47 @@ ${companySettings?.website ? companySettings.website : ''}`
           )}
 
           {/* Filtros de tipo, estado y vendedor */}
-          <div className="pt-2 border-t space-y-3">
-            {/* Tipo de documento */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex items-center gap-2 min-w-[80px]">
-                <span className="text-sm text-gray-600 font-medium">Tipo:</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: 'all', label: 'Todos' },
-                  { value: 'factura', label: 'Facturas' },
-                  { value: 'boleta', label: 'Boletas' },
-                  { value: 'nota_venta', label: 'N. Venta' },
-                  { value: 'nota_credito', label: 'N. Crédito' },
-                  { value: 'nota_debito', label: 'N. Débito' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setFilterType(option.value)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      filterType === option.value
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Estado */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex items-center gap-2 min-w-[80px]">
-                <span className="text-sm text-gray-600 font-medium">Estado:</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: 'all', label: 'Todos' },
-                  { value: 'paid', label: 'Pagadas' },
-                  { value: 'pending', label: 'Pendientes' },
-                  { value: 'overdue', label: 'Vencidas' },
-                  { value: 'cancelled', label: 'Anuladas' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setFilterStatus(option.value)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      filterStatus === option.value
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Vendedor */}
-            {sellers.length > 0 && (
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex items-center gap-2 min-w-[80px]">
-                  <span className="text-sm text-gray-600 font-medium">Vendedor:</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setFilterSeller('all')}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      filterSeller === 'all'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  {sellers.map(seller => (
-                    <button
-                      key={seller.id}
-                      onClick={() => setFilterSeller(seller.id)}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                        filterSeller === seller.id
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {seller.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t">
+            <select
+              value={filterType}
+              onChange={e => setFilterType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+            >
+              <option value="all">Todos los tipos</option>
+              <option value="factura">Facturas</option>
+              <option value="boleta">Boletas</option>
+              <option value="nota_venta">Notas de Venta</option>
+              <option value="nota_credito">Notas de Crédito</option>
+              <option value="nota_debito">Notas de Débito</option>
+            </select>
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+            >
+              <option value="all">Todos los estados</option>
+              <option value="paid">Pagadas</option>
+              <option value="pending">Pendientes</option>
+              <option value="overdue">Vencidas</option>
+              <option value="cancelled">Anuladas</option>
+            </select>
+            <select
+              value={filterSeller}
+              onChange={e => setFilterSeller(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+            >
+              <option value="all">Todos los vendedores</option>
+              {sellers.map(seller => (
+                <option key={seller.id} value={seller.id}>
+                  {seller.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Botón limpiar filtros */}
           {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || dateFilter !== 'all') && (
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end">
               <button
                 onClick={() => {
                   setDateFilter('all')
@@ -1199,7 +1144,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                 }}
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
-                Limpiar todos los filtros
+                Limpiar filtros
               </button>
             </div>
           )}
