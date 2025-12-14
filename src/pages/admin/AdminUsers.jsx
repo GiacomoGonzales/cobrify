@@ -38,7 +38,8 @@ import {
   Sparkles,
   DollarSign,
   Receipt,
-  Upload
+  Upload,
+  Landmark
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -108,7 +109,8 @@ export default function AdminUsers() {
   const [featuresForm, setFeaturesForm] = useState({
     productImages: false,
     hidePaymentMethods: false,
-    expenseManagement: false
+    expenseManagement: false,
+    loans: false
   })
 
   // Estados para modal de pagos y planes
@@ -644,7 +646,8 @@ export default function AdminUsers() {
     setFeaturesForm({
       productImages: user.features?.productImages || false,
       hidePaymentMethods: user.features?.hidePaymentMethods || false,
-      expenseManagement: user.features?.expenseManagement || false
+      expenseManagement: user.features?.expenseManagement || false,
+      loans: user.features?.loans || false
     })
     setShowFeaturesModal(true)
   }
@@ -1876,6 +1879,36 @@ export default function AdminUsers() {
                   <div className="mt-3 flex items-center gap-2 p-2 bg-red-100 rounded-lg">
                     <CheckCircle className="w-4 h-4 text-red-600" />
                     <span className="text-sm text-red-700 font-medium">Acceso a Gastos y Reportes de Gastos</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Feature: Préstamos */}
+              <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <Landmark className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">Préstamos</h3>
+                      <p className="text-xs text-gray-500">Gestión de préstamos bancarios y de terceros</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={featuresForm.loans}
+                      onChange={e => setFeaturesForm({ ...featuresForm, loans: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+                {featuresForm.loans && (
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-emerald-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm text-emerald-700 font-medium">Acceso al módulo de Préstamos</span>
                   </div>
                 )}
               </div>
