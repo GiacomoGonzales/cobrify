@@ -344,6 +344,12 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
+
+      // Subcollection: Loans (Préstamos bancarios y de terceros)
+      match /loans/{loanId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
     }
   }
 }
