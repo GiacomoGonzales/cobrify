@@ -70,3 +70,7 @@ logs_temp.txt
 # Postman collections
 *.postman_collection.json
 *.postman_collection*.zip
+
+# Android builds
+*.apk
+*.aab
