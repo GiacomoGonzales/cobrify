@@ -1031,7 +1031,7 @@ export default function AdminUsers() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map(user => (
+                filteredUsers.map((user, index) => (
                   <tr
                     key={user.id}
                     className="hover:bg-gray-50 cursor-pointer"
@@ -1102,7 +1102,9 @@ export default function AdminUsers() {
                         </button>
 
                         {actionMenuUser === user.id && (
-                          <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 ${
+                            index >= filteredUsers.length - 2 ? 'bottom-full mb-1' : 'mt-1'
+                          }`}>
                             <button
                               onClick={e => {
                                 e.stopPropagation()
