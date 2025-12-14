@@ -343,10 +343,17 @@ export default function CreatePurchase() {
     }
   }
 
-  // Generar cuotas automáticamente
-  const generateInstallments = () => {
+  // Generar cuotas automáticamente cuando cambian los parámetros
+  useEffect(() => {
+    if (paymentType !== 'credito' || creditType !== 'cuotas') {
+      return
+    }
+
     const amounts = calculateAmounts()
-    if (amounts.total <= 0 || !firstDueDate || numInstallments < 2) return
+    if (amounts.total <= 0 || !firstDueDate || numInstallments < 2) {
+      setInstallments([])
+      return
+    }
 
     const installmentAmount = Math.floor((amounts.total / numInstallments) * 100) / 100
     const lastInstallmentAmount = Math.round((amounts.total - (installmentAmount * (numInstallments - 1))) * 100) / 100
@@ -363,13 +370,12 @@ export default function CreatePurchase() {
         paidAt: null,
         paidAmount: 0
       })
-      // Agregar días para la siguiente cuota
       currentDate = new Date(currentDate)
       currentDate.setDate(currentDate.getDate() + installmentFrequency)
     }
 
     setInstallments(newInstallments)
-  }
+  }, [paymentType, creditType, numInstallments, firstDueDate, installmentFrequency, purchaseItems])
 
   // Actualizar monto de una cuota manualmente
   const updateInstallmentAmount = (index, newAmount) => {
@@ -995,9 +1001,12 @@ export default function CreatePurchase() {
                       </div>
                     </div>
 
-                    <Button type="button" variant="outline" onClick={generateInstallments} size="sm">
-                      Generar Cuotas
-                    </Button>
+                    {/* Mensaje si falta fecha */}
+                    {!firstDueDate && (
+                      <p className="text-sm text-amber-600 mt-2">
+                        Selecciona la fecha de la primera cuota para generar el cronograma
+                      </p>
+                    )}
 
                     {/* Lista de cuotas generadas */}
                     {installments.length > 0 && (
