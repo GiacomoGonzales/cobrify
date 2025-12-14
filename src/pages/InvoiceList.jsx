@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus,
@@ -29,6 +29,7 @@ import {
   Code,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -50,6 +51,7 @@ import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
+  const { branding } = useBranding()
   const navigate = useNavigate()
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
@@ -66,6 +68,7 @@ export default function InvoiceList() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [filterSeller, setFilterSeller] = useState('all')
+  const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
   const [viewingInvoice, setViewingInvoice] = useState(null)
@@ -217,7 +220,7 @@ ${companySettings?.website ? companySettings.website : ''}`
       try {
         // Generar PDF
         toast.info('Generando PDF...')
-        const pdfResult = await generateInvoicePDF(invoice, companySettings)
+        const pdfResult = await generateInvoicePDF(invoice, companySettings, true, branding)
 
         if (pdfResult?.uri) {
           // Compartir con PDF adjunto
@@ -728,44 +731,85 @@ ${companySettings?.website ? companySettings.website : ''}`
     )
   ).map(str => JSON.parse(str))
 
-  // Filtrar facturas
-  const filteredInvoices = invoices.filter(invoice => {
-    const search = searchTerm.toLowerCase()
-    const matchesSearch =
-      invoice.number?.toLowerCase().includes(search) ||
-      invoice.customer?.name?.toLowerCase().includes(search) ||
-      invoice.customer?.documentNumber?.includes(search)
+  // Obtener rango de fechas basado en el filtro de período
+  const getDateRange = () => {
+    const now = new Date()
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
 
-    const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
-    const matchesType = filterType === 'all' || invoice.documentType === filterType
-    const matchesSeller = filterSeller === 'all' || invoice.createdBy === filterSeller
-
-    // Filtrar por rango de fechas
-    let matchesDateRange = true
-    if (filterStartDate || filterEndDate) {
-      const invoiceDate = getInvoiceDate(invoice)
-
-      if (filterStartDate) {
-        // Crear fecha en zona horaria local (no UTC)
-        const [year, month, day] = filterStartDate.split('-').map(Number);
-        const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
-        if (invoiceDate && invoiceDate < startDate) {
-          matchesDateRange = false
+    switch (dateFilter) {
+      case 'today':
+        return { start: startOfDay, end: endOfDay }
+      case '3days':
+        const threeDaysAgo = new Date(startOfDay)
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 2)
+        return { start: threeDaysAgo, end: endOfDay }
+      case '7days':
+        const sevenDaysAgo = new Date(startOfDay)
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
+        return { start: sevenDaysAgo, end: endOfDay }
+      case '30days':
+        const thirtyDaysAgo = new Date(startOfDay)
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+        return { start: thirtyDaysAgo, end: endOfDay }
+      case 'custom':
+        if (filterStartDate && filterEndDate) {
+          const [sYear, sMonth, sDay] = filterStartDate.split('-').map(Number)
+          const [eYear, eMonth, eDay] = filterEndDate.split('-').map(Number)
+          return {
+            start: new Date(sYear, sMonth - 1, sDay, 0, 0, 0, 0),
+            end: new Date(eYear, eMonth - 1, eDay, 23, 59, 59, 999)
+          }
         }
-      }
-
-      if (filterEndDate) {
-        // Crear fecha en zona horaria local (no UTC)
-        const [year, month, day] = filterEndDate.split('-').map(Number);
-        const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
-        if (invoiceDate && invoiceDate > endDate) {
-          matchesDateRange = false
-        }
-      }
+        return null
+      default:
+        return null
     }
+  }
 
-    return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesDateRange
-  })
+  // Filtrar por período
+  const filterByDateRange = (invoice) => {
+    const dateRange = getDateRange()
+    if (!dateRange) return true
+
+    const invoiceDate = getInvoiceDate(invoice)
+    if (!invoiceDate) return true
+
+    return invoiceDate >= dateRange.start && invoiceDate <= dateRange.end
+  }
+
+  // Etiqueta del filtro actual
+  const getFilterLabel = () => {
+    switch (dateFilter) {
+      case 'today': return 'Hoy'
+      case '3days': return 'Últimos 3 días'
+      case '7days': return 'Últimos 7 días'
+      case '30days': return 'Últimos 30 días'
+      case 'custom':
+        if (filterStartDate && filterEndDate) {
+          return `${filterStartDate} - ${filterEndDate}`
+        }
+        return 'Personalizado'
+      default: return 'Todo el tiempo'
+    }
+  }
+
+  // Filtrar facturas
+  const filteredInvoices = invoices
+    .filter(filterByDateRange) // Primero filtrar por período
+    .filter(invoice => {
+      const search = searchTerm.toLowerCase()
+      const matchesSearch =
+        invoice.number?.toLowerCase().includes(search) ||
+        invoice.customer?.name?.toLowerCase().includes(search) ||
+        invoice.customer?.documentNumber?.includes(search)
+
+      const matchesStatus = filterStatus === 'all' || invoice.status === filterStatus
+      const matchesType = filterType === 'all' || invoice.documentType === filterType
+      const matchesSeller = filterSeller === 'all' || invoice.createdBy === filterSeller
+
+      return matchesSearch && matchesStatus && matchesType && matchesSeller
+    })
 
   // Apply pagination
   const displayedInvoices = filteredInvoices.slice(0, visibleInvoicesCount)
@@ -778,7 +822,7 @@ ${companySettings?.website ? companySettings.website : ''}`
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleInvoicesCount(20)
-  }, [searchTerm, filterStatus, filterType, filterSeller, filterStartDate, filterEndDate])
+  }, [searchTerm, filterStatus, filterType, filterSeller, dateFilter, filterStartDate, filterEndDate])
 
   const getStatusBadge = (status, documentType) => {
     // Para Notas de Crédito, usar estados específicos
@@ -884,12 +928,18 @@ ${companySettings?.website ? companySettings.website : ''}`
     }
   }
 
-  // Estadísticas
+  // Facturas filtradas por período (para estadísticas, sin filtros de texto/tipo/estado/vendedor)
+  const dateFilteredInvoices = useMemo(() => {
+    return invoices.filter(filterByDateRange)
+  }, [invoices, dateFilter, filterStartDate, filterEndDate])
+
+  // Estadísticas (basadas en el período seleccionado)
   const stats = {
-    total: invoices.length,
-    paid: invoices.filter(i => i.status === 'paid').length,
-    pending: invoices.filter(i => i.status === 'pending').length,
-    totalAmount: invoices.reduce((sum, i) => sum + (i.total || 0), 0),
+    total: dateFilteredInvoices.length,
+    paid: dateFilteredInvoices.filter(i => i.status === 'paid').length,
+    pending: dateFilteredInvoices.filter(i => i.status === 'pending').length,
+    totalAmount: dateFilteredInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
+    totalAll: invoices.length,
   }
 
   if (isLoading) {
@@ -931,8 +981,13 @@ ${companySettings?.website ? companySettings.website : ''}`
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Total Comprobantes</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Comprobantes {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
+                </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
+                {dateFilter !== 'all' && (
+                  <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -955,7 +1010,9 @@ ${companySettings?.website ? companySettings.website : ''}`
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-600">Monto Total</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">
+                  Monto Total {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
+                </p>
                 <p className="text-lg sm:text-xl font-bold text-primary-600 mt-2">
                   {formatCurrency(stats.totalAmount)}
                 </p>
@@ -965,93 +1022,187 @@ ${companySettings?.website ? companySettings.website : ''}`
         </div>
       )}
 
-      {/* Filters */}
+      {/* Search and Filters */}
       <Card>
-        <CardContent className="p-4">
-          <div className="space-y-4">
-            {/* Barra de búsqueda */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por número, cliente, RUC/DNI..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
+        <CardContent className="p-4 space-y-4">
+          {/* Búsqueda */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por número, cliente, RUC/DNI..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
 
-            {/* Filtros */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <Select
-                value={filterType}
-                onChange={e => setFilterType(e.target.value)}
-              >
-                <option value="all">Todos los tipos</option>
-                <option value="factura">Facturas</option>
-                <option value="boleta">Boletas</option>
-                <option value="nota_credito">Notas de Crédito</option>
-                <option value="nota_debito">Notas de Débito</option>
-                <option value="nota_venta">Notas de Venta</option>
-              </Select>
-              <Select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-              >
-                <option value="all">Todos los estados</option>
-                <option value="paid">Pagadas</option>
-                <option value="pending">Pendientes</option>
-                <option value="overdue">Vencidas</option>
-                <option value="cancelled">Anuladas</option>
-              </Select>
-              <Select
-                value={filterSeller}
-                onChange={e => setFilterSeller(e.target.value)}
-              >
-                <option value="all">Todos los vendedores</option>
-                {sellers.map(seller => (
-                  <option key={seller.id} value={seller.id}>
-                    {seller.name}
-                  </option>
-                ))}
-              </Select>
-              <div className="w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+          {/* Filtro de período */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600 font-medium">Período:</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'Todo' },
+                { value: 'today', label: 'Hoy' },
+                { value: '3days', label: '3 días' },
+                { value: '7days', label: '7 días' },
+                { value: '30days', label: '30 días' },
+                { value: 'custom', label: 'Personalizado' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setDateFilter(option.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    dateFilter === option.value
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Fechas personalizadas */}
+          {dateFilter === 'custom' && (
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Desde:</label>
                 <input
                   type="date"
                   value={filterStartDate}
-                  onChange={e => setFilterStartDate(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                  style={{ minHeight: '44px' }}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                 />
               </div>
-              <div className="w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Hasta:</label>
                 <input
                   type="date"
                   value={filterEndDate}
-                  onChange={e => setFilterEndDate(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                  style={{ minHeight: '44px' }}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                 />
               </div>
             </div>
+          )}
 
-            {/* Clear filters button */}
-            {(filterStartDate || filterEndDate) && (
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    setFilterStartDate('')
-                    setFilterEndDate('')
-                  }}
-                  className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
-                >
-                  Limpiar fechas
-                </button>
+          {/* Filtros de tipo, estado y vendedor */}
+          <div className="pt-2 border-t space-y-3">
+            {/* Tipo de documento */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2 min-w-[80px]">
+                <span className="text-sm text-gray-600 font-medium">Tipo:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: 'all', label: 'Todos' },
+                  { value: 'factura', label: 'Facturas' },
+                  { value: 'boleta', label: 'Boletas' },
+                  { value: 'nota_venta', label: 'N. Venta' },
+                  { value: 'nota_credito', label: 'N. Crédito' },
+                  { value: 'nota_debito', label: 'N. Débito' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterType(option.value)}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      filterType === option.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Estado */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2 min-w-[80px]">
+                <span className="text-sm text-gray-600 font-medium">Estado:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: 'all', label: 'Todos' },
+                  { value: 'paid', label: 'Pagadas' },
+                  { value: 'pending', label: 'Pendientes' },
+                  { value: 'overdue', label: 'Vencidas' },
+                  { value: 'cancelled', label: 'Anuladas' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setFilterStatus(option.value)}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      filterStatus === option.value
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Vendedor */}
+            {sellers.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex items-center gap-2 min-w-[80px]">
+                  <span className="text-sm text-gray-600 font-medium">Vendedor:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setFilterSeller('all')}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      filterSeller === 'all'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  {sellers.map(seller => (
+                    <button
+                      key={seller.id}
+                      onClick={() => setFilterSeller(seller.id)}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        filterSeller === seller.id
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {seller.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
+
+          {/* Botón limpiar filtros */}
+          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || dateFilter !== 'all') && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => {
+                  setDateFilter('all')
+                  setFilterStartDate('')
+                  setFilterEndDate('')
+                  setFilterType('all')
+                  setFilterStatus('all')
+                  setFilterSeller('all')
+                }}
+                className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
+              >
+                Limpiar todos los filtros
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1388,7 +1539,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                     onClick={async () => {
                       setOpenMenuId(null)
                       try {
-                        const result = await generateInvoicePDF(invoice, companySettings)
+                        const result = await generateInvoicePDF(invoice, companySettings, true, branding)
                         if (result?.fileName) {
                           toast.success(`PDF guardado: ${result.fileName}`)
                         } else {
@@ -1803,7 +1954,7 @@ ${companySettings?.website ? companySettings.website : ''}`
                   }
 
                   try {
-                    const result = await generateInvoicePDF(viewingInvoice, companySettings)
+                    const result = await generateInvoicePDF(viewingInvoice, companySettings, true, branding)
 
                     if (result?.fileName) {
                       // En móvil, mostrar nombre del archivo guardado
