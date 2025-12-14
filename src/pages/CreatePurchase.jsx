@@ -997,6 +997,9 @@ export default function CreatePurchase() {
                           <option value={7}>Semanal (7 días)</option>
                           <option value={15}>Quincenal (15 días)</option>
                           <option value={30}>Mensual (30 días)</option>
+                          <option value={60}>Bimestral (60 días)</option>
+                          <option value={90}>Trimestral (90 días)</option>
+                          <option value={120}>Cuatrimestral (120 días)</option>
                         </select>
                       </div>
                     </div>
