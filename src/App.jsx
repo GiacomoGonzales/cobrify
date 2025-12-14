@@ -66,6 +66,7 @@ import DispatchGuides from './pages/DispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
+import Loans from './pages/Loans'
 // Pharmacy pages
 import Laboratories from './pages/Laboratories'
 import ExpiryAlerts from './pages/ExpiryAlerts'
@@ -189,6 +190,7 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
+              <Route path="prestamos" element={<Loans />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />

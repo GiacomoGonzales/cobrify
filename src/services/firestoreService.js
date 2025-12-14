@@ -1426,3 +1426,65 @@ export const sendDispatchGuideToSunat = async (businessId, guideId) => {
     }
   }
 }
+
+// ==================== PRÉSTAMOS ====================
+
+// Obtener todos los préstamos
+export const getLoans = async (businessId) => {
+  try {
+    const loansRef = collection(db, 'businesses', businessId, 'loans')
+    const q = query(loansRef, orderBy('createdAt', 'desc'))
+    const snapshot = await getDocs(q)
+    const loans = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+    return { success: true, data: loans }
+  } catch (error) {
+    console.error('Error al obtener préstamos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Crear un préstamo
+export const createLoan = async (businessId, loanData) => {
+  try {
+    const loansRef = collection(db, 'businesses', businessId, 'loans')
+    const docRef = await addDoc(loansRef, {
+      ...loanData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    })
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al crear préstamo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Actualizar un préstamo
+export const updateLoan = async (businessId, loanId, loanData) => {
+  try {
+    const loanRef = doc(db, 'businesses', businessId, 'loans', loanId)
+    await updateDoc(loanRef, {
+      ...loanData,
+      updatedAt: serverTimestamp()
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar préstamo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Eliminar un préstamo
+export const deleteLoan = async (businessId, loanId) => {
+  try {
+    const loanRef = doc(db, 'businesses', businessId, 'loans', loanId)
+    await deleteDoc(loanRef)
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar préstamo:', error)
+    return { success: false, error: error.message }
+  }
+}

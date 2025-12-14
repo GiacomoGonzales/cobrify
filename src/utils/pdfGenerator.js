@@ -265,7 +265,7 @@ const hexToRgb = (hex) => {
  * Genera un PDF profesional estilo apisunat.com
  * Diseño con pie de página fijo y espacio flexible para productos
  */
-export const generateInvoicePDF = async (invoice, companySettings, download = true) => {
+export const generateInvoicePDF = async (invoice, companySettings, download = true, branding = null) => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
@@ -1046,7 +1046,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFontSize(6)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...MEDIUM_GRAY)
-  doc.text('Documento generado en Cobrify - Sistema de Facturación Electrónica', MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - MARGIN_BOTTOM - 3, { align: 'center' })
+  // Usar nombre del reseller si hay branding de marca blanca, sino usar Cobrify
+  const footerCompanyName = branding?.companyName || 'Cobrify'
+  doc.text(`Documento generado en ${footerCompanyName} - Sistema de Facturación Electrónica`, MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - MARGIN_BOTTOM - 3, { align: 'center' })
 
   // ========== GENERAR PDF ==========
 
@@ -1128,7 +1130,7 @@ export const generateSimpleInvoicePDF = async (invoice) => {
 /**
  * Exporta el PDF como blob para enviar por WhatsApp u otros usos
  */
-export const getInvoicePDFBlob = async (invoice, companySettings) => {
-  const doc = await generateInvoicePDF(invoice, companySettings, false)
+export const getInvoicePDFBlob = async (invoice, companySettings, branding = null) => {
+  const doc = await generateInvoicePDF(invoice, companySettings, false, branding)
   return doc.output('blob')
 }

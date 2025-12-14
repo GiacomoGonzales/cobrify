@@ -25,6 +25,7 @@ import {
   Settings2,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -141,6 +142,7 @@ const getProductExpirationStatus = (product) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
+  const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -1753,7 +1755,7 @@ export default function POS() {
             }
 
             // Descargar el PDF
-            await generateInvoicePDF(lastInvoiceData, companySettings)
+            await generateInvoicePDF(lastInvoiceData, companySettings, true, branding)
             toast.success('PDF descargado')
 
             // Crear mensaje y abrir WhatsApp directamente
@@ -1814,7 +1816,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       toast.info('Generando PDF...')
 
       // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings)
+      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding)
 
       // Convertir Blob a base64
       const reader = new FileReader()
@@ -3206,7 +3208,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <Button
                       onClick={() => {
                         try {
-                          generateInvoicePDF(lastInvoiceData, companySettings)
+                          generateInvoicePDF(lastInvoiceData, companySettings, true, branding)
                         } catch (error) {
                           console.error('Error al generar PDF:', error)
                           toast.error('Error al generar el PDF')

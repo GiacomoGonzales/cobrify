@@ -20,6 +20,7 @@ import {
   ClipboardList,
   History,
   Building2,
+  Landmark,
   Receipt,
   // Iconos para modo restaurante
   UtensilsCrossed,
@@ -150,6 +151,13 @@ function Sidebar() {
       icon: ShoppingBag,
       label: 'Compras',
       pageId: 'purchases',
+    },
+    {
+      path: '/prestamos',
+      icon: Landmark,
+      label: 'Préstamos',
+      pageId: 'loans',
+      requiresFeature: 'loans', // Solo visible si tiene el feature habilitado
     },
     {
       path: '/ingredientes',
@@ -360,6 +368,13 @@ function Sidebar() {
       icon: ShoppingBag,
       label: 'Compras',
       pageId: 'purchases',
+    },
+    {
+      path: '/prestamos',
+      icon: Landmark,
+      label: 'Préstamos',
+      pageId: 'loans',
+      requiresFeature: 'loans', // Solo visible si tiene el feature habilitado
     },
     {
       path: '/reportes',
