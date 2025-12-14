@@ -37,8 +37,18 @@ export default function Button({
 }) {
   const { branding } = useBranding()
 
-  // Solo aplicar branding personalizado si NO es el color default de Cobrify
-  const hasCustomBranding = branding.primaryColor !== DEFAULT_BRANDING.primaryColor
+  // Solo aplicar branding personalizado si:
+  // 1. Hay un color primario definido
+  // 2. NO es el color default de Cobrify (#2563eb)
+  // 3. NO estamos en el dominio principal de Cobrify
+  const isMainDomain = typeof window !== 'undefined' &&
+    (window.location.hostname === 'cobrifyperu.com' ||
+     window.location.hostname === 'www.cobrifyperu.com' ||
+     window.location.hostname === 'localhost')
+
+  const hasCustomBranding = !isMainDomain &&
+    branding?.primaryColor &&
+    branding.primaryColor !== DEFAULT_BRANDING.primaryColor
 
   // Calcular estilos inline solo para variantes primary y outline con branding personalizado
   let customStyle = style || {}
