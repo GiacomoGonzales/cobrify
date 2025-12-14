@@ -78,6 +78,10 @@ export default function CreatePurchase() {
   }
   const [invoiceDate, setInvoiceDate] = useState(getLocalDateString())
   const [notes, setNotes] = useState('')
+
+  // Tipo de pago
+  const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
+  const [dueDate, setDueDate] = useState('') // Fecha de vencimiento para crédito
   const [purchaseItems, setPurchaseItems] = useState([
     { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '' },
   ])
@@ -427,22 +431,14 @@ export default function CreatePurchase() {
   }
 
   const validateForm = () => {
-    // Proveedor y número de factura ahora son opcionales
-    // if (!selectedSupplier) {
-    //   setMessage({
-    //     type: 'error',
-    //     text: 'Debe seleccionar un proveedor',
-    //   })
-    //   return false
-    // }
-
-    // if (!invoiceNumber.trim()) {
-    //   setMessage({
-    //     type: 'error',
-    //     text: 'Debe ingresar el número de factura',
-    //   })
-    //   return false
-    // }
+    // Validar fecha de vencimiento para compras al crédito
+    if (paymentType === 'credito' && !dueDate) {
+      setMessage({
+        type: 'error',
+        text: 'Debe seleccionar una fecha de vencimiento para compras al crédito',
+      })
+      return false
+    }
 
     if (purchaseItems.length === 0) {
       setMessage({
@@ -533,6 +529,11 @@ export default function CreatePurchase() {
         igv: amounts.igv,
         total: amounts.total,
         notes: notes.trim(),
+        // Tipo de pago y estado
+        paymentType: paymentType, // 'contado' o 'credito'
+        paymentStatus: paymentType === 'contado' ? 'paid' : 'pending', // 'paid' o 'pending'
+        ...(paymentType === 'credito' && dueDate && { dueDate: new Date(dueDate) }),
+        paidAmount: paymentType === 'contado' ? amounts.total : 0, // Monto pagado
       }
 
       // 2. Guardar la compra
@@ -789,6 +790,56 @@ export default function CreatePurchase() {
                 </Select>
                 <p className="text-xs text-gray-500 mt-1">
                   El stock ingresará a este almacén
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Tipo de Pago */}
+          <div className="mt-4 pt-4 border-t">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tipo de Pago <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="paymentType"
+                  value="contado"
+                  checked={paymentType === 'contado'}
+                  onChange={e => {
+                    setPaymentType(e.target.value)
+                    setDueDate('')
+                  }}
+                  className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Al Contado</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="paymentType"
+                  value="credito"
+                  checked={paymentType === 'credito'}
+                  onChange={e => setPaymentType(e.target.value)}
+                  className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Al Crédito</span>
+              </label>
+            </div>
+
+            {paymentType === 'credito' && (
+              <div className="mt-3 max-w-xs">
+                <Input
+                  label="Fecha de Vencimiento"
+                  type="date"
+                  required
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                  min={getLocalDateString()}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Fecha límite para pagar esta compra
                 </p>
               </div>
             )}

@@ -15,6 +15,9 @@ import {
   ArrowUp,
   ArrowDown,
   Filter,
+  CheckCircle,
+  CreditCard,
+  Clock,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -24,7 +27,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getPurchases, deletePurchase } from '@/services/firestoreService'
+import { getPurchases, deletePurchase, updatePurchase } from '@/services/firestoreService'
 
 export default function Purchases() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -36,6 +39,10 @@ export default function Purchases() {
   const [deletingPurchase, setDeletingPurchase] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Estado para marcar como pagado
+  const [markingAsPaid, setMarkingAsPaid] = useState(null)
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false)
+
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
   const [sortDirection, setSortDirection] = useState('desc') // 'asc', 'desc'
@@ -44,6 +51,9 @@ export default function Purchases() {
   const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
+
+  // Filtro de tipo de pago
+  const [paymentFilter, setPaymentFilter] = useState('all') // 'all', 'contado', 'credito', 'pending'
 
   useEffect(() => {
     loadPurchases()
@@ -100,6 +110,39 @@ export default function Purchases() {
       toast.error('Error al eliminar la compra. Inténtalo nuevamente.')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  // Marcar compra como pagada
+  const handleMarkAsPaid = async () => {
+    if (!markingAsPaid || !user?.uid) return
+
+    if (isDemoMode) {
+      toast.error('No se pueden modificar compras en modo demo')
+      setMarkingAsPaid(null)
+      return
+    }
+
+    setIsMarkingPaid(true)
+    try {
+      const result = await updatePurchase(getBusinessId(), markingAsPaid.id, {
+        paymentStatus: 'paid',
+        paidAmount: markingAsPaid.total,
+        paidAt: new Date(),
+      })
+
+      if (result.success) {
+        toast.success('Compra marcada como pagada')
+        setMarkingAsPaid(null)
+        loadPurchases()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al marcar como pagada:', error)
+      toast.error('Error al actualizar la compra')
+    } finally {
+      setIsMarkingPaid(false)
     }
   }
 
@@ -170,8 +213,18 @@ export default function Purchases() {
     return purchaseDate >= dateRange.start && purchaseDate <= dateRange.end
   }
 
+  // Filtrar por tipo de pago
+  const filterByPayment = (purchase) => {
+    if (paymentFilter === 'all') return true
+    if (paymentFilter === 'contado') return purchase.paymentType === 'contado'
+    if (paymentFilter === 'credito') return purchase.paymentType === 'credito'
+    if (paymentFilter === 'pending') return purchase.paymentType === 'credito' && purchase.paymentStatus === 'pending'
+    return true
+  }
+
   const filteredPurchases = purchases
-    .filter(filterByDate) // Primero filtrar por fecha
+    .filter(filterByDate) // Filtrar por fecha
+    .filter(filterByPayment) // Filtrar por tipo de pago
     .filter(purchase => {
       // Si no hay término de búsqueda, mostrar todas las compras
       if (!searchTerm || searchTerm.trim() === '') return true
@@ -206,11 +259,23 @@ export default function Purchases() {
     return purchases.filter(filterByDate)
   }, [purchases, dateFilter, customStartDate, customEndDate])
 
-  const stats = {
-    total: dateFilteredPurchases.length,
-    totalAmount: dateFilteredPurchases.reduce((sum, p) => sum + (p.total || 0), 0),
-    totalAll: purchases.length,
-  }
+  // Estadísticas
+  const stats = useMemo(() => {
+    const filtered = dateFilteredPurchases
+    const pendingPurchases = filtered.filter(p => p.paymentType === 'credito' && p.paymentStatus === 'pending')
+    const pendingAmount = pendingPurchases.reduce((sum, p) => {
+      const remaining = (p.total || 0) - (p.paidAmount || 0)
+      return sum + remaining
+    }, 0)
+
+    return {
+      total: filtered.length,
+      totalAmount: filtered.reduce((sum, p) => sum + (p.total || 0), 0),
+      totalAll: purchases.length,
+      pendingCount: pendingPurchases.length,
+      pendingAmount: pendingAmount,
+    }
+  }, [dateFilteredPurchases, purchases])
 
   // Etiqueta del filtro actual
   const getFilterLabel = () => {
@@ -325,58 +390,99 @@ export default function Purchases() {
               </div>
             </div>
           )}
+
+          {/* Filtro de tipo de pago */}
+          <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600 font-medium">Pago:</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'Todos' },
+                { value: 'contado', label: 'Contado' },
+                { value: 'credito', label: 'Crédito' },
+                { value: 'pending', label: 'Pendientes' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setPaymentFilter(option.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    paymentFilter === option.value
+                      ? option.value === 'pending' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {option.label}
+                  {option.value === 'pending' && stats.pendingCount > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      {stats.pendingCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Compras {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
-                </p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{stats.total}</p>
-                {dateFilter !== 'all' && (
-                  <p className="text-xs text-gray-500 mt-1">de {stats.totalAll} en total</p>
-                )}
+                <p className="text-xs font-medium text-gray-600">Compras</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{stats.total}</p>
               </div>
-              <div className="p-3 bg-primary-100 rounded-lg">
-                <ShoppingBag className="w-6 h-6 text-primary-600" />
+              <div className="p-2 bg-primary-100 rounded-lg">
+                <ShoppingBag className="w-5 h-5 text-primary-600" />
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Período</p>
-                <p className="text-lg font-bold text-gray-900 mt-2">{getFilterLabel()}</p>
-                {dateFilter === 'all' && (
-                  <p className="text-xs text-gray-500 mt-1">Todas las compras</p>
-                )}
-              </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Calendar className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Monto Total {dateFilter !== 'all' && <span className="text-primary-600">({getFilterLabel()})</span>}
-                </p>
-                <p className="text-xl font-bold text-gray-900 mt-2">
+                <p className="text-xs font-medium text-gray-600">Monto Total</p>
+                <p className="text-lg font-bold text-gray-900 mt-1">
                   {formatCurrency(stats.totalAmount)}
                 </p>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DollarSign className="w-6 h-6 text-green-600" />
+              <div className="p-2 bg-green-100 rounded-lg">
+                <DollarSign className="w-5 h-5 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={stats.pendingCount > 0 ? 'ring-2 ring-red-200' : ''}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-600">Por Pagar</p>
+                <p className="text-lg font-bold text-red-600 mt-1">
+                  {formatCurrency(stats.pendingAmount)}
+                </p>
+                {stats.pendingCount > 0 && (
+                  <p className="text-xs text-red-500">{stats.pendingCount} pendientes</p>
+                )}
+              </div>
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Clock className="w-5 h-5 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-600">Período</p>
+                <p className="text-sm font-bold text-gray-900 mt-1">{getFilterLabel()}</p>
+              </div>
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Calendar className="w-5 h-5 text-blue-600" />
               </div>
             </div>
           </CardContent>
@@ -439,13 +545,14 @@ export default function Purchases() {
                       {getSortIcon('amount')}
                     </button>
                   </TableHead>
+                  <TableHead className="text-center">Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPurchases.map(purchase => (
                   <TableRow key={purchase.id}>
-                    <TableCell className="font-medium">{purchase.invoiceNumber}</TableCell>
+                    <TableCell className="font-medium">{purchase.invoiceNumber || '-'}</TableCell>
                     <TableCell>
                       <div>
                         <p className="font-medium">{purchase.supplier?.businessName || 'N/A'}</p>
@@ -469,8 +576,37 @@ export default function Purchases() {
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(purchase.total)}
                     </TableCell>
+                    <TableCell className="text-center">
+                      {purchase.paymentType === 'credito' ? (
+                        purchase.paymentStatus === 'paid' ? (
+                          <Badge variant="success" className="text-xs">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Pagado
+                          </Badge>
+                        ) : (
+                          <Badge variant="danger" className="text-xs">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Pendiente
+                          </Badge>
+                        )
+                      ) : (
+                        <Badge variant="default" className="text-xs bg-gray-100 text-gray-700">
+                          Contado
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
-                      <div className="flex items-center justify-end space-x-2">
+                      <div className="flex items-center justify-end space-x-1">
+                        {/* Botón marcar como pagado (solo para crédito pendiente) */}
+                        {purchase.paymentType === 'credito' && purchase.paymentStatus === 'pending' && (
+                          <button
+                            onClick={() => setMarkingAsPaid(purchase)}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Marcar como pagado"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setViewingPurchase(purchase)}
                           className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -649,6 +785,57 @@ export default function Purchases() {
                 </>
               ) : (
                 <>Eliminar</>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Confirmar Marcar como Pagado */}
+      <Modal
+        isOpen={!!markingAsPaid}
+        onClose={() => setMarkingAsPaid(null)}
+        title="Marcar como Pagado"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-700">
+                ¿Confirmas que la compra{' '}
+                <strong>{markingAsPaid?.invoiceNumber || 'sin número'}</strong> de{' '}
+                <strong>{markingAsPaid?.supplier?.businessName || 'proveedor'}</strong>{' '}
+                ha sido pagada?
+              </p>
+              <p className="text-lg font-bold text-gray-900 mt-2">
+                Monto: {formatCurrency(markingAsPaid?.total || 0)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setMarkingAsPaid(null)}
+              disabled={isMarkingPaid}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleMarkAsPaid} disabled={isMarkingPaid}>
+              {isMarkingPaid ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Confirmar Pago
+                </>
               )}
             </Button>
           </div>
