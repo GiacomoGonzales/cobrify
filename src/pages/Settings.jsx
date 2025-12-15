@@ -1327,6 +1327,17 @@ export default function Settings() {
                       <span className="text-xs text-gray-600">{option.name}</span>
                     </button>
                   ))}
+                  {/* Selector de color personalizado */}
+                  <div className="flex flex-col items-center gap-1 p-2">
+                    <input
+                      type="color"
+                      value={pdfAccentColor}
+                      onChange={(e) => setPdfAccentColor(e.target.value)}
+                      className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
+                      title="Elegir color personalizado"
+                    />
+                    <span className="text-xs text-gray-600">Otro</span>
+                  </div>
                 </div>
               </div>
 
