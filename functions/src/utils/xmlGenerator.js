@@ -527,10 +527,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
     const invoiceLine = root.ele('cac:InvoiceLine')
 
     // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)
-    // Si el negocio está exonerado de IGV, todos los items deben ser exonerados (20)
-    let taxAffectation = item.taxAffectation
-    if (!taxAffectation) {
-      taxAffectation = igvExempt ? '20' : '10'  // 20=Exonerado si empresa exonerada, 10=Gravado si no
+    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado para TODOS
+    //        Si negocio normal → respetar config del producto, si no tiene = gravado
+    let taxAffectation
+    if (igvExempt) {
+      // Ley de la Selva u otra exoneración → TODOS los productos son exonerados
+      taxAffectation = '20'
+    } else {
+      // Negocio normal → respetar configuración del producto, default gravado
+      taxAffectation = item.taxAffectation || '10'
     }
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
@@ -611,9 +616,19 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }).txt(taxAffectation) // 10=Gravado, 20=Exonerado, 30=Inafecto
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
-    // Para items exonerados usar código 9997 (EXO), para gravados usar 1000 (IGV)
-    const lineItemTaxSchemeCode = isExonerado ? '9997' : '1000'
-    const lineItemTaxSchemeName = isExonerado ? 'EXO' : 'IGV'
+    // Código de tributo según tipo de afectación:
+    // - 1000 (IGV) para gravados
+    // - 9997 (EXO) para exonerados
+    // - 9998 (INA) para inafectos
+    let lineItemTaxSchemeCode = '1000'
+    let lineItemTaxSchemeName = 'IGV'
+    if (isExonerado) {
+      lineItemTaxSchemeCode = '9997'
+      lineItemTaxSchemeName = 'EXO'
+    } else if (isInafecto) {
+      lineItemTaxSchemeCode = '9998'
+      lineItemTaxSchemeName = 'INA'
+    }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
       'schemeName': 'Codigo de tributos',
@@ -862,10 +877,14 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
   creditNoteData.items.forEach((item, index) => {
     const creditNoteLine = root.ele('cac:CreditNoteLine')
 
-    // Código de afectación al IGV
-    let taxAffectation = item.taxAffectation
-    if (!taxAffectation) {
-      taxAffectation = igvExempt ? '20' : '10'  // 20=Exonerado si empresa exonerada, 10=Gravado si no
+    // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)
+    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado para TODOS
+    //        Si negocio normal → respetar config del producto, si no tiene = gravado
+    let taxAffectation
+    if (igvExempt) {
+      taxAffectation = '20'
+    } else {
+      taxAffectation = item.taxAffectation || '10'
     }
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
@@ -942,9 +961,19 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     }).txt(taxAffectation)
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
-    // Para items exonerados usar código 9997 (EXO), para gravados usar 1000 (IGV)
-    const lineItemTaxSchemeCode = isExonerado ? '9997' : '1000'
-    const lineItemTaxSchemeName = isExonerado ? 'EXO' : 'IGV'
+    // Código de tributo según tipo de afectación:
+    // - 1000 (IGV) para gravados
+    // - 9997 (EXO) para exonerados
+    // - 9998 (INA) para inafectos
+    let lineItemTaxSchemeCode = '1000'
+    let lineItemTaxSchemeName = 'IGV'
+    if (isExonerado) {
+      lineItemTaxSchemeCode = '9997'
+      lineItemTaxSchemeName = 'EXO'
+    } else if (isInafecto) {
+      lineItemTaxSchemeCode = '9998'
+      lineItemTaxSchemeName = 'INA'
+    }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
       'schemeName': 'Codigo de tributos',
@@ -1188,10 +1217,14 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
   debitNoteData.items.forEach((item, index) => {
     const debitNoteLine = root.ele('cac:DebitNoteLine')
 
-    // Código de afectación al IGV
-    let taxAffectation = item.taxAffectation
-    if (!taxAffectation) {
-      taxAffectation = igvExempt ? '20' : '10'  // 20=Exonerado si empresa exonerada, 10=Gravado si no
+    // Código de afectación al IGV (10=Gravado, 20=Exonerado, 30=Inafecto)
+    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado para TODOS
+    //        Si negocio normal → respetar config del producto, si no tiene = gravado
+    let taxAffectation
+    if (igvExempt) {
+      taxAffectation = '20'
+    } else {
+      taxAffectation = item.taxAffectation || '10'
     }
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
@@ -1268,9 +1301,19 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     }).txt(taxAffectation)
 
     const lineItemTaxScheme = lineTaxCategory.ele('cac:TaxScheme')
-    // Para items exonerados usar código 9997 (EXO), para gravados usar 1000 (IGV)
-    const lineItemTaxSchemeCode = isExonerado ? '9997' : '1000'
-    const lineItemTaxSchemeName = isExonerado ? 'EXO' : 'IGV'
+    // Código de tributo según tipo de afectación:
+    // - 1000 (IGV) para gravados
+    // - 9997 (EXO) para exonerados
+    // - 9998 (INA) para inafectos
+    let lineItemTaxSchemeCode = '1000'
+    let lineItemTaxSchemeName = 'IGV'
+    if (isExonerado) {
+      lineItemTaxSchemeCode = '9997'
+      lineItemTaxSchemeName = 'EXO'
+    } else if (isInafecto) {
+      lineItemTaxSchemeCode = '9998'
+      lineItemTaxSchemeName = 'INA'
+    }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
       'schemeName': 'Codigo de tributos',

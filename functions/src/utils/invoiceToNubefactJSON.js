@@ -25,8 +25,12 @@ export function convertInvoiceToNubefactJSON(invoiceData, businessData) {
   // Cliente
   const cliente = getClienteData(invoiceData.customer)
 
-  // Calcular totales
-  const totales = calculateTotals(invoiceData.items, invoiceData.igvRate || 18)
+  // Configuración de impuestos - soporta exoneración de IGV (Ley de la Selva, etc.)
+  const igvRate = invoiceData.taxConfig?.igvRate ?? invoiceData.igvRate ?? 18
+  const igvExempt = invoiceData.taxConfig?.igvExempt ?? false
+
+  // Calcular totales considerando si es exonerado o no
+  const totales = calculateTotals(invoiceData.items, igvRate, igvExempt)
 
   // Construir JSON según especificación de NubeFact
   const nubefactJSON = {
@@ -58,8 +62,8 @@ export function convertInvoiceToNubefactJSON(invoiceData, businessData) {
     moneda: invoiceData.currency === 'USD' ? 2 : 1, // 1=Soles, 2=Dólares
     tipo_de_cambio: invoiceData.exchangeRate || '',
 
-    // IGV
-    porcentaje_de_igv: invoiceData.igvRate || 18.00,
+    // IGV - 0 si es exonerado
+    porcentaje_de_igv: igvExempt ? 0 : igvRate,
 
     // Descuentos y anticipos
     descuento_global: '',
@@ -113,7 +117,7 @@ export function convertInvoiceToNubefactJSON(invoiceData, businessData) {
     servicios_region_selva: '',
 
     // Items (productos/servicios)
-    items: convertItems(invoiceData.items, invoiceData.igvRate || 18),
+    items: convertItems(invoiceData.items, igvRate, igvExempt),
 
     // Guías relacionadas
     guias: [],
@@ -207,8 +211,11 @@ function getClienteData(customer) {
 
 /**
  * Calcula totales de la factura
+ * @param {Array} items - Items de la factura
+ * @param {number} igvRate - Tasa de IGV (18 por defecto)
+ * @param {boolean} igvExempt - Si el negocio está exonerado de IGV (Ley de la Selva, etc.)
  */
-function calculateTotals(items, igvRate) {
+function calculateTotals(items, igvRate, igvExempt = false) {
   if (!items || items.length === 0) {
     return {
       gravada: 0,
@@ -227,12 +234,23 @@ function calculateTotals(items, igvRate) {
   let totalIgv = 0
 
   items.forEach(item => {
-    const subtotal = item.quantity * item.unitPrice
+    const quantity = item.quantity || 1
+    const unitPrice = item.unitPrice || 0
 
-    // Por ahora asumimos que todo es gravado (afecto a IGV)
-    // En una implementación completa, cada item debería tener su tipo de IGV
-    totalGravada += subtotal
-    totalIgv += subtotal * (igvRate / 100)
+    if (igvExempt) {
+      // Para negocios exonerados de IGV (Ley de la Selva, etc.)
+      // El precio es el precio final, no hay IGV que extraer
+      const subtotal = quantity * unitPrice
+      totalExonerada += subtotal
+      // IGV = 0 para exonerados
+    } else {
+      // Para negocios gravados con IGV
+      // Extraer el valor sin IGV del precio con IGV
+      const valorSinIgv = unitPrice / (1 + igvRate / 100)
+      const subtotal = quantity * valorSinIgv
+      totalGravada += subtotal
+      totalIgv += subtotal * (igvRate / 100)
+    }
   })
 
   const total = totalGravada + totalInafecta + totalExonerada + totalIgv
@@ -249,8 +267,16 @@ function calculateTotals(items, igvRate) {
 
 /**
  * Convierte items de Firestore a formato NubeFact
+ * @param {Array} items - Items de la factura
+ * @param {number} igvRate - Tasa de IGV
+ * @param {boolean} igvExempt - Si el negocio está exonerado de IGV
+ *
+ * Tipos de IGV según catálogo SUNAT:
+ * - 1 = Gravado - Operación Onerosa
+ * - 8 = Exonerado - Operación Onerosa
+ * - 9 = Inafecto - Operación Onerosa
  */
-function convertItems(items, igvRate) {
+function convertItems(items, igvRate, igvExempt = false) {
   if (!items || items.length === 0) {
     return []
   }
@@ -259,34 +285,57 @@ function convertItems(items, igvRate) {
     const quantity = item.quantity || 1
     const unitPrice = item.unitPrice || 0
 
-    // Calcular valor unitario (sin IGV)
-    const valorUnitario = unitPrice / (1 + igvRate / 100)
+    if (igvExempt) {
+      // Para negocios exonerados de IGV (Ley de la Selva, etc.)
+      // El precio ya es el precio final, no hay IGV
+      return {
+        unidad_de_medida: item.unit || 'NIU',
+        codigo: item.code || item.productId || '',
+        codigo_producto_sunat: '',
+        descripcion: item.name || item.description || 'PRODUCTO/SERVICIO',
+        cantidad: quantity,
+        valor_unitario: parseFloat(unitPrice.toFixed(10)), // Precio = valor (sin IGV)
+        precio_unitario: parseFloat(unitPrice.toFixed(10)),
+        descuento: 0,
+        subtotal: parseFloat((quantity * unitPrice).toFixed(2)),
+        tipo_de_igv: 8, // 8 = Exonerado - Operación Onerosa
+        igv: 0, // Sin IGV
+        total: parseFloat((quantity * unitPrice).toFixed(2)),
+        anticipo_regularizacion: false,
+        anticipo_documento_serie: '',
+        anticipo_documento_numero: ''
+      }
+    } else {
+      // Para negocios gravados con IGV
+      // Calcular valor unitario (sin IGV)
+      const valorUnitario = unitPrice / (1 + igvRate / 100)
 
-    // Subtotal sin IGV
-    const subtotal = valorUnitario * quantity
+      // Subtotal sin IGV
+      const subtotal = valorUnitario * quantity
 
-    // IGV del item
-    const igv = subtotal * (igvRate / 100)
+      // IGV del item
+      const igv = subtotal * (igvRate / 100)
 
-    // Total del item (con IGV)
-    const total = subtotal + igv
+      // Total del item (con IGV)
+      const total = subtotal + igv
 
-    return {
-      unidad_de_medida: item.unit || 'NIU', // NIU = Unidad, ZZ = Servicio
-      codigo: item.code || item.productId || '',
-      codigo_producto_sunat: '', // Código de catálogo SUNAT (opcional)
-      descripcion: item.name || item.description || 'PRODUCTO/SERVICIO',
-      cantidad: quantity,
-      valor_unitario: parseFloat(valorUnitario.toFixed(10)),
-      precio_unitario: parseFloat(unitPrice.toFixed(10)),
-      descuento: 0,
-      subtotal: parseFloat(subtotal.toFixed(2)),
-      tipo_de_igv: 1, // 1 = Gravado - Operación Onerosa
-      igv: parseFloat(igv.toFixed(2)),
-      total: parseFloat(total.toFixed(2)),
-      anticipo_regularizacion: false,
-      anticipo_documento_serie: '',
-      anticipo_documento_numero: ''
+      return {
+        unidad_de_medida: item.unit || 'NIU',
+        codigo: item.code || item.productId || '',
+        codigo_producto_sunat: '',
+        descripcion: item.name || item.description || 'PRODUCTO/SERVICIO',
+        cantidad: quantity,
+        valor_unitario: parseFloat(valorUnitario.toFixed(10)),
+        precio_unitario: parseFloat(unitPrice.toFixed(10)),
+        descuento: 0,
+        subtotal: parseFloat(subtotal.toFixed(2)),
+        tipo_de_igv: 1, // 1 = Gravado - Operación Onerosa
+        igv: parseFloat(igv.toFixed(2)),
+        total: parseFloat(total.toFixed(2)),
+        anticipo_regularizacion: false,
+        anticipo_documento_serie: '',
+        anticipo_documento_numero: ''
+      }
     }
   })
 }
