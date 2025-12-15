@@ -214,6 +214,13 @@ function getClienteData(customer) {
  * @param {Array} items - Items de la factura
  * @param {number} igvRate - Tasa de IGV (18 por defecto)
  * @param {boolean} igvExempt - Si el negocio está exonerado de IGV (Ley de la Selva, etc.)
+ *
+ * REGLA:
+ * - Si negocio tiene Ley de la Selva (igvExempt=true) → TODO va a total_exonerada
+ * - Si negocio normal → respetar taxAffectation del producto:
+ *   - '10' o sin configurar → total_gravada + IGV
+ *   - '20' → total_exonerada (sin IGV)
+ *   - '30' → total_inafecta (sin IGV)
  */
 function calculateTotals(items, igvRate, igvExempt = false) {
   if (!items || items.length === 0) {
@@ -237,15 +244,30 @@ function calculateTotals(items, igvRate, igvExempt = false) {
     const quantity = item.quantity || 1
     const unitPrice = item.unitPrice || 0
 
+    // Determinar tipo de afectación del producto
+    let taxAffectation
     if (igvExempt) {
-      // Para negocios exonerados de IGV (Ley de la Selva, etc.)
-      // El precio es el precio final, no hay IGV que extraer
+      // Ley de la Selva → FORZAR exonerado para TODOS
+      taxAffectation = '20'
+    } else {
+      // Negocio normal → respetar config del producto, default gravado
+      taxAffectation = item.taxAffectation || '10'
+    }
+
+    const isGravado = taxAffectation === '10'
+    const isExonerado = taxAffectation === '20'
+    const isInafecto = taxAffectation === '30'
+
+    if (isExonerado) {
+      // Producto exonerado → precio es el total, sin IGV
       const subtotal = quantity * unitPrice
       totalExonerada += subtotal
-      // IGV = 0 para exonerados
+    } else if (isInafecto) {
+      // Producto inafecto → precio es el total, sin IGV
+      const subtotal = quantity * unitPrice
+      totalInafecta += subtotal
     } else {
-      // Para negocios gravados con IGV
-      // Extraer el valor sin IGV del precio con IGV
+      // Producto gravado → extraer valor sin IGV del precio con IGV
       const valorSinIgv = unitPrice / (1 + igvRate / 100)
       const subtotal = quantity * valorSinIgv
       totalGravada += subtotal
@@ -275,6 +297,13 @@ function calculateTotals(items, igvRate, igvExempt = false) {
  * - 1 = Gravado - Operación Onerosa
  * - 8 = Exonerado - Operación Onerosa
  * - 9 = Inafecto - Operación Onerosa
+ *
+ * REGLA:
+ * - Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado (8) para TODOS
+ * - Si negocio normal → respetar taxAffectation del producto:
+ *   - '10' o sin configurar → Gravado (1)
+ *   - '20' → Exonerado (8)
+ *   - '30' → Inafecto (9)
  */
 function convertItems(items, igvRate, igvExempt = false) {
   if (!items || items.length === 0) {
@@ -285,38 +314,45 @@ function convertItems(items, igvRate, igvExempt = false) {
     const quantity = item.quantity || 1
     const unitPrice = item.unitPrice || 0
 
+    // Determinar tipo de afectación del producto
+    let taxAffectation
     if (igvExempt) {
-      // Para negocios exonerados de IGV (Ley de la Selva, etc.)
-      // El precio ya es el precio final, no hay IGV
+      // Ley de la Selva → FORZAR exonerado para TODOS
+      taxAffectation = '20'
+    } else {
+      // Negocio normal → respetar config del producto, default gravado
+      taxAffectation = item.taxAffectation || '10'
+    }
+
+    const isGravado = taxAffectation === '10'
+    const isExonerado = taxAffectation === '20'
+    const isInafecto = taxAffectation === '30'
+
+    if (isExonerado || isInafecto) {
+      // Productos exonerados o inafectos → IGV = 0
+      // El precio ya es el precio final
       return {
         unidad_de_medida: item.unit || 'NIU',
         codigo: item.code || item.productId || '',
         codigo_producto_sunat: '',
         descripcion: item.name || item.description || 'PRODUCTO/SERVICIO',
         cantidad: quantity,
-        valor_unitario: parseFloat(unitPrice.toFixed(10)), // Precio = valor (sin IGV)
+        valor_unitario: parseFloat(unitPrice.toFixed(10)),
         precio_unitario: parseFloat(unitPrice.toFixed(10)),
         descuento: 0,
         subtotal: parseFloat((quantity * unitPrice).toFixed(2)),
-        tipo_de_igv: 8, // 8 = Exonerado - Operación Onerosa
-        igv: 0, // Sin IGV
+        tipo_de_igv: isExonerado ? 8 : 9, // 8 = Exonerado, 9 = Inafecto
+        igv: 0,
         total: parseFloat((quantity * unitPrice).toFixed(2)),
         anticipo_regularizacion: false,
         anticipo_documento_serie: '',
         anticipo_documento_numero: ''
       }
     } else {
-      // Para negocios gravados con IGV
-      // Calcular valor unitario (sin IGV)
+      // Productos gravados → calcular IGV
       const valorUnitario = unitPrice / (1 + igvRate / 100)
-
-      // Subtotal sin IGV
       const subtotal = valorUnitario * quantity
-
-      // IGV del item
       const igv = subtotal * (igvRate / 100)
-
-      // Total del item (con IGV)
       const total = subtotal + igv
 
       return {
@@ -329,7 +365,7 @@ function convertItems(items, igvRate, igvExempt = false) {
         precio_unitario: parseFloat(unitPrice.toFixed(10)),
         descuento: 0,
         subtotal: parseFloat(subtotal.toFixed(2)),
-        tipo_de_igv: 1, // 1 = Gravado - Operación Onerosa
+        tipo_de_igv: 1, // 1 = Gravado
         igv: parseFloat(igv.toFixed(2)),
         total: parseFloat(total.toFixed(2)),
         anticipo_regularizacion: false,
