@@ -158,14 +158,24 @@ const generateGuideQR = async (guide, companySettings) => {
 
 /**
  * Formatea una fecha para mostrar en el PDF
+ * Maneja correctamente fechas en formato YYYY-MM-DD sin problemas de zona horaria
  */
 const formatDate = (dateValue) => {
   if (!dateValue) return '-'
 
   try {
+    // Si es formato YYYY-MM-DD, formatear directamente sin pasar por Date
+    // Esto evita problemas de zona horaria donde "2024-12-14" se interpreta como UTC
+    // y en Perú (UTC-5) se muestra como el día anterior
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      const [year, month, day] = dateValue.split('-')
+      return `${day}/${month}/${year}`
+    }
+
     let date
     if (typeof dateValue === 'string') {
-      date = new Date(dateValue)
+      // Añadir T12:00:00 para evitar problemas de zona horaria
+      date = new Date(dateValue + 'T12:00:00')
     } else if (dateValue.toDate) {
       date = dateValue.toDate()
     } else if (dateValue instanceof Date) {

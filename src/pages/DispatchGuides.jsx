@@ -23,6 +23,21 @@ const TRANSPORT_MODES = {
   '02': 'Transporte Privado',
 }
 
+// Helper para formatear fecha sin problemas de zona horaria
+// Cuando se parsea "2024-12-14" con new Date(), JavaScript lo interpreta como UTC
+// lo que causa que en Perú (UTC-5) se muestre el día anterior
+const formatTransferDate = (dateString) => {
+  if (!dateString) return '-'
+  // Si es formato YYYY-MM-DD, formatear directamente sin pasar por Date
+  if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-')
+    return `${day}/${month}/${year}`
+  }
+  // Para otros formatos, usar el método tradicional con ajuste
+  const date = new Date(dateString + 'T12:00:00')
+  return date.toLocaleDateString('es-PE')
+}
+
 // Datos demo para guías de remisión
 const DEMO_GUIDES = [
   {
@@ -419,7 +434,7 @@ export default function DispatchGuides() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {new Date(guide.transferDate).toLocaleDateString('es-PE')}
+                          {formatTransferDate(guide.transferDate)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -648,7 +663,7 @@ export default function DispatchGuides() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-500">Fecha de traslado:</span>
-                    <p className="font-medium">{new Date(selectedGuide.transferDate).toLocaleDateString('es-PE')}</p>
+                    <p className="font-medium">{formatTransferDate(selectedGuide.transferDate)}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">Motivo:</span>

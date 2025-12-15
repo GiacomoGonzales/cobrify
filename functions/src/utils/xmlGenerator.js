@@ -1322,13 +1322,29 @@ function getCustomerDocTypeCode(documentType) {
  * - Especificaciones SUNAT GRE: https://cpe.sunat.gob.pe/
  */
 export function generateDispatchGuideXML(guideData, businessData) {
-  // Formatear fecha de emisión (hoy)
-  const issueDate = new Date().toISOString().split('T')[0]
+  // Helper para formatear fecha en zona horaria de Perú (UTC-5)
+  // Evita problemas con toISOString() que convierte a UTC
+  const formatDatePeru = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  // Formatear fecha de emisión (hoy en hora local del servidor/Perú)
+  const issueDate = formatDatePeru(new Date())
 
   // Formatear fecha de inicio del traslado
   let transferDate
   if (guideData.transferDate) {
-    transferDate = new Date(guideData.transferDate).toISOString().split('T')[0]
+    // Si transferDate ya viene en formato YYYY-MM-DD, usarlo directamente
+    if (typeof guideData.transferDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(guideData.transferDate)) {
+      transferDate = guideData.transferDate
+    } else {
+      // Si es otro formato, parsearlo respetando la zona horaria local
+      const date = new Date(guideData.transferDate)
+      transferDate = formatDatePeru(date)
+    }
   } else {
     transferDate = issueDate
   }
