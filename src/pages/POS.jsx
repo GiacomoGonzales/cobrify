@@ -2792,7 +2792,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                       }}
                                       onFocus={(e) => e.target.select()}
                                       min="1"
-                                      className="w-12 text-center font-semibold text-sm border border-gray-300 rounded-md py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                      className="w-12 text-center font-semibold text-sm border border-gray-300 rounded-md py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                     <button
                                       onClick={() => updateQuantity(itemId, 1)}
