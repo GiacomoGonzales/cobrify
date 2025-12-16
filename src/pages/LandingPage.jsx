@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle } from 'lucide-react'
+import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle, Handshake, Palette, HeadphonesIcon, DollarSign } from 'lucide-react'
 import Button from '@/components/ui/Button'
 
 export default function LandingPage() {
@@ -56,6 +56,9 @@ export default function LandingPage() {
               </Link>
               <a href="#pricing" className="text-gray-700 hover:text-primary-600 font-medium transition-colors">
                 Precios
+              </a>
+              <a href="#resellers" className="text-orange-600 hover:text-orange-700 font-medium transition-colors">
+                Resellers
               </a>
             </div>
 
@@ -566,6 +569,121 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Reseller Section */}
+      <section id="resellers" className="py-20 px-4 relative overflow-hidden bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30"></div>
+
+        <div className="container mx-auto max-w-6xl relative z-10">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left content */}
+            <div>
+              <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-full text-sm font-semibold mb-6">
+                <Handshake className="w-4 h-4" />
+                Programa de Socios
+              </div>
+              <h2 className="text-4xl font-bold text-gray-900 mb-6 leading-tight">
+                Haz crecer tu negocio con Cobrify
+              </h2>
+              <p className="text-xl text-gray-600 mb-8 leading-relaxed">
+                ¿Tienes clientes que necesitan facturación electrónica? Únete a nuestro programa de resellers y ofrece Cobrify con <strong>tu propia marca</strong>.
+              </p>
+
+              <div className="grid sm:grid-cols-2 gap-4 mb-8">
+                <div className="flex items-start gap-3 p-4 bg-white rounded-xl shadow-sm border border-orange-100">
+                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <DollarSign className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Comisiones Atractivas</h4>
+                    <p className="text-sm text-gray-600">Gana por cada cliente que refieras</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-4 bg-white rounded-xl shadow-sm border border-orange-100">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Palette className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Tu Propia Marca</h4>
+                    <p className="text-sm text-gray-600">White-label con tu logo y colores</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-4 bg-white rounded-xl shadow-sm border border-orange-100">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <BarChart3 className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Panel de Control</h4>
+                    <p className="text-sm text-gray-600">Administra todos tus clientes</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-4 bg-white rounded-xl shadow-sm border border-orange-100">
+                  <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <HeadphonesIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Soporte Técnico</h4>
+                    <p className="text-sm text-gray-600">Te respaldamos en todo momento</p>
+                  </div>
+                </div>
+              </div>
+
+              <a
+                href="https://wa.me/51900434988?text=Hola%2C%20quiero%20información%20sobre%20el%20programa%20de%20resellers%20de%20Cobrify"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button size="lg" className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold shadow-lg shadow-orange-200/50">
+                  <Handshake className="w-5 h-5 mr-2" />
+                  Quiero ser Reseller
+                </Button>
+              </a>
+            </div>
+
+            {/* Right content - Visual */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-amber-500 rounded-3xl blur-2xl opacity-20 transform rotate-3"></div>
+              <div className="relative bg-white rounded-3xl p-8 shadow-2xl border border-orange-100">
+                <div className="text-center mb-6">
+                  <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                    <Handshake className="w-10 h-10 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900">Programa Reseller</h3>
+                  <p className="text-gray-600">Beneficios exclusivos para socios</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                    <span className="text-gray-700">Dominio propio para tu marca</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                    <span className="text-gray-700">Logo y colores personalizados</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                    <span className="text-gray-700">Dashboard de administración</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                    <span className="text-gray-700">Reportes de tus clientes</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                    <Check className="w-5 h-5 text-green-600" />
+                    <span className="text-gray-700">Precios preferenciales</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 px-4 relative bg-gradient-to-br from-primary-600 via-primary-700 to-primary-900 overflow-hidden">
         {/* Animated background elements */}
@@ -628,6 +746,7 @@ export default function LandingPage() {
               <ul className="space-y-2 text-sm">
                 <li><Link to="/demo" className="hover:text-white transition-colors">Demo</Link></li>
                 <li><Link to="/login" className="hover:text-white transition-colors">Iniciar Sesión</Link></li>
+                <li><a href="#resellers" className="hover:text-orange-400 transition-colors">Programa Resellers</a></li>
               </ul>
             </div>
             <div>
