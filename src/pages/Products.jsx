@@ -2554,7 +2554,7 @@ export default function Products() {
                   onChange={e => setAllowDecimalQuantity(e.target.checked)}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
-                <span className="ml-2 text-sm text-gray-700">Vender por peso</span>
+                <span className="ml-2 text-sm text-gray-700">Permitir decimales</span>
               </label>
 
               <label className="flex items-center cursor-pointer">
