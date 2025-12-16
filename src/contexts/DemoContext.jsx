@@ -22,6 +22,7 @@ const generateDemoData = () => {
       phone: '01-2345678',
       email: 'ventas@empresademo.com',
       website: 'www.empresademo.com',
+      logoUrl: '/demologo.png',
     },
     products: [
       // Productos de electrónica
