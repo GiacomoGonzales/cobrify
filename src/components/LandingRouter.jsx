@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
-import { getResellerByHostname } from '@/services/brandingService'
+import { useSearchParams } from 'react-router-dom'
+import { getResellerByHostname, getResellerBranding, DEFAULT_BRANDING } from '@/services/brandingService'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import LandingPage from '@/pages/LandingPage'
 import ResellerLandingPage from '@/pages/ResellerLandingPage'
 import { Loader2 } from 'lucide-react'
@@ -7,18 +10,53 @@ import { Loader2 } from 'lucide-react'
 /**
  * LandingRouter - Detecta si el dominio actual es de un reseller
  * y muestra la landing personalizada del reseller o la landing de Cobrify
+ *
+ * También soporta ?preview=RESELLER_ID para previsualizar en desarrollo
  */
 export default function LandingRouter() {
   const [loading, setLoading] = useState(true)
   const [reseller, setReseller] = useState(null)
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     async function detectReseller() {
       try {
+        // Prioridad 1: Parámetro ?preview=RESELLER_ID (para desarrollo)
+        const previewId = searchParams.get('preview')
+        if (previewId) {
+          console.log('🔍 LandingRouter: Preview mode for reseller:', previewId)
+
+          // Cargar datos del reseller por ID
+          const resellerDoc = await getDoc(doc(db, 'resellers', previewId))
+          if (resellerDoc.exists()) {
+            const data = resellerDoc.data()
+            const resellerData = {
+              resellerId: previewId,
+              companyName: data.companyName,
+              phone: data.phone,
+              branding: {
+                ...DEFAULT_BRANDING,
+                companyName: data.branding?.companyName || data.companyName || DEFAULT_BRANDING.companyName,
+                logoUrl: data.branding?.logoUrl || null,
+                primaryColor: data.branding?.primaryColor || DEFAULT_BRANDING.primaryColor,
+                secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
+                accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
+                whatsapp: data.branding?.whatsapp || data.phone || '',
+              }
+            }
+            console.log('✅ LandingRouter: Preview reseller loaded:', resellerData.branding?.companyName)
+            setReseller(resellerData)
+            setLoading(false)
+            return
+          } else {
+            console.log('⚠️ LandingRouter: Preview reseller not found:', previewId)
+          }
+        }
+
+        // Prioridad 2: Detectar por hostname
         const hostname = window.location.hostname
         console.log('🌐 LandingRouter: Checking hostname:', hostname)
 
-        // Obtener reseller por hostname (subdominio o dominio personalizado)
         const resellerData = await getResellerByHostname(hostname)
 
         if (resellerData) {
@@ -35,7 +73,7 @@ export default function LandingRouter() {
     }
 
     detectReseller()
-  }, [])
+  }, [searchParams])
 
   // Mostrar loading mientras detectamos
   if (loading) {

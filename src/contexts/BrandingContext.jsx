@@ -46,11 +46,28 @@ export function BrandingProvider({ children }) {
     console.log('   isAdmin:', isAdmin)
 
     if (!user) {
-      // No user logged in, check if we're on a reseller domain
+      // No user logged in, check for preview param or reseller domain
+      const urlParams = new URLSearchParams(window.location.search)
+      const previewId = urlParams.get('preview')
       const hostname = window.location.hostname
-      console.log('🔍 No user, checking hostname for branding:', hostname)
 
       try {
+        // Prioridad 1: Parámetro ?preview=RESELLER_ID (para desarrollo)
+        if (previewId) {
+          console.log('🔍 Preview mode, loading branding for:', previewId)
+          const previewBranding = await getResellerBranding(previewId)
+          if (previewBranding && previewBranding.primaryColor !== DEFAULT_BRANDING.primaryColor) {
+            console.log('✅ Found reseller branding by preview param:', previewBranding.companyName)
+            setBranding(previewBranding)
+            applyBrandingColors(previewBranding)
+            setIsLoading(false)
+            setBrandingLoaded(true)
+            return
+          }
+        }
+
+        // Prioridad 2: Detectar por hostname
+        console.log('🔍 No user, checking hostname for branding:', hostname)
         const resellerData = await getResellerByHostname(hostname)
         if (resellerData) {
           console.log('✅ Found reseller branding by hostname (no user):', resellerData.branding.companyName)
@@ -61,7 +78,7 @@ export function BrandingProvider({ children }) {
           removeBrandingColors()
         }
       } catch (error) {
-        console.error('Error loading branding by hostname:', error)
+        console.error('Error loading branding:', error)
         setBranding(DEFAULT_BRANDING)
         removeBrandingColors()
       }
