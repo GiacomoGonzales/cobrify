@@ -458,7 +458,7 @@ export default function LandingPage() {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Mensual</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className="text-4xl font-bold text-gray-900">S/19.90</span>
+                  <span className="text-4xl font-bold text-gray-900">S/29.90</span>
                   <span className="text-gray-600 ml-2">/mes</span>
                 </div>
                 <p className="text-sm text-gray-500">Pago mes a mes</p>
@@ -512,10 +512,10 @@ export default function LandingPage() {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-white mb-2">Semestral</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className="text-4xl font-bold text-white">S/99.90</span>
+                  <span className="text-4xl font-bold text-white">S/149.90</span>
                   <span className="text-primary-100 ml-2">/6 meses</span>
                 </div>
-                <p className="text-sm text-primary-100">Ahorra S/19.50 (16%)</p>
+                <p className="text-sm text-primary-100">Ahorra S/29.50 (16%)</p>
               </div>
               <ul className="space-y-3 mb-8 text-left">
                 <li className="flex items-start text-white">
@@ -566,10 +566,10 @@ export default function LandingPage() {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Anual</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className="text-4xl font-bold text-gray-900">S/149.90</span>
+                  <span className="text-4xl font-bold text-gray-900">S/199.90</span>
                   <span className="text-gray-600 ml-2">/año</span>
                 </div>
-                <p className="text-sm text-green-600 font-semibold">Ahorra S/88.90 (37%)</p>
+                <p className="text-sm text-green-600 font-semibold">Ahorra S/158.90 (44%)</p>
               </div>
               <ul className="space-y-3 mb-8 text-left">
                 <li className="flex items-start text-gray-700">
