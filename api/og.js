@@ -1,45 +1,10 @@
 // Vercel Serverless Function para servir meta tags dinámicas a bots sociales
 
-const SOCIAL_BOTS = [
-  'facebookexternalhit',
-  'Facebot',
-  'LinkedInBot',
-  'Twitterbot',
-  'WhatsApp',
-  'TelegramBot',
-  'Slackbot',
-  'Discordbot',
-  'Pinterest'
-]
-
-const IGNORED_DOMAINS = [
-  'localhost',
-  'vercel.app',
-  'firebaseapp.com',
-  'web.app',
-  'cobrifyperu.com',
-  'cobrify.com'
-]
-
 export default async function handler(req, res) {
   const userAgent = req.headers['user-agent'] || ''
   const host = req.headers['host'] || req.headers['x-forwarded-host'] || ''
 
-  // Verificar si es dominio de reseller
-  const isResellerDomain = !IGNORED_DOMAINS.some(d => host.toLowerCase().includes(d))
-
-  if (!isResellerDomain) {
-    return res.redirect(302, '/')
-  }
-
-  // Verificar si es bot social
-  const isSocialBot = SOCIAL_BOTS.some(bot =>
-    userAgent.toLowerCase().includes(bot.toLowerCase())
-  )
-
-  if (!isSocialBot) {
-    return res.redirect(302, '/')
-  }
+  console.log('OG Function called - Host:', host, 'UA:', userAgent.substring(0, 50))
 
   try {
     // Llamar a la Cloud Function de Firebase
