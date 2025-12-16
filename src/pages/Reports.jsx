@@ -153,7 +153,7 @@ export default function Reports() {
         setCustomers(demoData.customers || [])
         setProducts(demoData.products || [])
         setRecipes([]) // En demo no hay recetas por ahora
-        setExpenses([]) // En demo no hay gastos por ahora
+        setExpenses(demoData.expenses || [])
         setIsLoading(false)
         return
       }
