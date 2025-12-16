@@ -472,8 +472,8 @@ export default function Inventory() {
 
       switch (sortField) {
         case 'code':
-          aValue = a.code || ''
-          bValue = b.code || ''
+          aValue = a.sku || a.code || ''
+          bValue = b.sku || b.code || ''
           break
         case 'name':
           aValue = a.name || ''
@@ -990,9 +990,9 @@ export default function Inventory() {
                       <button
                         onClick={() => handleSort('code')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                        title="Ordenar por código"
+                        title="Ordenar por SKU"
                       >
-                        Código
+                        SKU
                         {getSortIcon('code')}
                       </button>
                     </TableHead>
@@ -1056,7 +1056,7 @@ export default function Inventory() {
                       <TableRow>
                         <TableCell>
                           <span className="font-mono text-xs sm:text-sm">
-                            {item.code || '-'}
+                            {item.sku || item.code || '-'}
                           </span>
                         </TableCell>
                         <TableCell>
