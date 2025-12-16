@@ -11,7 +11,7 @@ const generateDemoData = () => {
   return {
     user: {
       uid: 'demo-user',
-      email: 'demo@cobrifyperu.com',
+      email: 'demo@facturacion.pe',
       displayName: 'Usuario Demo',
       photoURL: null,
     },
