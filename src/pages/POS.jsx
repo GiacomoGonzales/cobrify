@@ -441,8 +441,9 @@ export default function POS() {
         setCategories([])
         // Almacenes de demo
         const demoWarehouses = [
-          { id: 'demo-1', name: 'Almacén Principal', isDefault: true, isActive: true },
-          { id: 'demo-2', name: 'Almacén Secundario', isDefault: false, isActive: true },
+          { id: '1', name: 'Almacén Principal', isDefault: true, isActive: true },
+          { id: '2', name: 'Almacén Secundario', isDefault: false, isActive: true },
+          { id: '3', name: 'Almacén de Belleza', isDefault: false, isActive: true },
         ]
         setWarehouses(demoWarehouses)
         setSelectedWarehouse(demoWarehouses[0])
