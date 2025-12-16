@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#0a0e27",
   "theme_color": "#2563eb",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
   "lang": "es-PE",
   "dir": "ltr",
@@ -19,22 +19,30 @@
     {
       "src": "/logo.png",
       "type": "image/png",
-      "sizes": "192x192",
-      "purpose": "any maskable"
+      "sizes": "512x512",
+      "purpose": "any"
     },
     {
       "src": "/logo.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ],
   "screenshots": [
     {
       "src": "/logo.png",
-      "sizes": "1280x720",
+      "sizes": "512x512",
       "type": "image/png",
-      "form_factor": "wide"
+      "form_factor": "wide",
+      "label": "Dashboard de Cobrify"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Cobrify en móvil"
     }
   ],
   "shortcuts": [
@@ -42,24 +50,24 @@
       "name": "Punto de Venta",
       "short_name": "POS",
       "description": "Abrir punto de venta rápidamente",
-      "url": "/pos",
+      "url": "/app/pos",
       "icons": [
         {
           "src": "/logo.png",
-          "sizes": "96x96",
+          "sizes": "512x512",
           "type": "image/png"
         }
       ]
     },
     {
-      "name": "Nueva Factura",
-      "short_name": "Factura",
-      "description": "Crear nueva factura",
-      "url": "/facturas/crear",
+      "name": "Nueva Venta",
+      "short_name": "Venta",
+      "description": "Crear nueva venta",
+      "url": "/app/pos",
       "icons": [
         {
           "src": "/logo.png",
-          "sizes": "96x96",
+          "sizes": "512x512",
           "type": "image/png"
         }
       ]
@@ -68,11 +76,11 @@
       "name": "Clientes",
       "short_name": "Clientes",
       "description": "Ver lista de clientes",
-      "url": "/clientes",
+      "url": "/app/clientes",
       "icons": [
         {
           "src": "/logo.png",
-          "sizes": "96x96",
+          "sizes": "512x512",
           "type": "image/png"
         }
       ]
