@@ -102,17 +102,21 @@ export default function Login() {
         <div className="w-full max-w-md">
           <div className="text-center mb-6">
             {customBranding.logoUrl ? (
-              <img
-                src={customBranding.logoUrl}
-                alt={`${customBranding.companyName} - Sistema de facturación electrónica`}
-                className="max-w-96 max-h-48 mx-auto mb-4 object-contain"
-              />
+              <div className="inline-block bg-white rounded-2xl p-4 shadow-lg mb-4">
+                <img
+                  src={customBranding.logoUrl}
+                  alt={`${customBranding.companyName} - Sistema de facturación electrónica`}
+                  className="max-w-72 max-h-32 mx-auto object-contain"
+                />
+              </div>
             ) : (
-              <img
-                src="/logo.png"
-                alt={`${customBranding.companyName} - Sistema de facturación electrónica`}
-                className="max-w-96 max-h-48 mx-auto mb-4 object-contain"
-              />
+              <div className="inline-block bg-white rounded-2xl p-4 shadow-lg mb-4">
+                <img
+                  src="/logo.png"
+                  alt={`${customBranding.companyName} - Sistema de facturación electrónica`}
+                  className="w-24 h-24 mx-auto object-contain"
+                />
+              </div>
             )}
             <h1 className="text-3xl font-bold text-white mb-1">{customBranding.companyName}</h1>
             <p className="text-sm text-white/80">Sistema de facturación para Perú</p>
