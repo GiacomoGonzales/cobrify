@@ -208,13 +208,15 @@ export default function Inventory() {
   }
 
   const loadWarehouses = async () => {
-    if (!user?.uid) return
+    if (!user?.uid && !isDemoMode) return
 
     try {
       if (isDemoMode) {
+        // Usar los mismos IDs que warehouseStocks en DemoContext
         setWarehouses([
-          { id: 'demo-1', name: 'Almacén Principal', isDefault: true, isActive: true },
-          { id: 'demo-2', name: 'Mostrador', isDefault: false, isActive: true },
+          { id: '1', name: 'Almacén Principal', isDefault: true, isActive: true },
+          { id: '2', name: 'Almacén Secundario', isDefault: false, isActive: true },
+          { id: '3', name: 'Almacén de Belleza', isDefault: false, isActive: true },
         ])
         return
       }
