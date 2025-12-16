@@ -504,7 +504,7 @@ export default function Inventory() {
     })
 
     return sorted
-  }, [products, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection])
+  }, [allItems, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
