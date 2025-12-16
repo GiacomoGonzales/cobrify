@@ -152,7 +152,7 @@ export function BrandingProvider({ children }) {
     if (branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName) {
       document.title = `${branding.companyName} - Sistema de Facturación Electrónica`
     } else {
-      document.title = 'Cobrify - Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
+      document.title = 'Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
     }
 
     // Actualizar favicon si hay logo personalizado
@@ -193,7 +193,14 @@ export function BrandingProvider({ children }) {
   }, [branding, brandingLoaded])
 
   // Mostrar loading mientras se carga el branding (evita flash de Cobrify)
-  if (!brandingLoaded && user) {
+  // También mostrar loading para dominios de reseller sin usuario logueado
+  const isResellerDomain = () => {
+    const hostname = window.location.hostname.toLowerCase()
+    const ignoredDomains = ['localhost', 'vercel.app', 'firebaseapp.com', 'web.app', 'cobrifyperu.com', 'cobrify.com']
+    return !ignoredDomains.some(d => hostname.includes(d))
+  }
+
+  if (!brandingLoaded && (user || isResellerDomain())) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
