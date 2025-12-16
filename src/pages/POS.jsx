@@ -33,7 +33,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
-import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
+import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -1026,10 +1026,12 @@ export default function POS() {
 
   // Calcular montos sin descuento (optimizado con useMemo)
   const amounts = React.useMemo(() => {
-    const baseAmounts = calculateInvoiceAmounts(
+    // Usar calculateMixedInvoiceAmounts para manejar productos con diferentes taxAffectation
+    const baseAmounts = calculateMixedInvoiceAmounts(
       cart.map(item => ({
         price: item.price,
         quantity: item.quantity,
+        taxAffectation: item.taxAffectation || '10', // Default: Gravado
       })),
       taxConfig.igvRate
     )
@@ -1040,11 +1042,20 @@ export default function POS() {
     // El descuento se aplica al total (con IGV incluido)
     const totalAfterDiscount = Math.max(0, baseAmounts.total - discount)
 
-    // Recalcular subtotal e IGV desde el nuevo total
-    const subtotalAfterDiscount = taxConfig.igvRate > 0
-      ? totalAfterDiscount / (1 + taxConfig.igvRate / 100)
-      : totalAfterDiscount
-    const igvAfterDiscount = totalAfterDiscount - subtotalAfterDiscount
+    // Calcular proporción del descuento para aplicarlo a cada tipo
+    const discountRatio = baseAmounts.total > 0 ? totalAfterDiscount / baseAmounts.total : 1
+
+    // Recalcular montos con descuento aplicado proporcionalmente
+    const gravadoAfterDiscount = baseAmounts.gravado.total * discountRatio
+    const exoneradoAfterDiscount = baseAmounts.exonerado.total * discountRatio
+    const inafectoAfterDiscount = baseAmounts.inafecto.total * discountRatio
+
+    // Recalcular IGV solo de productos gravados
+    const subtotalGravadoAfterDiscount = gravadoAfterDiscount / (1 + taxConfig.igvRate / 100)
+    const igvAfterDiscount = gravadoAfterDiscount - subtotalGravadoAfterDiscount
+
+    // Subtotal total = subtotal gravado + exonerado + inafecto
+    const subtotalAfterDiscount = subtotalGravadoAfterDiscount + exoneradoAfterDiscount + inafectoAfterDiscount
 
     return {
       subtotal: Number(baseAmounts.subtotal.toFixed(2)),
@@ -1052,6 +1063,10 @@ export default function POS() {
       subtotalAfterDiscount: Number(subtotalAfterDiscount.toFixed(2)),
       igv: Number(igvAfterDiscount.toFixed(2)),
       total: Number(totalAfterDiscount.toFixed(2)),
+      // Montos por tipo de afectación (para mostrar desglose)
+      gravado: baseAmounts.gravado,
+      exonerado: baseAmounts.exonerado,
+      inafecto: baseAmounts.inafecto,
     }
   }, [cart, taxConfig.igvRate, discountAmount])
 
@@ -3001,14 +3016,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 )}
 
-                {/* Solo mostrar IGV si la tasa es mayor que 0 */}
-                {taxConfig.igvRate > 0 && (
+                {/* Mostrar IGV solo si hay productos gravados */}
+                {amounts.igv > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGV ({taxConfig.igvRate}%):</span>
                     <span className="font-medium">{formatCurrency(amounts.igv)}</span>
                   </div>
                 )}
-                {/* Mostrar badge si está exonerado de IGV */}
+                {/* Mostrar montos exonerados si hay productos exonerados */}
+                {amounts.exonerado?.total > 0 && (
+                  <div className="flex justify-between text-sm text-amber-700">
+                    <span>Op. Exoneradas:</span>
+                    <span className="font-medium">{formatCurrency(amounts.exonerado.total)}</span>
+                  </div>
+                )}
+                {/* Mostrar montos inafectos si hay productos inafectos */}
+                {amounts.inafecto?.total > 0 && (
+                  <div className="flex justify-between text-sm text-blue-700">
+                    <span>Op. Inafectas:</span>
+                    <span className="font-medium">{formatCurrency(amounts.inafecto.total)}</span>
+                  </div>
+                )}
+                {/* Mostrar badge si está exonerado de IGV (empresa) */}
                 {taxConfig.igvExempt && (
                   <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md">
                     <span className="font-medium">⚠️ Empresa exonerada de IGV</span>
