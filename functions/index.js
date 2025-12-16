@@ -2946,10 +2946,31 @@ export const voidBoleta = onRequest(
       const customerIdentityType = getIdentityTypeCode(boletaData.customer?.documentType || boletaData.customer?.identityType || '1')
       const customerIdentityNumber = boletaData.customer?.documentNumber || boletaData.customer?.identityNumber || '00000000'
 
-      // 8. Calcular montos
+      // 8. Calcular montos (soporta productos gravados, exonerados e inafectos)
       const total = boletaData.total || 0
-      const igv = boletaData.igv || boletaData.tax || (total - total / 1.18)
-      const taxableAmount = boletaData.subtotal || boletaData.taxableAmount || (total / 1.18)
+      const igv = boletaData.igv || 0
+
+      // Calcular montos por tipo de afectación
+      let taxableAmount = 0  // Gravado (base imponible)
+      let exemptAmount = 0   // Exonerado
+      let freeAmount = 0     // Inafecto
+
+      if (boletaData.opGravadas !== undefined || boletaData.opExoneradas !== undefined || boletaData.opInafectas !== undefined) {
+        // Nuevas ventas con desglose por tipo
+        const opGravadas = boletaData.opGravadas || 0
+        taxableAmount = opGravadas > 0 ? (opGravadas / 1.18) : 0
+        exemptAmount = boletaData.opExoneradas || 0
+        freeAmount = boletaData.opInafectas || 0
+        console.log(`📊 Montos desglosados - Gravado: ${taxableAmount}, Exonerado: ${exemptAmount}, Inafecto: ${freeAmount}, IGV: ${igv}`)
+      } else {
+        // Ventas anteriores - calcular desde total e igv
+        if (igv > 0) {
+          taxableAmount = boletaData.subtotal || (total / 1.18)
+        } else {
+          exemptAmount = total
+        }
+        console.log(`📊 Montos calculados (legacy) - Gravado: ${taxableAmount}, Exonerado: ${exemptAmount}, IGV: ${igv}`)
+      }
 
       // 9. Generar XML de Resumen Diario con ConditionCode 3 (Anular)
       const documentId = `${boletaData.series}-${boletaData.correlativeNumber}`
@@ -2974,6 +2995,8 @@ export const voidBoleta = onRequest(
           currency: boletaData.currency || 'PEN',
           total: total,
           taxableAmount: taxableAmount,
+          exemptAmount: exemptAmount,
+          freeAmount: freeAmount,
           igv: igv
         }]
       }
@@ -3426,10 +3449,31 @@ export const voidBoletaQPse = onRequest(
       const customerIdentityType = getIdentityTypeCode(boletaData.customer?.documentType || boletaData.customer?.identityType || '1')
       const customerIdentityNumber = boletaData.customer?.documentNumber || boletaData.customer?.identityNumber || '00000000'
 
-      // 8. Calcular montos
+      // 8. Calcular montos (soporta productos gravados, exonerados e inafectos)
       const total = boletaData.total || 0
-      const igv = boletaData.igv || boletaData.tax || (total - total / 1.18)
-      const taxableAmount = boletaData.subtotal || boletaData.taxableAmount || (total / 1.18)
+      const igv = boletaData.igv || 0
+
+      // Calcular montos por tipo de afectación
+      let taxableAmount = 0  // Gravado (base imponible)
+      let exemptAmount = 0   // Exonerado
+      let freeAmount = 0     // Inafecto
+
+      if (boletaData.opGravadas !== undefined || boletaData.opExoneradas !== undefined || boletaData.opInafectas !== undefined) {
+        // Nuevas ventas con desglose por tipo
+        const opGravadas = boletaData.opGravadas || 0
+        taxableAmount = opGravadas > 0 ? (opGravadas / 1.18) : 0
+        exemptAmount = boletaData.opExoneradas || 0
+        freeAmount = boletaData.opInafectas || 0
+        console.log(`📊 [QPse] Montos desglosados - Gravado: ${taxableAmount}, Exonerado: ${exemptAmount}, Inafecto: ${freeAmount}, IGV: ${igv}`)
+      } else {
+        // Ventas anteriores - calcular desde total e igv
+        if (igv > 0) {
+          taxableAmount = boletaData.subtotal || (total / 1.18)
+        } else {
+          exemptAmount = total
+        }
+        console.log(`📊 [QPse] Montos calculados (legacy) - Gravado: ${taxableAmount}, Exonerado: ${exemptAmount}, IGV: ${igv}`)
+      }
 
       // 9. Generar XML de Resumen Diario con ConditionCode 3 (Anular)
       const documentId = `${boletaData.series}-${boletaData.correlativeNumber}`
@@ -3454,6 +3498,8 @@ export const voidBoletaQPse = onRequest(
           currency: boletaData.currency || 'PEN',
           total: total,
           taxableAmount: taxableAmount,
+          exemptAmount: exemptAmount,
+          freeAmount: freeAmount,
           igv: igv
         }]
       }
