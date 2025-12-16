@@ -170,6 +170,7 @@ export default function POS() {
   const [tableData, setTableData] = useState(null)
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
+  const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
   const [isLookingUp, setIsLookingUp] = useState(false)
   const [customerSearchTerm, setCustomerSearchTerm] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
@@ -622,6 +623,12 @@ export default function POS() {
   }, [searchTerm, products, companySettings, selectedWarehouse])
 
   const addToCart = product => {
+    // Bloquear si ya se completó una venta
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+
     // If product has variants, show variant selection modal
     if (product.hasVariants) {
       setSelectedProductForVariant(product)
@@ -668,6 +675,12 @@ export default function POS() {
   }
 
   const addVariantToCart = (product, variant) => {
+    // Bloquear si ya se completó una venta
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+
     // Check stock for variant solo si allowNegativeStock es false
     if (variant.stock !== null && variant.stock <= 0 && !companySettings?.allowNegativeStock) {
       toast.error('Variante sin stock disponible')
@@ -716,6 +729,13 @@ export default function POS() {
   }
 
   const addCustomProductToCart = () => {
+    // Bloquear si ya se completó una venta
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      setShowCustomProductModal(false)
+      return
+    }
+
     // Validar campos
     if (!customProduct.name || !customProduct.name.trim()) {
       toast.error('El nombre del producto es requerido')
@@ -754,6 +774,10 @@ export default function POS() {
   }
 
   const updateQuantity = (itemId, change) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
     setCart(
       cart
         .map(item => {
@@ -784,6 +808,10 @@ export default function POS() {
 
   // Función para establecer cantidad directamente (para productos por peso o input manual)
   const setQuantityDirectly = (itemId, newQuantity) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
     const quantity = parseFloat(newQuantity)
     if (isNaN(quantity) || quantity < 0) return
 
@@ -813,10 +841,18 @@ export default function POS() {
   }
 
   const removeFromCart = itemId => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
     setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
   }
 
   const startEditingPrice = (itemId, currentPrice) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
     setEditingPriceItemId(itemId)
     setEditingPrice(currentPrice.toString())
   }
@@ -863,6 +899,7 @@ export default function POS() {
     })
     setPayments([{ method: '', amount: '' }])
     setLastInvoiceData(null)
+    setSaleCompleted(false) // Desbloquear carrito para nueva venta
     setDiscountAmount('')
     setDiscountPercentage('')
     // Reset forma de pago
@@ -1646,6 +1683,7 @@ export default function POS() {
       // 7. Mostrar éxito
       setLastInvoiceNumber(numberResult.number)
       setLastInvoiceData(invoiceData)
+      setSaleCompleted(true) // Bloquear carrito hasta que se inicie nueva venta
 
       // Mostrar mensaje de éxito con toast
       const documentName = documentType === 'factura' ? 'Factura' : documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta'
@@ -1949,22 +1987,37 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="sm:hidden">Personalizado</span>
                 </Button>
               )}
-              <Button variant="outline" onClick={clearCart} disabled={cart.length === 0} className="w-[30%] sm:w-auto">
-                <Trash2 className="w-4 h-4 mr-2" />
-                Limpiar
+              <Button
+                variant={saleCompleted ? "default" : "outline"}
+                onClick={clearCart}
+                disabled={cart.length === 0 && !saleCompleted}
+                className={`w-[30%] sm:w-auto ${saleCompleted ? 'bg-green-600 hover:bg-green-700 animate-pulse' : ''}`}
+              >
+                {saleCompleted ? (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nueva Venta
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Limpiar
+                  </>
+                )}
               </Button>
             </div>
           </div>
 
           {/* Search */}
-          <div className="relative">
+          <div className={`relative ${saleCompleted ? 'opacity-50' : ''}`}>
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar producto por nombre o código..."
+              placeholder={saleCompleted ? "Presiona 'Nueva Venta' para continuar..." : "Buscar producto por nombre o código..."}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-base sm:text-lg"
+              disabled={saleCompleted}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-base sm:text-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -2044,7 +2097,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+              <div className={`grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
@@ -2720,7 +2773,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <ShoppingCart className="w-3.5 h-3.5" />
                 Carrito de Compras
               </label>
-              <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar mb-4 max-h-[300px] lg:max-h-[400px]">
+
+              {/* Banner de venta completada */}
+              {saleCompleted && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-green-800">Venta emitida exitosamente</p>
+                    <p className="text-xs text-green-600">Presiona "Nueva Venta" para iniciar otra</p>
+                  </div>
+                </div>
+              )}
+
+              <div className={`flex-1 space-y-3 overflow-y-auto custom-scrollbar mb-4 max-h-[300px] lg:max-h-[400px] ${saleCompleted ? 'opacity-60 pointer-events-none' : ''}`}>
                 {cart.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400 py-8">
                     <ShoppingCart className="w-12 h-12 mb-2" />
@@ -3174,7 +3239,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {/* Checkout Button */}
               <Button
                 onClick={handleCheckout}
-                disabled={cart.length === 0 || isProcessing || lastInvoiceData !== null}
+                disabled={cart.length === 0 || isProcessing || saleCompleted}
                 className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg"
               >
                 {isProcessing ? (
@@ -3182,7 +3247,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     Procesando...
                   </>
-                ) : lastInvoiceData !== null ? (
+                ) : saleCompleted ? (
                   <>
                     <CheckCircle className="w-5 h-5 mr-2" />
                     Venta Completada
