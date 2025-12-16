@@ -1790,10 +1790,27 @@ ${companySettings?.website ? companySettings.website : ''}`
                 <span className="text-gray-600">Subtotal:</span>
                 <span className="font-medium">{formatCurrency(viewingInvoice.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">IGV (18%):</span>
-                <span className="font-medium">{formatCurrency(viewingInvoice.igv)}</span>
-              </div>
+              {/* Mostrar IGV solo si hay monto */}
+              {viewingInvoice.igv > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">IGV ({viewingInvoice.taxConfig?.igvRate || 18}%):</span>
+                  <span className="font-medium">{formatCurrency(viewingInvoice.igv)}</span>
+                </div>
+              )}
+              {/* Mostrar operaciones exoneradas si hay */}
+              {viewingInvoice.opExoneradas > 0 && (
+                <div className="flex justify-between text-sm text-amber-700">
+                  <span>Op. Exoneradas:</span>
+                  <span className="font-medium">{formatCurrency(viewingInvoice.opExoneradas)}</span>
+                </div>
+              )}
+              {/* Mostrar operaciones inafectas si hay */}
+              {viewingInvoice.opInafectas > 0 && (
+                <div className="flex justify-between text-sm text-blue-700">
+                  <span>Op. Inafectas:</span>
+                  <span className="font-medium">{formatCurrency(viewingInvoice.opInafectas)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xl font-bold border-t pt-2">
                 <span>Total:</span>
                 <span className="text-primary-600">{formatCurrency(viewingInvoice.total)}</span>

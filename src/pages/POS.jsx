@@ -1322,6 +1322,10 @@ export default function POS() {
           discountPercentage: parseFloat(discountPercentage) || 0,
           igv: amounts.igv,
           total: amounts.total,
+          // Montos por tipo de afectación tributaria
+          opGravadas: amounts.gravado?.total || 0,
+          opExoneradas: amounts.exonerado?.total || 0,
+          opInafectas: amounts.inafecto?.total || 0,
           payments: allPayments,
           paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
           status: isCreditSaleDemo ? 'pending' : 'paid',
@@ -1427,6 +1431,10 @@ export default function POS() {
         discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
         total: amounts.total,
+        // Montos por tipo de afectación tributaria
+        opGravadas: amounts.gravado?.total || 0,
+        opExoneradas: amounts.exonerado?.total || 0,
+        opInafectas: amounts.inafecto?.total || 0,
         // Configuración de impuestos
         taxConfig: taxConfig,
         // Guardar los métodos de pago
