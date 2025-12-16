@@ -145,7 +145,12 @@ export default function CreateQuotation() {
     return (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
   }
 
-  // Calcular subtotal base
+  // Calcular total directo (suma de precio * cantidad)
+  const directTotal = quotationItems.reduce((sum, item) => {
+    return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+  }, 0)
+
+  // Calcular subtotal base (asumiendo que precios incluyen IGV)
   const baseAmounts = calculateInvoiceAmounts(
     quotationItems.map(item => ({
       price: parseFloat(item.unitPrice) || 0,
@@ -156,14 +161,17 @@ export default function CreateQuotation() {
   // Calcular descuento
   const discountAmount =
     discountType === 'percentage'
-      ? (baseAmounts.subtotal * (parseFloat(discount) || 0)) / 100
+      ? (hideIgv ? directTotal : baseAmounts.subtotal) * (parseFloat(discount) || 0) / 100
       : parseFloat(discount) || 0
 
   const discountedSubtotal = baseAmounts.subtotal - discountAmount
 
   // Calcular IGV y total con descuento aplicado
-  const finalIgv = discountedSubtotal * 0.18
-  const finalTotal = discountedSubtotal + finalIgv
+  // Si hideIgv está activo, usar el total directo sin desglose de IGV
+  const finalIgv = hideIgv ? 0 : discountedSubtotal * 0.18
+  const finalTotal = hideIgv
+    ? Number((directTotal - discountAmount).toFixed(2))
+    : Number((discountedSubtotal + finalIgv).toFixed(2))
 
   const handleCustomerChange = customerId => {
     const customer = customers.find(c => c.id === customerId)
