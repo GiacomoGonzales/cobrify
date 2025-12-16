@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -109,6 +109,13 @@ export default function Settings() {
 
   // Estados para menú personalizado
   const [hiddenMenuItems, setHiddenMenuItems] = useState([])
+
+  // Estados para catálogo público
+  const [catalogEnabled, setCatalogEnabled] = useState(false)
+  const [catalogSlug, setCatalogSlug] = useState('')
+  const [catalogColor, setCatalogColor] = useState('#10B981')
+  const [catalogWelcome, setCatalogWelcome] = useState('')
+  const [catalogTagline, setCatalogTagline] = useState('')
 
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
@@ -319,6 +326,13 @@ export default function Settings() {
         if (businessData.hiddenMenuItems && Array.isArray(businessData.hiddenMenuItems)) {
           setHiddenMenuItems(businessData.hiddenMenuItems)
         }
+
+        // Cargar configuración de catálogo
+        setCatalogEnabled(businessData.catalogEnabled || false)
+        setCatalogSlug(businessData.catalogSlug || '')
+        setCatalogColor(businessData.catalogColor || '#10B981')
+        setCatalogWelcome(businessData.catalogWelcome || '')
+        setCatalogTagline(businessData.catalogTagline || '')
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -983,6 +997,7 @@ export default function Settings() {
     { id: 'informacion', label: 'Mi Empresa', icon: Building2 },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
+    { id: 'catalogo', label: 'Catálogo', icon: Globe },
     { id: 'series', label: 'Series', icon: FileText },
     { id: 'avanzado', label: 'Avanzado', icon: Cog },
     { id: 'impresora', label: 'Impresora', icon: Printer },
@@ -2079,6 +2094,275 @@ export default function Settings() {
                   <>
                     <Save className="w-4 h-4 mr-2" />
                     Guardar Configuración
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Catálogo Público */}
+      {activeTab === 'catalogo' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Globe className="w-5 h-5 text-primary-600" />
+              <CardTitle>Catálogo Virtual</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Descripción */}
+              <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                    <Globe className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-emerald-900">Comparte tu catálogo con tus clientes</h3>
+                    <p className="text-sm text-emerald-700 mt-1">
+                      Crea un catálogo online para que tus clientes vean tus productos, agreguen al carrito y hagan pedidos por WhatsApp. Sin necesidad de app ni registro.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Toggle habilitar */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-xl transition-colors hover:border-emerald-300">
+                <input
+                  type="checkbox"
+                  checked={catalogEnabled}
+                  onChange={(e) => setCatalogEnabled(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <span className="text-base font-semibold text-gray-900">
+                    {catalogEnabled ? 'Catálogo habilitado' : 'Habilitar catálogo público'}
+                  </span>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {catalogEnabled
+                      ? 'Tu catálogo está activo y visible para el público'
+                      : 'Activa esta opción para crear tu catálogo online'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Configuración del catálogo (solo si está habilitado) */}
+              {catalogEnabled && (
+                <>
+                  {/* URL del catálogo */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      URL de tu catálogo
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                        <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
+                          cobrify.com/catalogo/
+                        </span>
+                        <input
+                          type="text"
+                          value={catalogSlug}
+                          onChange={(e) => setCatalogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                          placeholder="mi-tienda"
+                          className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-emerald-500 text-gray-900"
+                        />
+                      </div>
+                      {catalogSlug && (
+                        <a
+                          href={`/catalogo/${catalogSlug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                          title="Ver catálogo"
+                        >
+                          <ExternalLink className="w-5 h-5" />
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez
+                    </p>
+                  </div>
+
+                  {/* Vista previa del enlace */}
+                  {catalogSlug && (
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-500 mb-1">Enlace de tu catálogo:</p>
+                          <p className="text-sm font-medium text-emerald-600 truncate">
+                            {window.location.origin}/catalogo/{catalogSlug}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/catalogo/${catalogSlug}`)
+                            toast.success('Enlace copiado al portapapeles')
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                        >
+                          <Copy className="w-4 h-4" />
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-200"></div>
+
+                  {/* Personalización */}
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-4">Personalización</h3>
+
+                    <div className="space-y-4">
+                      {/* Tagline */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Eslogan o descripción corta (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogTagline}
+                          onChange={(e) => setCatalogTagline(e.target.value)}
+                          placeholder="Los mejores productos al mejor precio"
+                          maxLength={60}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogTagline.length}/60 caracteres</p>
+                      </div>
+
+                      {/* Mensaje de bienvenida */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Mensaje de bienvenida (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWelcome}
+                          onChange={(e) => setCatalogWelcome(e.target.value)}
+                          placeholder="¡Bienvenido! Explora nuestros productos"
+                          maxLength={100}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+
+                      {/* Color */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Color principal del catálogo
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {[
+                            { color: '#10B981', name: 'Esmeralda' },
+                            { color: '#3B82F6', name: 'Azul' },
+                            { color: '#8B5CF6', name: 'Violeta' },
+                            { color: '#F59E0B', name: 'Ámbar' },
+                            { color: '#EF4444', name: 'Rojo' },
+                            { color: '#EC4899', name: 'Rosa' },
+                            { color: '#14B8A6', name: 'Teal' },
+                            { color: '#1F2937', name: 'Oscuro' },
+                          ].map((option) => (
+                            <button
+                              key={option.color}
+                              type="button"
+                              onClick={() => setCatalogColor(option.color)}
+                              className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                                catalogColor === option.color
+                                  ? 'border-gray-900 shadow-md'
+                                  : 'border-transparent hover:border-gray-300'
+                              }`}
+                            >
+                              <div
+                                className="w-10 h-10 rounded-full shadow-sm flex items-center justify-center"
+                                style={{ backgroundColor: option.color }}
+                              >
+                                {catalogColor === option.color && (
+                                  <Check className="w-5 h-5 text-white" />
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-600">{option.name}</span>
+                            </button>
+                          ))}
+                          <div className="flex flex-col items-center gap-1 p-2">
+                            <input
+                              type="color"
+                              value={catalogColor}
+                              onChange={(e) => setCatalogColor(e.target.value)}
+                              className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
+                            />
+                            <span className="text-xs text-gray-600">Otro</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200"></div>
+
+                  {/* Productos en el catálogo */}
+                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-blue-900">¿Cómo agrego productos al catálogo?</h4>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Ve a <strong>Productos</strong>, edita un producto y activa la opción <strong>"Mostrar en catálogo"</strong>. Solo los productos con esta opción activada aparecerán en tu catálogo público.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+
+          {/* Save Button for Catalogo */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo.')
+                    return
+                  }
+
+                  if (catalogEnabled && !catalogSlug) {
+                    toast.error('Ingresa una URL para tu catálogo')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      catalogEnabled,
+                      catalogSlug: catalogSlug.toLowerCase().trim(),
+                      catalogColor,
+                      catalogWelcome,
+                      catalogTagline,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')
+                  } catch (error) {
+                    console.error('Error al guardar catálogo:', error)
+                    toast.error('Error al guardar la configuración')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Catálogo
                   </>
                 )}
               </Button>

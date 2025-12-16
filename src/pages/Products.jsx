@@ -148,6 +148,7 @@ export default function Products() {
   const [noStock, setNoStock] = useState(false)
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
+  const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
   const [expandedProduct, setExpandedProduct] = useState(null)
   const [selectedWarehouse, setSelectedWarehouse] = useState('') // Almacén para stock inicial
 
@@ -344,6 +345,7 @@ export default function Products() {
     setNoStock(false)
     setAllowDecimalQuantity(false)
     setTrackExpiration(false)
+    setCatalogVisible(false)
     setHasVariants(false)
     setVariantAttributes([])
     setVariants([])
@@ -431,6 +433,9 @@ export default function Products() {
 
     // Load tax affectation (default to '10' = Gravado if not set for backwards compatibility)
     setTaxAffectation(product.taxAffectation || '10')
+
+    // Load catalog visibility
+    setCatalogVisible(product.catalogVisible || false)
 
     // Load product image if exists
     setProductImage(null)
@@ -554,6 +559,7 @@ export default function Products() {
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
+        catalogVisible: catalogVisible, // Visible en catálogo público
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add pharmacy data if in pharmacy mode
@@ -2572,6 +2578,16 @@ export default function Products() {
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Control de vencimiento</span>
+              </label>
+
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={catalogVisible}
+                  onChange={e => setCatalogVisible(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">Mostrar en catálogo</span>
               </label>
             </div>
 

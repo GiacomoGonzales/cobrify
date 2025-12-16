@@ -77,6 +77,8 @@ import Properties from './pages/Properties'
 import Operations from './pages/Operations'
 import Commissions from './pages/Commissions'
 import Agents from './pages/Agents'
+// Public catalog
+import CatalogoPublico from './pages/CatalogoPublico'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -102,6 +104,9 @@ function App() {
 
             {/* Rutas públicas */}
             <Route path="/terminos-y-condiciones" element={<TermsAndConditions />} />
+
+            {/* Catálogo público */}
+            <Route path="/catalogo/:slug" element={<CatalogoPublico />} />
 
             {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}
             <Route path="/demo" element={<Demo />} />
