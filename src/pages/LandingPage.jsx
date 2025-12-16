@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle, Handshake, Palette, HeadphonesIcon, DollarSign } from 'lucide-react'
+import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle, Handshake, Palette, HeadphonesIcon, DollarSign, Smartphone, Download } from 'lucide-react'
 import Button from '@/components/ui/Button'
 
 export default function LandingPage() {
@@ -347,6 +347,92 @@ export default function LandingPage() {
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Crece Contigo</h3>
               <p className="text-gray-600">Escalable a tu medida</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Mobile Apps Section */}
+      <section className="py-16 px-4 relative overflow-hidden bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900">
+        {/* Animated background */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-0 left-1/4 w-64 h-64 bg-primary-500 rounded-full mix-blend-overlay filter blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-blue-500 rounded-full mix-blend-overlay filter blur-3xl animate-pulse animation-delay-2000"></div>
+        </div>
+
+        <div className="container mx-auto max-w-6xl relative z-10">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+            {/* Left content */}
+            <div className="text-center lg:text-left">
+              <div className="flex items-center justify-center lg:justify-start gap-3 mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-blue-500 rounded-xl flex items-center justify-center">
+                  <Smartphone className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-3xl font-bold text-white">
+                  Disponible en tu móvil
+                </h2>
+              </div>
+              <p className="text-gray-300 text-lg max-w-md">
+                Lleva tu negocio en el bolsillo. Factura desde cualquier lugar con nuestra app móvil.
+              </p>
+            </div>
+
+            {/* App Store Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              {/* Google Play */}
+              <a
+                href="https://play.google.com/store"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3 bg-black hover:bg-gray-800 border border-gray-700 hover:border-gray-500 rounded-xl px-6 py-3 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary-500/20"
+              >
+                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                  <path d="M3.609 1.814L13.792 12 3.61 22.186a.996.996 0 01-.61-.92V2.734a1 1 0 01.609-.92z" fill="#00D7FF"/>
+                  <path d="M17.556 8.236L5.082.572C4.752.378 4.39.276 4.018.276L14.856 12 17.556 8.236z" fill="#00F076"/>
+                  <path d="M17.556 15.764L14.856 12 4.018 23.724c.372 0 .734-.102 1.064-.296l12.474-7.664z" fill="#FF3A44"/>
+                  <path d="M21.003 10.573l-3.447-2.337L14.856 12l2.7 3.764 3.447-2.337c.605-.41.997-1.09.997-1.854s-.392-1.444-.997-1.854v.854z" fill="#FFC107"/>
+                </svg>
+                <div className="text-left">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Disponible en</p>
+                  <p className="text-white font-semibold text-lg -mt-1">Google Play</p>
+                </div>
+              </a>
+
+              {/* App Store */}
+              <a
+                href="https://apps.apple.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-3 bg-black hover:bg-gray-800 border border-gray-700 hover:border-gray-500 rounded-xl px-6 py-3 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary-500/20"
+              >
+                <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                </svg>
+                <div className="text-left">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Descarga en el</p>
+                  <p className="text-white font-semibold text-lg -mt-1">App Store</p>
+                </div>
+              </a>
+            </div>
+          </div>
+
+          {/* Features badges */}
+          <div className="flex flex-wrap justify-center lg:justify-start gap-4 mt-8 pt-8 border-t border-gray-700">
+            <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <Check className="w-4 h-4 text-green-500" />
+              <span>Impresión Bluetooth</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <Check className="w-4 h-4 text-green-500" />
+              <span>Modo offline</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <Check className="w-4 h-4 text-green-500" />
+              <span>Sincronización automática</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400 text-sm">
+              <Check className="w-4 h-4 text-green-500" />
+              <span>Notificaciones push</span>
             </div>
           </div>
         </div>
