@@ -56,6 +56,8 @@ import { getRecipeByProductId } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock } from '@/services/warehouseService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { savePendingSale } from '@/services/offlineQueueService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 
 const PAYMENT_METHODS = {
@@ -147,6 +149,7 @@ export default function POS() {
   const location = useLocation()
   const navigate = useNavigate()
   const ticketRef = useRef(null)
+  const { isOnline, isOffline } = useOnlineStatus()
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -1490,6 +1493,49 @@ export default function POS() {
           purchaseOrderNumber: purchaseOrderNumber || null,
           orderNumber: orderNumber || null,
         }),
+      }
+
+      // MODO OFFLINE: Si no hay conexión, guardar en cola local
+      if (isOffline) {
+        console.log('📴 Modo offline: Guardando venta en cola local...')
+
+        // Solo permitir notas de venta en modo offline (no requieren SUNAT)
+        if (documentType === 'factura' || documentType === 'boleta') {
+          toast.warning('Sin conexión: Las facturas y boletas requieren conexión a SUNAT. Puedes crear una Nota de Venta.', 5000)
+          setIsProcessing(false)
+          return
+        }
+
+        try {
+          const offlineId = await savePendingSale({
+            invoiceData,
+            businessId,
+            userId: user.uid,
+            documentType,
+            total: amounts.total,
+            customerName: customerData.name || customerData.businessName || 'Cliente General',
+          })
+
+          toast.success('Venta guardada localmente. Se sincronizará cuando tengas conexión.', 5000)
+
+          // Mostrar datos de la venta offline
+          setLastInvoiceNumber(`OFFLINE-${offlineId}`)
+          setLastInvoiceData({
+            ...invoiceData,
+            id: `offline-${offlineId}`,
+            number: `PENDIENTE-${offlineId}`,
+            offlineId,
+            isOffline: true,
+          })
+          setSaleCompleted(true)
+          setIsProcessing(false)
+          return
+        } catch (offlineError) {
+          console.error('❌ Error guardando venta offline:', offlineError)
+          toast.error('Error al guardar la venta localmente')
+          setIsProcessing(false)
+          return
+        }
       }
 
       const result = await createInvoice(businessId, invoiceData)

@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
+import OfflineIndicator from '@/components/OfflineIndicator'
 
 export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription } = useAuth()
@@ -161,6 +162,9 @@ export default function MainLayout() {
           </main>
         </div>
       </div>
+
+      {/* Indicador de estado offline */}
+      <OfflineIndicator />
     </div>
   )
 }

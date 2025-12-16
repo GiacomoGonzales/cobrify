@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, indexedDBLocalPersistence, initializeAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 import { Capacitor } from '@capacitor/core'
@@ -81,6 +81,24 @@ try {
   db = getFirestore(app)
   storage = getStorage(app)
   functions = getFunctions(app)
+
+  // Habilitar persistencia offline de Firestore
+  // Esto permite que los datos se cacheen localmente y funcionen sin internet
+  enableIndexedDbPersistence(db, { cacheSizeBytes: CACHE_SIZE_UNLIMITED })
+    .then(() => {
+      console.log('📱 Firestore offline persistence habilitada')
+    })
+    .catch((err) => {
+      if (err.code === 'failed-precondition') {
+        // Múltiples tabs abiertos, solo puede haber una con persistencia
+        console.warn('⚠️ Firestore offline: Múltiples tabs detectadas, persistencia deshabilitada en esta tab')
+      } else if (err.code === 'unimplemented') {
+        // El navegador no soporta IndexedDB
+        console.warn('⚠️ Firestore offline: Navegador no soporta persistencia offline')
+      } else {
+        console.error('❌ Error habilitando Firestore offline:', err)
+      }
+    })
 
   // Conectar al emulador de Functions en desarrollo
   if (import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
