@@ -1721,51 +1721,39 @@ export default function Settings() {
                         Selecciona qué tipo de comprobante aparecerá seleccionado por defecto al abrir el Punto de Venta.
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        <label className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition-colors ${
-                          defaultDocumentType === 'boleta'
-                            ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}>
-                          <input
-                            type="radio"
-                            name="defaultDocumentType"
-                            value="boleta"
-                            checked={defaultDocumentType === 'boleta'}
-                            onChange={(e) => setDefaultDocumentType(e.target.value)}
-                            className="sr-only"
-                          />
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('boleta')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'boleta'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
                           <span className="text-sm font-medium">Boleta</span>
-                        </label>
-                        <label className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition-colors ${
-                          defaultDocumentType === 'factura'
-                            ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}>
-                          <input
-                            type="radio"
-                            name="defaultDocumentType"
-                            value="factura"
-                            checked={defaultDocumentType === 'factura'}
-                            onChange={(e) => setDefaultDocumentType(e.target.value)}
-                            className="sr-only"
-                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('factura')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'factura'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
                           <span className="text-sm font-medium">Factura</span>
-                        </label>
-                        <label className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition-colors ${
-                          defaultDocumentType === 'nota_venta'
-                            ? 'border-primary-500 bg-primary-50 text-primary-700'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}>
-                          <input
-                            type="radio"
-                            name="defaultDocumentType"
-                            value="nota_venta"
-                            checked={defaultDocumentType === 'nota_venta'}
-                            onChange={(e) => setDefaultDocumentType(e.target.value)}
-                            className="sr-only"
-                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('nota_venta')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'nota_venta'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
                           <span className="text-sm font-medium">Nota de Venta</span>
-                        </label>
+                        </button>
                       </div>
                     </div>
                   </div>
