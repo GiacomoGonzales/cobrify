@@ -42,7 +42,6 @@ import {
   Link2,
   ExternalLink
 } from 'lucide-react'
-import { BASE_DOMAIN } from '@/services/brandingService'
 
 // URL de las Cloud Functions (Cloud Run)
 const FUNCTIONS_BASE_URL = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
@@ -74,7 +73,6 @@ export default function AdminResellers() {
     discountOverride: '',  // Vacío = usar tier automático
     balance: 0,
     isActive: true,
-    subdomain: '',
     customDomain: ''  // Solo admin puede configurar esto
   })
 
@@ -127,7 +125,6 @@ export default function AdminResellers() {
           currentTier,
           effectiveDiscount,
           hasOverride: data.discountOverride !== undefined && data.discountOverride !== null,
-          subdomain: data.subdomain || '',
           customDomain: data.customDomain || ''
         })
       }
@@ -153,7 +150,6 @@ export default function AdminResellers() {
       discountOverride: '',
       balance: 0,
       isActive: true,
-      subdomain: '',
       customDomain: ''
     })
     setShowModal(true)
@@ -220,7 +216,6 @@ export default function AdminResellers() {
         : '',
       balance: reseller.balance || 0,
       isActive: reseller.isActive !== false,
-      subdomain: reseller.subdomain || '',
       customDomain: reseller.customDomain || ''
     })
     setShowModal(true)
@@ -261,7 +256,6 @@ export default function AdminResellers() {
         discountOverride: discountOverride,
         balance: parseFloat(formData.balance) || 0,
         isActive: formData.isActive,
-        subdomain: formData.subdomain || null,
         customDomain: formData.customDomain || null
       }
 
@@ -489,11 +483,11 @@ export default function AdminResellers() {
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900 text-sm truncate">{reseller.companyName}</p>
                         <p className="text-xs text-gray-500 truncate">{reseller.email}</p>
-                        {(reseller.subdomain || reseller.customDomain) && (
+                        {reseller.customDomain && (
                           <div className="flex items-center gap-1 mt-0.5">
                             <Globe className="w-2.5 h-2.5 text-indigo-400" />
                             <span className="text-xs text-indigo-600 truncate">
-                              {reseller.customDomain || `${reseller.subdomain}.${BASE_DOMAIN}`}
+                              {reseller.customDomain}
                             </span>
                           </div>
                         )}
@@ -582,11 +576,11 @@ export default function AdminResellers() {
                       <td className="px-4 py-3">
                         <p className="text-sm text-gray-900">{reseller.contactName || '-'}</p>
                         <p className="text-sm text-gray-500">{reseller.email}</p>
-                        {(reseller.subdomain || reseller.customDomain) && (
+                        {reseller.customDomain && (
                           <div className="flex items-center gap-1 mt-1">
                             <Globe className="w-3 h-3 text-indigo-400" />
                             <span className="text-xs text-indigo-600">
-                              {reseller.customDomain || `${reseller.subdomain}.${BASE_DOMAIN}`}
+                              {reseller.customDomain}
                             </span>
                           </div>
                         )}
@@ -864,57 +858,34 @@ export default function AdminResellers() {
                     </div>
                   </div>
 
-                  {/* Sección de Dominios (solo admin) */}
+                  {/* Sección de Dominio (solo admin) */}
                   <div className="border-t border-gray-200 pt-4 mt-4">
                     <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
                       <Globe className="w-4 h-4 text-indigo-500" />
-                      Configuración de Dominio
+                      Dominio Personalizado
                     </h3>
 
-                    <div className="space-y-3">
-                      {/* Subdominio (informativo) */}
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Subdominio</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={formData.subdomain}
-                            onChange={e => setFormData({ ...formData, subdomain: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
-                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                            placeholder="miempresa"
-                          />
-                          <span className="text-sm text-gray-500">.{BASE_DOMAIN}</span>
+                    <div>
+                      <label className="block text-sm text-gray-600 mb-1">
+                        Dominio del Reseller
+                        <span className="text-xs text-indigo-500 ml-1">(requiere configuración DNS)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customDomain}
+                        onChange={e => setFormData({ ...formData, customDomain: e.target.value.toLowerCase() })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="facturacion.miempresa.com"
+                      />
+                      {formData.customDomain && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                          <strong>Configuración requerida:</strong>
+                          <ol className="list-decimal ml-4 mt-1 space-y-0.5">
+                            <li>Agregar dominio en Vercel: {formData.customDomain}</li>
+                            <li>Configurar DNS: CNAME → cname.vercel-dns.com</li>
+                          </ol>
                         </div>
-                        {formData.subdomain && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            URL: https://{formData.subdomain}.{BASE_DOMAIN}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Dominio personalizado (solo admin) */}
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">
-                          Dominio Personalizado
-                          <span className="text-xs text-indigo-500 ml-1">(requiere configuración DNS)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.customDomain}
-                          onChange={e => setFormData({ ...formData, customDomain: e.target.value.toLowerCase() })}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                          placeholder="facturacion.miempresa.com"
-                        />
-                        {formData.customDomain && (
-                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                            <strong>Configuración requerida:</strong>
-                            <ol className="list-decimal ml-4 mt-1 space-y-0.5">
-                              <li>Agregar dominio en Vercel: {formData.customDomain}</li>
-                              <li>Configurar CNAME: {formData.customDomain} → cname.vercel-dns.com</li>
-                            </ol>
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 </>

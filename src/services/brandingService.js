@@ -2,9 +2,6 @@ import { doc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 
-// Dominio base para subdominios de resellers
-export const BASE_DOMAIN = 'cobrifyperu.com'
-
 // Branding por defecto (Cobrify) - Azul según Tailwind primary
 export const DEFAULT_BRANDING = {
   companyName: 'Cobrify',
@@ -192,68 +189,20 @@ function hexToRgba(hex, alpha = 1) {
 }
 
 /**
- * Genera un subdomain slug a partir del nombre de la empresa
- * Por ejemplo: "Factu Perú SAC" -> "factuperu"
- */
-export function generateSubdomain(companyName) {
-  if (!companyName) return ''
-  return companyName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // Quitar acentos
-    .replace(/[^a-z0-9]/g, '') // Solo letras y números
-    .slice(0, 20) // Máximo 20 caracteres
-}
-
-/**
- * Obtiene el reseller por hostname (subdominio o dominio personalizado)
- * @param {string} hostname - El hostname actual (ej: factuperu.cobrifyperu.com o factuperu.com)
+ * Obtiene el reseller por hostname (dominio personalizado)
+ * @param {string} hostname - El hostname actual (ej: factuperu.com)
  * @returns {Promise<{resellerId: string, branding: object} | null>}
  */
 export async function getResellerByHostname(hostname) {
   if (!hostname) return null
 
   // Ignorar localhost y dominios de desarrollo
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+  if (hostname.includes('localhost') || hostname.includes('127.0.0.1') || hostname.includes('vercel.app')) {
     return null
   }
 
   try {
-    // Caso 1: Es un subdominio de cobrifyperu.com (factuperu.cobrifyperu.com)
-    if (hostname.endsWith(`.${BASE_DOMAIN}`)) {
-      const subdomain = hostname.replace(`.${BASE_DOMAIN}`, '')
-      console.log('🔍 Searching reseller by subdomain:', subdomain)
-
-      // Buscar reseller por subdomain
-      const q = query(
-        collection(db, 'resellers'),
-        where('subdomain', '==', subdomain)
-      )
-      const snapshot = await getDocs(q)
-
-      if (!snapshot.empty) {
-        const docSnap = snapshot.docs[0]
-        const data = docSnap.data()
-        console.log('✅ Found reseller by subdomain:', data.companyName)
-        return {
-          resellerId: docSnap.id,
-          companyName: data.companyName,
-          phone: data.phone,
-          branding: {
-            ...DEFAULT_BRANDING,
-            companyName: data.branding?.companyName || data.companyName || DEFAULT_BRANDING.companyName,
-            logoUrl: data.branding?.logoUrl || null,
-            primaryColor: data.branding?.primaryColor || DEFAULT_BRANDING.primaryColor,
-            secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
-            accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
-            whatsapp: data.branding?.whatsapp || data.phone || '',
-          }
-        }
-      }
-    }
-
-    // Caso 2: Es un dominio personalizado (factuperu.com)
-    // Buscar por customDomain
+    // Buscar reseller por customDomain
     console.log('🔍 Searching reseller by custom domain:', hostname)
     const q = query(
       collection(db, 'resellers'),
@@ -286,34 +235,6 @@ export async function getResellerByHostname(hostname) {
   } catch (error) {
     console.error('Error getting reseller by hostname:', error)
     return null
-  }
-}
-
-/**
- * Verifica si un subdomain está disponible
- */
-export async function isSubdomainAvailable(subdomain, excludeResellerId = null) {
-  if (!subdomain) return false
-
-  try {
-    const q = query(
-      collection(db, 'resellers'),
-      where('subdomain', '==', subdomain)
-    )
-    const snapshot = await getDocs(q)
-
-    // Si no hay resultados, está disponible
-    if (snapshot.empty) return true
-
-    // Si hay resultado pero es el mismo reseller, está disponible
-    if (excludeResellerId && snapshot.docs[0].id === excludeResellerId) {
-      return true
-    }
-
-    return false
-  } catch (error) {
-    console.error('Error checking subdomain:', error)
-    return false
   }
 }
 

@@ -6,8 +6,7 @@ import { db } from '@/lib/firebase'
 import {
   updateResellerBranding,
   uploadResellerLogo,
-  PRESET_COLORS,
-  BASE_DOMAIN
+  PRESET_COLORS
 } from '@/services/brandingService'
 import {
   Building2,
@@ -225,10 +224,7 @@ export default function ResellerSettings() {
   const discount = resellerData?.discountOverride || resellerData?.discount || 0
   const discountPercent = discount < 1 ? discount * 100 : discount
 
-  // URLs de login para clientes (configuradas por admin)
-  const subdomainUrl = resellerData?.subdomain
-    ? `https://${resellerData.subdomain}.${BASE_DOMAIN}/login`
-    : null
+  // URL de login para clientes (configurada por admin)
   const customDomainUrl = resellerData?.customDomain
     ? `https://${resellerData.customDomain}/login`
     : null
@@ -313,38 +309,8 @@ export default function ResellerSettings() {
               Links de Acceso para Clientes
             </h3>
 
-            {/* Subdominio (configurado por admin) */}
-            {subdomainUrl ? (
-              <div>
-                <p className="text-xs text-blue-700 mb-1.5 flex items-center gap-1">
-                  <Link2 className="w-3 h-3" />
-                  Tu subdominio personalizado:
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={subdomainUrl}
-                    readOnly
-                    className="flex-1 text-xs bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-600 font-medium"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(subdomainUrl)}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 flex items-center gap-1"
-                  >
-                    {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                  </button>
-                </div>
-              </div>
-            ) : !customDomainUrl ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5">
-                <p className="text-xs text-gray-600">
-                  Aún no tienes un dominio personalizado configurado. Contacta al administrador para solicitar tu subdominio o dominio propio.
-                </p>
-              </div>
-            ) : null}
-
-            {/* Dominio personalizado (si está configurado por admin) */}
-            {customDomainUrl && (
+            {/* Dominio personalizado (configurado por admin) */}
+            {customDomainUrl ? (
               <div>
                 <p className="text-xs text-green-700 mb-1.5 flex items-center gap-1">
                   <Globe className="w-3 h-3" />
@@ -364,6 +330,12 @@ export default function ResellerSettings() {
                     {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                   </button>
                 </div>
+              </div>
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5">
+                <p className="text-xs text-gray-600">
+                  Aún no tienes un dominio personalizado configurado. Contacta al administrador para solicitar tu dominio propio.
+                </p>
               </div>
             )}
 
