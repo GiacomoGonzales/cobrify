@@ -5,6 +5,7 @@ const DemoRestaurantContext = createContext(null)
 // Datos de ejemplo para el demo de restaurante
 const generateRestaurantDemoData = () => {
   const today = new Date()
+  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
 
   return {
     user: {
