@@ -7,9 +7,7 @@ import {
   updateResellerBranding,
   uploadResellerLogo,
   PRESET_COLORS,
-  BASE_DOMAIN,
-  generateSubdomain,
-  isSubdomainAvailable
+  BASE_DOMAIN
 } from '@/services/brandingService'
 import {
   Building2,
@@ -56,8 +54,7 @@ export default function ResellerSettings() {
     ruc: resellerData?.ruc || '',
     phone: resellerData?.phone || '',
     address: resellerData?.address || '',
-    contactName: resellerData?.contactName || '',
-    subdomain: resellerData?.subdomain || ''
+    contactName: resellerData?.contactName || ''
   })
 
   const [brandingData, setBrandingData] = useState({
@@ -65,9 +62,8 @@ export default function ResellerSettings() {
     logoUrl: resellerData?.branding?.logoUrl || null,
     primaryColor: resellerData?.branding?.primaryColor || '#10B981',
     secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
+    whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
   })
-
-  const [subdomainStatus, setSubdomainStatus] = useState('') // '' | 'checking' | 'available' | 'taken'
 
   // Sincronizar formData y brandingData cuando resellerData se cargue
   React.useEffect(() => {
@@ -77,35 +73,18 @@ export default function ResellerSettings() {
         ruc: resellerData.ruc || '',
         phone: resellerData.phone || '',
         address: resellerData.address || '',
-        contactName: resellerData.contactName || '',
-        subdomain: resellerData.subdomain || ''
+        contactName: resellerData.contactName || ''
       })
       setBrandingData({
         companyName: resellerData.branding?.companyName || resellerData.companyName || '',
         logoUrl: resellerData.branding?.logoUrl || null,
         primaryColor: resellerData.branding?.primaryColor || '#10B981',
         secondaryColor: resellerData.branding?.secondaryColor || '#059669',
+        whatsapp: resellerData.branding?.whatsapp || resellerData.phone || '',
       })
       setDataLoaded(true)
     }
   }, [resellerData])
-
-  // Verificar disponibilidad del subdominio cuando cambia
-  React.useEffect(() => {
-    if (!formData.subdomain || formData.subdomain === resellerData?.subdomain) {
-      setSubdomainStatus('')
-      return
-    }
-
-    const checkSubdomain = async () => {
-      setSubdomainStatus('checking')
-      const available = await isSubdomainAvailable(formData.subdomain, resellerId)
-      setSubdomainStatus(available ? 'available' : 'taken')
-    }
-
-    const timeout = setTimeout(checkSubdomain, 500)
-    return () => clearTimeout(timeout)
-  }, [formData.subdomain, resellerId, resellerData?.subdomain])
 
   // Mostrar loading mientras se cargan los datos
   if (authLoading || !dataLoaded) {
@@ -173,18 +152,6 @@ export default function ResellerSettings() {
   }
 
   async function handleSave() {
-    // Validar subdomain si se cambió
-    if (formData.subdomain && formData.subdomain !== resellerData?.subdomain) {
-      if (subdomainStatus === 'taken') {
-        alert('El subdominio no está disponible. Por favor elige otro.')
-        return
-      }
-      if (subdomainStatus === 'checking') {
-        alert('Espera mientras verificamos la disponibilidad del subdominio.')
-        return
-      }
-    }
-
     setSaving(true)
 
     // Debug: mostrar los IDs que estamos usando
@@ -196,7 +163,7 @@ export default function ResellerSettings() {
     console.log('   brandingData:', brandingData)
 
     try {
-      // Guardar datos de empresa (incluyendo subdomain)
+      // Guardar datos de empresa (subdomain y customDomain se configuran solo desde admin)
       console.log('📝 Updating reseller document...')
       await updateDoc(doc(db, 'resellers', resellerId), {
         companyName: formData.companyName,
@@ -204,7 +171,6 @@ export default function ResellerSettings() {
         phone: formData.phone,
         address: formData.address,
         contactName: formData.contactName,
-        subdomain: formData.subdomain || null,
         updatedAt: Timestamp.now()
       })
       console.log('✅ Reseller document updated')
@@ -259,9 +225,9 @@ export default function ResellerSettings() {
   const discount = resellerData?.discountOverride || resellerData?.discount || 0
   const discountPercent = discount < 1 ? discount * 100 : discount
 
-  // URLs de login para clientes
-  const subdomainUrl = formData.subdomain
-    ? `https://${formData.subdomain}.${BASE_DOMAIN}/login`
+  // URLs de login para clientes (configuradas por admin)
+  const subdomainUrl = resellerData?.subdomain
+    ? `https://${resellerData.subdomain}.${BASE_DOMAIN}/login`
     : null
   const customDomainUrl = resellerData?.customDomain
     ? `https://${resellerData.customDomain}/login`
@@ -347,7 +313,7 @@ export default function ResellerSettings() {
               Links de Acceso para Clientes
             </h3>
 
-            {/* Subdominio (principal) */}
+            {/* Subdominio (configurado por admin) */}
             {subdomainUrl ? (
               <div>
                 <p className="text-xs text-blue-700 mb-1.5 flex items-center gap-1">
@@ -369,13 +335,13 @@ export default function ResellerSettings() {
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2.5">
-                <p className="text-xs text-yellow-700">
-                  Configura tu subdominio en la pestaña "Datos de Empresa" para obtener tu URL personalizada.
+            ) : !customDomainUrl ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5">
+                <p className="text-xs text-gray-600">
+                  Aún no tienes un dominio personalizado configurado. Contacta al administrador para solicitar tu subdominio o dominio propio.
                 </p>
               </div>
-            )}
+            ) : null}
 
             {/* Dominio personalizado (si está configurado por admin) */}
             {customDomainUrl && (
@@ -559,68 +525,7 @@ export default function ResellerSettings() {
                       </div>
                     </div>
 
-                    {/* Subdominio */}
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        <Globe className="w-4 h-4 inline mr-1" />
-                        Subdominio Personalizado
-                      </label>
-                      <p className="text-xs text-gray-500 mb-2">
-                        Tu URL de acceso será: <strong>{formData.subdomain || 'tuempresa'}.{BASE_DOMAIN}</strong>
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <input
-                            type="text"
-                            name="subdomain"
-                            value={formData.subdomain}
-                            onChange={(e) => {
-                              // Limpiar el valor: solo letras minúsculas y números
-                              const value = e.target.value
-                                .toLowerCase()
-                                .replace(/[^a-z0-9]/g, '')
-                                .slice(0, 20)
-                              setFormData(prev => ({ ...prev, subdomain: value }))
-                              setSaved(false)
-                            }}
-                            placeholder="tuempresa"
-                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-emerald-500 ${
-                              subdomainStatus === 'taken'
-                                ? 'border-red-300 bg-red-50'
-                                : subdomainStatus === 'available'
-                                ? 'border-green-300 bg-green-50'
-                                : 'border-gray-300'
-                            }`}
-                          />
-                          {subdomainStatus === 'checking' && (
-                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
-                          )}
-                          {subdomainStatus === 'available' && (
-                            <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                          )}
-                          {subdomainStatus === 'taken' && (
-                            <X className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" />
-                          )}
-                        </div>
-                        <span className="text-sm text-gray-500">.{BASE_DOMAIN}</span>
-                      </div>
-                      {subdomainStatus === 'taken' && (
-                        <p className="text-xs text-red-500 mt-1">Este subdominio ya está en uso</p>
-                      )}
-                      {!formData.subdomain && formData.companyName && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const suggested = generateSubdomain(formData.companyName)
-                            setFormData(prev => ({ ...prev, subdomain: suggested }))
-                            setSaved(false)
-                          }}
-                          className="text-xs text-emerald-600 hover:text-emerald-700 mt-1"
-                        >
-                          Sugerencia: {generateSubdomain(formData.companyName)}
-                        </button>
-                      )}
-                    </div>
+                    {/* Nota: El subdominio y dominio personalizado se configuran desde el panel de Admin */}
                   </div>
                 </div>
               ) : (
@@ -711,6 +616,25 @@ export default function ResellerSettings() {
                           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                         />
                       </div>
+                    </div>
+
+                    {/* WhatsApp para Landing */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        WhatsApp para tu Landing
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="whatsapp"
+                          value={brandingData.whatsapp}
+                          onChange={handleBrandingChange}
+                          placeholder="51900000000"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Número que aparecerá en el botón de WhatsApp de tu landing</p>
                     </div>
 
                     {/* Brand Colors */}

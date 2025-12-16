@@ -4,6 +4,7 @@ import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
 import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
+import LandingRouter from './components/LandingRouter'
 import { Capacitor } from '@capacitor/core'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -92,7 +93,8 @@ function App() {
           <ToastProvider>
             <Routes>
             {/* Landing Page / Splash - En móvil muestra splash primero */}
-            <Route path="/" element={isNative ? <SplashScreen /> : <LandingPage />} />
+            {/* En web, usa LandingRouter para detectar si es dominio de reseller */}
+            <Route path="/" element={isNative ? <SplashScreen /> : <LandingRouter />} />
 
             {/* Rutas públicas de autenticación */}
             <Route path="/login" element={<Login />} />

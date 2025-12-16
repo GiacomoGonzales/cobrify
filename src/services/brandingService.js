@@ -12,6 +12,7 @@ export const DEFAULT_BRANDING = {
   primaryColor: '#2563eb',    // primary-600 (blue)
   secondaryColor: '#1d4ed8',  // primary-700 (blue)
   accentColor: '#3b82f6',     // primary-500 (blue)
+  whatsapp: '',               // Número de WhatsApp para la landing
 }
 
 /**
@@ -31,6 +32,7 @@ export async function getResellerBranding(resellerId) {
         primaryColor: data.branding?.primaryColor || DEFAULT_BRANDING.primaryColor,
         secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
         accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
+        whatsapp: data.branding?.whatsapp || data.phone || '',
       }
     }
   } catch (error) {
@@ -104,6 +106,7 @@ export async function updateResellerBranding(resellerId, branding) {
         primaryColor: branding.primaryColor || DEFAULT_BRANDING.primaryColor,
         secondaryColor: branding.secondaryColor || DEFAULT_BRANDING.secondaryColor,
         accentColor: branding.accentColor || DEFAULT_BRANDING.accentColor,
+        whatsapp: branding.whatsapp || '',
       },
       updatedAt: Timestamp.now()
     })
@@ -234,6 +237,8 @@ export async function getResellerByHostname(hostname) {
         console.log('✅ Found reseller by subdomain:', data.companyName)
         return {
           resellerId: docSnap.id,
+          companyName: data.companyName,
+          phone: data.phone,
           branding: {
             ...DEFAULT_BRANDING,
             companyName: data.branding?.companyName || data.companyName || DEFAULT_BRANDING.companyName,
@@ -241,6 +246,7 @@ export async function getResellerByHostname(hostname) {
             primaryColor: data.branding?.primaryColor || DEFAULT_BRANDING.primaryColor,
             secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
             accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
+            whatsapp: data.branding?.whatsapp || data.phone || '',
           }
         }
       }
@@ -261,6 +267,8 @@ export async function getResellerByHostname(hostname) {
       console.log('✅ Found reseller by custom domain:', data.companyName)
       return {
         resellerId: docSnap.id,
+        companyName: data.companyName,
+        phone: data.phone,
         branding: {
           ...DEFAULT_BRANDING,
           companyName: data.branding?.companyName || data.companyName || DEFAULT_BRANDING.companyName,
@@ -268,6 +276,7 @@ export async function getResellerByHostname(hostname) {
           primaryColor: data.branding?.primaryColor || DEFAULT_BRANDING.primaryColor,
           secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
           accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
+          whatsapp: data.branding?.whatsapp || data.phone || '',
         }
       }
     }
