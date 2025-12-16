@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle } from 'lucide-react'
+import { FileText, ShoppingCart, BarChart3, Package, Users, TrendingUp, Check, Shield, Zap, Clock, MessageCircle, Play, Store, UtensilsCrossed } from 'lucide-react'
 import Button from '@/components/ui/Button'
 
 /**
@@ -55,29 +55,22 @@ export default function ResellerLandingPage({ reseller }) {
         <nav className="container mx-auto px-4 lg:px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <Link to="/" className="flex items-center space-x-3 group">
-              <div className="relative">
-                <img
-                  src={logoUrl}
-                  alt={brandName}
-                  className="w-10 h-10 object-contain relative z-10 transform group-hover:scale-110 transition-transform"
-                  width="40"
-                  height="40"
-                  onError={(e) => { e.target.src = '/logo.png' }}
-                />
-              </div>
-              <span
-                className="text-2xl font-bold"
-                style={{ color: primaryColor }}
-              >
-                {brandName}
-              </span>
+            <Link to="/" className="flex items-center group">
+              <img
+                src={logoUrl}
+                alt={brandName}
+                className="h-24 w-auto object-contain transform group-hover:scale-105 transition-transform"
+                onError={(e) => { e.target.src = '/logo.png' }}
+              />
             </Link>
 
             {/* Navigation Links */}
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-gray-700 hover:opacity-80 font-medium transition-colors" style={{ '--hover-color': primaryColor }}>
                 Características
+              </a>
+              <a href="#demo" className="text-gray-700 hover:opacity-80 font-medium transition-colors">
+                Demos
               </a>
               <a href="#benefits" className="text-gray-700 hover:opacity-80 font-medium transition-colors">
                 Beneficios
@@ -89,22 +82,18 @@ export default function ResellerLandingPage({ reseller }) {
 
             {/* CTA Buttons */}
             <div className="flex items-center space-x-3">
-              {whatsappLink && (
-                <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                  <Button className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg shadow-green-200/50 font-semibold text-white relative overflow-hidden group">
-                    <span className="relative z-10 flex items-center gap-2">
-                      CONTÁCTANOS
-                    </span>
-                  </Button>
-                </a>
-              )}
+              <Link to="/login">
+                <Button className="font-semibold text-white" style={{ backgroundColor: primaryColor }}>
+                  Iniciar Sesión
+                </Button>
+              </Link>
             </div>
           </div>
         </nav>
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 relative overflow-hidden" style={heroStyle}>
+      <section className="min-h-screen pt-36 pb-12 px-4 relative overflow-hidden flex items-center" style={heroStyle}>
         {/* Animated background patterns */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-full h-full">
@@ -119,17 +108,88 @@ export default function ResellerLandingPage({ reseller }) {
           </div>
         </div>
 
-        <div className="container mx-auto max-w-6xl relative z-10">
+        <div className="container mx-auto max-w-6xl relative z-10 w-full">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Image */}
+            {/* Hero Illustration */}
             <div className="flex justify-center items-center order-1 lg:order-2">
               <div className="relative w-[85%]">
-                <div className="absolute inset-0 bg-white/20 rounded-3xl blur-2xl opacity-20 transform rotate-6"></div>
-                <img
-                  src="/heroimage.png"
-                  alt={`Sistema de facturación ${brandName}`}
-                  className="relative z-10 w-full h-auto rounded-3xl shadow-2xl border-4 border-white/20 transform hover:scale-105 transition-transform duration-300"
-                />
+                {/* Floating documents illustration */}
+                <div className="relative">
+                  {/* Background glow */}
+                  <div className="absolute inset-0 bg-white/10 rounded-3xl blur-3xl"></div>
+
+                  {/* Main document card */}
+                  <div className="relative bg-white/95 backdrop-blur rounded-2xl shadow-2xl p-6 transform hover:scale-105 transition-all duration-300 animate-float">
+                    {/* Invoice header */}
+                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: primaryColor }}>
+                          <FileText className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-gray-800">FACTURA ELECTRÓNICA</div>
+                          <div className="text-xs text-gray-500">F001-00001234</div>
+                        </div>
+                      </div>
+                      <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                        EMITIDA
+                      </div>
+                    </div>
+
+                    {/* Invoice items mock */}
+                    <div className="space-y-3 mb-6">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-gray-100 rounded"></div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-700">Producto / Servicio</div>
+                            <div className="text-xs text-gray-400">Cantidad: 2</div>
+                          </div>
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">S/ 150.00</div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-gray-100 rounded"></div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-700">Producto / Servicio</div>
+                            <div className="text-xs text-gray-400">Cantidad: 1</div>
+                          </div>
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">S/ 85.00</div>
+                      </div>
+                    </div>
+
+                    {/* Invoice total */}
+                    <div className="pt-4 border-t border-gray-200">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm text-gray-500">Subtotal</span>
+                        <span className="text-sm text-gray-700">S/ 235.00</span>
+                      </div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-500">IGV (18%)</span>
+                        <span className="text-sm text-gray-700">S/ 42.30</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-base font-semibold text-gray-800">TOTAL</span>
+                        <span className="text-xl font-bold" style={{ color: primaryColor }}>S/ 277.30</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Floating elements around the card */}
+                  <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/90 rounded-xl shadow-lg flex items-center justify-center animate-bounce-slow">
+                    <Check className="w-8 h-8 text-green-500" />
+                  </div>
+
+                  <div className="absolute -bottom-4 -left-4 w-14 h-14 bg-white/90 rounded-xl shadow-lg flex items-center justify-center animate-pulse">
+                    <Shield className="w-7 h-7" style={{ color: primaryColor }} />
+                  </div>
+
+                  <div className="absolute top-1/2 -right-8 w-12 h-12 bg-white/80 rounded-lg shadow-lg flex items-center justify-center">
+                    <BarChart3 className="w-6 h-6 text-blue-500" />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -145,16 +205,11 @@ export default function ResellerLandingPage({ reseller }) {
               <div className="flex flex-col sm:flex-row gap-4">
                 {whatsappLink && (
                   <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                    <Button size="lg" className="bg-white hover:bg-gray-100 w-full sm:w-auto font-semibold" style={{ color: primaryColor }}>
-                      Solicitar Información
+                    <Button size="lg" className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg w-full sm:w-auto font-semibold text-white">
+                      Contáctanos por WhatsApp
                     </Button>
                   </a>
                 )}
-                <Link to="/login">
-                  <Button size="lg" className="bg-white/20 text-white hover:bg-white/30 border-2 border-white/30 w-full sm:w-auto font-semibold">
-                    Iniciar Sesión
-                  </Button>
-                </Link>
               </div>
               <div className="mt-8 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:space-x-6 text-sm opacity-90">
                 <div className="flex items-center space-x-2">
@@ -282,6 +337,66 @@ export default function ResellerLandingPage({ reseller }) {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Demo Section */}
+      <section id="demo" className="py-20 px-4 relative overflow-hidden" style={heroStyle}>
+        <div className="container mx-auto max-w-6xl relative z-10">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-white mb-4">
+              Prueba el sistema ahora
+            </h2>
+            <p className="text-xl text-white/90 max-w-2xl mx-auto">
+              Explora todas las funcionalidades sin necesidad de registrarte
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Demo Tienda */}
+            <Link to="/demo" className="group">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all duration-300 transform hover:-translate-y-1">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Store className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-white">Demo Tienda</h3>
+                    <p className="text-white/80">Retail y comercio</p>
+                  </div>
+                </div>
+                <p className="text-white/90 mb-6">
+                  Ideal para tiendas, minimarkets, bodegas, ferreterías y cualquier negocio de venta al por menor.
+                </p>
+                <div className="flex items-center text-white font-semibold">
+                  <Play className="w-5 h-5 mr-2" />
+                  Probar Demo
+                </div>
+              </div>
+            </Link>
+
+            {/* Demo Restaurante */}
+            <Link to="/demorestaurant" className="group">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all duration-300 transform hover:-translate-y-1">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                    <UtensilsCrossed className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-white">Demo Restaurante</h3>
+                    <p className="text-white/80">Gastronomía y servicios</p>
+                  </div>
+                </div>
+                <p className="text-white/90 mb-6">
+                  Perfecto para restaurantes, cafeterías, pollerías y negocios gastronómicos con gestión de mesas.
+                </p>
+                <div className="flex items-center text-white font-semibold">
+                  <Play className="w-5 h-5 mr-2" />
+                  Probar Demo
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
       </section>
@@ -527,16 +642,13 @@ export default function ResellerLandingPage({ reseller }) {
         <div className="container mx-auto max-w-6xl relative z-10">
           <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
-              <div className="flex items-center space-x-2 mb-4">
+              <div className="mb-4">
                 <img
                   src={logoUrl}
                   alt={brandName}
-                  className="w-8 h-8 object-contain"
-                  width="32"
-                  height="32"
+                  className="h-16 w-auto object-contain"
                   onError={(e) => { e.target.src = '/logo.png' }}
                 />
-                <span className="text-xl font-bold text-white">{brandName}</span>
               </div>
               <p className="text-sm">
                 Sistema completo de facturación electrónica para negocios en Perú

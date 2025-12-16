@@ -144,6 +144,54 @@ export function BrandingProvider({ children }) {
     await loadBranding()
   }
 
+  // Actualizar título y favicon cuando cambia el branding
+  useEffect(() => {
+    if (!brandingLoaded) return
+
+    // Actualizar título de la pestaña
+    if (branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName) {
+      document.title = `${branding.companyName} - Sistema de Facturación Electrónica`
+    } else {
+      document.title = 'Cobrify - Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
+    }
+
+    // Actualizar favicon si hay logo personalizado
+    if (branding.logoUrl) {
+      const updateFavicon = (selector, attr = 'href') => {
+        const element = document.querySelector(selector)
+        if (element) {
+          element.setAttribute(attr, branding.logoUrl)
+        }
+      }
+
+      updateFavicon('link[rel="icon"]')
+      updateFavicon('link[rel="apple-touch-icon"]')
+      updateFavicon('link[rel="shortcut icon"]')
+    } else {
+      // Restaurar favicon por defecto
+      const updateFavicon = (selector) => {
+        const element = document.querySelector(selector)
+        if (element) {
+          element.setAttribute('href', '/logo.png')
+        }
+      }
+
+      updateFavicon('link[rel="icon"]')
+      updateFavicon('link[rel="apple-touch-icon"]')
+      updateFavicon('link[rel="shortcut icon"]')
+    }
+
+    // Actualizar theme-color meta tag
+    if (branding.primaryColor && branding.primaryColor !== DEFAULT_BRANDING.primaryColor) {
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]')
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', branding.primaryColor)
+      }
+    }
+
+    console.log('🎨 Updated page title and favicon for:', branding.companyName)
+  }, [branding, brandingLoaded])
+
   // Mostrar loading mientras se carga el branding (evita flash de Cobrify)
   if (!brandingLoaded && user) {
     return (
