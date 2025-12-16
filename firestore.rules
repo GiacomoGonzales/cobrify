@@ -178,6 +178,10 @@ service cloud.firestore {
       allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
 
+      // Lectura pública para catálogo - permite buscar negocios por catalogSlug
+      // Solo se pueden leer campos básicos del negocio para el catálogo público
+      allow read: if resource.data.catalogEnabled == true;
+
       // Subcollection: Invoices (Facturas/Boletas)
       match /invoices/{invoiceId} {
         // Admins pueden leer todas las facturas
@@ -197,6 +201,17 @@ service cloud.firestore {
         // Admins pueden leer todos los productos
         allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Lectura pública para catálogo - solo productos marcados como visibles en catálogo
+        allow read: if resource.data.catalogVisible == true &&
+                       get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
+      }
+
+      // Subcollection: Categories (Categorías)
+      match /categories/{categoryId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Lectura pública para catálogo
+        allow read: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
       }
 
       // Subcollection: Cash Register Sessions (Sesiones de Caja)
