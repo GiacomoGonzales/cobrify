@@ -64,9 +64,9 @@ export default function LandingPage() {
 
             {/* CTA Buttons */}
             <div className="flex items-center space-x-3">
-              <Link to="/demo" className="hidden sm:block">
+              <Link to="/login" className="hidden sm:block">
                 <Button variant="ghost" className="hover:bg-primary-50 text-primary-700 font-semibold">
-                  Demo Retail
+                  Iniciar Sesión
                 </Button>
               </Link>
               <a
