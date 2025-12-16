@@ -5,23 +5,13 @@
       "has": [
         {
           "type": "host",
-          "value": "factuvip.com"
+          "value": "(www\\.)?factuvip\\.com"
         }
       ],
-      "destination": "/resellers/factuvip/index.html"
+      "destination": "/resellers/factuvip/"
     },
     {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.factuvip.com"
-        }
-      ],
-      "destination": "/resellers/factuvip/index.html"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!resellers).*)",
       "destination": "/index.html"
     }
   ]
