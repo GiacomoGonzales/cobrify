@@ -671,12 +671,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
     // - 9998 (INA) para inafectos
     let lineItemTaxSchemeCode = '1000'
     let lineItemTaxSchemeName = 'IGV'
+    let lineItemTaxTypeCode = 'VAT' // VAT para gravados y exonerados, FRE para inafectos
     if (isExonerado) {
       lineItemTaxSchemeCode = '9997'
       lineItemTaxSchemeName = 'EXO'
+      lineItemTaxTypeCode = 'VAT'
     } else if (isInafecto) {
       lineItemTaxSchemeCode = '9998'
       lineItemTaxSchemeName = 'INA'
+      lineItemTaxTypeCode = 'FRE' // Inafectos usan FRE según catálogo 05 SUNAT
     }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
@@ -684,7 +687,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'schemeAgencyName': 'PE:SUNAT'
     }).txt(lineItemTaxSchemeCode)
     lineItemTaxScheme.ele('cbc:Name').txt(lineItemTaxSchemeName)
-    lineItemTaxScheme.ele('cbc:TaxTypeCode').txt('VAT')
+    lineItemTaxScheme.ele('cbc:TaxTypeCode').txt(lineItemTaxTypeCode)
 
     // Descripción del item
     const lineItem = invoiceLine.ele('cac:Item')
@@ -1077,12 +1080,15 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     // - 9998 (INA) para inafectos
     let lineItemTaxSchemeCode = '1000'
     let lineItemTaxSchemeName = 'IGV'
+    let lineItemTaxTypeCode = 'VAT' // VAT para gravados y exonerados, FRE para inafectos
     if (isExonerado) {
       lineItemTaxSchemeCode = '9997'
       lineItemTaxSchemeName = 'EXO'
+      lineItemTaxTypeCode = 'VAT'
     } else if (isInafecto) {
       lineItemTaxSchemeCode = '9998'
       lineItemTaxSchemeName = 'INA'
+      lineItemTaxTypeCode = 'FRE' // Inafectos usan FRE según catálogo 05 SUNAT
     }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
@@ -1090,7 +1096,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       'schemeAgencyName': 'PE:SUNAT'
     }).txt(lineItemTaxSchemeCode)
     lineItemTaxScheme.ele('cbc:Name').txt(lineItemTaxSchemeName)
-    lineItemTaxScheme.ele('cbc:TaxTypeCode').txt('VAT')
+    lineItemTaxScheme.ele('cbc:TaxTypeCode').txt(lineItemTaxTypeCode)
 
     // Descripción del item
     const lineItem = creditNoteLine.ele('cac:Item')
@@ -1478,12 +1484,15 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     // - 9998 (INA) para inafectos
     let lineItemTaxSchemeCode = '1000'
     let lineItemTaxSchemeName = 'IGV'
+    let lineItemTaxTypeCode = 'VAT' // VAT para gravados y exonerados, FRE para inafectos
     if (isExonerado) {
       lineItemTaxSchemeCode = '9997'
       lineItemTaxSchemeName = 'EXO'
+      lineItemTaxTypeCode = 'VAT'
     } else if (isInafecto) {
       lineItemTaxSchemeCode = '9998'
       lineItemTaxSchemeName = 'INA'
+      lineItemTaxTypeCode = 'FRE' // Inafectos usan FRE según catálogo 05 SUNAT
     }
     lineItemTaxScheme.ele('cbc:ID', {
       'schemeID': 'UN/ECE 5153',
@@ -1491,7 +1500,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
       'schemeAgencyName': 'PE:SUNAT'
     }).txt(lineItemTaxSchemeCode)
     lineItemTaxScheme.ele('cbc:Name').txt(lineItemTaxSchemeName)
-    lineItemTaxScheme.ele('cbc:TaxTypeCode').txt('VAT')
+    lineItemTaxScheme.ele('cbc:TaxTypeCode').txt(lineItemTaxTypeCode)
 
     // Descripción del item
     const lineItem = debitNoteLine.ele('cac:Item')
