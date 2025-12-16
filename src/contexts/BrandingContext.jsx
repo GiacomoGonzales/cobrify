@@ -46,9 +46,26 @@ export function BrandingProvider({ children }) {
     console.log('   isAdmin:', isAdmin)
 
     if (!user) {
-      // No user logged in, use default branding
-      setBranding(DEFAULT_BRANDING)
-      removeBrandingColors()
+      // No user logged in, check if we're on a reseller domain
+      const hostname = window.location.hostname
+      console.log('🔍 No user, checking hostname for branding:', hostname)
+
+      try {
+        const resellerData = await getResellerByHostname(hostname)
+        if (resellerData) {
+          console.log('✅ Found reseller branding by hostname (no user):', resellerData.branding.companyName)
+          setBranding(resellerData.branding)
+          applyBrandingColors(resellerData.branding)
+        } else {
+          setBranding(DEFAULT_BRANDING)
+          removeBrandingColors()
+        }
+      } catch (error) {
+        console.error('Error loading branding by hostname:', error)
+        setBranding(DEFAULT_BRANDING)
+        removeBrandingColors()
+      }
+
       setIsLoading(false)
       setBrandingLoaded(true)
       return

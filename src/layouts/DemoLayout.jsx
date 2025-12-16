@@ -3,8 +3,10 @@ import { DemoProvider } from '@/contexts/DemoContext'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import { useEffect } from 'react'
+import { useBranding } from '@/contexts/BrandingContext'
 
 export default function DemoLayout() {
+  const { branding } = useBranding()
   // Forzar overflow hidden en body y root
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -28,10 +30,16 @@ export default function DemoLayout() {
     <DemoProvider>
       <div className="flex flex-col h-screen bg-gray-50" style={{ height: '100dvh' }}>
         {/* iOS Status Bar - Gradiente moderno */}
-        <div className="ios-status-bar bg-gradient-to-r from-blue-600 to-blue-700 md:hidden flex-shrink-0" />
+        <div
+          className="ios-status-bar md:hidden flex-shrink-0"
+          style={{ background: `linear-gradient(to right, ${branding.primaryColor}, ${branding.secondaryColor || branding.primaryColor})` }}
+        />
 
         {/* Demo Mode Banner */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-sm z-50 flex-shrink-0 md:ml-64">
+        <div
+          className="text-white shadow-sm z-50 flex-shrink-0 md:ml-64"
+          style={{ background: `linear-gradient(to right, ${branding.primaryColor}, ${branding.secondaryColor || branding.primaryColor})` }}
+        >
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2">
             <div className="flex items-center justify-center">
               <div className="flex items-center gap-2">
@@ -39,7 +47,7 @@ export default function DemoLayout() {
                   DEMO
                 </div>
                 <p className="text-xs sm:text-sm">
-                  Explorando Cobrify
+                  Explorando {branding.companyName}
                 </p>
               </div>
             </div>
