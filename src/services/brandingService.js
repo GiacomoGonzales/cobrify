@@ -197,16 +197,34 @@ export async function getResellerByHostname(hostname) {
   if (!hostname) return null
 
   // Ignorar localhost y dominios de desarrollo
-  if (hostname.includes('localhost') || hostname.includes('127.0.0.1') || hostname.includes('vercel.app')) {
+  const ignoredDomains = [
+    'localhost',
+    '127.0.0.1',
+    'vercel.app',
+    'firebaseapp.com',
+    'web.app',
+    'cobrifyperu.com',
+    'cobrify.com'
+  ]
+
+  if (ignoredDomains.some(domain => hostname.includes(domain))) {
+    console.log('ℹ️ Ignored domain:', hostname)
     return null
   }
 
   try {
-    // Buscar reseller por customDomain
-    console.log('🔍 Searching reseller by custom domain:', hostname)
+    // Normalizar hostname: quitar www. si existe y convertir a minúsculas
+    let normalizedHostname = hostname.toLowerCase()
+    if (normalizedHostname.startsWith('www.')) {
+      normalizedHostname = normalizedHostname.substring(4)
+    }
+
+    console.log('🔍 Searching reseller by custom domain:', normalizedHostname, '(original:', hostname, ')')
+
+    // Buscar reseller por customDomain (sin www)
     const q = query(
       collection(db, 'resellers'),
-      where('customDomain', '==', hostname)
+      where('customDomain', '==', normalizedHostname)
     )
     const snapshot = await getDocs(q)
 
@@ -230,7 +248,7 @@ export async function getResellerByHostname(hostname) {
       }
     }
 
-    console.log('⚠️ No reseller found for hostname:', hostname)
+    console.log('⚠️ No reseller found for hostname:', normalizedHostname)
     return null
   } catch (error) {
     console.error('Error getting reseller by hostname:', error)
