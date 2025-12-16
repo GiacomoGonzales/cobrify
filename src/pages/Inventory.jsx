@@ -160,9 +160,21 @@ export default function Inventory() {
   }
 
   const loadIngredients = async () => {
-    if (!user?.uid) return
+    if (!user?.uid && !isDemoMode) return
 
     try {
+      // MODO DEMO: Usar ingredientes de ejemplo
+      if (isDemoMode) {
+        setIngredients([
+          { id: 'ins1', name: 'Crema Hidratante Facial', category: 'Belleza', purchaseUnit: 'unidades', currentStock: 24, minimumStock: 10, averageCost: 45.00 },
+          { id: 'ins2', name: 'Aceite Esencial Lavanda', category: 'Belleza', purchaseUnit: 'unidades', currentStock: 18, minimumStock: 5, averageCost: 28.00 },
+          { id: 'ins3', name: 'Mascarilla de Arcilla', category: 'Belleza', purchaseUnit: 'unidades', currentStock: 15, minimumStock: 8, averageCost: 22.00 },
+          { id: 'ins4', name: 'Toallas Desechables', category: 'Suministros', purchaseUnit: 'cajas', currentStock: 8, minimumStock: 3, averageCost: 25.00 },
+          { id: 'ins5', name: 'Guantes de Látex', category: 'Suministros', purchaseUnit: 'cajas', currentStock: 12, minimumStock: 5, averageCost: 18.00 },
+        ])
+        return
+      }
+
       const result = await getIngredients(getBusinessId())
       if (result.success) {
         setIngredients(result.data || [])
