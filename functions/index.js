@@ -4063,3 +4063,174 @@ export { onProductStockChange } from './notifications/onStockLow.js'
 
 // Import and re-export migration function
 export { migratePurchasesHTTP } from './migratePurchases.js'
+
+// ========================================
+// DYNAMIC META TAGS FOR SOCIAL MEDIA
+// ========================================
+
+/**
+ * User agents de bots de redes sociales
+ */
+const SOCIAL_BOT_USER_AGENTS = [
+  'facebookexternalhit',
+  'Facebot',
+  'LinkedInBot',
+  'Twitterbot',
+  'WhatsApp',
+  'TelegramBot',
+  'Slackbot',
+  'Discordbot',
+  'Pinterest',
+  'Googlebot',
+  'bingbot',
+  'Applebot'
+]
+
+/**
+ * Detecta si el request viene de un bot de redes sociales
+ */
+function isSocialBot(userAgent) {
+  if (!userAgent) return false
+  const ua = userAgent.toLowerCase()
+  return SOCIAL_BOT_USER_AGENTS.some(bot => ua.includes(bot.toLowerCase()))
+}
+
+/**
+ * Genera HTML con meta tags dinámicas para un reseller
+ */
+function generateMetaTagsHTML(reseller, domain) {
+  // Los datos de branding están en reseller.branding
+  const branding = reseller.branding || {}
+  const brandName = branding.companyName || reseller.companyName || 'Sistema de Facturación'
+  const description = branding.description || `${brandName} - Sistema de facturación electrónica SUNAT para negocios en Perú`
+  const logoUrl = branding.logoUrl || 'https://cobrifyperu.com/logo.png'
+  const socialImageUrl = branding.socialImageUrl || branding.logoUrl || 'https://cobrifyperu.com/socialmedia.jpg'
+  const themeColor = branding.primaryColor || '#2563eb'
+  const url = `https://${domain}`
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary Meta Tags -->
+  <title>${brandName} - Sistema de Facturación Electrónica</title>
+  <meta name="title" content="${brandName} - Sistema de Facturación Electrónica" />
+  <meta name="description" content="${description}" />
+  <meta name="theme-color" content="${themeColor}" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="${logoUrl}" />
+  <link rel="apple-touch-icon" href="${logoUrl}" />
+
+  <!-- Open Graph / Facebook / WhatsApp -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:site_name" content="${brandName}" />
+  <meta property="og:title" content="${brandName} - Sistema de Facturación Electrónica" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${socialImageUrl}" />
+  <meta property="og:image:url" content="${socialImageUrl}" />
+  <meta property="og:image:secure_url" content="${socialImageUrl}" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="${brandName}" />
+  <meta property="og:locale" content="es_PE" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="${url}" />
+  <meta name="twitter:title" content="${brandName} - Sistema de Facturación Electrónica" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${socialImageUrl}" />
+  <meta name="twitter:image:alt" content="${brandName}" />
+</head>
+<body>
+  <script>window.location.href = "${url}";</script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=${url}">
+    <p>Redirigiendo a <a href="${url}">${brandName}</a>...</p>
+  </noscript>
+</body>
+</html>`
+}
+
+/**
+ * Cloud Function que sirve meta tags dinámicas para dominios de resellers
+ * Solo responde a bots de redes sociales, usuarios normales reciben redirect
+ */
+export const socialMetaTags = onRequest(
+  {
+    region: 'us-central1',
+    cors: true,
+    maxInstances: 10,
+    invoker: 'public'
+  },
+  async (req, res) => {
+    try {
+      const userAgent = req.headers['user-agent'] || ''
+      const host = req.headers['x-forwarded-host'] || req.headers.host || ''
+      const domain = host.toLowerCase().replace(/:\d+$/, '') // Remover puerto si existe
+
+      console.log(`📱 [SocialMeta] Request from domain: ${domain}, UA: ${userAgent.substring(0, 50)}...`)
+
+      // Dominios que NO deben ser tratados como reseller
+      const ignoredDomains = [
+        'localhost',
+        'vercel.app',
+        'firebaseapp.com',
+        'web.app',
+        'cobrifyperu.com',
+        'cobrify.com',
+        'cloudfunctions.net'
+      ]
+
+      const isIgnoredDomain = ignoredDomains.some(d => domain.includes(d))
+
+      if (isIgnoredDomain) {
+        // Para dominios de Cobrify, servir archivo estático normal
+        console.log(`📱 [SocialMeta] Ignored domain, redirecting to app`)
+        res.redirect(302, '/')
+        return
+      }
+
+      // Buscar reseller por customDomain
+      const resellersSnapshot = await db.collection('resellers')
+        .where('customDomain', '==', domain)
+        .limit(1)
+        .get()
+
+      if (resellersSnapshot.empty) {
+        console.log(`📱 [SocialMeta] No reseller found for domain: ${domain}`)
+        // Si no hay reseller, redirigir al index normal
+        res.redirect(302, '/')
+        return
+      }
+
+      const resellerDoc = resellersSnapshot.docs[0]
+      const reseller = resellerDoc.data()
+
+      console.log(`📱 [SocialMeta] Found reseller: ${reseller.brandName || reseller.businessName}`)
+
+      // Solo servir meta tags a bots de redes sociales
+      if (isSocialBot(userAgent)) {
+        console.log(`📱 [SocialMeta] Social bot detected, serving meta tags`)
+        const html = generateMetaTagsHTML(reseller, domain)
+        res.set('Content-Type', 'text/html; charset=utf-8')
+        res.set('Cache-Control', 'public, max-age=300') // Cache por 5 minutos
+        res.status(200).send(html)
+        return
+      }
+
+      // Usuarios normales: dejar que Firebase Hosting sirva la app
+      console.log(`📱 [SocialMeta] Normal user, redirecting to app`)
+      res.redirect(302, '/')
+
+    } catch (error) {
+      console.error('❌ [SocialMeta] Error:', error)
+      res.redirect(302, '/')
+    }
+  }
+)

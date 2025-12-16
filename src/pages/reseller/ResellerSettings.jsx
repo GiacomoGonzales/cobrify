@@ -31,7 +31,9 @@ import {
   Copy,
   ExternalLink,
   Globe,
-  Link2
+  Link2,
+  Share2,
+  FileText
 } from 'lucide-react'
 
 export default function ResellerSettings() {
@@ -41,9 +43,11 @@ export default function ResellerSettings() {
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState('empresa') // 'empresa' | 'branding'
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingSocialImage, setUploadingSocialImage] = useState(false)
   const [copied, setCopied] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const fileInputRef = useRef(null)
+  const socialImageInputRef = useRef(null)
 
   // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
@@ -59,9 +63,11 @@ export default function ResellerSettings() {
   const [brandingData, setBrandingData] = useState({
     companyName: resellerData?.branding?.companyName || resellerData?.companyName || '',
     logoUrl: resellerData?.branding?.logoUrl || null,
+    socialImageUrl: resellerData?.branding?.socialImageUrl || null,
     primaryColor: resellerData?.branding?.primaryColor || '#10B981',
     secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
     whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
+    description: resellerData?.branding?.description || '',
   })
 
   // Sincronizar formData y brandingData cuando resellerData se cargue
@@ -77,9 +83,11 @@ export default function ResellerSettings() {
       setBrandingData({
         companyName: resellerData.branding?.companyName || resellerData.companyName || '',
         logoUrl: resellerData.branding?.logoUrl || null,
+        socialImageUrl: resellerData.branding?.socialImageUrl || null,
         primaryColor: resellerData.branding?.primaryColor || '#10B981',
         secondaryColor: resellerData.branding?.secondaryColor || '#059669',
         whatsapp: resellerData.branding?.whatsapp || resellerData.phone || '',
+        description: resellerData.branding?.description || '',
       })
       setDataLoaded(true)
     }
@@ -147,6 +155,41 @@ export default function ResellerSettings() {
 
   function removeLogo() {
     setBrandingData(prev => ({ ...prev, logoUrl: null }))
+    setSaved(false)
+  }
+
+  async function handleSocialImageUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo de archivo
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona una imagen')
+      return
+    }
+
+    // Validar tamaño (máx 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen debe ser menor a 2MB')
+      return
+    }
+
+    setUploadingSocialImage(true)
+    try {
+      // Usar la misma función pero con sufijo diferente para distinguir
+      const socialImageUrl = await uploadResellerLogo(user.uid, file, 'social')
+      setBrandingData(prev => ({ ...prev, socialImageUrl }))
+      setSaved(false)
+    } catch (error) {
+      console.error('Error uploading social image:', error)
+      alert('Error al subir la imagen')
+    } finally {
+      setUploadingSocialImage(false)
+    }
+  }
+
+  function removeSocialImage() {
+    setBrandingData(prev => ({ ...prev, socialImageUrl: null }))
     setSaved(false)
   }
 
@@ -587,6 +630,85 @@ export default function ResellerSettings() {
                           placeholder="Mi Sistema de Facturación"
                           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                         />
+                      </div>
+                    </div>
+
+                    {/* Descripción para Redes Sociales */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <FileText className="w-4 h-4 inline mr-1" />
+                        Descripción para Redes Sociales
+                      </label>
+                      <textarea
+                        name="description"
+                        value={brandingData.description}
+                        onChange={handleBrandingChange}
+                        placeholder="Sistema de facturación electrónica para tu negocio..."
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Aparecerá cuando compartas tu link en WhatsApp, Facebook, etc.</p>
+                    </div>
+
+                    {/* Imagen para Redes Sociales */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <Share2 className="w-4 h-4 inline mr-1" />
+                        Imagen para Redes Sociales
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">Recomendado: 1200x630px (aparece al compartir tu link)</p>
+
+                      <div className="flex items-start gap-3">
+                        {/* Social Image Preview */}
+                        <div className="relative flex-shrink-0">
+                          {brandingData.socialImageUrl ? (
+                            <div className="relative">
+                              <img
+                                src={brandingData.socialImageUrl}
+                                alt="Social Preview"
+                                className="w-32 h-[68px] rounded-lg object-cover border-2 border-gray-200"
+                              />
+                              <button
+                                onClick={removeSocialImage}
+                                className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-32 h-[68px] rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                              <Share2 className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Upload Button */}
+                        <div>
+                          <input
+                            ref={socialImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleSocialImageUpload}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => socialImageInputRef.current?.click()}
+                            disabled={uploadingSocialImage}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+                          >
+                            {uploadingSocialImage ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Subiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-3.5 h-3.5" />
+                                Subir
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
