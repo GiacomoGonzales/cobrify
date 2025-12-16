@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download } from 'lucide-react'
+import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -116,6 +117,8 @@ export default function Settings() {
   const [catalogColor, setCatalogColor] = useState('#10B981')
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
+  const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
+  const qrCanvasRef = useRef(null)
 
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
@@ -179,6 +182,27 @@ export default function Settings() {
   useEffect(() => {
     loadSettings()
   }, [user])
+
+  // Generar QR del catálogo cuando cambie el slug
+  useEffect(() => {
+    if (catalogSlug && catalogEnabled) {
+      const catalogUrl = `${window.location.origin}/catalogo/${catalogSlug}`
+      QRCode.toDataURL(catalogUrl, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      }).then(url => {
+        setCatalogQrDataUrl(url)
+      }).catch(err => {
+        console.error('Error generating QR:', err)
+      })
+    } else {
+      setCatalogQrDataUrl('')
+    }
+  }, [catalogSlug, catalogEnabled])
 
   const loadSettings = async () => {
     if (!user?.uid) return
@@ -2206,6 +2230,43 @@ export default function Settings() {
                           <Copy className="w-4 h-4" />
                           Copiar
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Código QR del catálogo */}
+                  {catalogSlug && catalogQrDataUrl && (
+                    <div className="p-4 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <QrCode className="w-5 h-5 text-emerald-600" />
+                        <h4 className="font-medium text-gray-900">Código QR de tu Catálogo</h4>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="bg-white p-3 rounded-xl shadow-sm">
+                          <img
+                            src={catalogQrDataUrl}
+                            alt="QR del catálogo"
+                            className="w-40 h-40"
+                          />
+                        </div>
+                        <div className="flex-1 text-center sm:text-left">
+                          <p className="text-sm text-gray-600 mb-3">
+                            Descarga este código QR para compartirlo en tu negocio, tarjetas de presentación, o redes sociales.
+                          </p>
+                          <button
+                            onClick={() => {
+                              const link = document.createElement('a')
+                              link.download = `catalogo-${catalogSlug}-qr.png`
+                              link.href = catalogQrDataUrl
+                              link.click()
+                              toast.success('QR descargado exitosamente')
+                            }}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                          >
+                            <Download className="w-4 h-4" />
+                            Descargar QR
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
