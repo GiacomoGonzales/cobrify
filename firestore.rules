@@ -201,9 +201,9 @@ service cloud.firestore {
         // Admins pueden leer todos los productos
         allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
-        // Lectura pública para catálogo - solo productos marcados como visibles en catálogo
-        allow read: if resource.data.catalogVisible == true &&
-                       get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
+        // Lectura pública para catálogo - permitir queries cuando el negocio tiene catálogo habilitado
+        // La query debe filtrar por catalogVisible==true en el cliente
+        allow read: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
       }
 
       // Subcollection: Categories (Categorías)
