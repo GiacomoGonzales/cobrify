@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { Bell, Search, User, LogOut, Menu, FileText, Users, Package, X } from 'lucide-react'
+import { Bell, Search, User, LogOut, Menu, FileText, Users, Package, X, Download } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useStore } from '@/stores/useStore'
+import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
@@ -13,6 +14,7 @@ function Navbar() {
   const { user, logout, subscription, isDemoMode, demoData } = useAppContext()
   const { toggleMobileMenu } = useStore()
   const navigate = useAppNavigate()
+  const { isInstallable, promptInstall } = usePWAInstall()
 
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState({ invoices: [], customers: [], products: [] })
@@ -335,6 +337,18 @@ function Navbar() {
         >
           <Search className="w-5 h-5 text-gray-600" />
         </button>
+
+        {/* Install PWA Button - Solo visible cuando se puede instalar */}
+        {isInstallable && (
+          <button
+            onClick={promptInstall}
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+            title="Instalar aplicación"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Instalar App</span>
+          </button>
+        )}
 
         {/* Notifications */}
         <div className="relative" ref={notificationRef}>
