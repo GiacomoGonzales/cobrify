@@ -4,12 +4,21 @@
       "source": "/",
       "has": [
         {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest).*"
+          "type": "host",
+          "value": "factuvip.com"
         }
       ],
-      "destination": "/api/og"
+      "destination": "/resellers/factuvip/index.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.factuvip.com"
+        }
+      ],
+      "destination": "/resellers/factuvip/index.html"
     },
     {
       "source": "/(.*)",
