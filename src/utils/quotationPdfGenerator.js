@@ -636,6 +636,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   const igvExempt = companySettings?.taxConfig?.igvExempt || false
   const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
+  const hideIgv = quotation.hideIgv || false
 
   // --- TOTALES (derecha) ---
   const totalsRowHeight = 15
@@ -643,38 +644,55 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(0.5)
-  doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * 3 + 6)
 
-  // Fila 1: OP. GRAVADA
-  doc.setFillColor(250, 250, 250)
-  doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-  doc.setDrawColor(200, 200, 200)
-  doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...BLACK)
-  doc.text(labelGravada, totalsX + 5, footerY + 10)
-  doc.text('S/ ' + (quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-  footerY += totalsRowHeight
+  if (hideIgv) {
+    // Solo mostrar TOTAL cuando hideIgv está activo
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight + 6)
 
-  // Fila 2: IGV
-  doc.setFillColor(255, 255, 255)
-  doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-  doc.setDrawColor(200, 200, 200)
-  doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-  doc.text('IGV (18%)', totalsX + 5, footerY + 10)
-  doc.text('S/ ' + (quotation.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-  footerY += totalsRowHeight
+    // Fila única: TOTAL
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('TOTAL', totalsX + 5, footerY + 12)
+    doc.setFontSize(11)
+    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 12, { align: 'right' })
+  } else {
+    // Mostrar desglose completo: OP. GRAVADA, IGV, TOTAL
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * 3 + 6)
 
-  // Fila 3: TOTAL
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.text('TOTAL', totalsX + 5, footerY + 12)
-  doc.setFontSize(11)
-  doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 12, { align: 'right' })
+    // Fila 1: OP. GRAVADA
+    doc.setFillColor(250, 250, 250)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...BLACK)
+    doc.text(labelGravada, totalsX + 5, footerY + 10)
+    doc.text('S/ ' + (quotation.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    footerY += totalsRowHeight
+
+    // Fila 2: IGV
+    doc.setFillColor(255, 255, 255)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.text('IGV (18%)', totalsX + 5, footerY + 10)
+    doc.text('S/ ' + (quotation.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    footerY += totalsRowHeight
+
+    // Fila 3: TOTAL
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('TOTAL', totalsX + 5, footerY + 12)
+    doc.setFontSize(11)
+    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 12, { align: 'right' })
+  }
 
   // --- CUENTAS BANCARIAS (izquierda) ---
   doc.setTextColor(...BLACK)
