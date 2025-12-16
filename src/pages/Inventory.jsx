@@ -418,24 +418,26 @@ export default function Inventory() {
 
   // Combinar productos e ingredientes en modo retail
   const allItems = React.useMemo(() => {
-    let items = []
+    const productItems = products.map(p => ({ ...p, itemType: 'product' }))
+    const ingredientItems = isRetailMode ? ingredients.map(i => ({
+      ...i,
+      itemType: 'ingredient',
+      code: i.code || '-',
+      price: i.averageCost || 0,
+      stock: i.currentStock || 0,
+      category: i.category
+    })) : []
 
-    if (filterType === 'all' || filterType === 'products') {
-      items = [...items, ...products.map(p => ({ ...p, itemType: 'product' }))]
+    // Filtrar según el tipo seleccionado
+    switch (filterType) {
+      case 'products':
+        return productItems
+      case 'ingredients':
+        return ingredientItems
+      case 'all':
+      default:
+        return [...productItems, ...ingredientItems]
     }
-
-    if (isRetailMode && (filterType === 'all' || filterType === 'ingredients')) {
-      items = [...items, ...ingredients.map(i => ({
-        ...i,
-        itemType: 'ingredient',
-        code: i.code || '-',
-        price: i.averageCost || 0,
-        stock: i.currentStock || 0,
-        category: i.category
-      }))]
-    }
-
-    return items
   }, [products, ingredients, filterType, isRetailMode])
 
   // Filtrar y ordenar items (optimizado con useMemo)
