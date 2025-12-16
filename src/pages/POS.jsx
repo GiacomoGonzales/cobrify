@@ -188,8 +188,8 @@ export default function POS() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
 
   // Pagination for products
-  const [visibleProductsCount, setVisibleProductsCount] = useState(6)
-  const PRODUCTS_PER_PAGE = 6
+  const [visibleProductsCount, setVisibleProductsCount] = useState(12)
+  const PRODUCTS_PER_PAGE = 12
 
   // Pagos múltiples - lista simple y vertical
   const [payments, setPayments] = useState([{ method: '', amount: '' }])
