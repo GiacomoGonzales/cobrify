@@ -184,6 +184,65 @@ function generateDocumentLine(doc) {
   const customerIdType = customer?.identityType || '1'
   const customerIdNumber = customer?.identityNumber || '00000000'
 
+  // Generar TaxSubtotals según tipos de operación
+  let taxSubtotals = ''
+
+  // TaxSubtotal para operaciones gravadas (IGV)
+  if (taxableAmount > 0 || (igv > 0)) {
+    taxSubtotals += `<cac:TaxSubtotal>` +
+      `<cbc:TaxAmount currencyID="${currency}">${formatAmount(igv)}</cbc:TaxAmount>` +
+      `<cac:TaxCategory>` +
+      `<cac:TaxScheme>` +
+      `<cbc:ID>1000</cbc:ID>` +
+      `<cbc:Name>IGV</cbc:Name>` +
+      `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
+      `</cac:TaxScheme>` +
+      `</cac:TaxCategory>` +
+      `</cac:TaxSubtotal>`
+  }
+
+  // TaxSubtotal para operaciones exoneradas
+  if (exemptAmount > 0) {
+    taxSubtotals += `<cac:TaxSubtotal>` +
+      `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +
+      `<cac:TaxCategory>` +
+      `<cac:TaxScheme>` +
+      `<cbc:ID>9997</cbc:ID>` +
+      `<cbc:Name>EXO</cbc:Name>` +
+      `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
+      `</cac:TaxScheme>` +
+      `</cac:TaxCategory>` +
+      `</cac:TaxSubtotal>`
+  }
+
+  // TaxSubtotal para operaciones inafectas
+  if (freeAmount > 0) {
+    taxSubtotals += `<cac:TaxSubtotal>` +
+      `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +
+      `<cac:TaxCategory>` +
+      `<cac:TaxScheme>` +
+      `<cbc:ID>9998</cbc:ID>` +
+      `<cbc:Name>INA</cbc:Name>` +
+      `<cbc:TaxTypeCode>FRE</cbc:TaxTypeCode>` +
+      `</cac:TaxScheme>` +
+      `</cac:TaxCategory>` +
+      `</cac:TaxSubtotal>`
+  }
+
+  // Si no hay ningún TaxSubtotal, agregar uno de IGV con 0
+  if (!taxSubtotals) {
+    taxSubtotals = `<cac:TaxSubtotal>` +
+      `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +
+      `<cac:TaxCategory>` +
+      `<cac:TaxScheme>` +
+      `<cbc:ID>1000</cbc:ID>` +
+      `<cbc:Name>IGV</cbc:Name>` +
+      `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
+      `</cac:TaxScheme>` +
+      `</cac:TaxCategory>` +
+      `</cac:TaxSubtotal>`
+  }
+
   return `<sac:SummaryDocumentsLine>` +
     `<cbc:LineID>${lineId}</cbc:LineID>` +
     `<cbc:DocumentTypeCode>${documentType}</cbc:DocumentTypeCode>` +
@@ -199,16 +258,7 @@ function generateDocumentLine(doc) {
     billingPayments +
     `<cac:TaxTotal>` +
     `<cbc:TaxAmount currencyID="${currency}">${formatAmount(igv)}</cbc:TaxAmount>` +
-    `<cac:TaxSubtotal>` +
-    `<cbc:TaxAmount currencyID="${currency}">${formatAmount(igv)}</cbc:TaxAmount>` +
-    `<cac:TaxCategory>` +
-    `<cac:TaxScheme>` +
-    `<cbc:ID>1000</cbc:ID>` +
-    `<cbc:Name>IGV</cbc:Name>` +
-    `<cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>` +
-    `</cac:TaxScheme>` +
-    `</cac:TaxCategory>` +
-    `</cac:TaxSubtotal>` +
+    taxSubtotals +
     `</cac:TaxTotal>` +
     `</sac:SummaryDocumentsLine>`
 }
