@@ -16,7 +16,7 @@ import { getIngredients } from '@/services/ingredientService'
 import { getProducts } from '@/services/firestoreService'
 
 export default function Recipes() {
-  const { user, getBusinessId, businessMode } = useAppContext()
+  const { user, getBusinessId, businessMode, isDemoMode } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
 
@@ -89,18 +89,18 @@ export default function Recipes() {
   }, [user])
 
   const loadData = async () => {
-    if (!user?.uid && !demoContext) return
+    if (!user?.uid && !demoContext && !isDemoMode) return
 
     setIsLoading(true)
     try {
       // En modo demo, usar datos del contexto de demo o fallback
-      if (demoContext) {
-        // Si hay datos del contexto de demo, usarlos
-        if (demoContext.demoData?.recipes) {
+      if (demoContext || isDemoMode) {
+        // Si hay datos del contexto de demo (DemoRestaurant), usarlos
+        if (demoContext?.demoData?.recipes) {
           setRecipes(demoContext.demoData.recipes)
           setIngredients(demoContext.demoData.ingredients || [])
           setProducts(demoContext.demoData.products || [])
-        } else if (isRestaurantMode) {
+        } else if (isRestaurantMode || demoContext) {
           // Demo Restaurant: Recetas de cocina
           const restaurantRecipes = [
             { id: 'rec1', productId: '1', productName: 'Ceviche de Pescado', portions: 1, totalCost: 14.25, preparationTime: 20, instructions: '1. Cortar el pescado en cubos\n2. Agregar limón y dejar reposar\n3. Añadir cebolla, ají y sal', ingredients: [
