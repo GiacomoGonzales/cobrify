@@ -36,6 +36,10 @@ const generateDemoData = () => {
         unit: 'UNIDAD',
         category: 'Electrónica',
         hasVariants: false,
+        warehouseStocks: [
+          { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 10 },
+          { warehouseId: '2', warehouseName: 'Almacén Secundario', stock: 5 },
+        ],
       },
       {
         id: '2',
@@ -48,6 +52,10 @@ const generateDemoData = () => {
         unit: 'UNIDAD',
         category: 'Electrónica',
         hasVariants: false,
+        warehouseStocks: [
+          { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 30 },
+          { warehouseId: '2', warehouseName: 'Almacén Secundario', stock: 20 },
+        ],
       },
       {
         id: '3',
@@ -60,6 +68,10 @@ const generateDemoData = () => {
         unit: 'UNIDAD',
         category: 'Electrónica',
         hasVariants: false,
+        warehouseStocks: [
+          { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 15 },
+          { warehouseId: '2', warehouseName: 'Almacén Secundario', stock: 10 },
+        ],
       },
       {
         id: '4',
@@ -72,6 +84,10 @@ const generateDemoData = () => {
         unit: 'UNIDAD',
         category: 'Electrónica',
         hasVariants: false,
+        warehouseStocks: [
+          { warehouseId: '1', warehouseName: 'Almacén Principal', stock: 8 },
+          { warehouseId: '2', warehouseName: 'Almacén Secundario', stock: 4 },
+        ],
       },
       // Productos de spa/belleza
       {
@@ -85,6 +101,9 @@ const generateDemoData = () => {
         unit: 'UNIDAD',
         category: 'Belleza',
         hasVariants: false,
+        warehouseStocks: [
+          { warehouseId: '3', warehouseName: 'Almacén de Belleza', stock: 24 },
+        ],
       },
       {
         id: '6',
@@ -97,6 +116,9 @@ const generateDemoData = () => {
         unit: 'UNIDAD',
         category: 'Belleza',
         hasVariants: false,
+        warehouseStocks: [
+          { warehouseId: '3', warehouseName: 'Almacén de Belleza', stock: 18 },
+        ],
       },
       // Servicios
       {
