@@ -179,6 +179,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Script para limpiar título si es dominio de reseller (antes de React) -->
+    <script>
+      (function() {
+        var host = window.location.hostname.toLowerCase();
+        var ignoredDomains = ['localhost', 'vercel.app', 'firebaseapp.com', 'web.app', 'cobrifyperu.com', 'cobrify.com'];
+        var isResellerDomain = !ignoredDomains.some(function(d) { return host.includes(d); });
+        if (isResellerDomain) {
+          // Limpiar título temporalmente para evitar flash de "Cobrify"
+          document.title = 'Cargando...';
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

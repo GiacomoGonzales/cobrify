@@ -20,6 +20,33 @@ function isPWA() {
 }
 
 /**
+ * Actualiza el título de la página y el favicon dinámicamente
+ */
+function updatePageBranding(brandName, logoUrl, primaryColor) {
+  // Actualizar título
+  if (brandName) {
+    document.title = `${brandName} - Sistema de Facturación Electrónica`
+  }
+
+  // Actualizar favicon si hay logo personalizado
+  if (logoUrl) {
+    const existingFavicon = document.querySelector('link[rel="icon"]')
+    const existingAppleIcon = document.querySelector('link[rel="apple-touch-icon"]')
+    const existingShortcut = document.querySelector('link[rel="shortcut icon"]')
+
+    if (existingFavicon) existingFavicon.href = logoUrl
+    if (existingAppleIcon) existingAppleIcon.href = logoUrl
+    if (existingShortcut) existingShortcut.href = logoUrl
+  }
+
+  // Actualizar theme-color
+  if (primaryColor) {
+    const themeColor = document.querySelector('meta[name="theme-color"]')
+    if (themeColor) themeColor.content = primaryColor
+  }
+}
+
+/**
  * LandingRouter - Detecta si el dominio actual es de un reseller
  * y muestra la landing personalizada del reseller o la landing de Cobrify
  *
@@ -76,6 +103,12 @@ export default function LandingRouter() {
               }
             }
             console.log('✅ LandingRouter: Preview reseller loaded:', resellerData.branding?.companyName)
+            // Actualizar título y favicon inmediatamente
+            updatePageBranding(
+              resellerData.branding.companyName,
+              resellerData.branding.logoUrl,
+              resellerData.branding.primaryColor
+            )
             setReseller(resellerData)
             setLoading(false)
             return
@@ -92,6 +125,12 @@ export default function LandingRouter() {
 
         if (resellerData) {
           console.log('✅ LandingRouter: Found reseller:', resellerData.branding?.companyName)
+          // Actualizar título y favicon inmediatamente
+          updatePageBranding(
+            resellerData.branding?.companyName,
+            resellerData.branding?.logoUrl,
+            resellerData.branding?.primaryColor
+          )
           setReseller(resellerData)
         } else {
           console.log('ℹ️ LandingRouter: No reseller found, showing default landing')
@@ -106,13 +145,12 @@ export default function LandingRouter() {
     detectReseller()
   }, [searchParams])
 
-  // Mostrar loading mientras detectamos
+  // Mostrar loading mientras detectamos (neutro para no mostrar branding de Cobrify)
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-600 to-primary-800">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-white animate-spin mx-auto mb-4" />
-          <p className="text-white/80">Cargando...</p>
+          <Loader2 className="w-10 h-10 text-gray-400 animate-spin mx-auto" />
         </div>
       </div>
     )
