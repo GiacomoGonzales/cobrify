@@ -473,6 +473,15 @@ export default function POS() {
       const settingsResult = await getCompanySettings(businessId)
       if (settingsResult.success && settingsResult.data) {
         setCompanySettings(settingsResult.data)
+
+        // Establecer tipo de documento por defecto si está configurado y no hay borrador
+        const draftKey = `pos_draft_${businessId}`
+        const savedDraft = localStorage.getItem(draftKey)
+        const hasDraft = savedDraft && JSON.parse(savedDraft)?.cart?.length > 0
+
+        if (!hasDraft && settingsResult.data.defaultDocumentType) {
+          setDocumentType(settingsResult.data.defaultDocumentType)
+        }
       }
 
       // Cargar configuración de impuestos (taxConfig) desde el documento del business
@@ -890,7 +899,7 @@ export default function POS() {
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
-    setDocumentType('boleta')
+    setDocumentType(companySettings?.defaultDocumentType || 'boleta')
     setOrderType('takeaway')
     setCustomerData({
       documentType: ID_TYPES.DNI,

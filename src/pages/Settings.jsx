@@ -85,6 +85,7 @@ export default function Settings() {
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
+  const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
 
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
@@ -288,6 +289,7 @@ export default function Settings() {
         setAllowNegativeStock(businessData.allowNegativeStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
+        setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
@@ -1709,6 +1711,65 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  {/* Tipo de documento por defecto en POS */}
+                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900">
+                        Tipo de comprobante por defecto en POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Selecciona qué tipo de comprobante aparecerá seleccionado por defecto al abrir el Punto de Venta.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <label className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition-colors ${
+                          defaultDocumentType === 'boleta'
+                            ? 'border-primary-500 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="defaultDocumentType"
+                            value="boleta"
+                            checked={defaultDocumentType === 'boleta'}
+                            onChange={(e) => setDefaultDocumentType(e.target.value)}
+                            className="sr-only"
+                          />
+                          <span className="text-sm font-medium">Boleta</span>
+                        </label>
+                        <label className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition-colors ${
+                          defaultDocumentType === 'factura'
+                            ? 'border-primary-500 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="defaultDocumentType"
+                            value="factura"
+                            checked={defaultDocumentType === 'factura'}
+                            onChange={(e) => setDefaultDocumentType(e.target.value)}
+                            className="sr-only"
+                          />
+                          <span className="text-sm font-medium">Factura</span>
+                        </label>
+                        <label className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition-colors ${
+                          defaultDocumentType === 'nota_venta'
+                            ? 'border-primary-500 bg-primary-50 text-primary-700'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="defaultDocumentType"
+                            value="nota_venta"
+                            checked={defaultDocumentType === 'nota_venta'}
+                            onChange={(e) => setDefaultDocumentType(e.target.value)}
+                            className="sr-only"
+                          />
+                          <span className="text-sm font-medium">Nota de Venta</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
                       type="checkbox"
@@ -1971,6 +2032,7 @@ export default function Settings() {
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
+                      defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
                       allowDeleteInvoices: allowDeleteInvoices,
