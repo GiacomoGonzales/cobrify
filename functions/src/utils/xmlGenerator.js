@@ -392,14 +392,23 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // También guardamos los precios ajustados para evitar errores 4287/4288
   const lineExtensions = []
   const lineIGVs = []
+  const lineTaxAffectations = []     // Tipo de afectación de cada línea
   const linePricesWithIGV = []      // Precio unitario CON IGV (ajustado por descuento)
   const linePricesWithoutIGV = []   // Precio unitario SIN IGV (ajustado por descuento)
   let sumLineExtension = 0
   let sumLineIGV = 0
 
+  // Totales por tipo de afectación (para múltiples TaxSubtotals)
+  let sumGravadas = 0      // Operaciones gravadas (taxAffectation = '10')
+  let sumExoneradas = 0    // Operaciones exoneradas (taxAffectation = '20')
+  let sumInafectas = 0     // Operaciones inafectas (taxAffectation = '30')
+  let sumIGVGravadas = 0   // IGV solo de operaciones gravadas
+
   invoiceData.items.forEach((item) => {
     const taxAffectation = item.taxAffectation || (igvExempt ? '20' : '10')
     const isGravado = taxAffectation === '10'
+    const isExonerado = taxAffectation === '20'
+    const isInafecto = taxAffectation === '30'
     const originalPriceWithIGV = item.unitPrice
 
     // Para calcular correctamente, trabajamos desde el total con IGV
@@ -427,17 +436,32 @@ export function generateInvoiceXML(invoiceData, businessData) {
       : adjustedPriceWithoutIGV
 
     lineExtensions.push(lineTotal)
+    lineTaxAffectations.push(taxAffectation)
     linePricesWithIGV.push(Math.round(adjustedPriceWithIGV * 1000000) / 1000000) // 6 decimales para precio
     linePricesWithoutIGV.push(Math.round(adjustedPriceWithoutIGV * 1000000) / 1000000) // 6 decimales para precio
     sumLineExtension += lineTotal
 
     lineIGVs.push(lineIGV)
     sumLineIGV += lineIGV
+
+    // Acumular por tipo de afectación
+    if (isGravado) {
+      sumGravadas += lineTotal
+      sumIGVGravadas += lineIGV
+    } else if (isExonerado) {
+      sumExoneradas += lineTotal
+    } else if (isInafecto) {
+      sumInafectas += lineTotal
+    }
   })
 
   // Redondear sumas finales
   sumLineExtension = Math.round(sumLineExtension * 100) / 100
   sumLineIGV = Math.round(sumLineIGV * 100) / 100
+  sumGravadas = Math.round(sumGravadas * 100) / 100
+  sumExoneradas = Math.round(sumExoneradas * 100) / 100
+  sumInafectas = Math.round(sumInafectas * 100) / 100
+  sumIGVGravadas = Math.round(sumIGVGravadas * 100) / 100
 
   // Los valores globales ahora coinciden exactamente con la suma de líneas
   const taxableAmount = sumLineExtension
@@ -456,44 +480,69 @@ export function generateInvoiceXML(invoiceData, businessData) {
   console.log(`   sumLineExtension (taxableAmount): ${sumLineExtension}`)
   console.log(`   sumLineIGV (igvAmount): ${sumLineIGV}`)
   console.log(`   totalAmount: ${totalAmount}`)
+  console.log(`   📊 Por tipo de afectación:`)
+  console.log(`      Gravadas (10): ${sumGravadas} | IGV: ${sumIGVGravadas}`)
+  console.log(`      Exoneradas (20): ${sumExoneradas}`)
+  console.log(`      Inafectas (30): ${sumInafectas}`)
 
   // === IMPUESTOS (IGV) ===
   // IMPORTANTE: TaxTotal DEBE ir ANTES de LegalMonetaryTotal según UBL 2.1
   // SIEMPRE usar los valores calculados para que cuadren con las líneas
+  // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
   const finalIgv = igvAmount
-  const finalTaxable = taxableAmount
+  const currency = invoiceData.currency || 'PEN'
 
   const taxTotal = root.ele('cac:TaxTotal')
-  taxTotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+  taxTotal.ele('cbc:TaxAmount', { 'currencyID': currency })
     .txt(finalIgv.toFixed(2))
 
-  const taxSubtotal = taxTotal.ele('cac:TaxSubtotal')
-  taxSubtotal.ele('cbc:TaxableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(finalTaxable.toFixed(2))
-  taxSubtotal.ele('cbc:TaxAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-    .txt(finalIgv.toFixed(2))
+  // Función helper para crear un TaxSubtotal
+  const createTaxSubtotal = (taxableAmt, taxAmt, categoryId, schemeId, schemeName, taxTypeCode) => {
+    const subtotal = taxTotal.ele('cac:TaxSubtotal')
+    subtotal.ele('cbc:TaxableAmount', { 'currencyID': currency })
+      .txt(taxableAmt.toFixed(2))
+    subtotal.ele('cbc:TaxAmount', { 'currencyID': currency })
+      .txt(taxAmt.toFixed(2))
 
-  const taxCategory = taxSubtotal.ele('cac:TaxCategory')
-  // Tax Category ID según si es exonerado o no:
-  // S = Standard rate (Gravado con IGV)
-  // E = Exempt from tax (Exonerado de IGV)
-  const taxCategoryIdGlobal = igvExempt ? 'E' : 'S'
-  taxCategory.ele('cbc:ID', {
-    'schemeID': 'UN/ECE 5305',
-    'schemeName': 'Tax Category Identifier',
-    'schemeAgencyName': 'United Nations Economic Commission for Europe'
-  }).txt(taxCategoryIdGlobal)
+    const category = subtotal.ele('cac:TaxCategory')
+    category.ele('cbc:ID', {
+      'schemeID': 'UN/ECE 5305',
+      'schemeName': 'Tax Category Identifier',
+      'schemeAgencyName': 'United Nations Economic Commission for Europe'
+    }).txt(categoryId)
 
-  const taxScheme = taxCategory.ele('cac:TaxScheme')
-  // Para operaciones exoneradas usar código 9997 (EXO), para gravadas usar 1000 (IGV)
-  const taxSchemeCode = igvExempt ? '9997' : '1000'
-  const taxSchemeName = igvExempt ? 'EXO' : 'IGV'
-  taxScheme.ele('cbc:ID', {
-    'schemeID': 'UN/ECE 5153',
-    'schemeAgencyID': '6'
-  }).txt(taxSchemeCode)
-  taxScheme.ele('cbc:Name').txt(taxSchemeName)
-  taxScheme.ele('cbc:TaxTypeCode').txt('VAT')
+    const scheme = category.ele('cac:TaxScheme')
+    scheme.ele('cbc:ID', {
+      'schemeID': 'UN/ECE 5153',
+      'schemeAgencyID': '6'
+    }).txt(schemeId)
+    scheme.ele('cbc:Name').txt(schemeName)
+    scheme.ele('cbc:TaxTypeCode').txt(taxTypeCode)
+  }
+
+  // Generar TaxSubtotal para operaciones GRAVADAS (si hay)
+  if (sumGravadas > 0) {
+    createTaxSubtotal(sumGravadas, sumIGVGravadas, 'S', '1000', 'IGV', 'VAT')
+  }
+
+  // Generar TaxSubtotal para operaciones EXONERADAS (si hay)
+  if (sumExoneradas > 0) {
+    createTaxSubtotal(sumExoneradas, 0, 'E', '9997', 'EXO', 'VAT')
+  }
+
+  // Generar TaxSubtotal para operaciones INAFECTAS (si hay)
+  if (sumInafectas > 0) {
+    createTaxSubtotal(sumInafectas, 0, 'O', '9998', 'INA', 'FRE')
+  }
+
+  // Si no hay ningún tipo (caso edge), generar al menos uno según igvExempt
+  if (sumGravadas === 0 && sumExoneradas === 0 && sumInafectas === 0) {
+    if (igvExempt) {
+      createTaxSubtotal(0, 0, 'E', '9997', 'EXO', 'VAT')
+    } else {
+      createTaxSubtotal(0, 0, 'S', '1000', 'IGV', 'VAT')
+    }
+  }
 
   // === TOTALES ===
   // IMPORTANTE: LegalMonetaryTotal DEBE ir DESPUÉS de TaxTotal y ANTES de InvoiceLine
@@ -822,38 +871,99 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       .txt(subtotalBeforeDiscount.toFixed(2))
   }
 
+  // === CALCULAR TOTALES POR TIPO DE AFECTACIÓN ===
+  // Necesario para generar múltiples TaxSubtotals
+  let cnSumGravadas = 0
+  let cnSumExoneradas = 0
+  let cnSumInafectas = 0
+  let cnSumIGVGravadas = 0
+
+  creditNoteData.items.forEach((item) => {
+    let taxAffectation
+    if (igvExempt) {
+      taxAffectation = '20'
+    } else {
+      taxAffectation = item.taxAffectation || '10'
+    }
+    const isGravado = taxAffectation === '10'
+    const isExonerado = taxAffectation === '20'
+    const isInafecto = taxAffectation === '30'
+
+    const priceWithIGV = item.unitPrice
+    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
+    const lineTotal = Math.round(item.quantity * priceWithoutIGV * 100) / 100
+    const lineIGV = isGravado ? Math.round((item.quantity * priceWithIGV - lineTotal) * 100) / 100 : 0
+
+    if (isGravado) {
+      cnSumGravadas += lineTotal
+      cnSumIGVGravadas += lineIGV
+    } else if (isExonerado) {
+      cnSumExoneradas += lineTotal
+    } else if (isInafecto) {
+      cnSumInafectas += lineTotal
+    }
+  })
+
+  // Redondear
+  cnSumGravadas = Math.round(cnSumGravadas * 100) / 100
+  cnSumExoneradas = Math.round(cnSumExoneradas * 100) / 100
+  cnSumInafectas = Math.round(cnSumInafectas * 100) / 100
+  cnSumIGVGravadas = Math.round(cnSumIGVGravadas * 100) / 100
+
   // === IMPUESTOS (IGV) ===
+  // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
+  const currencyCN = creditNoteData.currency || 'PEN'
   const taxTotal = root.ele('cac:TaxTotal')
-  taxTotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
+  taxTotal.ele('cbc:TaxAmount', { 'currencyID': currencyCN })
     .txt(creditNoteData.igv.toFixed(2))
 
-  const taxSubtotal = taxTotal.ele('cac:TaxSubtotal')
-  taxSubtotal.ele('cbc:TaxableAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-    .txt(creditNoteData.subtotal.toFixed(2))
-  taxSubtotal.ele('cbc:TaxAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-    .txt(creditNoteData.igv.toFixed(2))
+  // Función helper para crear un TaxSubtotal
+  const createTaxSubtotalCN = (taxableAmt, taxAmt, categoryId, schemeId, schemeName, taxTypeCode) => {
+    const subtotal = taxTotal.ele('cac:TaxSubtotal')
+    subtotal.ele('cbc:TaxableAmount', { 'currencyID': currencyCN })
+      .txt(taxableAmt.toFixed(2))
+    subtotal.ele('cbc:TaxAmount', { 'currencyID': currencyCN })
+      .txt(taxAmt.toFixed(2))
 
-  const taxCategory = taxSubtotal.ele('cac:TaxCategory')
-  // Tax Category ID según si es exonerado o no:
-  // S = Standard rate (Gravado con IGV)
-  // E = Exempt from tax (Exonerado de IGV)
-  const taxCategoryIdGlobalCN = igvExempt ? 'E' : 'S'
-  taxCategory.ele('cbc:ID', {
-    'schemeID': 'UN/ECE 5305',
-    'schemeName': 'Tax Category Identifier',
-    'schemeAgencyName': 'United Nations Economic Commission for Europe'
-  }).txt(taxCategoryIdGlobalCN)
+    const category = subtotal.ele('cac:TaxCategory')
+    category.ele('cbc:ID', {
+      'schemeID': 'UN/ECE 5305',
+      'schemeName': 'Tax Category Identifier',
+      'schemeAgencyName': 'United Nations Economic Commission for Europe'
+    }).txt(categoryId)
 
-  const taxScheme = taxCategory.ele('cac:TaxScheme')
-  // Para operaciones exoneradas usar código 9997 (EXO), para gravadas usar 1000 (IGV)
-  const taxSchemeCodeCN = igvExempt ? '9997' : '1000'
-  const taxSchemeNameCN = igvExempt ? 'EXO' : 'IGV'
-  taxScheme.ele('cbc:ID', {
-    'schemeID': 'UN/ECE 5153',
-    'schemeAgencyID': '6'
-  }).txt(taxSchemeCodeCN)
-  taxScheme.ele('cbc:Name').txt(taxSchemeNameCN)
-  taxScheme.ele('cbc:TaxTypeCode').txt('VAT')
+    const scheme = category.ele('cac:TaxScheme')
+    scheme.ele('cbc:ID', {
+      'schemeID': 'UN/ECE 5153',
+      'schemeAgencyID': '6'
+    }).txt(schemeId)
+    scheme.ele('cbc:Name').txt(schemeName)
+    scheme.ele('cbc:TaxTypeCode').txt(taxTypeCode)
+  }
+
+  // Generar TaxSubtotal para operaciones GRAVADAS (si hay)
+  if (cnSumGravadas > 0) {
+    createTaxSubtotalCN(cnSumGravadas, cnSumIGVGravadas, 'S', '1000', 'IGV', 'VAT')
+  }
+
+  // Generar TaxSubtotal para operaciones EXONERADAS (si hay)
+  if (cnSumExoneradas > 0) {
+    createTaxSubtotalCN(cnSumExoneradas, 0, 'E', '9997', 'EXO', 'VAT')
+  }
+
+  // Generar TaxSubtotal para operaciones INAFECTAS (si hay)
+  if (cnSumInafectas > 0) {
+    createTaxSubtotalCN(cnSumInafectas, 0, 'O', '9998', 'INA', 'FRE')
+  }
+
+  // Si no hay ningún tipo (caso edge), generar al menos uno según igvExempt
+  if (cnSumGravadas === 0 && cnSumExoneradas === 0 && cnSumInafectas === 0) {
+    if (igvExempt) {
+      createTaxSubtotalCN(0, 0, 'E', '9997', 'EXO', 'VAT')
+    } else {
+      createTaxSubtotalCN(0, 0, 'S', '1000', 'IGV', 'VAT')
+    }
+  }
 
   // === TOTALES ===
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
@@ -1162,38 +1272,99 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
       .txt(subtotalBeforeDiscount.toFixed(2))
   }
 
+  // === CALCULAR TOTALES POR TIPO DE AFECTACIÓN ===
+  // Necesario para generar múltiples TaxSubtotals
+  let dnSumGravadas = 0
+  let dnSumExoneradas = 0
+  let dnSumInafectas = 0
+  let dnSumIGVGravadas = 0
+
+  debitNoteData.items.forEach((item) => {
+    let taxAffectation
+    if (igvExempt) {
+      taxAffectation = '20'
+    } else {
+      taxAffectation = item.taxAffectation || '10'
+    }
+    const isGravado = taxAffectation === '10'
+    const isExonerado = taxAffectation === '20'
+    const isInafecto = taxAffectation === '30'
+
+    const priceWithIGV = item.unitPrice
+    const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
+    const lineTotal = Math.round(item.quantity * priceWithoutIGV * 100) / 100
+    const lineIGV = isGravado ? Math.round((item.quantity * priceWithIGV - lineTotal) * 100) / 100 : 0
+
+    if (isGravado) {
+      dnSumGravadas += lineTotal
+      dnSumIGVGravadas += lineIGV
+    } else if (isExonerado) {
+      dnSumExoneradas += lineTotal
+    } else if (isInafecto) {
+      dnSumInafectas += lineTotal
+    }
+  })
+
+  // Redondear
+  dnSumGravadas = Math.round(dnSumGravadas * 100) / 100
+  dnSumExoneradas = Math.round(dnSumExoneradas * 100) / 100
+  dnSumInafectas = Math.round(dnSumInafectas * 100) / 100
+  dnSumIGVGravadas = Math.round(dnSumIGVGravadas * 100) / 100
+
   // === IMPUESTOS (IGV) ===
+  // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
+  const currencyDN = debitNoteData.currency || 'PEN'
   const taxTotal = root.ele('cac:TaxTotal')
-  taxTotal.ele('cbc:TaxAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
+  taxTotal.ele('cbc:TaxAmount', { 'currencyID': currencyDN })
     .txt(debitNoteData.igv.toFixed(2))
 
-  const taxSubtotal = taxTotal.ele('cac:TaxSubtotal')
-  taxSubtotal.ele('cbc:TaxableAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
-    .txt(debitNoteData.subtotal.toFixed(2))
-  taxSubtotal.ele('cbc:TaxAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
-    .txt(debitNoteData.igv.toFixed(2))
+  // Función helper para crear un TaxSubtotal
+  const createTaxSubtotalDN = (taxableAmt, taxAmt, categoryId, schemeId, schemeName, taxTypeCode) => {
+    const subtotal = taxTotal.ele('cac:TaxSubtotal')
+    subtotal.ele('cbc:TaxableAmount', { 'currencyID': currencyDN })
+      .txt(taxableAmt.toFixed(2))
+    subtotal.ele('cbc:TaxAmount', { 'currencyID': currencyDN })
+      .txt(taxAmt.toFixed(2))
 
-  const taxCategory = taxSubtotal.ele('cac:TaxCategory')
-  // Tax Category ID según si es exonerado o no:
-  // S = Standard rate (Gravado con IGV)
-  // E = Exempt from tax (Exonerado de IGV)
-  const taxCategoryIdGlobalDN = igvExempt ? 'E' : 'S'
-  taxCategory.ele('cbc:ID', {
-    'schemeID': 'UN/ECE 5305',
-    'schemeName': 'Tax Category Identifier',
-    'schemeAgencyName': 'United Nations Economic Commission for Europe'
-  }).txt(taxCategoryIdGlobalDN)
+    const category = subtotal.ele('cac:TaxCategory')
+    category.ele('cbc:ID', {
+      'schemeID': 'UN/ECE 5305',
+      'schemeName': 'Tax Category Identifier',
+      'schemeAgencyName': 'United Nations Economic Commission for Europe'
+    }).txt(categoryId)
 
-  const taxScheme = taxCategory.ele('cac:TaxScheme')
-  // Para operaciones exoneradas usar código 9997 (EXO), para gravadas usar 1000 (IGV)
-  const taxSchemeCodeDN = igvExempt ? '9997' : '1000'
-  const taxSchemeNameDN = igvExempt ? 'EXO' : 'IGV'
-  taxScheme.ele('cbc:ID', {
-    'schemeID': 'UN/ECE 5153',
-    'schemeAgencyID': '6'
-  }).txt(taxSchemeCodeDN)
-  taxScheme.ele('cbc:Name').txt(taxSchemeNameDN)
-  taxScheme.ele('cbc:TaxTypeCode').txt('VAT')
+    const scheme = category.ele('cac:TaxScheme')
+    scheme.ele('cbc:ID', {
+      'schemeID': 'UN/ECE 5153',
+      'schemeAgencyID': '6'
+    }).txt(schemeId)
+    scheme.ele('cbc:Name').txt(schemeName)
+    scheme.ele('cbc:TaxTypeCode').txt(taxTypeCode)
+  }
+
+  // Generar TaxSubtotal para operaciones GRAVADAS (si hay)
+  if (dnSumGravadas > 0) {
+    createTaxSubtotalDN(dnSumGravadas, dnSumIGVGravadas, 'S', '1000', 'IGV', 'VAT')
+  }
+
+  // Generar TaxSubtotal para operaciones EXONERADAS (si hay)
+  if (dnSumExoneradas > 0) {
+    createTaxSubtotalDN(dnSumExoneradas, 0, 'E', '9997', 'EXO', 'VAT')
+  }
+
+  // Generar TaxSubtotal para operaciones INAFECTAS (si hay)
+  if (dnSumInafectas > 0) {
+    createTaxSubtotalDN(dnSumInafectas, 0, 'O', '9998', 'INA', 'FRE')
+  }
+
+  // Si no hay ningún tipo (caso edge), generar al menos uno según igvExempt
+  if (dnSumGravadas === 0 && dnSumExoneradas === 0 && dnSumInafectas === 0) {
+    if (igvExempt) {
+      createTaxSubtotalDN(0, 0, 'E', '9997', 'EXO', 'VAT')
+    } else {
+      createTaxSubtotalDN(0, 0, 'S', '1000', 'IGV', 'VAT')
+    }
+  }
 
   // === TOTALES ===
   const legalMonetaryTotal = root.ele('cac:RequestedMonetaryTotal')

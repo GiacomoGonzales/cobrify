@@ -762,7 +762,8 @@ export default function POS() {
             const newQuantity = item.quantity + change
 
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
-            if (item.stock !== null && !item.isCustom) {
+            // Si allowNegativeStock está habilitado, permitir venta sin stock
+            if (item.stock !== null && !item.isCustom && !companySettings?.allowNegativeStock) {
               const productData = products.find(p => p.id === item.id)
               if (productData) {
                 const warehouseStock = getCurrentWarehouseStock(productData)
@@ -781,7 +782,7 @@ export default function POS() {
     )
   }
 
-  // Función para establecer cantidad directamente (para productos por peso)
+  // Función para establecer cantidad directamente (para productos por peso o input manual)
   const setQuantityDirectly = (itemId, newQuantity) => {
     const quantity = parseFloat(newQuantity)
     if (isNaN(quantity) || quantity < 0) return
@@ -792,7 +793,8 @@ export default function POS() {
           const matchId = item.cartId || item.id
           if (matchId === itemId) {
             // Verificar stock del almacén seleccionado (solo para productos no personalizados)
-            if (item.stock !== null && !item.isCustom && quantity > 0) {
+            // Si allowNegativeStock está habilitado, permitir venta sin stock
+            if (item.stock !== null && !item.isCustom && quantity > 0 && !companySettings?.allowNegativeStock) {
               const productData = products.find(p => p.id === item.id)
               if (productData) {
                 const warehouseStock = getCurrentWarehouseStock(productData)
@@ -2771,7 +2773,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     <span className="text-xs text-gray-500">{item.unit || 'kg'}</span>
                                   </div>
                                 ) : (
-                                  /* Botones +/- para productos normales */
+                                  /* Botones +/- para productos normales con cantidad editable */
                                   <>
                                     <button
                                       onClick={() => updateQuantity(itemId, -1)}
@@ -2779,9 +2781,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     >
                                       <Minus className="w-3 h-3" />
                                     </button>
-                                    <span className="w-8 text-center font-semibold text-sm">
-                                      {item.quantity}
-                                    </span>
+                                    <input
+                                      type="number"
+                                      value={item.quantity}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value)
+                                        if (!isNaN(val) && val >= 0) {
+                                          setQuantityDirectly(itemId, val)
+                                        }
+                                      }}
+                                      onFocus={(e) => e.target.select()}
+                                      min="1"
+                                      className="w-12 text-center font-semibold text-sm border border-gray-300 rounded-md py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    />
                                     <button
                                       onClick={() => updateQuantity(itemId, 1)}
                                       className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
