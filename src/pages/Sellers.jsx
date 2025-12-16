@@ -10,6 +10,66 @@ import { useToast } from '@/contexts/ToastContext'
 import SellerFormModal from '@/components/SellerFormModal'
 import { formatCurrency } from '@/lib/utils'
 
+// Datos de ejemplo para modo demo
+const DEMO_SELLERS = [
+  {
+    id: 'demo-seller-1',
+    code: 'V001',
+    name: 'Carlos Mendoza',
+    dni: '45678912',
+    phone: '987654321',
+    email: 'carlos.mendoza@email.com',
+    status: 'active',
+    todaySales: 2450.00,
+    todayOrders: 8,
+    totalSales: 45670.50,
+  },
+  {
+    id: 'demo-seller-2',
+    code: 'V002',
+    name: 'María García',
+    dni: '78945612',
+    phone: '976543210',
+    email: 'maria.garcia@email.com',
+    status: 'active',
+    todaySales: 3180.00,
+    todayOrders: 12,
+    totalSales: 68920.00,
+  },
+  {
+    id: 'demo-seller-3',
+    code: 'V003',
+    name: 'José Rodríguez',
+    dni: '32165498',
+    phone: '965432109',
+    email: 'jose.rodriguez@email.com',
+    status: 'active',
+    todaySales: 1890.50,
+    todayOrders: 6,
+    totalSales: 32450.75,
+  },
+  {
+    id: 'demo-seller-4',
+    code: 'V004',
+    name: 'Ana Torres',
+    dni: '65432178',
+    phone: '954321098',
+    email: 'ana.torres@email.com',
+    status: 'inactive',
+    todaySales: 0,
+    todayOrders: 0,
+    totalSales: 15680.00,
+  },
+]
+
+const DEMO_STATS = {
+  total: 4,
+  active: 3,
+  todaySales: 7520.50,
+  todayOrders: 26,
+  totalSales: 162721.25,
+}
+
 export default function Sellers() {
   const { getBusinessId, isDemoMode } = useAppContext()
   const toast = useToast()
@@ -29,7 +89,9 @@ export default function Sellers() {
     setIsLoading(true)
     try {
       if (isDemoMode) {
-        toast.info('Esta función no está disponible en modo demo')
+        // Usar datos de ejemplo en modo demo
+        setSellers(DEMO_SELLERS)
+        setStats(DEMO_STATS)
         setIsLoading(false)
         return
       }

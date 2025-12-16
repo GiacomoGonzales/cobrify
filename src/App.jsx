@@ -127,6 +127,7 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
+              <Route path="prestamos" element={<Loans />} />
               <Route path="configuracion" element={<Settings />} />
               {/* Rutas de modo restaurante en demo */}
               <Route path="mesas" element={<Tables />} />
@@ -155,6 +156,7 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
+              <Route path="prestamos" element={<Loans />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />

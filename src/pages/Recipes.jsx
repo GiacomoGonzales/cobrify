@@ -89,82 +89,101 @@ export default function Recipes() {
   }, [user])
 
   const loadData = async () => {
-    if (!user?.uid) return
+    if (!user?.uid && !demoContext) return
 
     setIsLoading(true)
     try {
       // En modo demo, usar datos del contexto de demo o fallback
       if (demoContext) {
-        const demoRecipes = demoContext.demoData?.recipes || [
-          {
-            id: 'rec1',
-            productId: '1',
-            productName: 'Ceviche de Pescado',
-            portions: 1,
-            totalCost: 14.25,
-            preparationTime: 20,
-            instructions: '1. Cortar el pescado en cubos\n2. Agregar limón y dejar reposar\n3. Añadir cebolla, ají y sal',
-            ingredients: [
+        // Si hay datos del contexto de demo, usarlos
+        if (demoContext.demoData?.recipes) {
+          setRecipes(demoContext.demoData.recipes)
+          setIngredients(demoContext.demoData.ingredients || [])
+          setProducts(demoContext.demoData.products || [])
+        } else if (isRestaurantMode) {
+          // Demo Restaurant: Recetas de cocina
+          const restaurantRecipes = [
+            { id: 'rec1', productId: '1', productName: 'Ceviche de Pescado', portions: 1, totalCost: 14.25, preparationTime: 20, instructions: '1. Cortar el pescado en cubos\n2. Agregar limón y dejar reposar\n3. Añadir cebolla, ají y sal', ingredients: [
               { ingredientId: 'ing4', ingredientName: 'Pescado (filete)', quantity: 0.25, unit: 'kg', cost: 4.50 },
               { ingredientId: 'ing5', ingredientName: 'Limón', quantity: 0.15, unit: 'kg', cost: 0.68 },
               { ingredientId: 'ing6', ingredientName: 'Cebolla Roja', quantity: 0.1, unit: 'kg', cost: 0.32 },
-              { ingredientId: 'ing10', ingredientName: 'Ají Amarillo', quantity: 0.05, unit: 'kg', cost: 0.43 },
-            ],
-          },
-          {
-            id: 'rec2',
-            productId: '2',
-            productName: 'Lomo Saltado',
-            portions: 1,
-            totalCost: 11.85,
-            preparationTime: 25,
-            instructions: '1. Cortar la carne en tiras\n2. Saltear con vegetales\n3. Servir con papas y arroz',
-            ingredients: [
+            ]},
+            { id: 'rec2', productId: '2', productName: 'Lomo Saltado', portions: 1, totalCost: 11.85, preparationTime: 25, instructions: '1. Cortar la carne en tiras\n2. Saltear con vegetales\n3. Servir con papas y arroz', ingredients: [
               { ingredientId: 'ing2', ingredientName: 'Pollo', quantity: 0.2, unit: 'kg', cost: 2.50 },
               { ingredientId: 'ing3', ingredientName: 'Papa', quantity: 0.15, unit: 'kg', cost: 0.38 },
-              { ingredientId: 'ing7', ingredientName: 'Tomate', quantity: 0.1, unit: 'kg', cost: 0.38 },
               { ingredientId: 'ing6', ingredientName: 'Cebolla Roja', quantity: 0.1, unit: 'kg', cost: 0.32 },
               { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.1, unit: 'kg', cost: 0.38 },
-            ],
-          },
-          {
-            id: 'rec3',
-            productId: '3',
-            productName: 'Arroz con Pollo',
-            portions: 1,
-            totalCost: 9.50,
-            preparationTime: 30,
-            instructions: '1. Cocinar el pollo\n2. Preparar el arroz con vegetales\n3. Servir con papa a la huancaína',
-            ingredients: [
+            ]},
+            { id: 'rec3', productId: '3', productName: 'Arroz con Pollo', portions: 1, totalCost: 9.50, preparationTime: 30, instructions: '1. Cocinar el pollo\n2. Preparar el arroz con vegetales\n3. Servir con papa a la huancaína', ingredients: [
               { ingredientId: 'ing2', ingredientName: 'Pollo', quantity: 0.25, unit: 'kg', cost: 3.13 },
               { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.15, unit: 'kg', cost: 0.57 },
               { ingredientId: 'ing3', ingredientName: 'Papa', quantity: 0.15, unit: 'kg', cost: 0.38 },
-              { ingredientId: 'ing10', ingredientName: 'Ají Amarillo', quantity: 0.05, unit: 'kg', cost: 0.43 },
-            ],
-          },
-        ]
-
-        const demoIngredients = demoContext.demoData?.ingredients || [
-          { id: 'ing1', name: 'Arroz', category: 'granos', purchaseUnit: 'kg', currentStock: 45.5, averageCost: 3.80 },
-          { id: 'ing2', name: 'Pollo', category: 'carnes', purchaseUnit: 'kg', currentStock: 22.0, averageCost: 12.50 },
-          { id: 'ing3', name: 'Papa', category: 'vegetales', purchaseUnit: 'kg', currentStock: 35.0, averageCost: 2.50 },
-          { id: 'ing4', name: 'Pescado (filete)', category: 'carnes', purchaseUnit: 'kg', currentStock: 8.5, averageCost: 18.00 },
-          { id: 'ing5', name: 'Limón', category: 'vegetales', purchaseUnit: 'kg', currentStock: 12.0, averageCost: 4.50 },
-          { id: 'ing6', name: 'Cebolla Roja', category: 'vegetales', purchaseUnit: 'kg', currentStock: 18.0, averageCost: 3.20 },
-          { id: 'ing7', name: 'Tomate', category: 'vegetales', purchaseUnit: 'kg', currentStock: 15.5, averageCost: 3.80 },
-          { id: 'ing10', name: 'Ají Amarillo', category: 'condimentos', purchaseUnit: 'kg', currentStock: 3.5, averageCost: 8.50 },
-        ]
-
-        const demoProducts = demoContext.demoData?.products || [
-          { id: '1', name: 'Ceviche de Pescado', price: 32.00, category: 'Entradas' },
-          { id: '2', name: 'Lomo Saltado', price: 28.00, category: 'Platos de Fondo' },
-          { id: '3', name: 'Arroz con Pollo', price: 22.00, category: 'Platos de Fondo' },
-          { id: '4', name: 'Ají de Gallina', price: 24.00, category: 'Platos de Fondo' },
-        ]
-
-        setRecipes(demoRecipes)
-        setIngredients(demoIngredients)
-        setProducts(demoProducts)
+            ]},
+          ]
+          const restaurantIngredients = [
+            { id: 'ing1', name: 'Arroz', category: 'granos', purchaseUnit: 'kg', currentStock: 45.5, averageCost: 3.80 },
+            { id: 'ing2', name: 'Pollo', category: 'carnes', purchaseUnit: 'kg', currentStock: 22.0, averageCost: 12.50 },
+            { id: 'ing3', name: 'Papa', category: 'vegetales', purchaseUnit: 'kg', currentStock: 35.0, averageCost: 2.50 },
+            { id: 'ing4', name: 'Pescado (filete)', category: 'carnes', purchaseUnit: 'kg', currentStock: 8.5, averageCost: 18.00 },
+            { id: 'ing5', name: 'Limón', category: 'vegetales', purchaseUnit: 'kg', currentStock: 12.0, averageCost: 4.50 },
+            { id: 'ing6', name: 'Cebolla Roja', category: 'vegetales', purchaseUnit: 'kg', currentStock: 18.0, averageCost: 3.20 },
+          ]
+          const restaurantProducts = [
+            { id: '1', name: 'Ceviche de Pescado', price: 32.00, category: 'Entradas' },
+            { id: '2', name: 'Lomo Saltado', price: 28.00, category: 'Platos de Fondo' },
+            { id: '3', name: 'Arroz con Pollo', price: 22.00, category: 'Platos de Fondo' },
+            { id: '4', name: 'Ají de Gallina', price: 24.00, category: 'Platos de Fondo' },
+          ]
+          setRecipes(restaurantRecipes)
+          setIngredients(restaurantIngredients)
+          setProducts(restaurantProducts)
+        } else {
+          // Demo Retail: Composición de servicios de Spa/Salón
+          const retailRecipes = [
+            { id: 'rec1', productId: 'srv1', productName: 'Limpieza Facial Profunda', portions: 1, totalCost: 18.50, preparationTime: 45, instructions: '1. Aplicar loción tónica\n2. Aplicar mascarilla de arcilla por 15 min\n3. Retirar con algodón húmedo\n4. Aplicar crema hidratante', ingredients: [
+              { ingredientId: 'ins1', ingredientName: 'Crema Hidratante Facial', quantity: 1, unit: 'unidades', cost: 4.50 },
+              { ingredientId: 'ins3', ingredientName: 'Mascarilla de Arcilla', quantity: 1, unit: 'unidades', cost: 5.60 },
+              { ingredientId: 'ins8', ingredientName: 'Loción Tónica Facial', quantity: 1, unit: 'unidades', cost: 3.20 },
+              { ingredientId: 'ins7', ingredientName: 'Algodón (Bolsa 500g)', quantity: 0.1, unit: 'unidades', cost: 0.85 },
+            ]},
+            { id: 'rec2', productId: 'srv2', productName: 'Masaje Relajante con Aromaterapia', portions: 1, totalCost: 12.80, preparationTime: 60, instructions: '1. Preparar camilla con toallas\n2. Calentar aceite esencial\n3. Realizar masaje por 50 min\n4. Limpiar con toallas', ingredients: [
+              { ingredientId: 'ins2', ingredientName: 'Aceite Esencial de Lavanda', quantity: 1, unit: 'unidades', cost: 7.00 },
+              { ingredientId: 'ins4', ingredientName: 'Toallas Desechables', quantity: 0.2, unit: 'cajas', cost: 5.00 },
+            ]},
+            { id: 'rec3', productId: 'srv3', productName: 'Depilación con Cera', portions: 1, totalCost: 8.50, preparationTime: 30, instructions: '1. Limpiar zona con desinfectante\n2. Aplicar cera caliente\n3. Retirar con bandas\n4. Aplicar loción calmante', ingredients: [
+              { ingredientId: 'ins10', ingredientName: 'Cera Depilatoria Roll-On', quantity: 1, unit: 'unidades', cost: 2.60 },
+              { ingredientId: 'ins5', ingredientName: 'Guantes de Látex (Caja x100)', quantity: 0.02, unit: 'cajas', cost: 0.36 },
+              { ingredientId: 'ins9', ingredientName: 'Desinfectante de Superficies', quantity: 0.1, unit: 'unidades', cost: 1.50 },
+            ]},
+            { id: 'rec4', productId: 'srv4', productName: 'Tratamiento Reductivo con Ultrasonido', portions: 1, totalCost: 15.20, preparationTime: 50, instructions: '1. Aplicar gel conductor\n2. Pasar equipo de ultrasonido por 30 min\n3. Masajear zona tratada\n4. Limpiar con toallas', ingredients: [
+              { ingredientId: 'ins6', ingredientName: 'Gel Conductor Ultrasonido', quantity: 1, unit: 'unidades', cost: 4.80 },
+              { ingredientId: 'ins4', ingredientName: 'Toallas Desechables', quantity: 0.2, unit: 'cajas', cost: 5.00 },
+              { ingredientId: 'ins5', ingredientName: 'Guantes de Látex (Caja x100)', quantity: 0.02, unit: 'cajas', cost: 0.36 },
+            ]},
+          ]
+          const retailIngredients = [
+            { id: 'ins1', name: 'Crema Hidratante Facial', category: 'estetica', purchaseUnit: 'unidades', currentStock: 24, averageCost: 45.00 },
+            { id: 'ins2', name: 'Aceite Esencial de Lavanda', category: 'estetica', purchaseUnit: 'unidades', currentStock: 18, averageCost: 35.00 },
+            { id: 'ins3', name: 'Mascarilla de Arcilla', category: 'estetica', purchaseUnit: 'unidades', currentStock: 15, averageCost: 28.00 },
+            { id: 'ins4', name: 'Toallas Desechables', category: 'otros', purchaseUnit: 'cajas', currentStock: 8, averageCost: 25.00 },
+            { id: 'ins5', name: 'Guantes de Látex (Caja x100)', category: 'salud', purchaseUnit: 'cajas', currentStock: 12, averageCost: 18.00 },
+            { id: 'ins6', name: 'Gel Conductor Ultrasonido', category: 'estetica', purchaseUnit: 'unidades', currentStock: 6, averageCost: 22.00 },
+            { id: 'ins7', name: 'Algodón (Bolsa 500g)', category: 'salud', purchaseUnit: 'unidades', currentStock: 20, averageCost: 8.50 },
+            { id: 'ins8', name: 'Loción Tónica Facial', category: 'estetica', purchaseUnit: 'unidades', currentStock: 14, averageCost: 32.00 },
+            { id: 'ins9', name: 'Desinfectante de Superficies', category: 'limpieza', purchaseUnit: 'unidades', currentStock: 10, averageCost: 15.00 },
+            { id: 'ins10', name: 'Cera Depilatoria Roll-On', category: 'estetica', purchaseUnit: 'unidades', currentStock: 22, averageCost: 12.00 },
+          ]
+          const retailProducts = [
+            { id: 'srv1', name: 'Limpieza Facial Profunda', price: 80.00, category: 'Servicios Faciales' },
+            { id: 'srv2', name: 'Masaje Relajante con Aromaterapia', price: 120.00, category: 'Masajes' },
+            { id: 'srv3', name: 'Depilación con Cera', price: 45.00, category: 'Depilación' },
+            { id: 'srv4', name: 'Tratamiento Reductivo con Ultrasonido', price: 150.00, category: 'Tratamientos Corporales' },
+            { id: 'srv5', name: 'Manicure Spa', price: 35.00, category: 'Uñas' },
+          ]
+          setRecipes(retailRecipes)
+          setIngredients(retailIngredients)
+          setProducts(retailProducts)
+        }
       } else {
         // En modo normal, cargar desde Firebase
         const businessId = getBusinessId()

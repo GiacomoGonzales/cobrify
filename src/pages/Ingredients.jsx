@@ -117,135 +117,44 @@ export default function Ingredients() {
   }, [user])
 
   const loadIngredients = async () => {
-    if (!user?.uid) return
+    if (!user?.uid && !isDemoMode) return
 
     setIsLoading(true)
     try {
       // En modo demo, usar insumos del contexto de demo o fallback
       if (isDemoMode) {
-        const demoIngredients = demoContext?.demoData?.ingredients || [
-          {
-            id: 'ing1',
-            name: 'Arroz',
-            category: 'granos',
-            purchaseUnit: 'kg',
-            currentStock: 45.5,
-            minimumStock: 10,
-            averageCost: 3.80,
-            lastPurchasePrice: 3.90,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 5)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing2',
-            name: 'Pollo',
-            category: 'carnes',
-            purchaseUnit: 'kg',
-            currentStock: 22.0,
-            minimumStock: 8,
-            averageCost: 12.50,
-            lastPurchasePrice: 12.80,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 2)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing3',
-            name: 'Papa',
-            category: 'vegetales',
-            purchaseUnit: 'kg',
-            currentStock: 35.0,
-            minimumStock: 15,
-            averageCost: 2.50,
-            lastPurchasePrice: 2.60,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 3)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing4',
-            name: 'Pescado (filete)',
-            category: 'carnes',
-            purchaseUnit: 'kg',
-            currentStock: 8.5,
-            minimumStock: 5,
-            averageCost: 18.00,
-            lastPurchasePrice: 18.50,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing5',
-            name: 'Limón',
-            category: 'vegetales',
-            purchaseUnit: 'kg',
-            currentStock: 12.0,
-            minimumStock: 3,
-            averageCost: 4.50,
-            lastPurchasePrice: 4.80,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing6',
-            name: 'Cebolla Roja',
-            category: 'vegetales',
-            purchaseUnit: 'kg',
-            currentStock: 18.0,
-            minimumStock: 5,
-            averageCost: 3.20,
-            lastPurchasePrice: 3.50,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 4)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing7',
-            name: 'Tomate',
-            category: 'vegetales',
-            purchaseUnit: 'kg',
-            currentStock: 15.5,
-            minimumStock: 5,
-            averageCost: 3.80,
-            lastPurchasePrice: 4.00,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 2)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing8',
-            name: 'Aceite Vegetal',
-            category: 'condimentos',
-            purchaseUnit: 'litros',
-            currentStock: 8.0,
-            minimumStock: 3,
-            averageCost: 12.00,
-            lastPurchasePrice: 12.50,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 7)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing9',
-            name: 'Sal',
-            category: 'condimentos',
-            purchaseUnit: 'kg',
-            currentStock: 5.0,
-            minimumStock: 2,
-            averageCost: 2.00,
-            lastPurchasePrice: 2.20,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 10)),
-            createdAt: new Date(2024, 0, 15),
-          },
-          {
-            id: 'ing10',
-            name: 'Ají Amarillo',
-            category: 'condimentos',
-            purchaseUnit: 'kg',
-            currentStock: 3.5,
-            minimumStock: 1,
-            averageCost: 8.50,
-            lastPurchasePrice: 9.00,
-            lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 3)),
-            createdAt: new Date(2024, 0, 15),
-          },
-        ]
-        setIngredients(demoIngredients)
+        // Si hay datos del contexto de demo restaurant, usarlos
+        if (demoContext?.demoData?.ingredients) {
+          setIngredients(demoContext.demoData.ingredients)
+        } else if (isRestaurantMode) {
+          // Demo Restaurant: Ingredientes de cocina
+          const restaurantIngredients = [
+            { id: 'ing1', name: 'Arroz', category: 'granos', purchaseUnit: 'kg', currentStock: 45.5, minimumStock: 10, averageCost: 3.80, lastPurchasePrice: 3.90, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 5)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing2', name: 'Pollo', category: 'carnes', purchaseUnit: 'kg', currentStock: 22.0, minimumStock: 8, averageCost: 12.50, lastPurchasePrice: 12.80, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 2)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing3', name: 'Papa', category: 'vegetales', purchaseUnit: 'kg', currentStock: 35.0, minimumStock: 15, averageCost: 2.50, lastPurchasePrice: 2.60, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 3)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing4', name: 'Pescado (filete)', category: 'carnes', purchaseUnit: 'kg', currentStock: 8.5, minimumStock: 5, averageCost: 18.00, lastPurchasePrice: 18.50, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing5', name: 'Limón', category: 'vegetales', purchaseUnit: 'kg', currentStock: 12.0, minimumStock: 3, averageCost: 4.50, lastPurchasePrice: 4.80, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing6', name: 'Cebolla Roja', category: 'vegetales', purchaseUnit: 'kg', currentStock: 18.0, minimumStock: 5, averageCost: 3.20, lastPurchasePrice: 3.50, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 4)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing7', name: 'Aceite Vegetal', category: 'condimentos', purchaseUnit: 'L', currentStock: 8.0, minimumStock: 3, averageCost: 12.00, lastPurchasePrice: 12.50, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 7)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ing8', name: 'Sal', category: 'condimentos', purchaseUnit: 'kg', currentStock: 5.0, minimumStock: 2, averageCost: 2.00, lastPurchasePrice: 2.20, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 10)), createdAt: new Date(2024, 0, 15) },
+          ]
+          setIngredients(restaurantIngredients)
+        } else {
+          // Demo Retail: Insumos de Spa/Salón de Belleza
+          const retailIngredients = [
+            { id: 'ins1', name: 'Crema Hidratante Facial', category: 'estetica', purchaseUnit: 'unidades', currentStock: 24, minimumStock: 10, averageCost: 45.00, lastPurchasePrice: 48.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 5)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins2', name: 'Aceite Esencial de Lavanda', category: 'estetica', purchaseUnit: 'unidades', currentStock: 18, minimumStock: 8, averageCost: 35.00, lastPurchasePrice: 38.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 3)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins3', name: 'Mascarilla de Arcilla', category: 'estetica', purchaseUnit: 'unidades', currentStock: 15, minimumStock: 5, averageCost: 28.00, lastPurchasePrice: 30.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 7)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins4', name: 'Toallas Desechables', category: 'otros', purchaseUnit: 'cajas', currentStock: 8, minimumStock: 3, averageCost: 25.00, lastPurchasePrice: 26.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 10)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins5', name: 'Guantes de Látex (Caja x100)', category: 'salud', purchaseUnit: 'cajas', currentStock: 12, minimumStock: 5, averageCost: 18.00, lastPurchasePrice: 19.50, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 4)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins6', name: 'Gel Conductor Ultrasonido', category: 'estetica', purchaseUnit: 'unidades', currentStock: 6, minimumStock: 3, averageCost: 22.00, lastPurchasePrice: 24.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 8)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins7', name: 'Algodón (Bolsa 500g)', category: 'salud', purchaseUnit: 'unidades', currentStock: 20, minimumStock: 8, averageCost: 8.50, lastPurchasePrice: 9.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 2)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins8', name: 'Loción Tónica Facial', category: 'estetica', purchaseUnit: 'unidades', currentStock: 14, minimumStock: 6, averageCost: 32.00, lastPurchasePrice: 35.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 6)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins9', name: 'Desinfectante de Superficies', category: 'limpieza', purchaseUnit: 'unidades', currentStock: 10, minimumStock: 4, averageCost: 15.00, lastPurchasePrice: 16.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 12)), createdAt: new Date(2024, 0, 15) },
+            { id: 'ins10', name: 'Cera Depilatoria Roll-On', category: 'estetica', purchaseUnit: 'unidades', currentStock: 22, minimumStock: 10, averageCost: 12.00, lastPurchasePrice: 13.00, lastPurchaseDate: new Date(new Date().setDate(new Date().getDate() - 1)), createdAt: new Date(2024, 0, 15) },
+          ]
+          setIngredients(retailIngredients)
+        }
       } else {
         // En modo normal, cargar desde Firebase
         const businessId = getBusinessId()

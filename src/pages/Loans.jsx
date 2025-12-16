@@ -27,6 +27,94 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getLoans, createLoan, updateLoan, deleteLoan } from '@/services/firestoreService'
 
+// Datos de ejemplo para modo demo
+const DEMO_LOANS = [
+  {
+    id: 'demo-loan-1',
+    type: 'bank',
+    lenderName: 'Banco de Crédito del Perú',
+    description: 'Préstamo para capital de trabajo',
+    amount: 50000,
+    interestRate: 12,
+    totalWithInterest: 56000,
+    totalInstallments: 12,
+    paidInstallments: 5,
+    paidAmount: 23333.33,
+    status: 'active',
+    installments: Array.from({ length: 12 }, (_, i) => ({
+      number: i + 1,
+      amount: 4666.67,
+      dueDate: new Date(2024, 0 + i, 15).toISOString(),
+      status: i < 5 ? 'paid' : 'pending',
+      paidAt: i < 5 ? new Date(2024, 0 + i, 14).toISOString() : null,
+      paidAmount: i < 5 ? 4666.67 : 0
+    }))
+  },
+  {
+    id: 'demo-loan-2',
+    type: 'bank',
+    lenderName: 'Interbank',
+    description: 'Préstamo vehicular',
+    amount: 35000,
+    interestRate: 15,
+    totalWithInterest: 40250,
+    totalInstallments: 24,
+    paidInstallments: 8,
+    paidAmount: 13416.67,
+    status: 'active',
+    installments: Array.from({ length: 24 }, (_, i) => ({
+      number: i + 1,
+      amount: 1677.08,
+      dueDate: new Date(2024, 0 + i, 20).toISOString(),
+      status: i < 8 ? 'paid' : 'pending',
+      paidAt: i < 8 ? new Date(2024, 0 + i, 19).toISOString() : null,
+      paidAmount: i < 8 ? 1677.08 : 0
+    }))
+  },
+  {
+    id: 'demo-loan-3',
+    type: 'third_party',
+    lenderName: 'Juan Pérez',
+    description: 'Préstamo personal para mercadería',
+    amount: 10000,
+    interestRate: 5,
+    totalWithInterest: 10500,
+    totalInstallments: 6,
+    paidInstallments: 6,
+    paidAmount: 10500,
+    status: 'paid',
+    installments: Array.from({ length: 6 }, (_, i) => ({
+      number: i + 1,
+      amount: 1750,
+      dueDate: new Date(2024, 0 + i, 10).toISOString(),
+      status: 'paid',
+      paidAt: new Date(2024, 0 + i, 9).toISOString(),
+      paidAmount: 1750
+    }))
+  },
+  {
+    id: 'demo-loan-4',
+    type: 'third_party',
+    lenderName: 'María García',
+    description: 'Préstamo para equipos',
+    amount: 8000,
+    interestRate: 0,
+    totalWithInterest: 8000,
+    totalInstallments: 4,
+    paidInstallments: 2,
+    paidAmount: 4000,
+    status: 'active',
+    installments: Array.from({ length: 4 }, (_, i) => ({
+      number: i + 1,
+      amount: 2000,
+      dueDate: new Date(2024, 3 + i, 5).toISOString(),
+      status: i < 2 ? 'paid' : 'pending',
+      paidAt: i < 2 ? new Date(2024, 3 + i, 4).toISOString() : null,
+      paidAmount: i < 2 ? 2000 : 0
+    }))
+  },
+]
+
 export default function Loans() {
   const { user, isDemoMode, getBusinessId } = useAppContext()
   const toast = useToast()
@@ -63,12 +151,12 @@ export default function Loans() {
   }, [user])
 
   const loadLoans = async () => {
-    if (!user?.uid) return
+    if (!user?.uid && !isDemoMode) return
 
     setIsLoading(true)
     try {
       if (isDemoMode) {
-        setLoans([])
+        setLoans(DEMO_LOANS)
         setIsLoading(false)
         return
       }

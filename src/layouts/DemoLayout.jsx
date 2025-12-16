@@ -65,10 +65,8 @@ export default function DemoLayout() {
             <Navbar />
 
             {/* Page Content */}
-            <main className="flex-1 overflow-y-auto overscroll-none p-4 sm:p-6 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-              <div className="max-w-7xl mx-auto">
-                <Outlet />
-              </div>
+            <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+              <Outlet />
             </main>
           </div>
         </div>
