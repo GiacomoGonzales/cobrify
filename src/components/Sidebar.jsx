@@ -65,12 +65,15 @@ function Sidebar() {
   }
 
   // Menú para modo RETAIL (tiendas, comercios)
+  // menuId: ID para personalización del menú (hiddenMenuItems)
+  // pageId: ID para control de acceso de usuarios secundarios
   const retailMenuItems = [
     {
       path: '/dashboard',
       icon: LayoutDashboard,
       label: 'Dashboard',
       pageId: 'dashboard',
+      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/pos',
@@ -78,30 +81,35 @@ function Sidebar() {
       label: 'Punto de Venta',
       badge: 'POS',
       pageId: 'pos',
+      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/caja',
       icon: Wallet,
       label: 'Control de Caja',
       pageId: 'cash-register',
+      menuId: 'cash-register',
     },
     {
       path: '/facturas',
       icon: FileText,
       label: 'Ventas',
       pageId: 'invoices',
+      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/cotizaciones',
       icon: FileCheck,
       label: 'Cotizaciones',
       pageId: 'invoices', // Mismo permiso que facturas
+      menuId: 'quotations',
     },
     {
       path: '/guias-remision',
       icon: Truck,
       label: 'Guías de Remisión',
       pageId: 'dispatch-guides',
+      menuId: 'dispatch-guides',
       requiresDispatchGuides: true, // Solo mostrar si está habilitado en preferencias
     },
     {
@@ -109,86 +117,99 @@ function Sidebar() {
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
+      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/vendedores',
       icon: UserCog,
       label: 'Vendedores',
       pageId: 'sellers',
+      menuId: 'sellers',
     },
     {
       path: '/productos',
       icon: Package,
       label: 'Productos',
       pageId: 'products',
+      // No tiene menuId = módulo principal que no se puede ocultar
     },
     {
       path: '/inventario',
       icon: ClipboardList,
       label: 'Inventario',
       pageId: 'products', // Mismo permiso que productos
+      menuId: 'inventory',
     },
     {
       path: '/almacenes',
       icon: Warehouse,
       label: 'Almacenes',
       pageId: 'products', // Mismo permiso que productos
+      menuId: 'warehouses',
     },
     {
       path: '/movimientos',
       icon: History,
       label: 'Movimientos',
       pageId: 'products', // Mismo permiso que productos/inventario
+      menuId: 'stock-movements',
     },
     {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
       pageId: 'purchases', // Relacionado con compras
+      menuId: 'suppliers',
     },
     {
       path: '/compras',
       icon: ShoppingBag,
       label: 'Compras',
       pageId: 'purchases',
+      menuId: 'purchases',
     },
     {
       path: '/prestamos',
       icon: Landmark,
       label: 'Préstamos',
       pageId: 'loans',
-      requiresFeature: 'loans', // Solo visible si tiene el feature habilitado
+      menuId: 'loans',
     },
     {
       path: '/ingredientes',
       icon: Package,
       label: 'Insumos',
       pageId: 'ingredients',
+      menuId: 'ingredients',
     },
     {
       path: '/recetas',
       icon: ClipboardList,
       label: 'Composición',
       pageId: 'recipes',
+      menuId: 'recipes',
     },
     {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',
       pageId: 'reports',
+      menuId: 'reports',
     },
     {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
       pageId: 'expenses',
-      requiresFeature: 'expenseManagement', // Solo visible si tiene el feature
+      menuId: 'expenses',
+      // Ahora controlado por el usuario en Preferencias (no requiresFeature)
     },
     {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
       pageId: 'settings',
+      // No tiene menuId = módulo principal que no se puede ocultar
     },
   ]
 
@@ -212,24 +233,28 @@ function Sidebar() {
       icon: Wallet,
       label: 'Caja',
       pageId: 'cash-register',
+      menuId: 'cash-register',
     },
     {
       path: '/ordenes',
       icon: ListOrdered,
       label: 'Órdenes',
       pageId: 'orders',
+      menuId: 'orders',
     },
     {
       path: '/mesas',
       icon: Grid3x3,
       label: 'Mesas',
       pageId: 'tables',
+      menuId: 'tables',
     },
     {
       path: '/cocina',
       icon: ChefHat,
       label: 'Cocina',
       pageId: 'kitchen',
+      menuId: 'kitchen',
     },
     {
       path: '/facturas',
@@ -248,24 +273,28 @@ function Sidebar() {
       icon: Carrot,
       label: 'Ingredientes',
       pageId: 'ingredients',
+      menuId: 'ingredients',
     },
     {
       path: '/recetas',
       icon: CookingPot,
       label: 'Recetas',
       pageId: 'recipes',
+      menuId: 'recipes',
     },
     {
       path: '/ingredientes/historial',
       icon: History,
       label: 'Historial de Compras',
       pageId: 'purchase-history',
+      menuId: 'purchase-history',
     },
     {
       path: '/mozos',
       icon: Users,
       label: 'Mozos',
       pageId: 'waiters',
+      menuId: 'waiters',
     },
     {
       path: '/clientes',
@@ -278,13 +307,14 @@ function Sidebar() {
       icon: BarChart3,
       label: 'Reportes',
       pageId: 'reports',
+      menuId: 'reports',
     },
     {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
       pageId: 'expenses',
-      requiresFeature: 'expenseManagement', // Solo visible si tiene el feature
+      menuId: 'expenses',
     },
     {
       path: '/configuracion',
@@ -314,6 +344,7 @@ function Sidebar() {
       icon: Wallet,
       label: 'Control de Caja',
       pageId: 'cash-register',
+      menuId: 'cash-register',
     },
     {
       path: '/facturas',
@@ -338,56 +369,63 @@ function Sidebar() {
       icon: FlaskConical,
       label: 'Laboratorios',
       pageId: 'laboratories',
+      menuId: 'laboratories',
     },
     {
       path: '/inventario',
       icon: ClipboardList,
       label: 'Inventario',
       pageId: 'inventory',
+      menuId: 'inventory',
     },
     {
       path: '/control-lotes',
       icon: Package,
       label: 'Control de Lotes',
       pageId: 'batch-control',
+      menuId: 'batch-control',
     },
     {
       path: '/alertas-vencimiento',
       icon: AlertTriangle,
       label: 'Alertas Vencimiento',
       pageId: 'expiry-alerts',
+      menuId: 'expiry-alerts',
     },
     {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
       pageId: 'suppliers',
+      menuId: 'suppliers',
     },
     {
       path: '/compras',
       icon: ShoppingBag,
       label: 'Compras',
       pageId: 'purchases',
+      menuId: 'purchases',
     },
     {
       path: '/prestamos',
       icon: Landmark,
       label: 'Préstamos',
       pageId: 'loans',
-      requiresFeature: 'loans', // Solo visible si tiene el feature habilitado
+      menuId: 'loans',
     },
     {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',
       pageId: 'reports',
+      menuId: 'reports',
     },
     {
       path: '/gastos',
       icon: Receipt,
       label: 'Gastos',
       pageId: 'expenses',
-      requiresFeature: 'expenseManagement',
+      menuId: 'expenses',
     },
     {
       path: '/configuracion',
@@ -502,8 +540,17 @@ function Sidebar() {
     },
   ]
 
+  // Obtener lista de items ocultos por el usuario
+  const hiddenMenuItems = businessSettings?.hiddenMenuItems || []
+
   // Filtrar items del menú según permisos
   const filteredMenuItems = menuItems.filter((item) => {
+    // Si el item tiene menuId y está en la lista de ocultos, no mostrar
+    // (Solo aplica a usuarios no-demo, y solo a items con menuId definido)
+    if (item.menuId && hiddenMenuItems.includes(item.menuId) && !isDemoMode) {
+      return false
+    }
+
     // Si requiere guías de remisión habilitadas, verificar configuración
     if (item.requiresDispatchGuides) {
       const dispatchGuidesEnabled = businessSettings?.dispatchGuidesEnabled || false

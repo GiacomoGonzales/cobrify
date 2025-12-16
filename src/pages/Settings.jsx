@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
@@ -106,6 +106,9 @@ export default function Settings() {
 
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
+
+  // Estados para menú personalizado
+  const [hiddenMenuItems, setHiddenMenuItems] = useState([])
 
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
@@ -311,6 +314,11 @@ export default function Settings() {
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
+
+        // Cargar menú personalizado
+        if (businessData.hiddenMenuItems && Array.isArray(businessData.hiddenMenuItems)) {
+          setHiddenMenuItems(businessData.hiddenMenuItems)
+        }
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -972,10 +980,11 @@ export default function Settings() {
 
   // Tabs configuration
   const tabs = [
-    { id: 'informacion', label: 'Información', icon: Building2 },
-    { id: 'personalizacion', label: 'Personalización', icon: Palette },
+    { id: 'informacion', label: 'Mi Empresa', icon: Building2 },
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
+    { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
     { id: 'series', label: 'Series', icon: FileText },
+    { id: 'avanzado', label: 'Avanzado', icon: Cog },
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
   ]
@@ -1260,90 +1269,6 @@ export default function Settings() {
                 helperText="Código de ubicación geográfica (6 dígitos) - Consultar en SUNAT"
               />
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Actions for Company Info */}
-        <div className="flex justify-end">
-          <Button type="submit" disabled={isSaving || uploadingLogo}>
-            {isSaving || uploadingLogo ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {uploadingLogo ? 'Subiendo logo...' : 'Guardando...'}
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Guardar Configuración
-              </>
-            )}
-          </Button>
-        </div>
-        </form>
-      )}
-
-      {/* Tab Content - Personalización */}
-      {activeTab === 'personalizacion' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center space-x-2">
-              <Palette className="w-5 h-5 text-primary-600" />
-              <CardTitle>Personalización de Documentos</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {/* Color de Acento del PDF */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Color de Acento del PDF
-                </label>
-                <p className="text-xs text-gray-500 mb-3">
-                  Este color se usará en los encabezados de tablas y secciones de tus facturas, boletas y cotizaciones.
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {[
-                    { color: '#464646', name: 'Gris Oscuro' },
-                    { color: '#1E40AF', name: 'Azul' },
-                    { color: '#065F46', name: 'Verde' },
-                    { color: '#7C2D12', name: 'Marrón' },
-                    { color: '#581C87', name: 'Púrpura' },
-                    { color: '#0F172A', name: 'Negro' },
-                    { color: '#B91C1C', name: 'Rojo' },
-                    { color: '#0E7490', name: 'Cyan' },
-                  ].map((option) => (
-                    <button
-                      key={option.color}
-                      type="button"
-                      onClick={() => setPdfAccentColor(option.color)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
-                        pdfAccentColor === option.color
-                          ? 'border-primary-500 bg-primary-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      title={option.name}
-                    >
-                      <div
-                        className="w-10 h-10 rounded-md shadow-sm"
-                        style={{ backgroundColor: option.color }}
-                      />
-                      <span className="text-xs text-gray-600">{option.name}</span>
-                    </button>
-                  ))}
-                  {/* Selector de color personalizado */}
-                  <div className="flex flex-col items-center gap-1 p-2">
-                    <input
-                      type="color"
-                      value={pdfAccentColor}
-                      onChange={(e) => setPdfAccentColor(e.target.value)}
-                      className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
-                      title="Elegir color personalizado"
-                    />
-                    <span className="text-xs text-gray-600">Otro</span>
-                  </div>
-                </div>
-              </div>
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
@@ -1396,7 +1321,7 @@ export default function Settings() {
                 {/* Formulario para agregar nueva cuenta */}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 bg-gray-50 rounded-lg">
                   <select
-                    id="newBankNamePersonalizacion"
+                    id="newBankName"
                     className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                     defaultValue=""
                   >
@@ -1411,7 +1336,7 @@ export default function Settings() {
                     <option value="Otro">Otro</option>
                   </select>
                   <select
-                    id="newBankCurrencyPersonalizacion"
+                    id="newBankCurrency"
                     className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                     defaultValue="PEN"
                   >
@@ -1419,13 +1344,13 @@ export default function Settings() {
                     <option value="USD">Dólares</option>
                   </select>
                   <input
-                    id="newBankAccountPersonalizacion"
+                    id="newBankAccount"
                     type="text"
                     placeholder="Nº Cuenta"
                     className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                   />
                   <input
-                    id="newBankCciPersonalizacion"
+                    id="newBankCci"
                     type="text"
                     placeholder="CCI (opcional)"
                     className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
@@ -1433,10 +1358,10 @@ export default function Settings() {
                   <button
                     type="button"
                     onClick={() => {
-                      const bank = document.getElementById('newBankNamePersonalizacion').value
-                      const currency = document.getElementById('newBankCurrencyPersonalizacion').value
-                      const accountNumber = document.getElementById('newBankAccountPersonalizacion').value
-                      const cci = document.getElementById('newBankCciPersonalizacion').value
+                      const bank = document.getElementById('newBankName').value
+                      const currency = document.getElementById('newBankCurrency').value
+                      const accountNumber = document.getElementById('newBankAccount').value
+                      const cci = document.getElementById('newBankCci').value
 
                       if (!bank || !accountNumber) {
                         toast.error('Ingresa el banco y número de cuenta')
@@ -1446,10 +1371,10 @@ export default function Settings() {
                       setBankAccounts([...bankAccounts, { bank, currency, accountNumber, cci }])
 
                       // Limpiar campos
-                      document.getElementById('newBankNamePersonalizacion').value = ''
-                      document.getElementById('newBankCurrencyPersonalizacion').value = 'PEN'
-                      document.getElementById('newBankAccountPersonalizacion').value = ''
-                      document.getElementById('newBankCciPersonalizacion').value = ''
+                      document.getElementById('newBankName').value = ''
+                      document.getElementById('newBankCurrency').value = 'PEN'
+                      document.getElementById('newBankAccount').value = ''
+                      document.getElementById('newBankCci').value = ''
                     }}
                     className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
                   >
@@ -1459,37 +1384,34 @@ export default function Settings() {
               </div>
             </div>
           </CardContent>
-
-          {/* Botón Guardar */}
-          <div className="px-6 py-4 border-t border-gray-100">
-            <Button
-              onClick={handleSubmit(onSubmit)}
-              disabled={isSaving}
-              className="w-full sm:w-auto"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Guardar Cambios
-                </>
-              )}
-            </Button>
-          </div>
         </Card>
+
+        {/* Actions for Company Info */}
+        <div className="flex justify-end">
+          <Button type="submit" disabled={isSaving || uploadingLogo}>
+            {isSaving || uploadingLogo ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {uploadingLogo ? 'Subiendo logo...' : 'Guardando...'}
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Guardar Configuración
+              </>
+            )}
+          </Button>
+        </div>
+        </form>
       )}
 
-      {/* Tab Content - Preferencias */}
+      {/* Tab Content - Preferencias (Tipo de negocio + Personalización) */}
       {activeTab === 'preferencias' && (
         <Card>
           <CardHeader>
             <div className="flex items-center space-x-2">
               <SettingsIcon className="w-5 h-5 text-primary-600" />
-              <CardTitle>Preferencias del Sistema</CardTitle>
+              <CardTitle>Preferencias Generales</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -1614,6 +1536,287 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Color de Acento del PDF */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Color de Acento del PDF
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Este color se usará en los encabezados de tablas y secciones de tus facturas, boletas y cotizaciones.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { color: '#464646', name: 'Gris Oscuro' },
+                    { color: '#1E40AF', name: 'Azul' },
+                    { color: '#065F46', name: 'Verde' },
+                    { color: '#7C2D12', name: 'Marrón' },
+                    { color: '#581C87', name: 'Púrpura' },
+                    { color: '#0F172A', name: 'Negro' },
+                    { color: '#B91C1C', name: 'Rojo' },
+                    { color: '#0E7490', name: 'Cyan' },
+                  ].map((option) => (
+                    <button
+                      key={option.color}
+                      type="button"
+                      onClick={() => setPdfAccentColor(option.color)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                        pdfAccentColor === option.color
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      title={option.name}
+                    >
+                      <div
+                        className="w-10 h-10 rounded-md shadow-sm"
+                        style={{ backgroundColor: option.color }}
+                      />
+                      <span className="text-xs text-gray-600">{option.name}</span>
+                    </button>
+                  ))}
+                  {/* Selector de color personalizado */}
+                  <div className="flex flex-col items-center gap-1 p-2">
+                    <input
+                      type="color"
+                      value={pdfAccentColor}
+                      onChange={(e) => setPdfAccentColor(e.target.value)}
+                      className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
+                      title="Elegir color personalizado"
+                    />
+                    <span className="text-xs text-gray-600">Otro</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Imágenes de productos */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={enableProductImages}
+                  onChange={(e) => setEnableProductImages(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Habilitar imágenes de productos
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {enableProductImages
+                      ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
+                      : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Personalización del Menú Lateral */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar Menú Lateral</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Elige qué módulos mostrar en tu menú lateral. Desmarca los que no uses para simplificar tu navegación.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Módulos según el modo de negocio */}
+                  {businessMode === 'retail' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                        { id: 'dispatch-guides', label: 'Guías de Remisión', description: 'Documentos de transporte' },
+                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
+                        { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'restaurant' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'orders', label: 'Órdenes', description: 'Listado de órdenes activas' },
+                        { id: 'tables', label: 'Mesas', description: 'Gestión de mesas del local' },
+                        { id: 'kitchen', label: 'Cocina', description: 'Vista de cocina para preparación' },
+                        { id: 'ingredients', label: 'Ingredientes', description: 'Inventario de ingredientes' },
+                        { id: 'recipes', label: 'Recetas', description: 'Recetas y composición de platos' },
+                        { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                        { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'pharmacy' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'laboratories', label: 'Laboratorios', description: 'Fabricantes de medicamentos' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock' },
+                        { id: 'batch-control', label: 'Control de Lotes', description: 'Gestión de lotes y vencimientos' },
+                        { id: 'expiry-alerts', label: 'Alertas de Vencimiento', description: 'Productos próximos a vencer' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Droguerías y distribuidores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  Los módulos principales (Dashboard, POS, Ventas, Clientes, Productos, Configuración) siempre estarán visibles.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+
+          {/* Save Button for Preferences */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      businessMode: businessMode,
+                      restaurantConfig: restaurantConfig,
+                      enableProductImages: enableProductImages,
+                      hiddenMenuItems: hiddenMenuItems,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')
+                  } catch (error) {
+                    console.error('Error al guardar preferencias:', error)
+                    toast.error('Error al guardar las preferencias')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Preferencias
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Ventas (Inventario y POS) */}
+      {activeTab === 'ventas' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <ShoppingCart className="w-5 h-5 text-primary-600" />
+              <CardTitle>Ventas e Inventario</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
               {/* Restaurant Operations Section - Only show in restaurant mode */}
               {businessMode === 'restaurant' && (
                 <>
@@ -1651,9 +1854,9 @@ export default function Settings() {
 
               {/* Inventory Settings Section */}
               <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1">Inventario y Ventas</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Control de Inventario</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Configura el comportamiento del punto de venta y control de inventario
+                  Configura el comportamiento del control de stock
                 </p>
                 <div className="space-y-4">
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
@@ -1674,7 +1877,19 @@ export default function Settings() {
                       </p>
                     </div>
                   </label>
+                </div>
+              </div>
 
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* POS Settings */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Punto de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el comportamiento del punto de venta
+                </p>
+                <div className="space-y-4">
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
                       type="checkbox"
@@ -1709,25 +1924,6 @@ export default function Settings() {
                         {allowPriceEdit
                           ? '✓ Habilitado: Podrás editar el precio de venta de cualquier producto directamente desde el carrito del punto de venta. Útil para aplicar descuentos personalizados, promociones especiales o ajustar precios según el cliente.'
                           : '✗ Deshabilitado: Los productos se venderán siempre al precio registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener precios fijos y evitar errores de digitación.'}
-                      </p>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={enableProductImages}
-                      onChange={(e) => setEnableProductImages(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
-                        Habilitar imágenes de productos
-                      </span>
-                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
-                        {enableProductImages
-                          ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
-                          : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
                       </p>
                     </div>
                   </label>
@@ -1778,7 +1974,19 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
 
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Notas de Venta */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Notas de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura opciones específicas para notas de venta
+                </p>
+                <div className="space-y-4">
                   <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <input
                       type="checkbox"
@@ -1826,10 +2034,70 @@ export default function Settings() {
                   </label>
                 </div>
               </div>
+            </div>
+          </CardContent>
 
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
+          {/* Save Button for Ventas */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
 
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      restaurantConfig: restaurantConfig,
+                      allowNegativeStock: allowNegativeStock,
+                      allowCustomProducts: allowCustomProducts,
+                      allowPriceEdit: allowPriceEdit,
+                      defaultDocumentType: defaultDocumentType,
+                      hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
+                      allowPartialPayments: allowPartialPayments,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    toast.success('Configuración de ventas guardada exitosamente.')
+                  } catch (error) {
+                    console.error('Error al guardar configuración:', error)
+                    toast.error('Error al guardar la configuración')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Configuración
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Avanzado (SUNAT, Comprobantes, GRE, Privacidad) */}
+      {activeTab === 'avanzado' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Cog className="w-5 h-5 text-primary-600" />
+              <CardTitle>Configuración Avanzada</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
               {/* Configuración de Envío a SUNAT */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Envío a SUNAT</h3>
@@ -2022,7 +2290,7 @@ export default function Settings() {
             </div>
           </CardContent>
 
-          {/* Save Button for Preferences */}
+          {/* Save Button for Avanzado */}
           <div className="px-6 pb-6">
             <div className="flex justify-end">
               <Button
@@ -2036,26 +2304,17 @@ export default function Settings() {
                   try {
                     const businessRef = doc(db, 'businesses', getBusinessId())
                     await setDoc(businessRef, {
-                      businessMode: businessMode,
-                      restaurantConfig: restaurantConfig,
-                      allowNegativeStock: allowNegativeStock,
-                      allowCustomProducts: allowCustomProducts,
-                      allowPriceEdit: allowPriceEdit,
-                      enableProductImages: enableProductImages,
-                      defaultDocumentType: defaultDocumentType,
-                      hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
-                      allowPartialPayments: allowPartialPayments,
-                      allowDeleteInvoices: allowDeleteInvoices,
                       autoSendToSunat: autoSendToSunat,
-                      dispatchGuidesEnabled: dispatchGuidesEnabled,
+                      allowDeleteInvoices: allowDeleteInvoices,
                       allowCustomEmissionDate: allowCustomEmissionDate,
+                      dispatchGuidesEnabled: dispatchGuidesEnabled,
                       hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
-                    toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')
+                    toast.success('Configuración avanzada guardada exitosamente. Recarga la página para ver los cambios en el menú.')
                   } catch (error) {
-                    console.error('Error al guardar preferencias:', error)
-                    toast.error('Error al guardar las preferencias')
+                    console.error('Error al guardar configuración:', error)
+                    toast.error('Error al guardar la configuración')
                   } finally {
                     setIsSaving(false)
                   }
@@ -2070,7 +2329,7 @@ export default function Settings() {
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Guardar Preferencias
+                    Guardar Configuración
                   </>
                 )}
               </Button>
