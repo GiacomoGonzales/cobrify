@@ -132,7 +132,7 @@ const getExpirationStatus = (expirationDate) => {
 }
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -214,6 +214,9 @@ export default function Products() {
   const [productImagePreview, setProductImagePreview] = useState(null) // URL preview
   const [uploadingImage, setUploadingImage] = useState(false)
 
+  // Verificar si las imágenes de productos están habilitadas (por admin O por preferencia del usuario)
+  const canUseProductImages = hasFeature('productImages') || businessSettings?.enableProductImages
+
   const {
     register,
     handleSubmit,
@@ -257,7 +260,7 @@ export default function Products() {
       if (isDemoMode && demoData) {
         // Cargar datos de demo
         setProducts(demoData.products || [])
-        setCategories([]) // Demo no necesita categorías por ahora
+        setCategories(demoData.categories || [])
         setIsLoading(false)
         return
       }
@@ -643,7 +646,7 @@ export default function Products() {
       }
 
       // Handle product image upload (only if feature is enabled)
-      if (hasFeature('productImages') && productImage) {
+      if (canUseProductImages && productImage) {
         try {
           setUploadingImage(true)
           const businessId = getBusinessId()
@@ -2351,7 +2354,7 @@ export default function Products() {
             {/* Imagen y Descripción en fila */}
             <div className="flex gap-4">
               {/* Image upload - only shown if feature is enabled */}
-              {hasFeature('productImages') && (
+              {canUseProductImages && (
                 <div className="flex-shrink-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
                   <div className="relative">
@@ -2410,7 +2413,7 @@ export default function Products() {
                 </label>
                 <textarea
                   {...register('description')}
-                  rows={hasFeature('productImages') ? 3 : 2}
+                  rows={canUseProductImages ? 3 : 2}
                   placeholder="Descripción breve del producto o servicio"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
                 />

@@ -23,7 +23,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoRestaurantContext,
       businessMode: 'restaurant', // Modo restaurante
-      businessSettings: { dispatchGuidesEnabled: true }, // Habilitar guías en demo
+      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true }, // Habilitar guías e imágenes en demo
       userFeatures: { expenseManagement: true }, // Features habilitados en demo
       hasFeature: (feature) => ['expenseManagement'].includes(feature), // Features disponibles en demo
       getBusinessId: demoRestaurantContext.getBusinessId,
@@ -45,7 +45,7 @@ export function useAppContext() {
       isDemoMode: true,
       demoData: demoContext.demoData,
       businessMode: 'retail', // Modo por defecto en demo
-      businessSettings: { dispatchGuidesEnabled: true }, // Habilitar guías en demo
+      businessSettings: { dispatchGuidesEnabled: true, enableProductImages: true }, // Habilitar guías e imágenes en demo
       userFeatures: { expenseManagement: true }, // Features habilitados en demo
       hasFeature: (feature) => ['expenseManagement'].includes(feature), // Features disponibles en demo
       getBusinessId: () => demoContext.demoData.user.uid, // Retornar el ID del usuario demo

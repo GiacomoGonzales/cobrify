@@ -85,6 +85,7 @@ export default function Settings() {
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
+  const [enableProductImages, setEnableProductImages] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
 
   // Estados para configuración de notas de venta
@@ -289,6 +290,7 @@ export default function Settings() {
         setAllowNegativeStock(businessData.allowNegativeStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
+        setEnableProductImages(businessData.enableProductImages || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
 
         // Cargar configuración de notas de venta
@@ -1711,6 +1713,25 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={enableProductImages}
+                      onChange={(e) => setEnableProductImages(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Habilitar imágenes de productos
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {enableProductImages
+                          ? '✓ Habilitado: Podrás subir imágenes para tus productos. Las imágenes se mostrarán en el catálogo de productos y en el punto de venta, facilitando la identificación visual de cada producto.'
+                          : '✗ Deshabilitado: Los productos se mostrarán sin imagen. Recomendado si prefieres un catálogo más simple o tienes muchos productos sin fotos.'}
+                      </p>
+                    </div>
+                  </label>
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -2020,6 +2041,7 @@ export default function Settings() {
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
+                      enableProductImages: enableProductImages,
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,

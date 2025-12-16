@@ -188,12 +188,9 @@ export default function Inventory() {
     if (!user?.uid) return
 
     try {
-      // MODO DEMO: Usar categorías de ejemplo
+      // MODO DEMO: Usar categorías del demo data
       if (isDemoMode && demoData) {
-        setProductCategories([
-          { id: 'cat-1', name: 'Electrónica', parentId: null },
-          { id: 'cat-2', name: 'Servicios', parentId: null }
-        ])
+        setProductCategories(demoData.categories || [])
         return
       }
 

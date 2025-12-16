@@ -441,15 +441,11 @@ export default function POS() {
         setProducts(demoData.products || [])
         setCustomers(demoData.customers || [])
         setCompanySettings(demoData.business || null)
-        setCategories([])
+        setCategories(demoData.categories || [])
         // Almacenes de demo
-        const demoWarehouses = [
-          { id: '1', name: 'Almacén Principal', isDefault: true, isActive: true },
-          { id: '2', name: 'Almacén Secundario', isDefault: false, isActive: true },
-          { id: '3', name: 'Almacén de Belleza', isDefault: false, isActive: true },
-        ]
-        setWarehouses(demoWarehouses)
-        setSelectedWarehouse(demoWarehouses[0])
+        setWarehouses(demoData.warehouses || [])
+        const defaultWarehouse = (demoData.warehouses || []).find(w => w.isDefault) || demoData.warehouses?.[0] || null
+        setSelectedWarehouse(defaultWarehouse)
         setIsLoading(false)
         return
       }
