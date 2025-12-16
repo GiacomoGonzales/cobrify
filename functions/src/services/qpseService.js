@@ -106,8 +106,31 @@ async function firmarXML(nombreArchivo, xmlContent, token, environment = 'demo')
     return response.data
 
   } catch (error) {
-    console.error('❌ Error al firmar XML con QPse:', error.response?.data || error.message)
-    throw new Error(`Error al firmar con QPse: ${error.response?.data?.message || error.message}`)
+    console.error('❌ Error al firmar XML con QPse:')
+    console.error('Status:', error.response?.status)
+    console.error('Data completa:', JSON.stringify(error.response?.data, null, 2))
+    console.error('Headers:', JSON.stringify(error.response?.headers, null, 2))
+    console.error('Message:', error.message)
+
+    // Extraer mensaje de error más específico
+    const errorData = error.response?.data
+    let errorMessage = error.message
+
+    if (errorData) {
+      if (errorData.errors && Array.isArray(errorData.errors)) {
+        errorMessage = `QPse errors: ${errorData.errors.join(', ')}`
+      } else if (errorData.errores && Array.isArray(errorData.errores)) {
+        errorMessage = `QPse errores: ${errorData.errores.join(', ')}`
+      } else if (errorData.mensaje) {
+        errorMessage = errorData.mensaje
+      } else if (errorData.message) {
+        errorMessage = errorData.message
+      } else if (typeof errorData === 'string') {
+        errorMessage = errorData
+      }
+    }
+
+    throw new Error(`Error al firmar con QPse: ${errorMessage}`)
   }
 }
 

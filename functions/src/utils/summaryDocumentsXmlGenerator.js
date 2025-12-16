@@ -144,36 +144,50 @@ function generateDocumentLine(doc) {
   // Formatear montos a 2 decimales
   const formatAmount = (amount) => (amount || 0).toFixed(2)
 
-  // Generar secciones de montos según tipo de operación
+  // Si no hay ningún monto desglosado, calcular desde el total
+  let effectiveTaxableAmount = taxableAmount
+  let effectiveExemptAmount = exemptAmount
+  let effectiveFreeAmount = freeAmount
+
+  if (effectiveTaxableAmount === 0 && effectiveExemptAmount === 0 && effectiveFreeAmount === 0 && total > 0) {
+    // Legacy: calcular desde total
+    if (igv > 0) {
+      effectiveTaxableAmount = total / 1.18
+    } else {
+      effectiveExemptAmount = total
+    }
+  }
+
+  // Generar BillingPayments SOLO para montos > 0
   let billingPayments = ''
 
-  // Monto gravado (operación gravada)
-  if (taxableAmount > 0) {
+  // Monto gravado (operación gravada) - InstructionID 01
+  if (effectiveTaxableAmount > 0) {
     billingPayments += `<sac:BillingPayment>` +
-      `<cbc:PaidAmount currencyID="${currency}">${formatAmount(taxableAmount)}</cbc:PaidAmount>` +
+      `<cbc:PaidAmount currencyID="${currency}">${formatAmount(effectiveTaxableAmount)}</cbc:PaidAmount>` +
       `<cbc:InstructionID>01</cbc:InstructionID>` +
       `</sac:BillingPayment>`
   }
 
-  // Monto exonerado
-  if (exemptAmount > 0) {
+  // Monto exonerado - InstructionID 02
+  if (effectiveExemptAmount > 0) {
     billingPayments += `<sac:BillingPayment>` +
-      `<cbc:PaidAmount currencyID="${currency}">${formatAmount(exemptAmount)}</cbc:PaidAmount>` +
+      `<cbc:PaidAmount currencyID="${currency}">${formatAmount(effectiveExemptAmount)}</cbc:PaidAmount>` +
       `<cbc:InstructionID>02</cbc:InstructionID>` +
       `</sac:BillingPayment>`
   }
 
-  // Monto inafecto/gratuito
-  if (freeAmount > 0) {
+  // Monto inafecto - InstructionID 03
+  if (effectiveFreeAmount > 0) {
     billingPayments += `<sac:BillingPayment>` +
-      `<cbc:PaidAmount currencyID="${currency}">${formatAmount(freeAmount)}</cbc:PaidAmount>` +
+      `<cbc:PaidAmount currencyID="${currency}">${formatAmount(effectiveFreeAmount)}</cbc:PaidAmount>` +
       `<cbc:InstructionID>03</cbc:InstructionID>` +
       `</sac:BillingPayment>`
   }
 
-  // Si no hay ningún monto específico, usar el total como gravado
+  // Fallback: si no hay ningún BillingPayment, usar total como gravado
   if (!billingPayments && total > 0) {
-    const baseAmount = total / 1.18 // Calcular base del total con IGV
+    const baseAmount = total / 1.18
     billingPayments = `<sac:BillingPayment>` +
       `<cbc:PaidAmount currencyID="${currency}">${formatAmount(baseAmount)}</cbc:PaidAmount>` +
       `<cbc:InstructionID>01</cbc:InstructionID>` +
@@ -187,8 +201,8 @@ function generateDocumentLine(doc) {
   // Generar TaxSubtotals según tipos de operación
   let taxSubtotals = ''
 
-  // TaxSubtotal para operaciones gravadas (IGV)
-  if (taxableAmount > 0 || (igv > 0)) {
+  // TaxSubtotal para operaciones gravadas (IGV) - incluir si hay gravado o IGV
+  if (effectiveTaxableAmount > 0 || igv > 0) {
     taxSubtotals += `<cac:TaxSubtotal>` +
       `<cbc:TaxAmount currencyID="${currency}">${formatAmount(igv)}</cbc:TaxAmount>` +
       `<cac:TaxCategory>` +
@@ -201,8 +215,8 @@ function generateDocumentLine(doc) {
       `</cac:TaxSubtotal>`
   }
 
-  // TaxSubtotal para operaciones exoneradas
-  if (exemptAmount > 0) {
+  // TaxSubtotal para operaciones exoneradas - solo si hay monto
+  if (effectiveExemptAmount > 0) {
     taxSubtotals += `<cac:TaxSubtotal>` +
       `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +
       `<cac:TaxCategory>` +
@@ -215,8 +229,8 @@ function generateDocumentLine(doc) {
       `</cac:TaxSubtotal>`
   }
 
-  // TaxSubtotal para operaciones inafectas
-  if (freeAmount > 0) {
+  // TaxSubtotal para operaciones inafectas - solo si hay monto
+  if (effectiveFreeAmount > 0) {
     taxSubtotals += `<cac:TaxSubtotal>` +
       `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +
       `<cac:TaxCategory>` +
@@ -229,7 +243,7 @@ function generateDocumentLine(doc) {
       `</cac:TaxSubtotal>`
   }
 
-  // Si no hay ningún TaxSubtotal, agregar uno de IGV con 0
+  // Fallback: si no hay ningún TaxSubtotal, agregar uno de IGV con 0
   if (!taxSubtotals) {
     taxSubtotals = `<cac:TaxSubtotal>` +
       `<cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>` +

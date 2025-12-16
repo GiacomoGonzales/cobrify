@@ -2913,34 +2913,38 @@ export const voidBoleta = onRequest(
       console.log(`📄 Generando resumen diario de baja: ${summaryDocId}`)
 
       // 6. Preparar fecha de referencia (fecha de emisión de la boleta)
-      let issueDate
+      let issueDateUTC
       console.log('📅 boletaData.issueDate:', boletaData.issueDate, 'tipo:', typeof boletaData.issueDate)
 
       if (boletaData.issueDate?.toDate) {
-        issueDate = boletaData.issueDate.toDate()
+        issueDateUTC = boletaData.issueDate.toDate()
       } else if (boletaData.issueDate?._seconds) {
-        issueDate = new Date(boletaData.issueDate._seconds * 1000)
+        issueDateUTC = new Date(boletaData.issueDate._seconds * 1000)
       } else if (typeof boletaData.issueDate === 'string') {
-        issueDate = new Date(boletaData.issueDate)
+        issueDateUTC = new Date(boletaData.issueDate)
       } else if (boletaData.issueDate instanceof Date) {
-        issueDate = boletaData.issueDate
+        issueDateUTC = boletaData.issueDate
       } else if (boletaData.createdAt?.toDate) {
         console.log('⚠️ Usando createdAt como fecha de emisión')
-        issueDate = boletaData.createdAt.toDate()
+        issueDateUTC = boletaData.createdAt.toDate()
       } else {
         console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
-        issueDate = new Date()
+        issueDateUTC = new Date()
       }
 
-      if (isNaN(issueDate.getTime())) {
+      if (isNaN(issueDateUTC.getTime())) {
         console.error('❌ Fecha inválida:', boletaData.issueDate)
         res.status(400).json({ error: 'Fecha de emisión de la boleta inválida' })
         return
       }
 
+      // Convertir fecha de emisión de la boleta a hora de Perú (UTC-5)
+      const issueDate = new Date(issueDateUTC.getTime() + (peruOffset - issueDateUTC.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha emisión boleta UTC:', issueDateUTC.toISOString(), '-> Perú:', issueDate.toISOString())
+
       const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate (resumen):', issueDateStr)
 
       // 7. Preparar datos del cliente
       const customerIdentityType = getIdentityTypeCode(boletaData.customer?.documentType || boletaData.customer?.identityType || '1')
@@ -3416,34 +3420,38 @@ export const voidBoletaQPse = onRequest(
       console.log(`📄 [QPse] Generando resumen diario de baja: ${summaryDocId}`)
 
       // 6. Preparar fecha de referencia (fecha de emisión de la boleta)
-      let issueDate
+      let issueDateUTC
       console.log('📅 boletaData.issueDate:', boletaData.issueDate, 'tipo:', typeof boletaData.issueDate)
 
       if (boletaData.issueDate?.toDate) {
-        issueDate = boletaData.issueDate.toDate()
+        issueDateUTC = boletaData.issueDate.toDate()
       } else if (boletaData.issueDate?._seconds) {
-        issueDate = new Date(boletaData.issueDate._seconds * 1000)
+        issueDateUTC = new Date(boletaData.issueDate._seconds * 1000)
       } else if (typeof boletaData.issueDate === 'string') {
-        issueDate = new Date(boletaData.issueDate)
+        issueDateUTC = new Date(boletaData.issueDate)
       } else if (boletaData.issueDate instanceof Date) {
-        issueDate = boletaData.issueDate
+        issueDateUTC = boletaData.issueDate
       } else if (boletaData.createdAt?.toDate) {
         console.log('⚠️ Usando createdAt como fecha de emisión')
-        issueDate = boletaData.createdAt.toDate()
+        issueDateUTC = boletaData.createdAt.toDate()
       } else {
         console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
-        issueDate = new Date()
+        issueDateUTC = new Date()
       }
 
-      if (isNaN(issueDate.getTime())) {
+      if (isNaN(issueDateUTC.getTime())) {
         console.error('❌ Fecha inválida:', boletaData.issueDate)
         res.status(400).json({ error: 'Fecha de emisión de la boleta inválida' })
         return
       }
 
+      // Convertir fecha de emisión de la boleta a hora de Perú (UTC-5)
+      const issueDate = new Date(issueDateUTC.getTime() + (peruOffset - issueDateUTC.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha emisión boleta UTC:', issueDateUTC.toISOString(), '-> Perú:', issueDate.toISOString())
+
       const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate (resumen):', issueDateStr)
 
       // 7. Preparar datos del cliente
       const customerIdentityType = getIdentityTypeCode(boletaData.customer?.documentType || boletaData.customer?.identityType || '1')
@@ -3507,7 +3515,9 @@ export const voidBoletaQPse = onRequest(
       const summaryXml = generateSummaryDocumentsXML(summaryXmlData)
 
       console.log('✅ [QPse] XML de resumen diario generado')
-      console.log('📄 XML preview:', summaryXml.substring(0, 500))
+      console.log('📄 XML completo:')
+      console.log(summaryXml)
+      console.log('📊 Datos usados para generar XML:', JSON.stringify(summaryXmlData, null, 2))
 
       // 10. Marcar boleta como "anulando" antes de enviar
       await boletaRef.update({
