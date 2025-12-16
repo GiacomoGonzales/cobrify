@@ -1,17 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "(www\\.)?factuvip\\.com"
-        }
-      ],
-      "destination": "/resellers/factuvip/"
-    },
-    {
-      "source": "/((?!resellers).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
