@@ -28,6 +28,7 @@ import {
   Receipt,
   Code,
   FileCheck,
+  Archive,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -44,6 +45,7 @@ import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvo
 import { generateInvoicePDF, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
+import { exportXMLandCDR, downloadZip, generateZipFileName } from '@/services/xmlExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
@@ -92,6 +94,17 @@ export default function InvoiceList() {
     endDate: '',
     excludeConverted: true, // Por defecto excluir boletas convertidas desde notas
   })
+
+  // Estados para exportación XML/CDR
+  const [showXMLExportModal, setShowXMLExportModal] = useState(false)
+  const [xmlExportFilters, setXmlExportFilters] = useState({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    includeXML: true,
+    includeCDR: true,
+  })
+  const [isExportingXML, setIsExportingXML] = useState(false)
+  const [xmlExportProgress, setXmlExportProgress] = useState(0)
 
   // Estados para modal de guía de remisión
   const [showDispatchGuideModal, setShowDispatchGuideModal] = useState(false)
@@ -645,6 +658,64 @@ ${companySettings?.website ? companySettings.website : ''}`
     }
   }
 
+  // Función para exportar XML/CDR masivamente
+  const handleExportXMLCDR = async () => {
+    if (!companySettings?.ruc) {
+      toast.error('Configura el RUC de tu empresa primero')
+      return
+    }
+
+    setIsExportingXML(true)
+    setXmlExportProgress(0)
+
+    try {
+      const { month, year, includeXML, includeCDR } = xmlExportFilters
+
+      // Filtrar facturas del mes seleccionado que fueron aceptadas por SUNAT
+      const startDate = new Date(year, month - 1, 1)
+      const endDate = new Date(year, month, 0, 23, 59, 59)
+
+      const filteredInvoices = invoices.filter(inv => {
+        if (inv.sunatStatus !== 'accepted') return false
+        if (!inv.sunatResponse) return false
+
+        const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
+        return invDate >= startDate && invDate <= endDate
+      })
+
+      if (filteredInvoices.length === 0) {
+        toast.error('No hay comprobantes aceptados por SUNAT en el período seleccionado')
+        setIsExportingXML(false)
+        return
+      }
+
+      const { blob, results } = await exportXMLandCDR(
+        filteredInvoices,
+        companySettings.ruc,
+        { includeXML, includeCDR },
+        (progress) => setXmlExportProgress(progress)
+      )
+
+      const fileName = generateZipFileName(companySettings.ruc, month, year)
+      downloadZip(blob, fileName)
+
+      const message = `Exportados: ${results.xmlCount} XML y ${results.cdrCount} CDR`
+      if (results.failed > 0) {
+        toast.warning(`${message}. ${results.failed} archivos no disponibles.`)
+      } else {
+        toast.success(message)
+      }
+
+      setShowXMLExportModal(false)
+    } catch (error) {
+      console.error('Error al exportar XML/CDR:', error)
+      toast.error(error.message || 'Error al exportar XML/CDR')
+    } finally {
+      setIsExportingXML(false)
+      setXmlExportProgress(0)
+    }
+  }
+
   const handleUpdateStatus = async (invoiceId, newStatus) => {
     if (!user?.uid) return
 
@@ -969,6 +1040,15 @@ ${companySettings?.website ? companySettings.website : ''}`
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={() => setShowXMLExportModal(true)}
+            className="w-full sm:w-auto"
+            title="Descargar XML y CDR para auditoría SUNAT"
+          >
+            <Archive className="w-4 h-4 mr-2" />
+            XML/CDR
+          </Button>
           <Button
             variant="outline"
             onClick={() => setShowExportModal(true)}
@@ -2731,6 +2811,138 @@ ${companySettings?.website ? companySettings.website : ''}`
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Exportar a Excel
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Exportar XML/CDR */}
+      <Modal
+        isOpen={showXMLExportModal}
+        onClose={() => !isExportingXML && setShowXMLExportModal(false)}
+        title="Exportar XML y CDR para Auditoría"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Descarga todos los XML y CDR de comprobantes aceptados por SUNAT para el período seleccionado.
+            Útil para declaraciones mensuales y auditorías.
+          </p>
+
+          {/* Selector de período */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Mes</label>
+              <Select
+                value={xmlExportFilters.month}
+                onChange={(e) => setXmlExportFilters(prev => ({ ...prev, month: parseInt(e.target.value) }))}
+                disabled={isExportingXML}
+              >
+                <option value={1}>Enero</option>
+                <option value={2}>Febrero</option>
+                <option value={3}>Marzo</option>
+                <option value={4}>Abril</option>
+                <option value={5}>Mayo</option>
+                <option value={6}>Junio</option>
+                <option value={7}>Julio</option>
+                <option value={8}>Agosto</option>
+                <option value={9}>Septiembre</option>
+                <option value={10}>Octubre</option>
+                <option value={11}>Noviembre</option>
+                <option value={12}>Diciembre</option>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Año</label>
+              <Select
+                value={xmlExportFilters.year}
+                onChange={(e) => setXmlExportFilters(prev => ({ ...prev, year: parseInt(e.target.value) }))}
+                disabled={isExportingXML}
+              >
+                {[...Array(5)].map((_, i) => {
+                  const year = new Date().getFullYear() - i
+                  return <option key={year} value={year}>{year}</option>
+                })}
+              </Select>
+            </div>
+          </div>
+
+          {/* Opciones de exportación */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Incluir en la exportación:</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={xmlExportFilters.includeXML}
+                  onChange={(e) => setXmlExportFilters(prev => ({ ...prev, includeXML: e.target.checked }))}
+                  disabled={isExportingXML}
+                  className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Archivos XML</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={xmlExportFilters.includeCDR}
+                  onChange={(e) => setXmlExportFilters(prev => ({ ...prev, includeCDR: e.target.checked }))}
+                  disabled={isExportingXML}
+                  className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                />
+                <span className="text-sm text-gray-700">Archivos CDR (respuesta SUNAT)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Barra de progreso */}
+          {isExportingXML && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Descargando archivos...</span>
+                <span className="font-medium">{xmlExportProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${xmlExportProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Info */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-700">
+              <strong>Nota:</strong> Solo se exportarán comprobantes electrónicos (facturas, boletas, notas de crédito/débito)
+              que hayan sido aceptados por SUNAT. Los archivos se descargarán en un ZIP organizado por carpetas XML y CDR.
+            </p>
+          </div>
+
+          {/* Botones */}
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowXMLExportModal(false)}
+              disabled={isExportingXML}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleExportXMLCDR}
+              disabled={isExportingXML || (!xmlExportFilters.includeXML && !xmlExportFilters.includeCDR)}
+              className="w-full sm:flex-1"
+            >
+              {isExportingXML ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Exportando...
+                </>
+              ) : (
+                <>
+                  <Archive className="w-4 h-4 mr-2" />
+                  Descargar ZIP
+                </>
+              )}
             </Button>
           </div>
         </div>
