@@ -920,9 +920,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
-  doc.text('TOTAL', totalsX + 5, footerY + 12)
+  doc.text('TOTAL', totalsX + 5, footerY + 14)
   doc.setFontSize(11)
-  doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 12, { align: 'right' })
+  doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
 
   // --- CUENTAS BANCARIAS (izquierda) con borde ---
   doc.setTextColor(...BLACK)
