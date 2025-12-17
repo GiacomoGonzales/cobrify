@@ -763,7 +763,7 @@ export default function CatalogoPublico() {
           </div>
 
           <div className="mt-8 pt-6 border-t text-center text-sm text-gray-400">
-            Catálogo powered by <a href="https://cobrify.com" className="text-gray-600 hover:underline">Cobrify</a>
+            Catálogo powered by <a href="https://cobrifyperu.com" className="text-gray-600 hover:underline">Cobrify</a>
           </div>
         </div>
       </footer>
