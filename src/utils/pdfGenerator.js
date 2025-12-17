@@ -1194,3 +1194,13 @@ export const getInvoicePDFBlob = async (invoice, companySettings, branding = nul
   const doc = await generateInvoicePDF(invoice, companySettings, false, branding)
   return doc.output('blob')
 }
+
+/**
+ * Abre el PDF en una nueva pestaña para vista previa
+ */
+export const previewInvoicePDF = async (invoice, companySettings, branding = null) => {
+  const doc = await generateInvoicePDF(invoice, companySettings, false, branding)
+  const blobUrl = doc.output('bloburl')
+  window.open(blobUrl, '_blank')
+  return blobUrl
+}

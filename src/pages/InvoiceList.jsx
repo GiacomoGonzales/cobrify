@@ -41,7 +41,7 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
-import { generateInvoicePDF } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, previewInvoicePDF } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -1480,6 +1480,23 @@ ${companySettings?.website ? companySettings.website : ''}`
                     <span>Ver detalles</span>
                   </button>
 
+                  {/* Vista previa PDF */}
+                  <button
+                    onClick={async () => {
+                      setOpenMenuId(null)
+                      try {
+                        await previewInvoicePDF(invoice, companySettings, branding)
+                      } catch (error) {
+                        console.error('Error al generar vista previa:', error)
+                        toast.error(`Error al generar vista previa: ${error.message}`)
+                      }
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <Printer className="w-4 h-4 text-purple-600" />
+                    <span>Vista previa / Imprimir</span>
+                  </button>
+
                   {/* Descargar PDF */}
                   <button
                     onClick={async () => {
@@ -2005,6 +2022,26 @@ ${companySettings?.website ? companySettings.website : ''}`
               >
                 <Printer className="w-4 h-4 mr-2" />
                 Imprimir
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  // Validar que existan los datos de la empresa
+                  if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
+                    toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
+                    return
+                  }
+
+                  try {
+                    await previewInvoicePDF(viewingInvoice, companySettings, branding)
+                  } catch (error) {
+                    console.error('Error al generar vista previa:', error)
+                    toast.error('Error al generar la vista previa')
+                  }
+                }}
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                Vista Previa
               </Button>
               <Button
                 onClick={async () => {

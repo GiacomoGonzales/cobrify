@@ -38,7 +38,7 @@ import {
   markQuotationAsConverted,
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
-import { generateQuotationPDF } from '@/utils/quotationPdfGenerator'
+import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
 
 export default function Quotations() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -317,6 +317,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
     } catch (error) {
       console.error('Error al generar PDF:', error)
       toast.error('Error al generar el PDF')
+    }
+  }
+
+  const handlePreviewPDF = async (quotation) => {
+    if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
+      toast.error(
+        'Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa',
+        5000
+      )
+      return
+    }
+
+    try {
+      await previewQuotationPDF(quotation, companySettings)
+    } catch (error) {
+      console.error('Error al generar vista previa:', error)
+      toast.error('Error al generar la vista previa')
     }
   }
 
@@ -621,6 +638,18 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   <span>Ver detalles</span>
                                 </button>
 
+                                {/* Vista previa PDF */}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    handlePreviewPDF(quotation)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Eye className="w-4 h-4 text-purple-600" />
+                                  <span>Vista previa / Imprimir</span>
+                                </button>
+
                                 {/* Descargar PDF */}
                                 <button
                                   onClick={() => {
@@ -831,6 +860,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setViewingQuotation(null)}>
                 Cerrar
+              </Button>
+              <Button variant="outline" onClick={() => handlePreviewPDF(viewingQuotation)}>
+                <Eye className="w-4 h-4 mr-2" />
+                Vista Previa
               </Button>
               <Button onClick={() => handleDownloadPDF(viewingQuotation)}>
                 <Download className="w-4 h-4 mr-2" />

@@ -997,3 +997,13 @@ export const getQuotationPDFBase64 = async (quotation, companySettings, branding
   const doc = await generateQuotationPDF(quotation, companySettings, false, branding)
   return doc.output('datauristring')
 }
+
+/**
+ * Abre el PDF en una nueva pestaña para vista previa
+ */
+export const previewQuotationPDF = async (quotation, companySettings, branding = null) => {
+  const doc = await generateQuotationPDF(quotation, companySettings, false, branding)
+  const blobUrl = doc.output('bloburl')
+  window.open(blobUrl, '_blank')
+  return blobUrl
+}
