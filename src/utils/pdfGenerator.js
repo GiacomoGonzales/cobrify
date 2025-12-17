@@ -336,22 +336,30 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
       if (aspectRatio >= 2) {
         // Logo muy horizontal (2:1 o más): permitir más ancho pero con límite
-        // Máximo hasta donde empieza la info de empresa (con margen de seguridad)
         const maxHorizontalWidth = logoColumnWidth + infoColumnWidth - 20
-        logoHeight = maxLogoHeight * 0.7 // Altura más reducida para logos muy anchos
+        logoHeight = maxLogoHeight * 0.7
         logoWidth = logoHeight * aspectRatio
         if (logoWidth > maxHorizontalWidth) {
           logoWidth = maxHorizontalWidth
           logoHeight = logoWidth / aspectRatio
         }
-      } else if (aspectRatio >= 1) {
-        // Logo horizontal moderado o cuadrado
-        const maxLogoWidth = logoColumnWidth + 30 // Permitir algo más que la columna
+      } else if (aspectRatio >= 1.3) {
+        // Logo horizontal moderado (1.3:1 a 2:1): permitir más ancho
+        const maxLogoWidth = logoColumnWidth + 30
         logoWidth = maxLogoWidth
         logoHeight = logoWidth / aspectRatio
         if (logoHeight > maxLogoHeight) {
           logoHeight = maxLogoHeight
           logoWidth = logoHeight * aspectRatio
+        }
+      } else if (aspectRatio >= 1) {
+        // Logo cuadrado o casi cuadrado: limitar tamaño para no superponerse
+        const maxLogoWidth = logoColumnWidth - 5
+        logoHeight = maxLogoHeight * 0.75 // Reducir altura para logos cuadrados
+        logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxLogoWidth) {
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
         }
       } else {
         // Logo vertical: priorizar altura máxima

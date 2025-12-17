@@ -259,14 +259,23 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
           logoWidth = maxHorizontalWidth
           logoHeight = logoWidth / aspectRatio
         }
-      } else if (aspectRatio >= 1) {
-        // Logo horizontal moderado o cuadrado
+      } else if (aspectRatio >= 1.3) {
+        // Logo horizontal moderado (1.3:1 a 2:1): permitir más ancho
         const maxLogoWidth = logoColumnWidth + 30
         logoWidth = maxLogoWidth
         logoHeight = logoWidth / aspectRatio
         if (logoHeight > maxLogoHeight) {
           logoHeight = maxLogoHeight
           logoWidth = logoHeight * aspectRatio
+        }
+      } else if (aspectRatio >= 1) {
+        // Logo cuadrado o casi cuadrado: limitar tamaño para no superponerse
+        const maxLogoWidth = logoColumnWidth - 5
+        logoHeight = maxLogoHeight * 0.75
+        logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxLogoWidth) {
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
         }
       } else {
         // Logo vertical: priorizar altura máxima
