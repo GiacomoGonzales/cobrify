@@ -1259,7 +1259,7 @@ export default function Settings() {
               <div className="md:col-span-2">
                 <Input
                   label="Eslogan / Descripción"
-                  placeholder="ESPECIALISTAS EN ELECTRICIDAD Y MANTENIMIENTO"
+                  placeholder="Tu frase comercial o descripción breve"
                   value={companySlogan}
                   onChange={(e) => setCompanySlogan(e.target.value.toUpperCase())}
                   maxLength={80}
