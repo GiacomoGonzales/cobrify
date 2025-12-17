@@ -364,7 +364,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         }
       }
 
-      const logoYPos = currentY + (headerHeight - logoHeight) / 2
+      const logoYPos = currentY + (headerHeight - logoHeight) / 2 - 10
       doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo:', error.message)
