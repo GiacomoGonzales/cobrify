@@ -374,18 +374,22 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== ESLOGAN debajo del logo =====
   if (companySettings?.companySlogan) {
     const slogan = companySettings.companySlogan.toUpperCase()
-    doc.setFontSize(7)
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...ACCENT_COLOR)
 
-    // El eslogan ocupa el ancho del logo + parte del área de información
-    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 30
+    // El eslogan ocupa el ancho del logo + área de información (centrado)
+    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 10
     const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
 
-    // Posición: debajo del header, alineado a la izquierda
-    const sloganY = currentY + headerHeight - 8
-    sloganLines.forEach((line, index) => {
-      doc.text(line, logoX, sloganY + (index * 8))
+    // Limitar a máximo 2 líneas
+    const linesToShow = sloganLines.slice(0, 2)
+
+    // Posición: debajo del header, centrado horizontalmente
+    const sloganCenterX = logoX + (sloganMaxWidth / 2)
+    const sloganY = currentY + headerHeight - 6
+    linesToShow.forEach((line, index) => {
+      doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
     })
 
     doc.setTextColor(...BLACK) // Restaurar color

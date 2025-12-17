@@ -1262,8 +1262,8 @@ export default function Settings() {
                   placeholder="Tu frase comercial o descripción breve"
                   value={companySlogan}
                   onChange={(e) => setCompanySlogan(e.target.value.toUpperCase())}
-                  maxLength={80}
-                  helperText="Aparecerá debajo del logo en el PDF (máx. 80 caracteres)"
+                  maxLength={120}
+                  helperText="Aparecerá debajo del logo en el PDF (máx. 120 caracteres, hasta 2 líneas)"
                 />
               </div>
 
