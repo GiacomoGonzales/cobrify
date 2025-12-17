@@ -17,12 +17,22 @@ const generateDemoData = () => {
     },
     business: {
       businessName: 'EMPRESA DEMO SAC',
+      name: 'EMPRESA DEMO SAC',
       ruc: '20123456789',
       address: 'Av. Larco 1234, Miraflores',
       phone: '01-2345678',
       email: 'ventas@empresademo.com',
       website: 'www.empresademo.com',
       logoUrl: '/demologo.png',
+      // Configuración del catálogo
+      catalogEnabled: true,
+      catalogSlug: 'demo',
+      catalogTagline: 'Tu tienda de tecnología y belleza',
+      catalogWelcome: 'Bienvenido a nuestra tienda. Explora nuestros productos de electrónica y belleza.',
+      catalogColor: '#10B981',
+      catalogWhatsapp: '51987654321',
+      catalogShowPrices: true,
+      catalogAllowOrders: true,
     },
     products: [
       // Productos de electrónica

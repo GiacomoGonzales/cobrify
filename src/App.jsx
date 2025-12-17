@@ -109,6 +109,9 @@ function App() {
             <Route path="/catalogo/:slug" element={<CatalogoPublico />} />
             <Route path="/app/catalogo/:slug" element={<CatalogoPublico />} />
 
+            {/* Catálogo Demo */}
+            <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />
+
             {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}
             <Route path="/demo" element={<Demo />} />
             <Route path="/demo" element={<DemoLayout />}>
