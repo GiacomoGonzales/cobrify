@@ -4462,6 +4462,147 @@ export const socialMetaTags = onRequest(
   }
 )
 
+// ==================== META TAGS DINÁMICOS PARA CATÁLOGO PÚBLICO ====================
+
+/**
+ * Genera HTML con meta tags dinámicos para un catálogo público
+ */
+function generateCatalogMetaTagsHTML(business, slug) {
+  const businessName = business.name || business.businessName || 'Catálogo'
+  const tagline = business.catalogTagline || `Catálogo de productos de ${businessName}`
+  const description = business.catalogWelcome || tagline
+  const logoUrl = business.logoUrl || 'https://cobrifyperu.com/logo.png'
+  const themeColor = business.catalogColor || '#10B981'
+  const url = `https://cobrifyperu.com/catalogo/${slug}`
+
+  // Usar logo del negocio como imagen OG, o una imagen por defecto
+  // Idealmente el negocio debería tener una imagen específica para redes sociales
+  const socialImageUrl = business.catalogSocialImage || business.logoUrl || 'https://cobrifyperu.com/socialmedia.jpg'
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary Meta Tags -->
+  <title>${businessName} - Catálogo de Productos</title>
+  <meta name="title" content="${businessName} - Catálogo de Productos" />
+  <meta name="description" content="${description}" />
+  <meta name="theme-color" content="${themeColor}" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="${logoUrl}" />
+  <link rel="apple-touch-icon" href="${logoUrl}" />
+
+  <!-- Open Graph / Facebook / WhatsApp -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${businessName}" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:title" content="${businessName} - Catálogo de Productos" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${socialImageUrl}" />
+  <meta property="og:image:url" content="${socialImageUrl}" />
+  <meta property="og:image:secure_url" content="${socialImageUrl}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Catálogo de ${businessName}" />
+  <meta property="og:locale" content="es_PE" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="${url}" />
+  <meta name="twitter:title" content="${businessName} - Catálogo de Productos" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${socialImageUrl}" />
+  <meta name="twitter:image:alt" content="Catálogo de ${businessName}" />
+</head>
+<body>
+  <script>window.location.href = "${url}";</script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=${url}">
+    <p>Redirigiendo a <a href="${url}">${businessName}</a>...</p>
+  </noscript>
+</body>
+</html>`
+}
+
+/**
+ * Cloud Function para servir meta tags dinámicos para catálogos públicos
+ * Permite que cada catálogo tenga su propia preview en WhatsApp/Facebook
+ */
+export const catalogMetaTags = onRequest(
+  {
+    region: 'us-central1',
+    cors: true,
+    maxInstances: 10,
+    invoker: 'public'
+  },
+  async (req, res) => {
+    try {
+      const userAgent = req.headers['user-agent'] || ''
+      const path = req.path || req.url || ''
+
+      console.log(`🛍️ [CatalogMeta] Request path: ${path}, UA: ${userAgent.substring(0, 50)}...`)
+
+      // Extraer el slug del path
+      // El path puede ser /catalogo/mi-tienda o /mi-tienda
+      const pathParts = path.split('/').filter(Boolean)
+      let slug = null
+
+      if (pathParts[0] === 'catalogo' && pathParts[1]) {
+        slug = pathParts[1]
+      } else if (pathParts[0] && pathParts[0] !== 'catalogo') {
+        slug = pathParts[0]
+      }
+
+      if (!slug) {
+        console.log(`🛍️ [CatalogMeta] No slug found in path: ${path}`)
+        res.redirect(302, '/catalogo/' + (pathParts[1] || ''))
+        return
+      }
+
+      console.log(`🛍️ [CatalogMeta] Looking for catalog with slug: ${slug}`)
+
+      // Buscar el negocio por catalogSlug
+      const businessesSnapshot = await db.collection('businesses')
+        .where('catalogSlug', '==', slug)
+        .where('catalogEnabled', '==', true)
+        .limit(1)
+        .get()
+
+      if (businessesSnapshot.empty) {
+        console.log(`🛍️ [CatalogMeta] No catalog found for slug: ${slug}`)
+        res.redirect(302, `/catalogo/${slug}`)
+        return
+      }
+
+      const businessDoc = businessesSnapshot.docs[0]
+      const business = businessDoc.data()
+
+      console.log(`🛍️ [CatalogMeta] Found business: ${business.name || business.businessName}`)
+
+      // Solo servir meta tags a bots de redes sociales
+      if (isSocialBot(userAgent)) {
+        console.log(`🛍️ [CatalogMeta] Social bot detected, serving meta tags`)
+        const html = generateCatalogMetaTagsHTML(business, slug)
+        res.set('Content-Type', 'text/html; charset=utf-8')
+        res.set('Cache-Control', 'public, max-age=300') // Cache por 5 minutos
+        res.status(200).send(html)
+        return
+      }
+
+      // Usuarios normales: redirigir a la app React
+      console.log(`🛍️ [CatalogMeta] Normal user, redirecting to app`)
+      res.redirect(302, `/catalogo/${slug}`)
+
+    } catch (error) {
+      console.error('❌ [CatalogMeta] Error:', error)
+      res.redirect(302, '/')
+    }
+  }
+)
+
 // ==================== EXPORTACIÓN MASIVA PARA AUDITORÍA ====================
 
 /**
