@@ -582,7 +582,6 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const tableY = currentY
   const headerRowHeight = 18
   const productRowHeight = 15
-  const MIN_EMPTY_ROWS = 8
 
   const colWidths = {
     cant: CONTENT_WIDTH * 0.08,
@@ -635,12 +634,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const itemHeights = items.map(item => calculateItemHeight(item))
   const totalItemsHeight = itemHeights.reduce((sum, ih) => sum + ih.height, 0)
 
-  // Filas vacías para llenar espacio
-  const remainingHeight = availableHeight - totalItemsHeight
-  const emptyRows = Math.max(0, Math.floor(remainingHeight / productRowHeight))
-  const actualEmptyRows = Math.min(emptyRows, MIN_EMPTY_ROWS)
-
-  const tableHeight = headerRowHeight + totalItemsHeight + (actualEmptyRows * productRowHeight)
+  // Sin filas vacías - solo mostrar productos reales
+  const tableHeight = headerRowHeight + totalItemsHeight
 
   // Encabezado de tabla con color de acento
   doc.setFillColor(...ACCENT_COLOR)
@@ -673,8 +668,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     const item = items[i]
     const { height: rowHeight, nameLines, descLines } = itemHeights[i]
 
-    // Filas alternadas
-    if (i % 2 === 1) {
+    // Filas alternadas (gris primero, luego blanco)
+    if (i % 2 === 0) {
       doc.setFillColor(248, 248, 248)
       doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, rowHeight, 'F')
     }
@@ -720,15 +715,6 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
 
     dataRowY += rowHeight
-  }
-
-  // Renderizar filas vacías
-  for (let i = 0; i < actualEmptyRows; i++) {
-    if ((items.length + i) % 2 === 1) {
-      doc.setFillColor(248, 248, 248)
-      doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, productRowHeight, 'F')
-    }
-    dataRowY += productRowHeight
   }
 
   // ========== 4. PIE DE PÁGINA ==========
