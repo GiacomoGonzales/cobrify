@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/api/reseller-meta"
+    },
+    {
       "source": "/catalogo/:slug",
       "destination": "/api/catalog-meta?slug=:slug"
     },
