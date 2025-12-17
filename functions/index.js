@@ -3,6 +3,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 import { emitirComprobante, emitirNotaCredito, emitirGuiaRemision } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
@@ -14,6 +15,61 @@ import { voidBoletaViaQPse, voidInvoiceViaQPse } from './src/services/qpseServic
 initializeApp()
 const db = getFirestore()
 const auth = getAuth()
+const storage = getStorage()
+
+/**
+ * Guarda un archivo XML/CDR en Firebase Storage
+ * @param {string} businessId - ID del negocio
+ * @param {string} invoiceId - ID del comprobante
+ * @param {string} fileName - Nombre del archivo (ej: 'comprobante.xml', 'cdr.xml')
+ * @param {string} content - Contenido del archivo
+ * @returns {Promise<string>} URL de descarga del archivo
+ */
+async function saveToStorage(businessId, invoiceId, fileName, content) {
+  try {
+    const bucket = storage.bucket()
+    const filePath = `comprobantes/${businessId}/${invoiceId}/${fileName}`
+    const file = bucket.file(filePath)
+
+    await file.save(content, {
+      contentType: 'application/xml',
+      metadata: {
+        cacheControl: 'public, max-age=31536000',
+      }
+    })
+
+    // Generar URL firmada válida por 10 años (para acceso permanente)
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000 // 10 años
+    })
+
+    console.log(`📁 Archivo guardado en Storage: ${filePath}`)
+    return signedUrl
+  } catch (error) {
+    console.error(`❌ Error guardando archivo en Storage: ${error.message}`)
+    // No fallar la emisión si falla el guardado en Storage
+    return null
+  }
+}
+
+/**
+ * Descarga contenido desde una URL externa
+ * @param {string} url - URL del archivo a descargar
+ * @returns {Promise<string|null>} Contenido del archivo o null si falla
+ */
+async function downloadFromUrl(url) {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+    return await response.text()
+  } catch (error) {
+    console.error(`❌ Error descargando desde URL: ${error.message}`)
+    return null
+  }
+}
 
 /**
  * Maneja CORS manualmente
@@ -561,6 +617,101 @@ export const sendInvoiceToSunat = onRequest(
         pendingManual: isPendingManual
       }
 
+      // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE ==========
+      // Solo guardar si el documento fue aceptado o está pendiente de reintento
+      let xmlStorageUrl = null
+      let cdrStorageUrl = null
+
+      if (emissionResult.accepted || isPendingManual) {
+        const documentNumber = `${invoiceData.series}-${invoiceData.correlativeNumber}`
+        console.log(`📁 Guardando XML y CDR para ${documentNumber}...`)
+
+        try {
+          // SUNAT DIRECTO: Guardar XML firmado y CDR
+          if (emissionResult.method === 'sunat_direct') {
+            // Guardar XML firmado
+            if (emissionResult.xml) {
+              xmlStorageUrl = await saveToStorage(
+                userId,
+                invoiceId,
+                `${documentNumber}.xml`,
+                emissionResult.xml
+              )
+            }
+            // Guardar CDR
+            if (emissionResult.cdrData) {
+              cdrStorageUrl = await saveToStorage(
+                userId,
+                invoiceId,
+                `${documentNumber}-CDR.xml`,
+                emissionResult.cdrData
+              )
+            }
+          }
+
+          // QPSE: Descargar XML y CDR desde URLs externas y guardar localmente
+          if (emissionResult.method === 'qpse') {
+            // Descargar y guardar XML
+            if (emissionResult.xmlUrl) {
+              const xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
+              if (xmlContent) {
+                xmlStorageUrl = await saveToStorage(
+                  userId,
+                  invoiceId,
+                  `${documentNumber}.xml`,
+                  xmlContent
+                )
+              }
+            }
+            // Descargar y guardar CDR
+            if (emissionResult.cdrUrl) {
+              const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
+              if (cdrContent) {
+                cdrStorageUrl = await saveToStorage(
+                  userId,
+                  invoiceId,
+                  `${documentNumber}-CDR.xml`,
+                  cdrContent
+                )
+              }
+            }
+          }
+
+          // NUBEFACT: Descargar XML y CDR desde URLs externas y guardar localmente
+          if (emissionResult.method === 'nubefact') {
+            // Descargar y guardar XML
+            if (emissionResult.xmlUrl) {
+              const xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
+              if (xmlContent) {
+                xmlStorageUrl = await saveToStorage(
+                  userId,
+                  invoiceId,
+                  `${documentNumber}.xml`,
+                  xmlContent
+                )
+              }
+            }
+            // Descargar y guardar CDR
+            if (emissionResult.cdrUrl) {
+              const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
+              if (cdrContent) {
+                cdrStorageUrl = await saveToStorage(
+                  userId,
+                  invoiceId,
+                  `${documentNumber}-CDR.xml`,
+                  cdrContent
+                )
+              }
+            }
+          }
+
+          console.log(`✅ Archivos guardados - XML: ${xmlStorageUrl ? 'OK' : 'NO'}, CDR: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+        } catch (storageError) {
+          console.error('⚠️ Error guardando archivos en Storage (no crítico):', storageError)
+          // Continuar sin fallar la emisión
+        }
+      }
+
       // Agregar datos específicos según el método, filtrando undefined y sanitizando
       let methodSpecificData = {}
       if (emissionResult.method === 'nubefact') {
@@ -568,6 +719,8 @@ export const sendInvoiceToSunat = onRequest(
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
+          xmlStorageUrl: xmlStorageUrl,  // URL en Firebase Storage
+          cdrStorageUrl: cdrStorageUrl,  // URL en Firebase Storage
           qrCode: emissionResult.qrCode,
           hash: emissionResult.hash,
           enlace: emissionResult.enlace
@@ -577,13 +730,17 @@ export const sendInvoiceToSunat = onRequest(
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
+          xmlStorageUrl: xmlStorageUrl,  // URL en Firebase Storage
+          cdrStorageUrl: cdrStorageUrl,  // URL en Firebase Storage
           ticket: emissionResult.ticket,
           hash: emissionResult.hash,
           nombreArchivo: emissionResult.nombreArchivo
         }))
       } else if (emissionResult.method === 'sunat_direct') {
         methodSpecificData = sanitizeForFirestore(removeUndefined({
-          cdrData: emissionResult.cdrData
+          cdrData: emissionResult.cdrData,
+          xmlStorageUrl: xmlStorageUrl,  // URL en Firebase Storage
+          cdrStorageUrl: cdrStorageUrl   // URL en Firebase Storage
         }))
       }
 
@@ -1046,6 +1203,55 @@ export const sendCreditNoteToSunat = onRequest(
         pendingManual: isPendingManual
       }
 
+      // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (NOTAS DE CRÉDITO) ==========
+      let xmlStorageUrl = null
+      let cdrStorageUrl = null
+
+      if (emissionResult.accepted || isPendingManual) {
+        const documentNumber = `${creditNoteData.series}-${creditNoteData.correlativeNumber}`
+        console.log(`📁 Guardando XML y CDR de NC para ${documentNumber}...`)
+
+        try {
+          if (emissionResult.method === 'sunat_direct') {
+            if (emissionResult.xml) {
+              xmlStorageUrl = await saveToStorage(
+                userId,
+                creditNoteId,
+                `${documentNumber}.xml`,
+                emissionResult.xml
+              )
+            }
+            if (emissionResult.cdrData) {
+              cdrStorageUrl = await saveToStorage(
+                userId,
+                creditNoteId,
+                `${documentNumber}-CDR.xml`,
+                emissionResult.cdrData
+              )
+            }
+          }
+
+          if (emissionResult.method === 'qpse') {
+            if (emissionResult.xmlUrl) {
+              const xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
+              if (xmlContent) {
+                xmlStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}.xml`, xmlContent)
+              }
+            }
+            if (emissionResult.cdrUrl) {
+              const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
+              if (cdrContent) {
+                cdrStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}-CDR.xml`, cdrContent)
+              }
+            }
+          }
+
+          console.log(`✅ Archivos NC guardados - XML: ${xmlStorageUrl ? 'OK' : 'NO'}, CDR: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+        } catch (storageError) {
+          console.error('⚠️ Error guardando archivos NC en Storage:', storageError)
+        }
+      }
+
       // Agregar datos específicos según el método
       let methodSpecificData = {}
       if (emissionResult.method === 'qpse') {
@@ -1053,13 +1259,17 @@ export const sendCreditNoteToSunat = onRequest(
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
+          xmlStorageUrl: xmlStorageUrl,
+          cdrStorageUrl: cdrStorageUrl,
           ticket: emissionResult.ticket,
           hash: emissionResult.hash,
           nombreArchivo: emissionResult.nombreArchivo
         }))
       } else if (emissionResult.method === 'sunat_direct') {
         methodSpecificData = sanitizeForFirestore(removeUndefined({
-          cdrData: emissionResult.cdrData
+          cdrData: emissionResult.cdrData,
+          xmlStorageUrl: xmlStorageUrl,
+          cdrStorageUrl: cdrStorageUrl
         }))
       }
 
