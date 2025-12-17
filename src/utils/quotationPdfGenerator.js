@@ -244,19 +244,70 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       })
 
       const aspectRatio = img.width / img.height
-      let logoWidth = logoColumnWidth - 10
-      let logoHeight = logoWidth / aspectRatio
 
-      if (logoHeight > headerHeight - 10) {
-        logoHeight = headerHeight - 10
+      // Altura máxima: proporcional al header
+      const maxLogoHeight = headerHeight - 15
+
+      let logoWidth, logoHeight
+
+      if (aspectRatio >= 2) {
+        // Logo muy horizontal (2:1 o más): permitir más ancho pero con límite
+        const maxHorizontalWidth = logoColumnWidth + infoColumnWidth - 20
+        logoHeight = maxLogoHeight * 0.7
         logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxHorizontalWidth) {
+          logoWidth = maxHorizontalWidth
+          logoHeight = logoWidth / aspectRatio
+        }
+      } else if (aspectRatio >= 1) {
+        // Logo horizontal moderado o cuadrado
+        const maxLogoWidth = logoColumnWidth + 30
+        logoWidth = maxLogoWidth
+        logoHeight = logoWidth / aspectRatio
+        if (logoHeight > maxLogoHeight) {
+          logoHeight = maxLogoHeight
+          logoWidth = logoHeight * aspectRatio
+        }
+      } else {
+        // Logo vertical: priorizar altura máxima
+        const maxLogoWidth = logoColumnWidth - 5
+        logoHeight = maxLogoHeight
+        logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxLogoWidth) {
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
+        }
       }
 
-      const logoYPos = currentY + (headerHeight - logoHeight) / 2
+      const logoYPos = currentY + (headerHeight - logoHeight) / 2 - 10
       doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
       console.warn('No se pudo cargar el logo:', error.message)
     }
+  }
+
+  // ===== ESLOGAN debajo del logo =====
+  if (companySettings?.companySlogan) {
+    const slogan = companySettings.companySlogan.toUpperCase()
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+
+    // El eslogan ocupa el ancho del logo + área de información (centrado)
+    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 10
+    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
+
+    // Limitar a máximo 2 líneas
+    const linesToShow = sloganLines.slice(0, 2)
+
+    // Posición: en la parte inferior del header, más arriba que antes
+    const sloganCenterX = logoX + (sloganMaxWidth / 2)
+    const sloganY = currentY + headerHeight - 18
+    linesToShow.forEach((line, index) => {
+      doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
+    })
+
+    doc.setTextColor(...BLACK) // Restaurar color
   }
 
   // ===== COLUMNA 2: DATOS DE LA EMPRESA (centro) =====
@@ -342,18 +393,29 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // ===== COLUMNA 3: RECUADRO DEL DOCUMENTO =====
   const docBoxY = currentY
 
+  // Altura de la sección del RUC (parte superior con fondo de color)
+  const rucSectionHeight = 26
+
+  // Fondo de color para la sección del RUC
+  doc.setFillColor(...ACCENT_COLOR)
+  doc.rect(docBoxX, docBoxY, docColumnWidth, rucSectionHeight, 'F')
+
+  // Recuadro completo con borde
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(1.5)
   doc.rect(docBoxX, docBoxY, docColumnWidth, headerHeight)
 
-  const rucLineY = docBoxY + 26
+  // Línea separadora después del RUC
+  const rucLineY = docBoxY + rucSectionHeight
   doc.setLineWidth(0.5)
   doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
 
+  // RUC (texto blanco sobre fondo de color)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
+  doc.setTextColor(255, 255, 255)
   doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+  doc.setTextColor(...BLACK) // Restaurar color negro
 
   doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')
@@ -633,7 +695,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
     // Nombre del producto (puede ser múltiples líneas)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7)
+    doc.setFontSize(8)
     let currentDescY = textY
     nameLines.forEach((line, idx) => {
       doc.text(line, cols.desc + 4, currentDescY)
@@ -653,7 +715,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     }
 
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
+    doc.setFontSize(8)
     doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
     doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
 
@@ -717,9 +779,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setTextColor(255, 255, 255)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
-    doc.text('TOTAL', totalsX + 5, footerY + 12)
+    doc.text('TOTAL', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
-    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 12, { align: 'right' })
+    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
   } else {
     // Mostrar desglose completo: OP. GRAVADA, IGV, TOTAL
     doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * 3 + 6)
@@ -729,7 +791,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
     doc.setDrawColor(200, 200, 200)
     doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setFontSize(8)
+    doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...BLACK)
     doc.text(labelGravada, totalsX + 5, footerY + 10)
@@ -751,9 +813,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setTextColor(255, 255, 255)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
-    doc.text('TOTAL', totalsX + 5, footerY + 12)
+    doc.text('TOTAL', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
-    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 12, { align: 'right' })
+    doc.text('S/ ' + (quotation.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
   }
 
   // --- CUENTAS BANCARIAS (izquierda) ---
@@ -791,7 +853,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.line(colStart.cuenta, bankY, colStart.cuenta, bankY + bankTotalHeight)
     doc.line(colStart.cci, bankY, colStart.cci, bankY + bankTotalHeight)
 
-    doc.setFontSize(6)
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(255, 255, 255)
     doc.text('BANCO', colStart.banco + 3, bankY + 9)
@@ -810,10 +872,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         doc.line(bankTableX, bankY, bankTableX + bankTableWidth, bankY)
       }
 
-      doc.setFontSize(6)
+      doc.setFontSize(8)
       doc.text(String(account.bank || ''), colStart.banco + 3, bankY + 8)
       doc.text(String(account.currency || ''), colStart.moneda + 3, bankY + 8)
-      doc.setFontSize(5.5)
       doc.text(String(account.accountNumber || ''), colStart.cuenta + 3, bankY + 8)
       doc.text(String(account.cci || '-'), colStart.cci + 3, bankY + 8)
       bankY += bankRowHeight
