@@ -20,9 +20,11 @@ import Alert from '@/components/ui/Alert'
 import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
+import { useBranding } from '@/contexts/BrandingContext'
 
 export default function Dashboard() {
   const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner } = useAppContext()
+  const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
@@ -290,7 +292,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Bienvenido a Cobrify - Resumen de tu negocio
+            Bienvenido{branding?.companyName ? ` a ${branding.companyName}` : ''} - Resumen de tu negocio
           </p>
         </div>
         <Link to={`${routePrefix}/pos`} className="w-full sm:w-auto">
