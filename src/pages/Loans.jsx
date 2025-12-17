@@ -142,6 +142,7 @@ export default function Loans() {
     amount: '',
     interestRate: '',
     numInstallments: 12,
+    issueDate: '', // Fecha de emisión del préstamo
     firstDueDate: '',
     frequency: 30,
   })
@@ -246,6 +247,8 @@ export default function Loans() {
         paidInstallments: 0,
         paidAmount: 0,
         status: 'active', // 'active' o 'paid'
+        issueDate: formData.issueDate ? new Date(formData.issueDate).toISOString() : new Date().toISOString(),
+        frequency: formData.frequency, // Guardar frecuencia para referencia
       }
 
       const result = await createLoan(getBusinessId(), loanData)
@@ -342,6 +345,7 @@ export default function Loans() {
       amount: '',
       interestRate: '',
       numInstallments: 12,
+      issueDate: '',
       firstDueDate: '',
       frequency: 30,
     })
@@ -555,6 +559,7 @@ export default function Loans() {
                 <TableRow>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Prestamista</TableHead>
+                  <TableHead className="hidden sm:table-cell">Emisión</TableHead>
                   <TableHead className="text-right">Monto</TableHead>
                   <TableHead className="text-center">Cuotas</TableHead>
                   <TableHead className="text-center">Estado</TableHead>
@@ -582,6 +587,12 @@ export default function Loans() {
                         {loan.description && (
                           <p className="text-xs text-gray-500">{loan.description}</p>
                         )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                        <Calendar className="w-3 h-3" />
+                        {loan.issueDate ? formatDate(new Date(loan.issueDate)) : '-'}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -698,6 +709,20 @@ export default function Loans() {
             placeholder="Ej: Préstamo para capital de trabajo"
           />
 
+          {/* Fecha de emisión */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Fecha de Emisión del Préstamo
+            </label>
+            <input
+              type="date"
+              value={formData.issueDate}
+              onChange={e => setFormData({ ...formData, issueDate: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Si no se especifica, se usará la fecha actual</p>
+          </div>
+
           {/* Monto e interés */}
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -755,6 +780,7 @@ export default function Loans() {
                 onChange={e => setFormData({ ...formData, frequency: parseInt(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
+                <option value={1}>Diario</option>
                 <option value={7}>Semanal</option>
                 <option value={15}>Quincenal</option>
                 <option value={30}>Mensual</option>
@@ -835,15 +861,23 @@ export default function Loans() {
           <div className="space-y-4">
             {/* Resumen */}
             <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center gap-2 mb-3">
-                {viewingLoan.type === 'bank' ? (
-                  <Building2 className="w-5 h-5 text-blue-600" />
-                ) : (
-                  <User className="w-5 h-5 text-purple-600" />
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  {viewingLoan.type === 'bank' ? (
+                    <Building2 className="w-5 h-5 text-blue-600" />
+                  ) : (
+                    <User className="w-5 h-5 text-purple-600" />
+                  )}
+                  <span className="font-medium">{viewingLoan.lenderName}</span>
+                </div>
+                {viewingLoan.issueDate && (
+                  <div className="flex items-center gap-1 text-sm text-gray-600">
+                    <Calendar className="w-4 h-4" />
+                    <span>Emisión: {formatDate(new Date(viewingLoan.issueDate))}</span>
+                  </div>
                 )}
-                <span className="font-medium">{viewingLoan.lenderName}</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm text-gray-600">Monto Original</p>
                   <p className="font-bold">{formatCurrency(viewingLoan.amount)}</p>
@@ -851,6 +885,17 @@ export default function Loans() {
                 <div>
                   <p className="text-sm text-gray-600">Total con Interés</p>
                   <p className="font-bold">{formatCurrency(viewingLoan.totalWithInterest || viewingLoan.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Frecuencia</p>
+                  <p className="font-medium">
+                    {viewingLoan.frequency === 1 ? 'Diario' :
+                     viewingLoan.frequency === 7 ? 'Semanal' :
+                     viewingLoan.frequency === 15 ? 'Quincenal' :
+                     viewingLoan.frequency === 30 ? 'Mensual' :
+                     viewingLoan.frequency === 60 ? 'Bimestral' :
+                     viewingLoan.frequency === 90 ? 'Trimestral' : 'Mensual'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Pagado</p>
@@ -861,6 +906,10 @@ export default function Loans() {
                   <p className="font-medium text-red-600">
                     {formatCurrency((viewingLoan.totalWithInterest || viewingLoan.amount) - (viewingLoan.paidAmount || 0))}
                   </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Interés</p>
+                  <p className="font-medium">{viewingLoan.interestRate || 0}%</p>
                 </div>
               </div>
             </div>
