@@ -24,6 +24,7 @@ const generateDemoData = () => {
       email: 'ventas@empresademo.com',
       website: 'www.empresademo.com',
       logoUrl: '/demologo.png',
+      companySlogan: 'SOLUCIONES TECNOLÓGICAS PARA TU NEGOCIO',
       // Configuración del catálogo
       catalogEnabled: true,
       catalogSlug: 'demo',
