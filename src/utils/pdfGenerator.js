@@ -364,30 +364,36 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         }
       }
 
-      const logoYPos = currentY + (headerHeight - logoHeight) / 2 - (companySettings?.companySlogan ? 8 : 0)
+      const logoYPos = currentY + (headerHeight - logoHeight) / 2
       doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo:', error.message)
     }
   }
 
-  // ===== ESLOGAN debajo del logo =====
+  // Variable para controlar espacio adicional del eslogan
+  let sloganHeight = 0
+
+  // ===== ESLOGAN debajo del header =====
   if (companySettings?.companySlogan) {
     const slogan = companySettings.companySlogan.toUpperCase()
-    doc.setFontSize(9)
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...ACCENT_COLOR)
 
-    // El eslogan ocupa el ancho del logo + área de información (centrado)
-    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 10
+    // El eslogan ocupa todo el ancho del contenido (centrado)
+    const sloganMaxWidth = CONTENT_WIDTH - 20
     const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
 
     // Limitar a máximo 2 líneas
     const linesToShow = sloganLines.slice(0, 2)
 
-    // Posición: debajo del header, centrado horizontalmente
-    const sloganCenterX = logoX + (sloganMaxWidth / 2)
-    const sloganY = currentY + headerHeight - 6
+    // Calcular altura del eslogan
+    sloganHeight = linesToShow.length * 10 + 8
+
+    // Posición: después del header con padding
+    const sloganCenterX = MARGIN_LEFT + (CONTENT_WIDTH / 2)
+    const sloganY = currentY + headerHeight + 12
     linesToShow.forEach((line, index) => {
       doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
     })
@@ -541,7 +547,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const numberY = documentLine2 ? titleY + 30 : titleY + 16
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  currentY += headerHeight + 15
+  currentY += headerHeight + 15 + sloganHeight
 
   // ========== 2. DATOS DEL CLIENTE (DOS COLUMNAS) ==========
 
