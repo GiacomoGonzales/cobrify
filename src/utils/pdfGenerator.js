@@ -376,7 +376,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const slogan = companySettings.companySlogan.toUpperCase()
     doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...ACCENT_COLOR)
+    doc.setTextColor(...BLACK)
 
     // El eslogan ocupa el ancho del logo + área de información (centrado)
     const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 10
@@ -840,9 +840,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const itemCode = item.code || item.productCode || ''
     const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    doc.setFontSize(8)
     doc.text(descLines[0], cols.desc + 4, textY)
 
     // Precio unitario
+    doc.setFontSize(8)
     doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
 
     // Importe
@@ -896,7 +898,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
   doc.setDrawColor(200, 200, 200)
   doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-  doc.setFontSize(8)
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...BLACK)
   doc.text(labelGravada, totalsX + 5, footerY + 10)
@@ -960,7 +962,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.line(colStart.cuenta, bankY, colStart.cuenta, bankY + bankTotalHeight)
     doc.line(colStart.cci, bankY, colStart.cci, bankY + bankTotalHeight)
 
-    doc.setFontSize(6)
+    doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(255, 255, 255)
     doc.text('BANCO', colStart.banco + 3, bankY + 9)
@@ -981,10 +983,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.line(bankTableX, bankY, bankTableX + bankTableWidth, bankY)
       }
 
-      doc.setFontSize(6)
+      doc.setFontSize(7)
       doc.text(String(account.bank || ''), colStart.banco + 3, bankY + 8)
       doc.text(String(account.currency || ''), colStart.moneda + 3, bankY + 8)
-      doc.setFontSize(5.5)
+      doc.setFontSize(6.5)
       doc.text(String(account.accountNumber || ''), colStart.cuenta + 3, bankY + 8)
       doc.text(String(account.cci || '-'), colStart.cci + 3, bankY + 8)
       bankY += bankRowHeight
