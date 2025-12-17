@@ -371,29 +371,23 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
   }
 
-  // Variable para controlar espacio adicional del eslogan
-  let sloganHeight = 0
-
-  // ===== ESLOGAN debajo del header =====
+  // ===== ESLOGAN debajo del logo =====
   if (companySettings?.companySlogan) {
     const slogan = companySettings.companySlogan.toUpperCase()
     doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...ACCENT_COLOR)
 
-    // El eslogan ocupa todo el ancho del contenido (centrado)
-    const sloganMaxWidth = CONTENT_WIDTH - 20
+    // El eslogan ocupa el ancho del logo + área de información (centrado)
+    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 10
     const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
 
     // Limitar a máximo 2 líneas
     const linesToShow = sloganLines.slice(0, 2)
 
-    // Calcular altura del eslogan
-    sloganHeight = linesToShow.length * 10 + 8
-
-    // Posición: después del header con padding
-    const sloganCenterX = MARGIN_LEFT + (CONTENT_WIDTH / 2)
-    const sloganY = currentY + headerHeight + 12
+    // Posición: en la parte inferior del header, más arriba que antes
+    const sloganCenterX = logoX + (sloganMaxWidth / 2)
+    const sloganY = currentY + headerHeight - 18
     linesToShow.forEach((line, index) => {
       doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
     })
@@ -547,7 +541,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const numberY = documentLine2 ? titleY + 30 : titleY + 16
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  currentY += headerHeight + 15 + sloganHeight
+  currentY += headerHeight + 15
 
   // ========== 2. DATOS DEL CLIENTE (DOS COLUMNAS) ==========
 
