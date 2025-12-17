@@ -585,8 +585,23 @@ export const sendInvoiceToSunat = onRequest(
       const isPendingManual = emissionResult.pendingManual === true
       const isTransientError = isTransientSunatError(emissionResult.responseCode, emissionResult.description)
 
+      // Validar que existe prueba del CDR antes de marcar como aceptado
+      const hasCDRProof = !!(
+        emissionResult.cdrData ||           // SUNAT Directo - CDR en respuesta
+        emissionResult.cdrUrl ||            // QPSE/NubeFact - URL al CDR
+        emissionResult.nubefactResponse?.enlace_del_cdr ||  // NubeFact alternativo
+        emissionResult.qpseResponse?.cdrUrl                 // QPse alternativo
+      )
+
       let finalStatus
       if (emissionResult.accepted) {
+        // Validar que realmente tenemos prueba del CDR
+        if (!hasCDRProof) {
+          console.warn('⚠️ ALERTA: Documento marcado como aceptado pero SIN CDR')
+          console.warn('   Esto podría indicar un problema con el proveedor de facturación')
+          // Aún así marcamos como accepted porque el proveedor dijo que fue aceptado
+          // pero dejamos registro del problema
+        }
         finalStatus = 'accepted'
       } else if (isTransientError || isPendingManual) {
         // Error temporal o firmado pero no enviado → mantener como pending para reintento
@@ -614,7 +629,8 @@ export const sendInvoiceToSunat = onRequest(
         description: emissionResult.description || '',
         observations: observations,
         method: emissionResult.method,
-        pendingManual: isPendingManual
+        pendingManual: isPendingManual,
+        hasCDRProof: hasCDRProof  // Indica si tenemos prueba del CDR de SUNAT
       }
 
       // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE ==========
