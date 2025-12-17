@@ -962,7 +962,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.line(colStart.cuenta, bankY, colStart.cuenta, bankY + bankTotalHeight)
     doc.line(colStart.cci, bankY, colStart.cci, bankY + bankTotalHeight)
 
-    doc.setFontSize(7)
+    doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(255, 255, 255)
     doc.text('BANCO', colStart.banco + 3, bankY + 9)
@@ -983,10 +983,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         doc.line(bankTableX, bankY, bankTableX + bankTableWidth, bankY)
       }
 
-      doc.setFontSize(7)
+      doc.setFontSize(8)
       doc.text(String(account.bank || ''), colStart.banco + 3, bankY + 8)
       doc.text(String(account.currency || ''), colStart.moneda + 3, bankY + 8)
-      doc.setFontSize(6.5)
       doc.text(String(account.accountNumber || ''), colStart.cuenta + 3, bankY + 8)
       doc.text(String(account.cci || '-'), colStart.cci + 3, bankY + 8)
       bankY += bankRowHeight
