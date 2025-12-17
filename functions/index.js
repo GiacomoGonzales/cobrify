@@ -4,6 +4,7 @@ import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+import JSZip from 'jszip'
 import { emitirComprobante, emitirNotaCredito, emitirGuiaRemision } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
@@ -4457,6 +4458,204 @@ export const socialMetaTags = onRequest(
     } catch (error) {
       console.error('❌ [SocialMeta] Error:', error)
       res.redirect(302, '/')
+    }
+  }
+)
+
+// ==================== EXPORTACIÓN MASIVA PARA AUDITORÍA ====================
+
+/**
+ * Exporta todos los comprobantes electrónicos de un rango de fechas
+ * Genera un ZIP con XMLs y CDRs para auditoría SUNAT
+ *
+ * POST /exportInvoicesForAudit
+ * Body: { startDate, endDate } (formato: YYYY-MM-DD)
+ * Headers: Authorization: Bearer <token>
+ *
+ * Retorna: ZIP con estructura:
+ *   - facturas/
+ *     - F001-123.xml
+ *     - F001-123-CDR.xml
+ *   - boletas/
+ *     - B001-456.xml
+ *     - B001-456-CDR.xml
+ *   - notas_credito/
+ *   - notas_debito/
+ *   - resumen.json (lista de todos los documentos)
+ */
+export const exportInvoicesForAudit = onRequest(
+  { cors: true, timeoutSeconds: 300, memory: '1GiB' },
+  async (req, res) => {
+    console.log('📦 [ExportAudit] Iniciando exportación para auditoría')
+
+    // Solo permitir POST
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Método no permitido' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error de autenticación:', authError)
+        res.status(401).json({ error: 'Token inválido' })
+        return
+      }
+
+      const userId = decodedToken.uid
+      const { startDate, endDate } = req.body
+
+      if (!startDate || !endDate) {
+        res.status(400).json({ error: 'Debe proporcionar startDate y endDate (formato: YYYY-MM-DD)' })
+        return
+      }
+
+      console.log(`📅 Rango de fechas: ${startDate} - ${endDate}`)
+      console.log(`👤 Usuario: ${userId}`)
+
+      // Convertir fechas
+      const start = new Date(startDate)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(endDate)
+      end.setHours(23, 59, 59, 999)
+
+      // Crear ZIP
+      const zip = new JSZip()
+      const resumen = {
+        exportDate: new Date().toISOString(),
+        dateRange: { startDate, endDate },
+        documents: []
+      }
+
+      // Obtener facturas y boletas
+      const invoicesRef = db.collection('businesses').doc(userId).collection('invoices')
+      const invoicesSnapshot = await invoicesRef
+        .where('createdAt', '>=', start)
+        .where('createdAt', '<=', end)
+        .where('sunatStatus', '==', 'accepted')
+        .orderBy('createdAt', 'asc')
+        .get()
+
+      console.log(`📋 Encontrados ${invoicesSnapshot.size} documentos aceptados`)
+
+      const bucket = storage.bucket()
+
+      for (const doc of invoicesSnapshot.docs) {
+        const invoice = doc.data()
+        const docNumber = `${invoice.series}-${invoice.correlativeNumber}`
+
+        // Determinar carpeta según tipo de documento
+        let folder = 'otros'
+        if (invoice.documentType === 'factura') folder = 'facturas'
+        else if (invoice.documentType === 'boleta') folder = 'boletas'
+        else if (invoice.documentType === 'nota_credito') folder = 'notas_credito'
+        else if (invoice.documentType === 'nota_debito') folder = 'notas_debito'
+
+        const docInfo = {
+          id: doc.id,
+          number: docNumber,
+          type: invoice.documentType,
+          customer: invoice.customer?.name || 'Sin nombre',
+          customerDocument: invoice.customer?.documentNumber || '-',
+          total: invoice.total,
+          date: invoice.createdAt?.toDate?.()?.toISOString() || invoice.createdAt,
+          sunatCode: invoice.sunatResponse?.code || '-',
+          hasCDRProof: invoice.sunatResponse?.hasCDRProof || false,
+          xmlFile: null,
+          cdrFile: null
+        }
+
+        // Intentar obtener XML desde Storage
+        if (invoice.sunatResponse?.xmlStorageUrl) {
+          try {
+            const xmlPath = `comprobantes/${userId}/${doc.id}/${docNumber}.xml`
+            const [xmlExists] = await bucket.file(xmlPath).exists()
+            if (xmlExists) {
+              const [xmlContent] = await bucket.file(xmlPath).download()
+              const xmlFileName = `${folder}/${docNumber}.xml`
+              zip.file(xmlFileName, xmlContent)
+              docInfo.xmlFile = xmlFileName
+            }
+          } catch (e) {
+            console.warn(`⚠️ No se pudo obtener XML de ${docNumber}:`, e.message)
+          }
+        }
+
+        // Intentar obtener CDR desde Storage
+        if (invoice.sunatResponse?.cdrStorageUrl) {
+          try {
+            const cdrPath = `comprobantes/${userId}/${doc.id}/${docNumber}-CDR.xml`
+            const [cdrExists] = await bucket.file(cdrPath).exists()
+            if (cdrExists) {
+              const [cdrContent] = await bucket.file(cdrPath).download()
+              const cdrFileName = `${folder}/${docNumber}-CDR.xml`
+              zip.file(cdrFileName, cdrContent)
+              docInfo.cdrFile = cdrFileName
+            }
+          } catch (e) {
+            console.warn(`⚠️ No se pudo obtener CDR de ${docNumber}:`, e.message)
+          }
+        } else if (invoice.sunatResponse?.cdrData) {
+          // CDR guardado directamente en Firestore (SUNAT Directo antiguo)
+          const cdrFileName = `${folder}/${docNumber}-CDR.xml`
+          zip.file(cdrFileName, invoice.sunatResponse.cdrData)
+          docInfo.cdrFile = cdrFileName
+        }
+
+        resumen.documents.push(docInfo)
+      }
+
+      // Agregar resumen al ZIP
+      zip.file('resumen.json', JSON.stringify(resumen, null, 2))
+
+      // Generar estadísticas
+      const stats = {
+        total: resumen.documents.length,
+        facturas: resumen.documents.filter(d => d.type === 'factura').length,
+        boletas: resumen.documents.filter(d => d.type === 'boleta').length,
+        notasCredito: resumen.documents.filter(d => d.type === 'nota_credito').length,
+        notasDebito: resumen.documents.filter(d => d.type === 'nota_debito').length,
+        conXML: resumen.documents.filter(d => d.xmlFile).length,
+        conCDR: resumen.documents.filter(d => d.cdrFile).length,
+        montoTotal: resumen.documents.reduce((sum, d) => sum + (d.total || 0), 0)
+      }
+
+      console.log('📊 Estadísticas:', stats)
+
+      // Generar ZIP
+      const zipContent = await zip.generateAsync({
+        type: 'nodebuffer',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      })
+
+      // Enviar respuesta
+      const fileName = `comprobantes_${startDate}_${endDate}.zip`
+      res.set('Content-Type', 'application/zip')
+      res.set('Content-Disposition', `attachment; filename="${fileName}"`)
+      res.set('X-Export-Stats', JSON.stringify(stats))
+      res.status(200).send(zipContent)
+
+      console.log(`✅ Exportación completada: ${stats.total} documentos`)
+
+    } catch (error) {
+      console.error('❌ Error en exportación:', error)
+      res.status(500).json({ error: 'Error al exportar comprobantes', details: error.message })
     }
   }
 )
