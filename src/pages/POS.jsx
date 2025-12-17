@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   Settings2,
+  Eye,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -34,7 +35,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
-import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { getDoc, doc } from 'firebase/firestore'
@@ -3379,6 +3380,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     >
                       <Printer className="w-4 h-4 mr-2" />
                       Imprimir Ticket
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          await previewInvoicePDF(lastInvoiceData, companySettings, branding)
+                        } catch (error) {
+                          console.error('Error al generar vista previa:', error)
+                          toast.error('Error al generar la vista previa')
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Vista Previa
                     </Button>
                     <Button
                       onClick={() => {
