@@ -2732,7 +2732,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 ) : (
                   /* Nota de venta - campos mínimos + teléfono para WhatsApp */
                   <div className="space-y-2">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 min-w-0">
                       <input
                         type="text"
                         maxLength={11}
@@ -2742,14 +2742,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           documentNumber: e.target.value.replace(/\D/g, '')
                         })}
                         placeholder="DNI/RUC (opcional)"
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                       <input
                         type="text"
                         value={customerData.name}
                         onChange={e => setCustomerData({ ...customerData, name: e.target.value })}
                         placeholder="Nombre"
-                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </div>
                     <input
