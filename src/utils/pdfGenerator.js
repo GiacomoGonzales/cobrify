@@ -714,7 +714,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const tableY = currentY
   const headerRowHeight = 18
   const productRowHeight = 15
-  const MIN_EMPTY_ROWS = 8 // Mínimo de filas vacías para mostrar
 
   // Definir columnas: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
   const colWidths = {
@@ -734,22 +733,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     total: colX += colWidths.pu
   }
 
-  // Calcular cuántas filas caben en el espacio disponible
-  const availableHeight = FOOTER_AREA_START - tableY - headerRowHeight
-  const maxRows = Math.floor(availableHeight / productRowHeight)
+  // Solo mostrar las filas que tienen productos (sin filas vacías)
   const items = invoice.items || []
-  const totalRows = Math.max(items.length, Math.min(maxRows, MIN_EMPTY_ROWS + items.length))
+  const totalRows = items.length
 
-  // Altura total de la tabla
+  // Altura total de la tabla (solo filas con productos)
   const tableHeight = headerRowHeight + (totalRows * productRowHeight)
 
-  // Sin borde exterior - diseño moderno limpio
-
-  // Encabezado de tabla con fondo gris oscuro
+  // Encabezado de tabla con fondo de color
   doc.setFillColor(...ACCENT_COLOR)
   doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, headerRowHeight, 'F')
-
-  // Sin líneas verticales - diseño moderno con filas alternadas
 
   // Textos del encabezado
   doc.setFontSize(7)
@@ -763,7 +756,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
   doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
 
-  // Dibujar filas de productos
+  // Dibujar filas de productos (solo las que tienen datos)
   let dataRowY = tableY + headerRowHeight
   doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'normal')
@@ -774,43 +767,41 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     'METRO': 'MT', 'HORA': 'HR', 'SERVICIO': 'SERV'
   }
 
-  for (let i = 0; i < totalRows; i++) {
-    // Fondo alternado: filas pares blanco, filas impares gris muy suave
-    if (i % 2 === 1) {
+  for (let i = 0; i < items.length; i++) {
+    // Fondo alternado: filas pares gris, filas impares blanco
+    if (i % 2 === 0) {
       doc.setFillColor(248, 248, 248) // Gris muy suave
       doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, productRowHeight, 'F')
     }
 
-    if (i < items.length) {
-      const item = items[i]
-      const precioConIGV = item.unitPrice || item.price || 0
-      const importeConIGV = item.quantity * precioConIGV
-      const textY = dataRowY + 10
+    const item = items[i]
+    const precioConIGV = item.unitPrice || item.price || 0
+    const importeConIGV = item.quantity * precioConIGV
+    const textY = dataRowY + 10
 
-      doc.setTextColor(...BLACK)
+    doc.setTextColor(...BLACK)
 
-      // Cantidad (solo número)
-      const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
-      doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
+    // Cantidad (solo número)
+    const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
+    doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
 
-      // Unidad de medida
-      const unitCode = item.unit || 'UNIDAD'
-      const unitText = unitLabels[unitCode] || unitCode
-      doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
+    // Unidad de medida
+    const unitCode = item.unit || 'UNIDAD'
+    const unitText = unitLabels[unitCode] || unitCode
+    doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
 
-      // Descripción con código de producto
-      const itemName = item.name || item.description || ''
-      const itemCode = item.code || item.productCode || ''
-      const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
-      const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-      doc.text(descLines[0], cols.desc + 4, textY)
+    // Descripción con código de producto
+    const itemName = item.name || item.description || ''
+    const itemCode = item.code || item.productCode || ''
+    const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    doc.text(descLines[0], cols.desc + 4, textY)
 
-      // Precio unitario
-      doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
+    // Precio unitario
+    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
 
-      // Importe
-      doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
-    }
+    // Importe
+    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
 
     dataRowY += productRowHeight
   }
