@@ -82,6 +82,9 @@ export default function Settings() {
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
 
+  // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
+  const [companySlogan, setCompanySlogan] = useState('')
+
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
@@ -315,6 +318,11 @@ export default function Settings() {
           setPdfAccentColor(businessData.pdfAccentColor)
         }
 
+        // Cargar eslogan de empresa
+        if (businessData.companySlogan) {
+          setCompanySlogan(businessData.companySlogan)
+        }
+
         // Cargar cuentas bancarias estructuradas
         if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
           setBankAccounts(businessData.bankAccountsList)
@@ -526,6 +534,7 @@ export default function Settings() {
         ubigeo: data.ubigeo,
         logoUrl: uploadedLogoUrl || null,
         pdfAccentColor: pdfAccentColor,
+        companySlogan: companySlogan || '',
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         updatedAt: serverTimestamp(),
@@ -1246,6 +1255,17 @@ export default function Settings() {
                 error={errors.website?.message}
                 {...register('website')}
               />
+
+              <div className="md:col-span-2">
+                <Input
+                  label="Eslogan / Descripción"
+                  placeholder="ESPECIALISTAS EN ELECTRICIDAD Y MANTENIMIENTO"
+                  value={companySlogan}
+                  onChange={(e) => setCompanySlogan(e.target.value.toUpperCase())}
+                  maxLength={80}
+                  helperText="Aparecerá debajo del logo en el PDF (máx. 80 caracteres)"
+                />
+              </div>
 
               <Input
                 label="Redes Sociales"

@@ -364,11 +364,31 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
         }
       }
 
-      const logoYPos = currentY + (headerHeight - logoHeight) / 2
+      const logoYPos = currentY + (headerHeight - logoHeight) / 2 - (companySettings?.companySlogan ? 8 : 0)
       doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo:', error.message)
     }
+  }
+
+  // ===== ESLOGAN debajo del logo =====
+  if (companySettings?.companySlogan) {
+    const slogan = companySettings.companySlogan.toUpperCase()
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...ACCENT_COLOR)
+
+    // El eslogan ocupa el ancho del logo + parte del área de información
+    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 30
+    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
+
+    // Posición: debajo del header, alineado a la izquierda
+    const sloganY = currentY + headerHeight - 8
+    sloganLines.forEach((line, index) => {
+      doc.text(line, logoX, sloganY + (index * 8))
+    })
+
+    doc.setTextColor(...BLACK) // Restaurar color
   }
 
   // ===== COLUMNA 2: DATOS DE LA EMPRESA (centro) =====
