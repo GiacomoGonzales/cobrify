@@ -441,21 +441,29 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== COLUMNA 3: RECUADRO DEL DOCUMENTO (derecha) =====
   const docBoxY = currentY
 
-  // Recuadro con borde negro
+  // Altura de la sección del RUC (parte superior con fondo de color)
+  const rucSectionHeight = 26
+
+  // Fondo de color para la sección del RUC
+  doc.setFillColor(...ACCENT_COLOR)
+  doc.rect(docBoxX, docBoxY, docColumnWidth, rucSectionHeight, 'F')
+
+  // Recuadro completo con borde
   doc.setDrawColor(...BORDER_COLOR)
   doc.setLineWidth(1.5)
   doc.rect(docBoxX, docBoxY, docColumnWidth, headerHeight)
 
   // Línea separadora después del RUC
-  const rucLineY = docBoxY + 26
+  const rucLineY = docBoxY + rucSectionHeight
   doc.setLineWidth(0.5)
   doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
 
-  // RUC
+  // RUC (texto blanco sobre fondo de color)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
+  doc.setTextColor(255, 255, 255)
   doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+  doc.setTextColor(...BLACK) // Restaurar color negro para el resto
 
   // Tipo de documento
   let documentLine1 = 'BOLETA DE VENTA'
