@@ -39,6 +39,7 @@ import {
 } from '@/services/quotationService'
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
+import { preloadLogo } from '@/utils/pdfGenerator'
 
 export default function Quotations() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -121,6 +122,10 @@ export default function Quotations() {
 
       if (settingsResult.success) {
         setCompanySettings(settingsResult.data)
+        // Pre-cargar logo en background
+        if (settingsResult.data?.logoUrl) {
+          preloadLogo(settingsResult.data.logoUrl).catch(() => {})
+        }
       }
     } catch (error) {
       console.error('Error:', error)

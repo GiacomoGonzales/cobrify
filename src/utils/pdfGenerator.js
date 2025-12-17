@@ -168,6 +168,68 @@ export const invalidateLogoCache = () => {
 }
 
 /**
+ * Pre-carga el logo en caché para que esté disponible instantáneamente
+ * Llamar esta función cuando se carga la configuración de la empresa
+ */
+export const preloadLogo = async (logoUrl) => {
+  if (!logoUrl) return null
+
+  try {
+    // Si ya está en caché, no hacer nada
+    const cached = getLogoFromCache(logoUrl)
+    if (cached) {
+      console.log('✅ Logo ya está en caché')
+      return cached
+    }
+
+    console.log('🔄 Pre-cargando logo en background...')
+    const result = await loadImageAsBase64(logoUrl)
+    console.log('✅ Logo pre-cargado exitosamente')
+    return result
+  } catch (error) {
+    console.warn('⚠️ Error pre-cargando logo:', error)
+    return null
+  }
+}
+
+/**
+ * Carga imagen con reintentos
+ */
+const loadImageWithRetry = async (url, maxRetries = 3, timeout = 30000) => {
+  let lastError = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Intento ${attempt}/${maxRetries} de cargar logo...`)
+
+      const result = await Promise.race([
+        loadImageAsBase64(url),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout después de ${timeout/1000}s`)), timeout)
+        )
+      ])
+
+      if (result) {
+        console.log(`✅ Logo cargado en intento ${attempt}`)
+        return result
+      }
+    } catch (error) {
+      lastError = error
+      console.warn(`⚠️ Intento ${attempt} falló:`, error.message)
+
+      if (attempt < maxRetries) {
+        // Esperar un poco antes de reintentar (backoff exponencial)
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        console.log(`⏳ Esperando ${waitTime}ms antes de reintentar...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+  }
+
+  throw lastError || new Error('No se pudo cargar el logo después de varios intentos')
+}
+
+/**
  * Carga una imagen desde Firebase Storage y la convierte a base64
  * Utiliza caché para mejorar rendimiento
  */
@@ -384,10 +446,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== COLUMNA 1: LOGO (izquierda) =====
   if (companySettings?.logoUrl) {
     try {
-      const imgData = await Promise.race([
-        loadImageAsBase64(companySettings.logoUrl),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
-      ])
+      const imgData = await loadImageWithRetry(companySettings.logoUrl, 3, 30000)
 
       let format = 'PNG'
       if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||

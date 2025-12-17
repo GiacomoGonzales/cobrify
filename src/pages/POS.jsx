@@ -35,7 +35,7 @@ import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
-import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { getDoc, doc } from 'firebase/firestore'
@@ -470,6 +470,13 @@ export default function POS() {
       const settingsResult = await getCompanySettings(businessId)
       if (settingsResult.success && settingsResult.data) {
         setCompanySettings(settingsResult.data)
+
+        // Pre-cargar logo en background para que esté listo al generar PDF
+        if (settingsResult.data.logoUrl) {
+          preloadLogo(settingsResult.data.logoUrl).catch(() => {
+            // Ignorar errores de pre-carga, se intentará de nuevo al generar PDF
+          })
+        }
 
         // Establecer tipo de documento por defecto si está configurado y no hay borrador
         const draftKey = `pos_draft_${businessId}`

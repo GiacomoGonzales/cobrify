@@ -225,6 +225,42 @@ const loadImageAsBase64 = async (url) => {
 }
 
 /**
+ * Carga imagen con reintentos
+ */
+const loadImageWithRetry = async (url, maxRetries = 3, timeout = 30000) => {
+  let lastError = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Intento ${attempt}/${maxRetries} de cargar logo (cotización)...`)
+
+      const result = await Promise.race([
+        loadImageAsBase64(url),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout después de ${timeout/1000}s`)), timeout)
+        )
+      ])
+
+      if (result) {
+        console.log(`✅ Logo cargado en intento ${attempt}`)
+        return result
+      }
+    } catch (error) {
+      lastError = error
+      console.warn(`⚠️ Intento ${attempt} falló:`, error.message)
+
+      if (attempt < maxRetries) {
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        console.log(`⏳ Esperando ${waitTime}ms antes de reintentar...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
+  }
+
+  throw lastError || new Error('No se pudo cargar el logo después de varios intentos')
+}
+
+/**
  * Convierte un color hexadecimal a RGB
  */
 const hexToRgb = (hex) => {
@@ -279,10 +315,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // ===== COLUMNA 1: LOGO =====
   if (companySettings?.logoUrl) {
     try {
-      const imgData = await Promise.race([
-        loadImageAsBase64(companySettings.logoUrl),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
-      ])
+      const imgData = await loadImageWithRetry(companySettings.logoUrl, 3, 30000)
 
       let format = 'PNG'
       if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||

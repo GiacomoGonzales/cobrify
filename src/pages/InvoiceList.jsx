@@ -41,7 +41,7 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
-import { generateInvoicePDF, previewInvoicePDF } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -283,6 +283,10 @@ ${companySettings?.website ? companySettings.website : ''}`
 
       if (settingsResult.success) {
         setCompanySettings(settingsResult.data)
+        // Pre-cargar logo en background
+        if (settingsResult.data?.logoUrl) {
+          preloadLogo(settingsResult.data.logoUrl).catch(() => {})
+        }
       }
     } catch (error) {
       console.error('Error:', error)
