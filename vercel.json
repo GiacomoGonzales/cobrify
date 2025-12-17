@@ -5,6 +5,10 @@
       "destination": "/api/catalogo/:slug"
     },
     {
+      "source": "/app/catalogo/:slug",
+      "destination": "/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

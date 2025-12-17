@@ -1,28 +1,11 @@
 // Vercel Serverless Function para meta tags dinámicos de catálogos
 // Esta función intercepta las requests a /catalogo/:slug y sirve meta tags
 // personalizados para crawlers de redes sociales (WhatsApp, Facebook, Twitter, etc.)
+//
+// Usa la REST API de Firestore (no requiere Service Account Key)
 
-import { initializeApp, getApps, cert } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
-
-// Inicializar Firebase Admin si no está inicializado
-if (!getApps().length) {
-  // En Vercel, las credenciales se pasan como variable de entorno
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
-    : null
-
-  if (serviceAccount) {
-    initializeApp({
-      credential: cert(serviceAccount)
-    })
-  } else {
-    // Fallback para desarrollo local o si no hay credenciales
-    initializeApp()
-  }
-}
-
-const db = getFirestore()
+// Configuración de Firebase (mismas variables que el frontend)
+const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID || 'cobrify-395fe'
 
 // User agents de bots de redes sociales
 const SOCIAL_BOT_USER_AGENTS = [
@@ -47,6 +30,84 @@ function isSocialBot(userAgent) {
   if (!userAgent) return false
   const ua = userAgent.toLowerCase()
   return SOCIAL_BOT_USER_AGENTS.some(bot => ua.includes(bot.toLowerCase()))
+}
+
+/**
+ * Busca un negocio por catalogSlug usando la REST API de Firestore
+ */
+async function findBusinessByCatalogSlug(slug) {
+  try {
+    // Firestore REST API - runQuery
+    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`
+
+    const query = {
+      structuredQuery: {
+        from: [{ collectionId: 'businesses' }],
+        where: {
+          compositeFilter: {
+            op: 'AND',
+            filters: [
+              {
+                fieldFilter: {
+                  field: { fieldPath: 'catalogSlug' },
+                  op: 'EQUAL',
+                  value: { stringValue: slug }
+                }
+              },
+              {
+                fieldFilter: {
+                  field: { fieldPath: 'catalogEnabled' },
+                  op: 'EQUAL',
+                  value: { booleanValue: true }
+                }
+              }
+            ]
+          }
+        },
+        limit: 1
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(query)
+    })
+
+    if (!response.ok) {
+      console.error('Firestore API error:', response.status, await response.text())
+      return null
+    }
+
+    const results = await response.json()
+
+    // La respuesta es un array, el primer elemento puede tener document o estar vacío
+    if (!results || results.length === 0 || !results[0].document) {
+      return null
+    }
+
+    // Convertir el formato de Firestore a objeto plano
+    const doc = results[0].document
+    const fields = doc.fields || {}
+
+    return {
+      id: doc.name.split('/').pop(),
+      name: fields.name?.stringValue || null,
+      businessName: fields.businessName?.stringValue || null,
+      catalogSlug: fields.catalogSlug?.stringValue || null,
+      catalogEnabled: fields.catalogEnabled?.booleanValue || false,
+      catalogTagline: fields.catalogTagline?.stringValue || null,
+      catalogWelcome: fields.catalogWelcome?.stringValue || null,
+      catalogColor: fields.catalogColor?.stringValue || null,
+      catalogSocialImage: fields.catalogSocialImage?.stringValue || null,
+      logoUrl: fields.logoUrl?.stringValue || null
+    }
+  } catch (error) {
+    console.error('Error fetching from Firestore:', error)
+    return null
+  }
 }
 
 /**
@@ -119,33 +180,29 @@ export default async function handler(req, res) {
     console.log(`🛍️ [CatalogMeta] Request for slug: ${slug}, UA: ${userAgent.substring(0, 50)}...`)
 
     if (!slug) {
-      // Sin slug, redirigir a home
       return res.redirect(302, '/')
     }
 
-    // Si no es un bot de redes sociales, dejar que la SPA maneje la ruta
+    // Si no es un bot de redes sociales, servir el index.html para que React maneje la ruta
     if (!isSocialBot(userAgent)) {
       console.log(`🛍️ [CatalogMeta] Normal user, serving SPA`)
-      // Redirigir a la ruta del catálogo para que la SPA lo maneje
-      return res.redirect(302, `/catalogo/${slug}`)
+      // Redirigir a /app/catalogo/:slug que sirve el index.html sin pasar por la API
+      return res.redirect(302, `/app/catalogo/${slug}`)
     }
 
     console.log(`🛍️ [CatalogMeta] Social bot detected, fetching business data...`)
 
-    // Buscar el negocio por catalogSlug
-    const businessesSnapshot = await db.collection('businesses')
-      .where('catalogSlug', '==', slug)
-      .where('catalogEnabled', '==', true)
-      .limit(1)
-      .get()
+    // Buscar el negocio por catalogSlug usando REST API
+    const business = await findBusinessByCatalogSlug(slug)
 
-    if (businessesSnapshot.empty) {
+    if (!business) {
       console.log(`🛍️ [CatalogMeta] No catalog found for slug: ${slug}`)
-      return res.redirect(302, `/catalogo/${slug}`)
+      // Si no se encuentra, devolver meta tags genéricos
+      const html = generateCatalogMetaTagsHTML({ name: 'Catálogo' }, slug)
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=60')
+      return res.status(200).send(html)
     }
-
-    const businessDoc = businessesSnapshot.docs[0]
-    const business = businessDoc.data()
 
     console.log(`🛍️ [CatalogMeta] Found business: ${business.name || business.businessName}`)
 
