@@ -27,6 +27,7 @@ import {
   ArrowRightCircle,
   Receipt,
   Code,
+  FileCheck,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -1527,6 +1528,52 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </button>
                   )}
 
+                  {/* Descargar XML SUNAT - Solo si el comprobante fue enviado a SUNAT y tiene XML guardado */}
+                  {invoice.sunatStatus === 'accepted' && invoice.sunatResponse?.xmlStorageUrl && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        window.open(invoice.sunatResponse.xmlStorageUrl, '_blank')
+                        toast.success('Descargando XML enviado a SUNAT')
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <Code className="w-4 h-4 text-indigo-600" />
+                      <span>XML SUNAT</span>
+                    </button>
+                  )}
+
+                  {/* Descargar CDR - Solo si el comprobante fue aceptado por SUNAT y tiene CDR */}
+                  {invoice.sunatStatus === 'accepted' && (invoice.sunatResponse?.cdrStorageUrl || invoice.sunatResponse?.cdrData || invoice.sunatResponse?.cdrUrl) && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        // Prioridad: Storage URL > CDR externo > CDR data
+                        if (invoice.sunatResponse.cdrStorageUrl) {
+                          window.open(invoice.sunatResponse.cdrStorageUrl, '_blank')
+                        } else if (invoice.sunatResponse.cdrUrl) {
+                          window.open(invoice.sunatResponse.cdrUrl, '_blank')
+                        } else if (invoice.sunatResponse.cdrData) {
+                          // Descargar CDR desde data guardada en Firestore
+                          const blob = new Blob([invoice.sunatResponse.cdrData], { type: 'application/xml' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `CDR-${invoice.series}-${invoice.correlativeNumber}.xml`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        }
+                        toast.success('Descargando CDR de SUNAT')
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FileCheck className="w-4 h-4 text-green-600" />
+                      <span>CDR SUNAT</span>
+                    </button>
+                  )}
+
                   {/* Registrar Pago - Solo para notas de venta con saldo pendiente */}
                   {invoice.documentType === 'nota_venta' &&
                    invoice.status !== 'cancelled' &&
@@ -1877,6 +1924,58 @@ ${companySettings?.website ? companySettings.website : ''}`
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Archivos SUNAT - Solo si fue aceptado */}
+            {viewingInvoice.sunatStatus === 'accepted' && (viewingInvoice.sunatResponse?.xmlStorageUrl || viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData) && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <h4 className="font-semibold text-emerald-900 mb-3 flex items-center gap-2">
+                  <FileCheck className="w-4 h-4" />
+                  Archivos SUNAT
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {viewingInvoice.sunatResponse?.xmlStorageUrl && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => window.open(viewingInvoice.sunatResponse.xmlStorageUrl, '_blank')}
+                    >
+                      <Code className="w-4 h-4 mr-1" />
+                      Descargar XML
+                    </Button>
+                  )}
+                  {(viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData || viewingInvoice.sunatResponse?.cdrUrl) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (viewingInvoice.sunatResponse.cdrStorageUrl) {
+                          window.open(viewingInvoice.sunatResponse.cdrStorageUrl, '_blank')
+                        } else if (viewingInvoice.sunatResponse.cdrUrl) {
+                          window.open(viewingInvoice.sunatResponse.cdrUrl, '_blank')
+                        } else if (viewingInvoice.sunatResponse.cdrData) {
+                          const blob = new Blob([viewingInvoice.sunatResponse.cdrData], { type: 'application/xml' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `CDR-${viewingInvoice.series}-${viewingInvoice.correlativeNumber}.xml`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        }
+                        toast.success('Descargando CDR')
+                      }}
+                    >
+                      <FileCheck className="w-4 h-4 mr-1" />
+                      Descargar CDR
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-emerald-700 mt-2">
+                  El CDR es la Constancia de Recepción que prueba que SUNAT aceptó este comprobante.
+                </p>
               </div>
             )}
 
