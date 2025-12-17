@@ -328,12 +328,19 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       })
 
       const aspectRatio = img.width / img.height
-      let logoWidth = logoColumnWidth - 10
-      let logoHeight = logoWidth / aspectRatio
 
-      if (logoHeight > headerHeight - 10) {
-        logoHeight = headerHeight - 10
-        logoWidth = logoHeight * aspectRatio
+      // Altura fija para todos los logos (proporcional al header)
+      const targetLogoHeight = headerHeight - 20
+      // Ancho máximo permitido (puede extenderse hasta la columna central)
+      const maxLogoWidth = logoColumnWidth + infoColumnWidth * 0.4
+
+      let logoHeight = targetLogoHeight
+      let logoWidth = logoHeight * aspectRatio
+
+      // Si el logo es muy ancho, limitar al máximo permitido
+      if (logoWidth > maxLogoWidth) {
+        logoWidth = maxLogoWidth
+        logoHeight = logoWidth / aspectRatio
       }
 
       const logoYPos = currentY + (headerHeight - logoHeight) / 2
