@@ -108,12 +108,81 @@ const getStoragePathFromUrl = (url) => {
 }
 
 /**
+ * Sistema de caché para logos
+ * Guarda el logo en localStorage para evitar descargarlo cada vez
+ */
+const LOGO_CACHE_KEY = 'cobrify_logo_cache'
+const LOGO_CACHE_EXPIRY = 24 * 60 * 60 * 1000 // 24 horas
+
+const getLogoFromCache = (logoUrl) => {
+  try {
+    const cached = localStorage.getItem(LOGO_CACHE_KEY)
+    if (!cached) return null
+
+    const { url, data, timestamp } = JSON.parse(cached)
+
+    // Verificar si es el mismo logo y no ha expirado
+    if (url === logoUrl && (Date.now() - timestamp) < LOGO_CACHE_EXPIRY) {
+      console.log('✅ Logo obtenido desde caché')
+      return data
+    }
+
+    // Caché expirado o logo diferente
+    return null
+  } catch (error) {
+    console.warn('⚠️ Error leyendo caché de logo:', error)
+    return null
+  }
+}
+
+const saveLogoToCache = (logoUrl, base64Data) => {
+  try {
+    const cacheData = {
+      url: logoUrl,
+      data: base64Data,
+      timestamp: Date.now()
+    }
+    localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(cacheData))
+    console.log('✅ Logo guardado en caché')
+  } catch (error) {
+    console.warn('⚠️ Error guardando logo en caché:', error)
+    // Si localStorage está lleno, intentar limpiar
+    try {
+      localStorage.removeItem(LOGO_CACHE_KEY)
+    } catch (e) {
+      // Ignorar
+    }
+  }
+}
+
+/**
+ * Invalida el caché del logo (llamar cuando se actualiza el logo en configuración)
+ */
+export const invalidateLogoCache = () => {
+  try {
+    localStorage.removeItem(LOGO_CACHE_KEY)
+    console.log('🗑️ Caché de logo invalidado')
+  } catch (error) {
+    console.warn('⚠️ Error invalidando caché:', error)
+  }
+}
+
+/**
  * Carga una imagen desde Firebase Storage y la convierte a base64
+ * Utiliza caché para mejorar rendimiento
  */
 const loadImageAsBase64 = async (url) => {
   try {
+    // Primero intentar obtener del caché
+    const cachedLogo = getLogoFromCache(url)
+    if (cachedLogo) {
+      return cachedLogo
+    }
+
+    console.log('🔄 Logo no está en caché, descargando...')
     const isNative = Capacitor.isNativePlatform()
-    console.log('🔄 Cargando imagen, isNative:', isNative)
+
+    let base64Result = null
 
     // En plataformas nativas, usar CapacitorHttp que es más confiable
     if (isNative) {
@@ -139,8 +208,10 @@ const loadImageAsBase64 = async (url) => {
           // response.data ya viene como base64 cuando responseType es 'blob'
           const base64Data = response.data
           const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
+          base64Result = `data:${mimeType};base64,${base64Data}`
           console.log('✅ Logo cargado con CapacitorHttp')
-          return `data:${mimeType};base64,${base64Data}`
+          saveLogoToCache(url, base64Result)
+          return base64Result
         }
         throw new Error('No se pudo descargar la imagen')
       } catch (nativeError) {
@@ -161,7 +232,9 @@ const loadImageAsBase64 = async (url) => {
         const reader = new FileReader()
         reader.onloadend = () => {
           console.log('✅ Imagen cargada correctamente usando Firebase SDK')
-          resolve(reader.result)
+          const result = reader.result
+          saveLogoToCache(url, result)
+          resolve(result)
         }
         reader.onerror = reject
         reader.readAsDataURL(blob)
@@ -186,7 +259,9 @@ const loadImageAsBase64 = async (url) => {
       const reader = new FileReader()
       reader.onloadend = () => {
         console.log('✅ Imagen cargada con fetch directo')
-        resolve(reader.result)
+        const result = reader.result
+        saveLogoToCache(url, result)
+        resolve(result)
       }
       reader.onerror = reject
       reader.readAsDataURL(blob)

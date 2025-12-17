@@ -5,6 +5,42 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 
+// Sistema de caché compartido con pdfGenerator
+const LOGO_CACHE_KEY = 'cobrify_logo_cache'
+const LOGO_CACHE_EXPIRY = 24 * 60 * 60 * 1000 // 24 horas
+
+const getLogoFromCache = (logoUrl) => {
+  try {
+    const cached = localStorage.getItem(LOGO_CACHE_KEY)
+    if (!cached) return null
+
+    const { url, data, timestamp } = JSON.parse(cached)
+
+    if (url === logoUrl && (Date.now() - timestamp) < LOGO_CACHE_EXPIRY) {
+      console.log('✅ Logo obtenido desde caché (cotización)')
+      return data
+    }
+
+    return null
+  } catch (error) {
+    return null
+  }
+}
+
+const saveLogoToCache = (logoUrl, base64Data) => {
+  try {
+    const cacheData = {
+      url: logoUrl,
+      data: base64Data,
+      timestamp: Date.now()
+    }
+    localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(cacheData))
+    console.log('✅ Logo guardado en caché (cotización)')
+  } catch (error) {
+    // Si localStorage está lleno, ignorar
+  }
+}
+
 /**
  * Convierte un número a texto en español (para montos en cotizaciones peruanas)
  * Soporta hasta 999,999,999 (millones)
@@ -100,9 +136,17 @@ const getStoragePathFromUrl = (url) => {
 
 /**
  * Carga una imagen desde Firebase Storage y la convierte a base64
+ * Utiliza caché para mejorar rendimiento
  */
 const loadImageAsBase64 = async (url) => {
   try {
+    // Primero intentar obtener del caché
+    const cachedLogo = getLogoFromCache(url)
+    if (cachedLogo) {
+      return cachedLogo
+    }
+
+    console.log('🔄 Logo no está en caché, descargando...')
     const isNative = Capacitor.isNativePlatform()
 
     if (isNative) {
@@ -123,7 +167,9 @@ const loadImageAsBase64 = async (url) => {
         if (response.status === 200 && response.data) {
           const base64Data = response.data
           const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-          return `data:${mimeType};base64,${base64Data}`
+          const result = `data:${mimeType};base64,${base64Data}`
+          saveLogoToCache(url, result)
+          return result
         }
         throw new Error('No se pudo descargar la imagen')
       } catch (nativeError) {
@@ -139,7 +185,11 @@ const loadImageAsBase64 = async (url) => {
 
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result)
+        reader.onloadend = () => {
+          const result = reader.result
+          saveLogoToCache(url, result)
+          resolve(result)
+        }
         reader.onerror = reject
         reader.readAsDataURL(blob)
       })
@@ -159,7 +209,11 @@ const loadImageAsBase64 = async (url) => {
 
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result)
+      reader.onloadend = () => {
+        const result = reader.result
+        saveLogoToCache(url, result)
+        resolve(result)
+      }
       reader.onerror = reject
       reader.readAsDataURL(blob)
     })

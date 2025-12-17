@@ -5,6 +5,7 @@ import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, U
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { invalidateLogoCache } from '@/utils/pdfGenerator'
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
@@ -439,6 +440,8 @@ export default function Settings() {
 
       setLogoUrl('')
       setLogoFile(null)
+      // Invalidar caché del logo
+      invalidateLogoCache()
       toast.success('Logo eliminado exitosamente')
     } catch (error) {
       console.error('Error al eliminar logo:', error)
@@ -504,6 +507,8 @@ export default function Settings() {
           const logoRef = ref(storage, `businesses/${getBusinessId()}/logo`)
           await uploadBytes(logoRef, logoFile)
           uploadedLogoUrl = await getDownloadURL(logoRef)
+          // Invalidar caché del logo para que se descargue el nuevo
+          invalidateLogoCache()
           console.log('✅ Logo subido exitosamente')
         } catch (logoError) {
           console.error('Error al subir logo:', logoError)
