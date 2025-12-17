@@ -179,7 +179,9 @@ service cloud.firestore {
       allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
 
       // Lectura pública para catálogo - permite buscar negocios por catalogSlug
-      // Solo se pueden leer campos básicos del negocio para el catálogo público
+      // Para que funcione en usuarios no autenticados, permitimos lectura pública
+      // pero solo de negocios con catalogEnabled == true
+      // El cliente filtrará adicionalmente por catalogSlug
       allow read: if resource.data.catalogEnabled == true;
 
       // Subcollection: Invoices (Facturas/Boletas)

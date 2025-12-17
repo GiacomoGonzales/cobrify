@@ -290,9 +290,12 @@ export default function CatalogoPublico() {
         setError(null)
 
         // Buscar negocio por slug
+        // IMPORTANTE: Incluir catalogEnabled==true para que las reglas de Firestore
+        // permitan el query desde usuarios no autenticados
         const businessesQuery = query(
           collection(db, 'businesses'),
-          where('catalogSlug', '==', slug)
+          where('catalogSlug', '==', slug),
+          where('catalogEnabled', '==', true)
         )
         const businessesSnap = await getDocs(businessesQuery)
 
@@ -304,12 +307,7 @@ export default function CatalogoPublico() {
         const businessDoc = businessesSnap.docs[0]
         const businessData = { id: businessDoc.id, ...businessDoc.data() }
 
-        // Verificar que el catálogo esté habilitado
-        if (!businessData.catalogEnabled) {
-          setError('Este catálogo no está disponible')
-          return
-        }
-
+        // Ya no necesitamos verificar catalogEnabled porque el query ya lo filtra
         setBusiness(businessData)
 
         // Cargar productos visibles en catálogo
