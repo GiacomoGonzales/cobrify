@@ -540,11 +540,45 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   }
 
   const availableHeight = FOOTER_AREA_START - tableY - headerRowHeight
-  const maxRows = Math.floor(availableHeight / productRowHeight)
   const items = quotation.items || []
-  const totalRows = Math.max(items.length, Math.min(maxRows, MIN_EMPTY_ROWS + items.length))
 
-  const tableHeight = headerRowHeight + (totalRows * productRowHeight)
+  // Calcular altura dinámica para cada item basado en la descripción
+  const calculateItemHeight = (item) => {
+    const baseHeight = productRowHeight
+    const itemName = item.name || ''
+    const itemCode = item.code || item.productCode || ''
+    const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
+    // La descripción adicional del producto
+    const productDescription = item.description || ''
+
+    // Calcular líneas necesarias para el nombre
+    doc.setFontSize(7)
+    const nameLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+
+    // Calcular líneas necesarias para la descripción (si existe)
+    let descLines = []
+    if (productDescription && productDescription.trim()) {
+      doc.setFontSize(6)
+      descLines = doc.splitTextToSize(productDescription, colWidths.desc - 10)
+    }
+
+    const totalLines = nameLines.length + descLines.length
+    const minHeight = baseHeight
+    const calculatedHeight = Math.max(minHeight, 10 + (totalLines * 8))
+
+    return { height: calculatedHeight, nameLines, descLines }
+  }
+
+  // Calcular alturas de todos los items
+  const itemHeights = items.map(item => calculateItemHeight(item))
+  const totalItemsHeight = itemHeights.reduce((sum, ih) => sum + ih.height, 0)
+
+  // Filas vacías para llenar espacio
+  const remainingHeight = availableHeight - totalItemsHeight
+  const emptyRows = Math.max(0, Math.floor(remainingHeight / productRowHeight))
+  const actualEmptyRows = Math.min(emptyRows, MIN_EMPTY_ROWS)
+
+  const tableHeight = headerRowHeight + totalItemsHeight + (actualEmptyRows * productRowHeight)
 
   // Encabezado de tabla con color de acento
   doc.setFillColor(...ACCENT_COLOR)
@@ -572,38 +606,66 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     'METRO': 'MT', 'HORA': 'HR', 'SERVICIO': 'SERV'
   }
 
-  for (let i = 0; i < totalRows; i++) {
+  // Renderizar items con alturas dinámicas
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const { height: rowHeight, nameLines, descLines } = itemHeights[i]
+
     // Filas alternadas
     if (i % 2 === 1) {
       doc.setFillColor(248, 248, 248)
+      doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, rowHeight, 'F')
+    }
+
+    const precioConIGV = item.unitPrice || item.price || 0
+    const importeConIGV = item.quantity * precioConIGV
+    const textY = dataRowY + 10
+
+    doc.setTextColor(...BLACK)
+    doc.setFontSize(7)
+
+    const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
+    doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
+
+    const unitCode = item.unit || 'UNIDAD'
+    const unitText = unitLabels[unitCode] || unitCode
+    doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
+
+    // Nombre del producto (puede ser múltiples líneas)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7)
+    let currentDescY = textY
+    nameLines.forEach((line, idx) => {
+      doc.text(line, cols.desc + 4, currentDescY)
+      currentDescY += 8
+    })
+
+    // Descripción del producto (debajo del nombre, en gris y más pequeño)
+    if (descLines.length > 0) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6)
+      doc.setTextColor(...MEDIUM_GRAY)
+      descLines.forEach((line) => {
+        doc.text(line, cols.desc + 4, currentDescY)
+        currentDescY += 7
+      })
+      doc.setTextColor(...BLACK)
+    }
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
+    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
+
+    dataRowY += rowHeight
+  }
+
+  // Renderizar filas vacías
+  for (let i = 0; i < actualEmptyRows; i++) {
+    if ((items.length + i) % 2 === 1) {
+      doc.setFillColor(248, 248, 248)
       doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, productRowHeight, 'F')
     }
-
-    if (i < items.length) {
-      const item = items[i]
-      const precioConIGV = item.unitPrice || item.price || 0
-      const importeConIGV = item.quantity * precioConIGV
-      const textY = dataRowY + 10
-
-      doc.setTextColor(...BLACK)
-
-      const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
-      doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
-
-      const unitCode = item.unit || 'UNIDAD'
-      const unitText = unitLabels[unitCode] || unitCode
-      doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
-
-      const itemName = item.name || item.description || ''
-      const itemCode = item.code || item.productCode || ''
-      const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
-      const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-      doc.text(descLines[0], cols.desc + 4, textY)
-
-      doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
-      doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
-    }
-
     dataRowY += productRowHeight
   }
 

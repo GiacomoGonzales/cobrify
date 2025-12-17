@@ -2016,7 +2016,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
       return <span className="text-xs text-red-600 font-semibold">Sin stock</span>
     }
 
-    if (warehouseStock < 10) {
+    if (warehouseStock < 4) {
       return <span className="text-xs text-yellow-600">Stock: {warehouseStock}</span>
     }
 
@@ -3579,7 +3579,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         {variant.stock !== null && (
                           <span
                             className={`text-xs font-semibold ${
-                              variant.stock > 10
+                              variant.stock >= 4
                                 ? 'text-green-600'
                                 : variant.stock > 0
                                 ? 'text-yellow-600'
