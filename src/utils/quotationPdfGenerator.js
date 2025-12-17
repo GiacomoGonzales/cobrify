@@ -697,14 +697,14 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       currentDescY += 8
     })
 
-    // Descripción del producto (debajo del nombre, en gris y más pequeño)
+    // Descripción del producto (debajo del nombre, en gris, mismo tamaño pero normal)
     if (descLines.length > 0) {
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(6)
+      doc.setFontSize(8)
       doc.setTextColor(...MEDIUM_GRAY)
       descLines.forEach((line) => {
         doc.text(line, cols.desc + 4, currentDescY)
-        currentDescY += 7
+        currentDescY += 8
       })
       doc.setTextColor(...BLACK)
     }
