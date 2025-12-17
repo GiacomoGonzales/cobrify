@@ -630,23 +630,23 @@ function Sidebar() {
       >
       {/* Logo - Dinámico según branding del reseller */}
       <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           {branding.logoUrl ? (
             <img
               src={branding.logoUrl}
               alt={`${branding.companyName} - Sistema de facturación electrónica`}
-              className="w-8 h-8 object-contain"
-              width="32"
-              height="32"
+              className="w-10 h-10 object-contain"
+              width="40"
+              height="40"
               loading="eager"
             />
           ) : (
             <img
               src="/logo.png"
               alt={`${branding.companyName} - Sistema de facturación electrónica`}
-              className="w-8 h-8 object-contain"
-              width="32"
-              height="32"
+              className="w-10 h-10 object-contain"
+              width="40"
+              height="40"
               loading="eager"
             />
           )}
