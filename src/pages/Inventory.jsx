@@ -17,6 +17,9 @@ import {
   ArrowUp,
   ArrowDown,
   ClipboardCheck,
+  History,
+  ArrowUpCircle,
+  ArrowDownCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -33,7 +36,7 @@ import { formatCurrency } from '@/lib/utils'
 import { getProducts, getProductCategories, updateProduct } from '@/services/firestoreService'
 import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
-import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock } from '@/services/warehouseService'
+import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements } from '@/services/warehouseService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import { getCompanySettings } from '@/services/firestoreService'
 
@@ -129,6 +132,12 @@ export default function Inventory() {
     notes: ''
   })
   const [isProcessingDamage, setIsProcessingDamage] = useState(false)
+
+  // Estado para modal de historial de movimientos
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historyProduct, setHistoryProduct] = useState(null)
+  const [productMovements, setProductMovements] = useState([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
   // Estado para migración de stock huérfano
   const [isMigratingOrphanStock, setIsMigratingOrphanStock] = useState(false)
@@ -401,6 +410,118 @@ export default function Inventory() {
     } finally {
       setIsProcessingDamage(false)
     }
+  }
+
+  // Funciones para modal de historial de movimientos
+  const openHistoryModal = async (product) => {
+    setHistoryProduct(product)
+    setShowHistoryModal(true)
+    setIsLoadingHistory(true)
+
+    try {
+      const businessId = getBusinessId()
+      const result = await getStockMovements(businessId, { productId: product.id })
+
+      if (result.success) {
+        // Enriquecer movimientos con nombres de almacenes
+        const enrichedMovements = result.data.map(mov => {
+          const warehouse = warehouses.find(w => w.id === mov.warehouseId)
+          const fromWarehouse = warehouses.find(w => w.id === mov.fromWarehouse)
+          const toWarehouse = warehouses.find(w => w.id === mov.toWarehouse)
+
+          return {
+            ...mov,
+            warehouseName: warehouse?.name || 'Almacén desconocido',
+            fromWarehouseName: fromWarehouse?.name,
+            toWarehouseName: toWarehouse?.name,
+          }
+        })
+        setProductMovements(enrichedMovements)
+      } else {
+        toast.error('Error al cargar el historial')
+      }
+    } catch (error) {
+      console.error('Error al cargar historial:', error)
+      toast.error('Error al cargar el historial')
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const closeHistoryModal = () => {
+    setShowHistoryModal(false)
+    setHistoryProduct(null)
+    setProductMovements([])
+  }
+
+  // Función para obtener info del tipo de movimiento
+  const getMovementTypeInfo = (type) => {
+    const types = {
+      entry: {
+        label: 'Entrada',
+        icon: ArrowUpCircle,
+        color: 'text-green-600',
+        bgColor: 'bg-green-50',
+        variant: 'success',
+      },
+      exit: {
+        label: 'Salida',
+        icon: ArrowDownCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        variant: 'danger',
+      },
+      sale: {
+        label: 'Venta',
+        icon: ArrowDownCircle,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        variant: 'danger',
+      },
+      transfer_in: {
+        label: 'Transferencia Entrada',
+        icon: ArrowRightLeft,
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-50',
+        variant: 'info',
+      },
+      transfer_out: {
+        label: 'Transferencia Salida',
+        icon: ArrowRightLeft,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-50',
+        variant: 'warning',
+      },
+      adjustment: {
+        label: 'Ajuste',
+        icon: Package,
+        color: 'text-purple-600',
+        bgColor: 'bg-purple-50',
+        variant: 'default',
+      },
+      damage: {
+        label: 'Merma/Dañado',
+        icon: AlertTriangle,
+        color: 'text-red-700',
+        bgColor: 'bg-red-100',
+        variant: 'danger',
+      },
+    }
+
+    return types[type] || types.adjustment
+  }
+
+  // Función para formatear fecha
+  const formatMovementDate = (date) => {
+    if (!date) return '-'
+    const d = date.toDate ? date.toDate() : new Date(date)
+    return d.toLocaleString('es-PE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }
 
   // Función para manejar el ordenamiento
@@ -1322,6 +1443,15 @@ export default function Inventory() {
                                   <AlertTriangle className="w-4 h-4" />
                                 </button>
                               )}
+                              {isProduct && (
+                                <button
+                                  onClick={() => openHistoryModal(item)}
+                                  className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                  title="Ver historial de movimientos"
+                                >
+                                  <History className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </TableCell>
                         )}
@@ -1729,6 +1859,155 @@ export default function Inventory() {
                   Registrar Merma
                 </>
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Historial de Movimientos */}
+      <Modal
+        isOpen={showHistoryModal}
+        onClose={closeHistoryModal}
+        title={`Historial de Movimientos - ${historyProduct?.name || ''}`}
+        size="xl"
+      >
+        <div className="space-y-4">
+          {historyProduct && (
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <p className="text-sm text-gray-600">Producto</p>
+              <p className="font-semibold text-gray-900">{historyProduct.name}</p>
+              <p className="text-sm text-gray-500">Código: {historyProduct.code || '-'}</p>
+            </div>
+          )}
+
+          {isLoadingHistory ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+              <span className="ml-2 text-gray-600">Cargando historial...</span>
+            </div>
+          ) : productMovements.length === 0 ? (
+            <div className="text-center py-12">
+              <History className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Sin movimientos registrados
+              </h3>
+              <p className="text-gray-600">
+                Este producto no tiene historial de movimientos
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto max-h-96">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Almacén</TableHead>
+                    <TableHead className="text-center">Cantidad</TableHead>
+                    <TableHead className="hidden md:table-cell">Motivo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {productMovements.map(movement => {
+                    const typeInfo = getMovementTypeInfo(movement.type)
+                    const Icon = typeInfo.icon
+                    return (
+                      <TableRow key={movement.id}>
+                        <TableCell>
+                          <span className="text-sm text-gray-600">
+                            {formatMovementDate(movement.createdAt)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={typeInfo.variant}>
+                            <Icon className="w-3 h-3 mr-1 inline" />
+                            {typeInfo.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
+                              <div>
+                                <p className="text-gray-500">
+                                  <span className="text-gray-400">De:</span> {movement.fromWarehouseName}
+                                </p>
+                                <p className="font-medium">
+                                  <span className="text-gray-400">A:</span> {movement.warehouseName}
+                                </p>
+                              </div>
+                            ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
+                              <div>
+                                <p className="font-medium">
+                                  <span className="text-gray-400">De:</span> {movement.warehouseName}
+                                </p>
+                                <p className="text-gray-500">
+                                  <span className="text-gray-400">A:</span> {movement.toWarehouseName}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="font-medium">{movement.warehouseName}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span
+                            className={`font-bold ${
+                              movement.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}
+                          >
+                            {movement.quantity > 0 ? '+' : ''}
+                            {movement.quantity}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="max-w-xs">
+                            <p className="text-sm text-gray-600 truncate" title={movement.notes}>
+                              {movement.notes || movement.reason || '-'}
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Resumen de movimientos */}
+          {!isLoadingHistory && productMovements.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t">
+              <div className="bg-gray-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">Total</p>
+                <p className="text-lg font-bold text-gray-900">{productMovements.length}</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">Entradas</p>
+                <p className="text-lg font-bold text-green-600">
+                  {productMovements.filter(m => m.type === 'entry' || m.type === 'transfer_in').length}
+                </p>
+              </div>
+              <div className="bg-red-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">Salidas</p>
+                <p className="text-lg font-bold text-red-600">
+                  {productMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out' || m.type === 'sale' || m.type === 'damage').length}
+                </p>
+              </div>
+              <div className="bg-purple-50 p-3 rounded-lg text-center">
+                <p className="text-xs text-gray-600">Ajustes</p>
+                <p className="text-lg font-bold text-purple-600">
+                  {productMovements.filter(m => m.type === 'adjustment').length}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="outline"
+              onClick={closeHistoryModal}
+            >
+              Cerrar
             </Button>
           </div>
         </div>
