@@ -471,6 +471,22 @@ function parseQPseResponse(qpseResponse) {
     notes = qpseResponse.errores.join(' | ')
   }
 
+  // Buscar CDR en múltiples campos posibles (URL o contenido base64)
+  const cdrUrl = qpseResponse.url_cdr || qpseResponse.cdrUrl || qpseResponse.cdr_url ||
+                 qpseResponse.enlace_cdr || qpseResponse.link_cdr || ''
+  const cdrData = qpseResponse.cdr || qpseResponse.cdr_base64 || qpseResponse.cdr_content ||
+                  qpseResponse.contenido_cdr || qpseResponse.cdr_xml || ''
+
+  // Log para debugging - ver todos los campos disponibles
+  if (accepted) {
+    console.log('🔍 Campos disponibles en respuesta QPse:', Object.keys(qpseResponse))
+    if (cdrUrl) console.log('✅ CDR URL encontrada:', cdrUrl)
+    if (cdrData) console.log('✅ CDR Data encontrada (longitud):', cdrData.length)
+    if (!cdrUrl && !cdrData) {
+      console.warn('⚠️ No se encontró CDR en la respuesta. Campos disponibles:', JSON.stringify(qpseResponse, null, 2))
+    }
+  }
+
   return {
     accepted: accepted,
     responseCode: responseCode,
@@ -479,9 +495,11 @@ function parseQPseResponse(qpseResponse) {
 
     // Datos adicionales de QPse
     ticket: qpseResponse.ticket || '',
-    cdrUrl: qpseResponse.url_cdr || qpseResponse.cdrUrl || '',
-    xmlUrl: qpseResponse.url_xml || qpseResponse.xmlUrl || '',
-    pdfUrl: qpseResponse.url_pdf || qpseResponse.pdfUrl || '',
+    cdrUrl: cdrUrl,
+    cdrData: cdrData, // CDR como contenido base64/XML
+    xmlUrl: qpseResponse.url_xml || qpseResponse.xmlUrl || qpseResponse.xml_url || '',
+    pdfUrl: qpseResponse.url_pdf || qpseResponse.pdfUrl || qpseResponse.pdf_url || '',
+    hash: qpseResponse.hash || qpseResponse.codigo_hash || qpseResponse.digest_value || '',
 
     // Respuesta completa para debugging
     rawResponse: qpseResponse

@@ -1260,11 +1260,16 @@ export const sendCreditNoteToSunat = onRequest(
                 xmlStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}.xml`, xmlContent)
               }
             }
+            // CDR puede venir como URL o como contenido directo (base64/XML)
             if (emissionResult.cdrUrl) {
               const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
               if (cdrContent) {
                 cdrStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}-CDR.xml`, cdrContent)
               }
+            } else if (emissionResult.cdrData) {
+              // Si el CDR viene como contenido directo (no URL)
+              console.log('📄 CDR recibido como contenido directo, guardando...')
+              cdrStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}-CDR.xml`, emissionResult.cdrData)
             }
           }
 
