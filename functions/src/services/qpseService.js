@@ -409,6 +409,25 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
       }
     }
 
+    // 8. Si aún no tenemos URLs, construirlas directamente desde QPse
+    // QPse tiene URLs predecibles basadas en el nombre del archivo
+    if (resultado.accepted) {
+      const baseUrl = config.environment === 'production' ? 'https://cpe.qpse.pe' : 'https://demo-cpe.qpse.pe'
+
+      if (!resultado.cdrUrl) {
+        resultado.cdrUrl = `${baseUrl}/descargar/cdr/${nombreArchivo}`
+        console.log(`📄 CDR URL construida: ${resultado.cdrUrl}`)
+      }
+      if (!resultado.xmlUrl) {
+        resultado.xmlUrl = `${baseUrl}/descargar/xml/${nombreArchivo}`
+        console.log(`📄 XML URL construida: ${resultado.xmlUrl}`)
+      }
+      if (!resultado.pdfUrl) {
+        resultado.pdfUrl = `${baseUrl}/descargar/pdf/${nombreArchivo}`
+        console.log(`📄 PDF URL construida: ${resultado.pdfUrl}`)
+      }
+    }
+
     return resultado
 
   } catch (error) {
