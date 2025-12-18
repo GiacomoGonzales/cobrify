@@ -1310,6 +1310,10 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       docTypeName = 'Factura'
     } else if (invoice.documentType === 'nota_venta') {
       docTypeName = 'Nota_de_Venta'
+    } else if (invoice.documentType === 'nota_credito') {
+      docTypeName = 'Nota_de_Credito'
+    } else if (invoice.documentType === 'nota_debito') {
+      docTypeName = 'Nota_de_Debito'
     }
     const fileName = `${docTypeName}_${invoice.number.replace(/\//g, '-')}.pdf`
 
