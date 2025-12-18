@@ -337,6 +337,7 @@ async function emitViaQPse(invoiceData, businessData) {
       description: qpseResponse.description,
       notes: qpseResponse.notes,
       cdrUrl: qpseResponse.cdrUrl,
+      cdrData: qpseResponse.cdrData, // CDR como contenido directo (base64 decodificado)
       xmlUrl: qpseResponse.xmlUrl,
       pdfUrl: qpseResponse.pdfUrl,
       ticket: qpseResponse.ticket,
@@ -550,6 +551,7 @@ async function emitCreditNoteViaQPse(creditNoteData, businessData) {
       description: qpseResponse.description,
       notes: qpseResponse.notes,
       cdrUrl: qpseResponse.cdrUrl,
+      cdrData: qpseResponse.cdrData, // CDR como contenido directo (base64 decodificado)
       xmlUrl: qpseResponse.xmlUrl,
       pdfUrl: qpseResponse.pdfUrl,
       ticket: qpseResponse.ticket,
@@ -772,6 +774,7 @@ async function emitDispatchGuideViaQPse(guideData, businessData) {
       description: qpseResponse.description,
       notes: qpseResponse.notes,
       cdrUrl: qpseResponse.cdrUrl,
+      cdrData: qpseResponse.cdrData, // CDR como contenido directo (base64 decodificado)
       xmlUrl: qpseResponse.xmlUrl,
       pdfUrl: qpseResponse.pdfUrl,
       ticket: qpseResponse.ticket,
