@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, FileText, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, FileText, AlertCircle, Send } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -9,6 +9,12 @@ import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
 import { getInvoices, createInvoice, getDocumentSeries } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
+import { getAuth } from 'firebase/auth'
+
+// URL de la Cloud Function
+const SEND_DEBIT_NOTE_URL = import.meta.env.VITE_FIREBASE_FUNCTIONS_URL
+  ? `${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL}/sendDebitNoteToSunat`
+  : 'https://us-central1-cobrify-395fe.cloudfunctions.net/sendDebitNoteToSunat'
 
 // Catálogo 10 - Tipos de nota de débito SUNAT
 const DEBIT_NOTE_REASONS = [
@@ -141,6 +147,7 @@ export default function CreateDebitNote() {
     }
 
     setIsSaving(true)
+    setMessage(null)
 
     try {
       const { subtotal, igv, total } = calculateTotals()
@@ -166,6 +173,7 @@ export default function CreateDebitNote() {
         // Referencia al documento modificado
         referencedDocumentId: selectedInvoice.number,
         referencedDocumentType: selectedInvoice.documentType === 'factura' ? '01' : '03',
+        referencedInvoiceFirestoreId: selectedInvoice.id, // ID de Firestore para actualizar
 
         // Motivo
         discrepancyCode: formData.discrepancyCode,
@@ -197,14 +205,55 @@ export default function CreateDebitNote() {
         createdByEmail: user.email || '',
       }
 
+      // 1. Crear el documento en Firestore
+      setMessage({ type: 'info', text: 'Creando nota de débito...' })
       const result = await createInvoice(user.uid, debitNoteData)
 
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Nota de Débito creada exitosamente' })
+      if (!result.success) {
+        throw new Error(result.error || 'Error al crear la nota de débito')
+      }
+
+      const debitNoteId = result.id
+
+      // 2. Enviar a SUNAT
+      setMessage({ type: 'info', text: 'Enviando a SUNAT...' })
+
+      const auth = getAuth()
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error('Usuario no autenticado')
+      }
+
+      const idToken = await currentUser.getIdToken()
+
+      const sunatResponse = await fetch(SEND_DEBIT_NOTE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          debitNoteId: debitNoteId
+        })
+      })
+
+      const sunatResult = await sunatResponse.json()
+
+      if (sunatResponse.ok && sunatResult.success) {
+        setMessage({
+          type: 'success',
+          text: `Nota de Débito ${debitNoteNumber} aceptada por SUNAT`
+        })
         setTimeout(() => navigate('/app/facturas'), 2000)
       } else {
-        throw new Error(result.error)
+        // El documento fue creado pero rechazado por SUNAT
+        setMessage({
+          type: 'error',
+          text: sunatResult.error || sunatResult.message || 'Error al enviar a SUNAT. La nota de débito fue creada pero no aceptada.'
+        })
       }
+
     } catch (error) {
       console.error('Error al crear nota de débito:', error)
       setMessage({ type: 'error', text: error.message || 'Error al crear la nota de débito' })
@@ -441,12 +490,12 @@ export default function CreateDebitNote() {
             {isSaving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creando...
+                Enviando a SUNAT...
               </>
             ) : (
               <>
-                <FileText className="w-4 h-4 mr-2" />
-                Crear Nota de Débito
+                <Send className="w-4 h-4 mr-2" />
+                Crear y Enviar a SUNAT
               </>
             )}
           </Button>

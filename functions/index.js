@@ -5,7 +5,7 @@ import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
-import { emitirComprobante, emitirNotaCredito, emitirGuiaRemision } from './src/services/emissionRouter.js'
+import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
@@ -1438,6 +1438,547 @@ export const sendCreditNoteToSunat = onRequest(
       }
 
       res.status(500).json({ error: error.message || 'Error al procesar la nota de crédito' })
+    }
+  }
+)
+
+/**
+ * Cloud Function: Enviar Nota de Débito a SUNAT
+ *
+ * Función INDEPENDIENTE para emitir Notas de Débito electrónicas.
+ *
+ * Esta función:
+ * 1. Obtiene los datos de la nota de débito de Firestore
+ * 2. Obtiene la configuración del usuario (QPse o SUNAT directo)
+ * 3. Genera el XML específico para Nota de Débito (UBL 2.1)
+ * 4. Firma y envía a SUNAT
+ * 5. Actualiza el estado en Firestore
+ */
+export const sendDebitNoteToSunat = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    invoker: 'public',
+  },
+  async (req, res) => {
+    // Manejar preflight OPTIONS request
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    // Solo aceptar POST
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Obtener y verificar token de autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      // Obtener datos del body
+      const { userId, debitNoteId } = req.body
+
+      // Validar parámetros
+      if (!userId || !debitNoteId) {
+        res.status(400).json({ error: 'userId y debitNoteId son requeridos' })
+        return
+      }
+
+      // Verificar autorización: debe ser el owner O un usuario secundario del owner
+      if (authenticatedUserId !== userId) {
+        try {
+          const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+
+          if (!userDoc.exists) {
+            res.status(403).json({ error: 'Usuario no encontrado' })
+            return
+          }
+
+          const userData = userDoc.data()
+
+          if (userData.ownerId !== userId) {
+            res.status(403).json({
+              error: 'No autorizado para esta operación. Usuario no pertenece a este negocio.'
+            })
+            return
+          }
+
+          if (!userData.isActive) {
+            res.status(403).json({ error: 'Usuario inactivo' })
+            return
+          }
+
+          console.log(`✅ Sub-usuario autorizado: ${authenticatedUserId} del owner: ${userId}`)
+        } catch (error) {
+          console.error('Error al verificar sub-usuario:', error)
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`📤 Iniciando envío de NOTA DE DÉBITO a SUNAT - Usuario: ${userId}, ND: ${debitNoteId}`)
+
+      // 1. Obtener datos de la nota de débito usando una transacción para prevenir envíos duplicados
+      const debitNoteRef = db.collection('businesses').doc(userId).collection('invoices').doc(debitNoteId)
+
+      // Usar transacción para verificar y marcar como "sending" atómicamente
+      let debitNoteData
+      try {
+        debitNoteData = await db.runTransaction(async (transaction) => {
+          const debitNoteDoc = await transaction.get(debitNoteRef)
+
+          if (!debitNoteDoc.exists) {
+            throw new Error('NOT_FOUND')
+          }
+
+          const data = debitNoteDoc.data()
+
+          // Validar que sea nota de débito
+          if (data.documentType !== 'nota_debito') {
+            throw new Error('INVALID_TYPE')
+          }
+
+          // Validar estado: rechazar si ya está en proceso de envío
+          // Pero permitir reintento si lleva más de 2 minutos (timeout)
+          if (data.sunatStatus === 'sending') {
+            const sendingStartedAt = data.sunatSendingStartedAt?.toDate?.() || data.sunatSendingStartedAt
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
+
+            if (sendingStartedAt && sendingStartedAt > twoMinutesAgo) {
+              throw new Error('ALREADY_SENDING')
+            }
+            console.log('⚠️ Documento estaba en "sending" por más de 2 min, permitiendo reintento')
+          }
+
+          // Validar estado: permitir envío si está pendiente, rechazada, firmada o sending (con timeout)
+          const allowedStatuses = ['pending', 'rejected', 'signed', 'SIGNED', 'sending']
+          if (!allowedStatuses.includes(data.sunatStatus)) {
+            throw new Error(`INVALID_STATUS:${data.sunatStatus}`)
+          }
+
+          // Marcar como "sending" para prevenir envíos duplicados
+          transaction.update(debitNoteRef, {
+            sunatStatus: 'sending',
+            sunatSendingStartedAt: FieldValue.serverTimestamp()
+          })
+
+          return data
+        })
+      } catch (transactionError) {
+        if (transactionError.message === 'NOT_FOUND') {
+          res.status(404).json({ error: 'Nota de débito no encontrada' })
+          return
+        }
+        if (transactionError.message === 'INVALID_TYPE') {
+          res.status(400).json({ error: 'El documento no es una nota de débito' })
+          return
+        }
+        if (transactionError.message === 'ALREADY_SENDING') {
+          res.status(409).json({
+            error: 'La nota de débito ya está siendo enviada a SUNAT. Por favor espera unos segundos.'
+          })
+          return
+        }
+        if (transactionError.message.startsWith('INVALID_STATUS:')) {
+          const currentStatus = transactionError.message.split(':')[1]
+          res.status(400).json({
+            error: `La nota de débito ya fue procesada por SUNAT. Estado actual: ${currentStatus}`
+          })
+          return
+        }
+        throw transactionError
+      }
+
+      // Log si es un reenvío
+      if (debitNoteData.sunatStatus === 'rejected') {
+        console.log(`🔄 Reenviando nota de débito rechazada`)
+      } else if (debitNoteData.sunatStatus === 'signed' || debitNoteData.sunatStatus === 'SIGNED') {
+        console.log(`🔄 Reenviando ND firmada que no llegó a SUNAT`)
+      }
+
+      // 2. Obtener configuración del negocio
+      const businessRef = db.collection('businesses').doc(userId)
+      const businessDoc = await businessRef.get()
+
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Configuración de empresa no encontrada' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      // Mapear emissionConfig (configurado por super admin) al formato esperado
+      if (businessData.emissionConfig) {
+        console.log('📋 Usando configuración de emisión del admin')
+        const config = businessData.emissionConfig
+
+        if (config.method === 'qpse') {
+          businessData.qpse = {
+            enabled: config.qpse.enabled !== false,
+            usuario: config.qpse.usuario,
+            password: config.qpse.password,
+            environment: config.qpse.environment || 'demo',
+            firmasDisponibles: config.qpse.firmasDisponibles || 0,
+            firmasUsadas: config.qpse.firmasUsadas || 0
+          }
+          businessData.sunat = { enabled: false }
+          businessData.nubefact = { enabled: false }
+        } else if (config.method === 'sunat_direct') {
+          businessData.sunat = {
+            enabled: config.sunat.enabled !== false,
+            environment: config.sunat.environment || 'beta',
+            solUser: config.sunat.solUser,
+            solPassword: config.sunat.solPassword,
+            certificateName: config.sunat.certificateName,
+            certificatePassword: config.sunat.certificatePassword,
+            certificateData: config.sunat.certificateData,
+            homologated: config.sunat.homologated || false
+          }
+          businessData.qpse = { enabled: false }
+          businessData.nubefact = { enabled: false }
+        }
+      }
+
+      // Validar que al menos un método esté habilitado
+      const sunatEnabled = businessData.sunat?.enabled === true
+      const qpseEnabled = businessData.qpse?.enabled === true
+
+      if (!sunatEnabled && !qpseEnabled) {
+        res.status(400).json({
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse.'
+        })
+        return
+      }
+
+      console.log(`🏢 Empresa: ${businessData.businessName} - RUC: ${businessData.ruc}`)
+
+      // 3. Verificar límite de documentos del plan (solo si no es reenvío)
+      if (debitNoteData.sunatStatus === 'pending') {
+        try {
+          const subscriptionRef = db.collection('subscriptions').doc(userId)
+          const subscriptionDoc = await subscriptionRef.get()
+
+          if (subscriptionDoc.exists) {
+            const subscription = subscriptionDoc.data()
+            const currentUsage = subscription.usage?.invoicesThisMonth || 0
+            const maxInvoices = subscription.limits?.maxInvoicesPerMonth || -1
+
+            if (maxInvoices !== -1 && currentUsage >= maxInvoices) {
+              console.log(`🚫 Límite de documentos alcanzado: ${currentUsage}/${maxInvoices}`)
+
+              await debitNoteRef.update({
+                sunatStatus: 'rejected',
+                sunatResponse: {
+                  code: 'LIMIT_EXCEEDED',
+                  description: `Límite de ${maxInvoices} comprobantes por mes alcanzado. Actual: ${currentUsage}`,
+                  observations: ['Actualiza tu plan para emitir más comprobantes'],
+                  error: true,
+                  method: 'validation'
+                },
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+
+              res.status(400).json({
+                error: `Límite de ${maxInvoices} comprobantes por mes alcanzado`,
+                currentUsage,
+                maxInvoices,
+                message: 'Actualiza tu plan para emitir más comprobantes'
+              })
+              return
+            }
+
+            console.log(`✅ Límite OK: ${currentUsage}/${maxInvoices === -1 ? '∞' : maxInvoices}`)
+          }
+        } catch (limitError) {
+          console.error('⚠️ Error al verificar límite (continuando):', limitError)
+        }
+      }
+
+      // 4. Emitir nota de débito usando la función específica
+      console.log('📨 Emitiendo Nota de Débito electrónica...')
+
+      const emissionResult = await emitirNotaDebito(debitNoteData, businessData)
+
+      console.log(`✅ Resultado: ${emissionResult.success ? 'ÉXITO' : 'FALLO'}`)
+      console.log(`📡 Método usado: ${emissionResult.method}`)
+
+      if (!emissionResult.success) {
+        // Actualizar ND con error
+        await debitNoteRef.update({
+          sunatStatus: 'rejected',
+          sunatResponse: {
+            code: 'ERROR',
+            description: emissionResult.error || 'Error al emitir nota de débito',
+            observations: [],
+            error: true,
+            method: emissionResult.method
+          },
+          sunatSentAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        res.status(500).json({
+          error: emissionResult.error || 'Error al emitir nota de débito',
+          method: emissionResult.method
+        })
+        return
+      }
+
+      // 5. Actualizar estado en Firestore
+      // Código 1033 = "El comprobante fue registrado previamente"
+      const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
+        (emissionResult.description && emissionResult.description.includes('registrado previamente'))
+
+      if (isAlreadyRegistered) {
+        const allowedStatuses = ['pending', 'signed', 'rejected', 'sending']
+        const isOurDocument = allowedStatuses.includes(debitNoteData.sunatStatus)
+
+        if (isOurDocument) {
+          console.log('📋 Código 1033: ND ya registrada en SUNAT - tratando como aceptada')
+          emissionResult.accepted = true
+          emissionResult.description = 'Nota de Débito aceptada por SUNAT (registrada previamente)'
+        } else {
+          console.log('⚠️ Código 1033: Documento ya estaba en estado:', debitNoteData.sunatStatus)
+          emissionResult.accepted = true
+        }
+      }
+
+      const isPendingManual = emissionResult.pendingManual === true
+      const finalStatus = isPendingManual ? 'signed' : (emissionResult.accepted ? 'accepted' : 'rejected')
+
+      // Normalizar observations
+      let observations = []
+      if (Array.isArray(emissionResult.notes)) {
+        observations = emissionResult.notes.map(note =>
+          typeof note === 'string' ? note : JSON.stringify(note)
+        )
+      } else if (emissionResult.notes) {
+        observations = [String(emissionResult.notes)]
+      }
+
+      const sunatResponseBase = {
+        code: emissionResult.responseCode || '',
+        description: emissionResult.description || '',
+        observations: observations,
+        method: emissionResult.method,
+        pendingManual: isPendingManual
+      }
+
+      // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (NOTAS DE DÉBITO) ==========
+      let xmlStorageUrl = null
+      let cdrStorageUrl = null
+
+      if (emissionResult.accepted || isPendingManual) {
+        const documentNumber = `${debitNoteData.series}-${debitNoteData.correlativeNumber}`
+        console.log(`📁 Guardando XML y CDR de ND para ${documentNumber}...`)
+
+        try {
+          if (emissionResult.method === 'sunat_direct') {
+            if (emissionResult.xml) {
+              xmlStorageUrl = await saveToStorage(
+                userId,
+                debitNoteId,
+                `${documentNumber}.xml`,
+                emissionResult.xml
+              )
+            }
+            if (emissionResult.cdrData) {
+              cdrStorageUrl = await saveToStorage(
+                userId,
+                debitNoteId,
+                `${documentNumber}-CDR.xml`,
+                emissionResult.cdrData
+              )
+            }
+          }
+
+          if (emissionResult.method === 'qpse') {
+            if (emissionResult.xmlUrl) {
+              const xmlContent = await downloadFromUrl(emissionResult.xmlUrl)
+              if (xmlContent) {
+                xmlStorageUrl = await saveToStorage(userId, debitNoteId, `${documentNumber}.xml`, xmlContent)
+              }
+            }
+            // CDR puede venir como URL o como contenido directo (base64/XML)
+            if (emissionResult.cdrUrl) {
+              const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
+              if (cdrContent) {
+                cdrStorageUrl = await saveToStorage(userId, debitNoteId, `${documentNumber}-CDR.xml`, cdrContent)
+              }
+            } else if (emissionResult.cdrData) {
+              // Si el CDR viene como contenido directo (no URL)
+              console.log('📄 CDR recibido como contenido directo, guardando...')
+              cdrStorageUrl = await saveToStorage(userId, debitNoteId, `${documentNumber}-CDR.xml`, emissionResult.cdrData)
+            }
+          }
+
+          console.log(`✅ Archivos ND guardados - XML: ${xmlStorageUrl ? 'OK' : 'NO'}, CDR: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+        } catch (storageError) {
+          console.error('⚠️ Error guardando archivos ND en Storage:', storageError)
+        }
+      }
+
+      // Agregar datos específicos según el método
+      let methodSpecificData = {}
+      if (emissionResult.method === 'qpse') {
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl,
+          cdrData: emissionResult.cdrData,
+          xmlStorageUrl: xmlStorageUrl,
+          cdrStorageUrl: cdrStorageUrl,
+          ticket: emissionResult.ticket,
+          hash: emissionResult.hash,
+          nombreArchivo: emissionResult.nombreArchivo
+        }))
+      } else if (emissionResult.method === 'sunat_direct') {
+        methodSpecificData = sanitizeForFirestore(removeUndefined({
+          cdrData: emissionResult.cdrData,
+          xmlStorageUrl: xmlStorageUrl,
+          cdrStorageUrl: cdrStorageUrl
+        }))
+      }
+
+      const updateData = {
+        sunatStatus: finalStatus,
+        sunatResponse: sanitizeForFirestore({
+          ...sunatResponseBase,
+          ...methodSpecificData
+        }),
+        sunatSentAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      // Si fue aceptada, cambiar status a 'applied'
+      if (emissionResult.accepted === true) {
+        updateData.status = 'applied'
+      }
+
+      await debitNoteRef.update(updateData)
+      console.log(`💾 Estado de ND actualizado en Firestore`)
+
+      // 6. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO
+      if (emissionResult.accepted === true) {
+        try {
+          const subscriptionRef = db.collection('subscriptions').doc(userId)
+          const subscriptionDoc = await subscriptionRef.get()
+
+          if (subscriptionDoc.exists) {
+            const subscriptionData = subscriptionDoc.data()
+
+            if (!subscriptionData.usage) {
+              await subscriptionRef.update({
+                usage: {
+                  invoicesThisMonth: 1,
+                  totalCustomers: 0,
+                  totalProducts: 0
+                }
+              })
+              console.log(`📊 Campo usage inicializado y contador en 1 - Usuario: ${userId}`)
+            } else {
+              await subscriptionRef.update({
+                'usage.invoicesThisMonth': FieldValue.increment(1)
+              })
+              console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
+            }
+          } else {
+            console.warn(`⚠️ No existe suscripción para usuario: ${userId}`)
+          }
+        } catch (counterError) {
+          console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
+        }
+
+        // 7. Actualizar el documento original (boleta/factura) para reflejar el cargo adicional
+        try {
+          const referencedFirestoreId = debitNoteData.referencedInvoiceFirestoreId
+
+          if (referencedFirestoreId) {
+            const originalDocRef = db.collection('businesses').doc(userId).collection('invoices').doc(referencedFirestoreId)
+            const originalDoc = await originalDocRef.get()
+
+            if (originalDoc.exists) {
+              await originalDocRef.update({
+                hasDebitNote: true,
+                debitNoteId: debitNoteId,
+                debitNoteNumber: debitNoteData.number,
+                debitNoteTotal: debitNoteData.total || 0,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+
+              console.log(`📝 Documento original actualizado con referencia a ND`)
+            } else {
+              console.log(`⚠️ No se encontró el documento original con ID: ${referencedFirestoreId}`)
+            }
+          } else {
+            console.log(`⚠️ No hay referencedInvoiceFirestoreId en la ND`)
+          }
+        } catch (updateOriginalError) {
+          console.error('⚠️ Error al actualizar documento original (no crítico):', updateOriginalError)
+        }
+      } else {
+        console.log(`⏭️ ND rechazada - No se incrementa el contador`)
+      }
+
+      res.status(200).json({
+        success: true,
+        status: emissionResult.accepted ? 'accepted' : 'rejected',
+        message: emissionResult.description,
+        method: emissionResult.method,
+        ...(emissionResult.method === 'qpse' && {
+          pdfUrl: emissionResult.pdfUrl,
+          xmlUrl: emissionResult.xmlUrl,
+          cdrUrl: emissionResult.cdrUrl
+        })
+      })
+
+    } catch (error) {
+      console.error('❌ Error general:', error)
+
+      // Intentar revertir el estado "sending" si ocurrió un error inesperado
+      try {
+        const debitNoteRef = db.collection('businesses').doc(req.body.userId).collection('invoices').doc(req.body.debitNoteId)
+        const currentDoc = await debitNoteRef.get()
+        if (currentDoc.exists && currentDoc.data().sunatStatus === 'sending') {
+          await debitNoteRef.update({
+            sunatStatus: 'pending',
+            sunatResponse: {
+              code: 'ERROR',
+              description: error.message || 'Error inesperado al procesar la nota de débito',
+              observations: ['El envío falló. Puede reintentar.'],
+              error: true
+            },
+            updatedAt: FieldValue.serverTimestamp()
+          })
+          console.log('🔄 Estado de ND revertido a pending tras error inesperado')
+        }
+      } catch (revertError) {
+        console.error('⚠️ Error al revertir estado de ND:', revertError)
+      }
+
+      res.status(500).json({ error: error.message || 'Error al procesar la nota de débito' })
     }
   }
 )

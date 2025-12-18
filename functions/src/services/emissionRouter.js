@@ -1,4 +1,4 @@
-import { generateInvoiceXML, generateCreditNoteXML, generateDispatchGuideXML } from '../utils/xmlGenerator.js'
+import { generateInvoiceXML, generateCreditNoteXML, generateDebitNoteXML, generateDispatchGuideXML } from '../utils/xmlGenerator.js'
 import { signXML } from '../utils/xmlSigner.js'
 import { sendToSunat } from '../utils/sunatClient.js'
 import { sendDispatchGuideToSunat } from '../utils/sunatClientGRE.js'
@@ -564,6 +564,196 @@ async function emitCreditNoteViaQPse(creditNoteData, businessData) {
 
   } catch (error) {
     console.error('❌ Error en emisión NC vía QPse:', error)
+
+    return {
+      success: false,
+      method: 'qpse',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+// ==================== NOTAS DE DÉBITO ====================
+
+/**
+ * Emite una Nota de Débito Electrónica a SUNAT
+ *
+ * Tipo de documento: 08 (Nota de Débito)
+ *
+ * Catálogo 10 - Motivos de Nota de Débito:
+ * - '01': Intereses por mora
+ * - '02': Aumento en el valor
+ * - '03': Penalidades / otros conceptos
+ *
+ * @param {Object} debitNoteData - Datos de la nota de débito
+ * @param {Object} businessData - Datos del negocio
+ * @returns {Promise<Object>} Resultado del envío
+ */
+export async function emitirNotaDebito(debitNoteData, businessData) {
+  try {
+    console.log('🚀 Iniciando emisión de NOTA DE DÉBITO...')
+    console.log(`📋 Documento: ${debitNoteData.documentType} ${debitNoteData.series}-${debitNoteData.correlativeNumber}`)
+    console.log(`📄 Documento referenciado: ${debitNoteData.referencedDocumentId} (tipo: ${debitNoteData.referencedDocumentType})`)
+    console.log(`📝 Motivo: ${debitNoteData.discrepancyCode} - ${debitNoteData.discrepancyReason}`)
+
+    // Determinar qué método usar
+    const emissionMethod = determineEmissionMethod(businessData)
+    console.log(`📡 Método de emisión seleccionado: ${emissionMethod}`)
+
+    // Ejecutar el método correspondiente
+    let result
+
+    if (emissionMethod === 'qpse') {
+      result = await emitDebitNoteViaQPse(debitNoteData, businessData)
+    } else if (emissionMethod === 'sunat_direct') {
+      result = await emitDebitNoteViaSunatDirect(debitNoteData, businessData)
+    } else {
+      // NubeFact no soportado por ahora para ND
+      throw new Error('NubeFact no está soportado para notas de débito. Use QPse o SUNAT directo.')
+    }
+
+    return result
+
+  } catch (error) {
+    console.error('❌ Error en emisión de nota de débito:', error)
+
+    return {
+      success: false,
+      method: 'error',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Nota de Débito vía SUNAT DIRECTO
+ */
+async function emitDebitNoteViaSunatDirect(debitNoteData, businessData) {
+  console.log('📤 Emitiendo Nota de Débito vía SUNAT DIRECTO...')
+
+  try {
+    // Validar configuración SUNAT
+    if (!businessData.sunat || !businessData.sunat.enabled) {
+      throw new Error('SUNAT no está habilitado para este negocio')
+    }
+
+    if (!businessData.sunat.solUser || !businessData.sunat.solPassword) {
+      throw new Error('Credenciales SOL no configuradas')
+    }
+
+    if (!businessData.sunat.certificateData || !businessData.sunat.certificatePassword) {
+      throw new Error('Certificado digital no configurado')
+    }
+
+    // 1. Generar XML usando generateDebitNoteXML (específico para ND)
+    console.log('🔨 Generando XML UBL 2.1 para Nota de Débito...')
+    const xml = generateDebitNoteXML(debitNoteData, businessData)
+
+    // 2. Firmar XML
+    console.log('🔏 Firmando XML con certificado digital...')
+    const signedXML = await signXML(xml, {
+      certificate: businessData.sunat.certificateData,
+      certificatePassword: businessData.sunat.certificatePassword
+    })
+
+    // 3. Enviar a SUNAT (tipo documento 08 = Nota de Débito)
+    console.log('📡 Enviando Nota de Débito a SUNAT...')
+    const sunatResponse = await sendToSunat(signedXML, {
+      ruc: businessData.ruc,
+      documentType: 'nota_debito', // Se mapea a '08' en sunatClient
+      series: debitNoteData.series,
+      number: debitNoteData.correlativeNumber,
+      solUser: businessData.sunat.solUser,
+      solPassword: businessData.sunat.solPassword,
+      environment: businessData.sunat.environment || 'production'
+    })
+
+    return {
+      success: sunatResponse.accepted,
+      method: 'sunat_direct',
+      accepted: sunatResponse.accepted,
+      responseCode: sunatResponse.code || sunatResponse.responseCode,
+      description: sunatResponse.description,
+      notes: sunatResponse.notes,
+      cdrData: sunatResponse.cdrData,
+      xml: signedXML,
+      sunatResponse: sunatResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión ND vía SUNAT directo:', error)
+
+    return {
+      success: false,
+      method: 'sunat_direct',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Nota de Débito vía QPse
+ */
+async function emitDebitNoteViaQPse(debitNoteData, businessData) {
+  console.log('📤 Emitiendo Nota de Débito vía QPSE...')
+
+  try {
+    // Validar configuración QPse
+    if (!businessData.qpse || !businessData.qpse.enabled) {
+      throw new Error('QPse no está habilitado para este negocio')
+    }
+
+    if (!businessData.qpse.usuario || !businessData.qpse.password) {
+      throw new Error('Credenciales de QPse no configuradas')
+    }
+
+    // 1. Generar XML usando generateDebitNoteXML (específico para ND)
+    console.log('🔨 Generando XML UBL 2.1 para Nota de Débito...')
+    const xml = generateDebitNoteXML(debitNoteData, businessData)
+
+    // 2. Tipo de documento: 08 = Nota de Débito
+    const tipoDocumento = '08'
+    console.log(`📄 Tipo de documento: nota_debito → Código SUNAT: ${tipoDocumento}`)
+
+    // 3. Enviar a QPse (firma y envía automáticamente)
+    console.log('📡 Enviando Nota de Débito a QPse...')
+    const qpseResponse = await sendToQPse(
+      xml,
+      businessData.ruc,
+      tipoDocumento,
+      debitNoteData.series,
+      debitNoteData.correlativeNumber,
+      businessData.qpse,
+      businessData
+    )
+
+    // Si el código es PENDING_MANUAL, el documento está firmado pero necesita envío manual
+    const isPendingManual = qpseResponse.responseCode === 'PENDING_MANUAL'
+
+    return {
+      success: true,
+      method: 'qpse',
+      accepted: qpseResponse.accepted,
+      responseCode: qpseResponse.responseCode,
+      description: qpseResponse.description,
+      notes: qpseResponse.notes,
+      cdrUrl: qpseResponse.cdrUrl,
+      cdrData: qpseResponse.cdrData, // CDR como contenido directo (base64 decodificado)
+      xmlUrl: qpseResponse.xmlUrl,
+      pdfUrl: qpseResponse.pdfUrl,
+      ticket: qpseResponse.ticket,
+      hash: qpseResponse.hash,
+      nombreArchivo: qpseResponse.nombreArchivo,
+      xmlFirmado: qpseResponse.xmlFirmado,
+      pendingManual: isPendingManual,
+      qpseResponse: qpseResponse.rawResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión ND vía QPse:', error)
 
     return {
       success: false,
