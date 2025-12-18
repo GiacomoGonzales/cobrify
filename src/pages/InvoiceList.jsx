@@ -277,8 +277,14 @@ Gracias por tu preferencia.`
 
       toast.success('Abriendo WhatsApp...')
 
-      // Abrir WhatsApp en nueva pestaña/ventana para no perder el estado de la app
-      window.open(whatsappUrl, '_blank')
+      // Usar un enlace temporal para abrir WhatsApp (más compatible con navegadores móviles)
+      const link = document.createElement('a')
+      link.href = whatsappUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
     } catch (error) {
       console.error('Error al enviar por WhatsApp:', error)
