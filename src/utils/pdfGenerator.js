@@ -833,15 +833,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       (invoice.discrepancyReason || 'No especificado')
     doc.setFont('helvetica', 'bold')
     doc.text('MOTIVO:', colRightX, rightY)
+    rightY += 10
     doc.setFont('helvetica', 'normal')
-    // Truncar motivo si es muy largo
-    const motivoLines = doc.splitTextToSize(motivoText, colWidth - 10)
-    doc.text(motivoLines[0], rightValueX, rightY)
-    if (motivoLines[1]) {
-      rightY += 10
-      doc.text(motivoLines[1], colRightX, rightY)
-    }
-    rightY += dataLineHeight
+    // El motivo puede ser largo, dividirlo en líneas que quepan en la columna
+    const motivoMaxWidth = colWidth - 5
+    const motivoLines = doc.splitTextToSize(motivoText, motivoMaxWidth)
+    // Mostrar hasta 3 líneas del motivo
+    const linesToShow = motivoLines.slice(0, 3)
+    linesToShow.forEach((line, index) => {
+      doc.text(line, colRightX, rightY + (index * 10))
+    })
+    rightY += (linesToShow.length * 10) + 2
 
     // Moneda
     doc.setFont('helvetica', 'bold')
