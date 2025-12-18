@@ -450,6 +450,7 @@ export default function CreateCreditNote() {
                             <Input
                               type="number"
                               min="0"
+                              step="any"
                               max={item.originalQuantity || item.quantity}
                               value={item.quantity}
                               onChange={e => handleItemQuantityChange(index, parseFloat(e.target.value) || 0)}
