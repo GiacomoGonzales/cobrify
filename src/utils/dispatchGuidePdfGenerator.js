@@ -581,7 +581,10 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text((index + 1).toString(), colX + colWidths.num/2, rowY, { align: 'center' })
     colX += colWidths.num
 
-    const itemCode = item.code || '-'
+    // Solo mostrar código si es "real" (no vacío, no CUSTOM)
+    const rawCode = item.code || ''
+    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
+    const itemCode = isValidCode ? rawCode : '-'
     doc.text(itemCode.substring(0, 12), colX + 5, rowY)
     colX += colWidths.code
 

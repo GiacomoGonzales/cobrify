@@ -703,8 +703,10 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const calculateItemHeight = (item) => {
     const baseHeight = productRowHeight
     const itemName = item.name || ''
-    const itemCode = item.code || item.productCode || ''
-    const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
+    // Solo mostrar código si es un código "real" (no vacío, no CUSTOM)
+    const rawCode = item.code || item.productCode || ''
+    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
+    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
     // La descripción adicional del producto
     const productDescription = item.description || ''
 

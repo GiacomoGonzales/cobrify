@@ -1036,9 +1036,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
 
     // Descripción con código de producto
+    // Solo mostrar código si es un código "real" (no vacío, no CUSTOM, no placeholder)
     const itemName = item.name || item.description || ''
-    const itemCode = item.code || item.productCode || ''
-    const itemDesc = itemCode ? `${itemCode} - ${itemName}` : itemName
+    const rawCode = item.code || item.productCode || ''
+    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
+    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
     doc.setFontSize(8)
     doc.text(descLines[0], cols.desc + 4, textY)
