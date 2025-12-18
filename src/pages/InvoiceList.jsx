@@ -2110,41 +2110,40 @@ Gracias por tu preferencia.`
             )}
 
             {/* Actions */}
-            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-              <Button variant="outline" onClick={() => setViewingInvoice(null)}>
+            <div className="flex flex-wrap justify-end gap-2 pt-4 border-t">
+              <Button size="sm" variant="outline" onClick={() => setViewingInvoice(null)}>
                 Cerrar
               </Button>
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => handleSendWhatsApp(viewingInvoice)}
               >
-                <Share2 className="w-4 h-4 mr-2" />
+                <Share2 className="w-4 h-4 mr-1" />
                 WhatsApp
               </Button>
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => {
-                  // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
                     toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
                     return
                   }
-
                   handlePrintTicket()
                 }}
               >
-                <Printer className="w-4 h-4 mr-2" />
+                <Printer className="w-4 h-4 mr-1" />
                 Imprimir
               </Button>
               <Button
+                size="sm"
                 variant="outline"
                 onClick={async () => {
-                  // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
                     toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
                     return
                   }
-
                   try {
                     await previewInvoicePDF(viewingInvoice, companySettings, branding)
                   } catch (error) {
@@ -2153,25 +2152,21 @@ Gracias por tu preferencia.`
                   }
                 }}
               >
-                <Eye className="w-4 h-4 mr-2" />
+                <Eye className="w-4 h-4 mr-1" />
                 Vista Previa
               </Button>
               <Button
+                size="sm"
                 onClick={async () => {
-                  // Validar que existan los datos de la empresa
                   if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
                     toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
                     return
                   }
-
                   try {
                     const result = await generateInvoicePDF(viewingInvoice, companySettings, true, branding)
-
                     if (result?.fileName) {
-                      // En móvil, mostrar nombre del archivo guardado
                       toast.success(`PDF guardado: ${result.fileName}`)
                     } else {
-                      // En web, descarga normal
                       toast.success('PDF descargado exitosamente')
                     }
                   } catch (error) {
@@ -2180,7 +2175,7 @@ Gracias por tu preferencia.`
                   }
                 }}
               >
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="w-4 h-4 mr-1" />
                 PDF
               </Button>
               {/* Botón Convertir a Boleta - Solo para Notas de Venta no convertidas y no anuladas */}
@@ -2188,11 +2183,12 @@ Gracias por tu preferencia.`
                !viewingInvoice.convertedTo &&
                viewingInvoice.status !== 'voided' && (
                 <Button
+                  size="sm"
                   variant="success"
                   onClick={() => handleOpenConvertModal(viewingInvoice)}
                 >
-                  <Receipt className="w-4 h-4 mr-2" />
-                  Convertir a Boleta
+                  <Receipt className="w-4 h-4 mr-1" />
+                  Convertir
                 </Button>
               )}
             </div>
