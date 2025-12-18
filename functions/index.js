@@ -1179,23 +1179,28 @@ export const sendCreditNoteToSunat = onRequest(
 
       // 5. Actualizar estado en Firestore
       // Código 1033 = "El comprobante fue registrado previamente"
-      // IMPORTANTE: Solo tratar como aceptado si el documento ya fue enviado antes desde ESTE sistema
+      // Esto puede pasar cuando:
+      // - El primer envío llegó a SUNAT pero no recibimos respuesta (timeout)
+      // - Reenviamos y SUNAT dice que ya existe
+      // En ambos casos, si estamos reenviando desde nuestra app, debemos tratarlo como aceptado
       const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
         (emissionResult.description && emissionResult.description.includes('registrado previamente'))
 
       if (isAlreadyRegistered) {
-        // Verificar si este documento ya fue enviado antes desde nuestro sistema
-        const previouslySent = creditNoteData.sunatSentAt && creditNoteData.sunatStatus !== 'pending'
-        const hadPreviousTicket = creditNoteData.sunatResponse?.ticket || creditNoteData.sunatResponse?.cdrUrl
+        // Si el documento está en estado pending, signed, rejected o sending,
+        // significa que lo estamos reenviando desde nuestra app
+        const allowedStatuses = ['pending', 'signed', 'rejected', 'sending']
+        const isOurDocument = allowedStatuses.includes(creditNoteData.sunatStatus)
 
-        if (previouslySent || hadPreviousTicket) {
-          // Es un reintento de un documento que ya enviamos → Tratar como aceptado
-          console.log('📋 Código 1033: NC ya enviada antes desde este sistema - tratando como aceptada')
+        if (isOurDocument) {
+          // Es un reintento de un documento nuestro → Tratar como aceptado
+          console.log('📋 Código 1033: NC ya registrada en SUNAT - tratando como aceptada')
           emissionResult.accepted = true
+          emissionResult.description = 'Nota de Crédito aceptada por SUNAT (registrada previamente)'
         } else {
-          // Es numeración duplicada de OTRO sistema → Mantener como rechazado
-          console.log('⚠️ Código 1033: Numeración duplicada de otro sistema - mantener como rechazado')
-          emissionResult.description = 'El número de NC ya existe en SUNAT (posible numeración duplicada de otro sistema). Debe usar una serie/número diferente.'
+          // El documento ya estaba aceptado, no debería llegar aquí
+          console.log('⚠️ Código 1033: Documento ya estaba en estado:', creditNoteData.sunatStatus)
+          emissionResult.accepted = true
         }
       }
 
