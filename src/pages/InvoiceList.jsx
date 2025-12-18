@@ -42,7 +42,9 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
-import { generateInvoicePDF, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
+import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { storage } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import { exportXMLandCDR, downloadZip, generateZipFileName } from '@/services/xmlExportService'
@@ -206,60 +208,74 @@ export default function InvoiceList() {
       return
     }
 
-    // Limpiar el número de teléfono (solo dígitos)
-    const cleanPhone = phone.replace(/\D/g, '')
+    try {
+      toast.info('Generando comprobante...')
 
-    // Crear mensaje
-    const docTypeName = invoice.documentType === 'factura' ? 'Factura' :
-                       invoice.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+      // Generar el PDF como blob
+      const pdfBlob = await getInvoicePDFBlob(invoice, companySettings, branding)
 
-    const customerName = invoice.customer?.name || 'Cliente'
-    const total = `S/ ${Number(invoice.total).toFixed(2)}`
+      // Preparar nombre del archivo
+      const docTypeFile = invoice.documentType === 'factura' ? 'Factura' :
+                          invoice.documentType === 'boleta' ? 'Boleta' :
+                          invoice.documentType === 'nota_credito' ? 'NotaCredito' :
+                          invoice.documentType === 'nota_debito' ? 'NotaDebito' : 'NotaVenta'
+      const fileName = `${docTypeFile}_${invoice.number.replace(/\//g, '-')}_${Date.now()}.pdf`
 
-    const message = `Hola ${customerName},
+      // Subir a Firebase Storage
+      toast.info('Subiendo comprobante...')
+      const businessId = getBusinessId()
+      const storageRef = ref(storage, `comprobantes/${businessId}/${fileName}`)
+      await uploadBytes(storageRef, pdfBlob, { contentType: 'application/pdf' })
 
-Gracias por tu compra. Aquí está el detalle de tu ${docTypeName}:
+      // Obtener URL de descarga
+      const downloadURL = await getDownloadURL(storageRef)
+      console.log('PDF subido:', downloadURL)
 
-${docTypeName}: ${invoice.number}
-Total: ${total}
-
-${companySettings?.businessName || 'Tu Empresa'}
-${companySettings?.phone ? `Tel: ${companySettings.phone}` : ''}
-${companySettings?.website ? companySettings.website : ''}`
-
-    const isNative = Capacitor.isNativePlatform()
-
-    // Si es móvil, usar Capacitor Share con PDF
-    if (isNative) {
-      try {
-        // Generar PDF
-        toast.info('Generando PDF...')
-        const pdfResult = await generateInvoicePDF(invoice, companySettings, true, branding)
-
-        if (pdfResult?.uri) {
-          // Compartir con PDF adjunto
-          await Share.share({
-            title: `${docTypeName} ${invoice.number}`,
-            text: message,
-            url: pdfResult.uri,
-            dialogTitle: 'Compartir comprobante por WhatsApp'
-          })
-          toast.success('Abriendo WhatsApp...')
-        } else {
-          // Si falla la generación del PDF, enviar solo texto
-          const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-          window.open(url, '_blank')
-          toast.success('Abriendo WhatsApp...')
-        }
-      } catch (error) {
-        console.error('Error al compartir:', error)
-        toast.error('Error al compartir el PDF')
+      // Preparar datos para WhatsApp
+      const cleanPhone = phone.replace(/\D/g, '')
+      let formattedPhone = cleanPhone
+      if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
+        formattedPhone = '51' + formattedPhone
       }
-    } else {
-      // En web, usar WhatsApp Web (solo texto)
-      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-      window.open(url, '_blank')
-      toast.success('Abriendo WhatsApp...')
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '51' + formattedPhone.substring(1)
+      }
+
+      const docTypeName = invoice.documentType === 'factura' ? 'Factura' :
+                          invoice.documentType === 'boleta' ? 'Boleta' :
+                          invoice.documentType === 'nota_credito' ? 'Nota de Crédito' :
+                          invoice.documentType === 'nota_debito' ? 'Nota de Débito' : 'Nota de Venta'
+      const customerName = invoice.customer?.name || 'Cliente'
+      const total = formatCurrency(invoice.total)
+
+      // Crear mensaje con link de descarga
+      const message = `Hola ${customerName},
+
+Gracias por tu compra en *${companySettings?.businessName || 'nuestra tienda'}*.
+
+📄 *${docTypeName}:* ${invoice.number}
+💰 *Total:* ${total}
+
+📥 *Descarga tu comprobante aquí:*
+${downloadURL}
+
+¡Gracias por tu preferencia!`
+
+      const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
+
+      toast.success('¡Listo! Abriendo WhatsApp...')
+
+      // Detectar si es móvil o escritorio para abrir correctamente
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      if (isMobile) {
+        window.location.href = whatsappUrl
+      } else {
+        window.open(whatsappUrl, '_blank')
+      }
+
+    } catch (error) {
+      console.error('Error al enviar por WhatsApp:', error)
+      toast.error('Error al generar el comprobante. Intenta de nuevo.')
     }
   }
 
