@@ -275,15 +275,10 @@ Gracias por tu preferencia.`
 
       const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
 
-      toast.success('¡Listo! Abriendo WhatsApp...')
+      toast.success('Abriendo WhatsApp...')
 
-      // Detectar si es móvil o escritorio para abrir correctamente
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      if (isMobile) {
-        window.location.href = whatsappUrl
-      } else {
-        window.open(whatsappUrl, '_blank')
-      }
+      // Abrir WhatsApp en nueva pestaña/ventana para no perder el estado de la app
+      window.open(whatsappUrl, '_blank')
 
     } catch (error) {
       console.error('Error al enviar por WhatsApp:', error)
