@@ -226,10 +226,9 @@ const loadImageAsBase64 = async (url) => {
 
 /**
  * Carga imagen con reintentos
+ * Retorna null si falla (no lanza error para no bloquear la generación del PDF)
  */
-const loadImageWithRetry = async (url, maxRetries = 3, timeout = 30000) => {
-  let lastError = null
-
+const loadImageWithRetry = async (url, maxRetries = 2, timeout = 10000) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔄 Intento ${attempt}/${maxRetries} de cargar logo (cotización)...`)
@@ -246,18 +245,19 @@ const loadImageWithRetry = async (url, maxRetries = 3, timeout = 30000) => {
         return result
       }
     } catch (error) {
-      lastError = error
       console.warn(`⚠️ Intento ${attempt} falló:`, error.message)
 
       if (attempt < maxRetries) {
-        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        const waitTime = 1000
         console.log(`⏳ Esperando ${waitTime}ms antes de reintentar...`)
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
     }
   }
 
-  throw lastError || new Error('No se pudo cargar el logo después de varios intentos')
+  // Retornar null en lugar de lanzar error - el PDF se generará sin logo
+  console.warn('⚠️ No se pudo cargar el logo, continuando sin logo')
+  return null
 }
 
 /**

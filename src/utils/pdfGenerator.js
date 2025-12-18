@@ -194,10 +194,9 @@ export const preloadLogo = async (logoUrl) => {
 
 /**
  * Carga imagen con reintentos
+ * Retorna null si falla (no lanza error para no bloquear la generación del PDF)
  */
-const loadImageWithRetry = async (url, maxRetries = 3, timeout = 30000) => {
-  let lastError = null
-
+const loadImageWithRetry = async (url, maxRetries = 2, timeout = 10000) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔄 Intento ${attempt}/${maxRetries} de cargar logo...`)
@@ -214,19 +213,20 @@ const loadImageWithRetry = async (url, maxRetries = 3, timeout = 30000) => {
         return result
       }
     } catch (error) {
-      lastError = error
       console.warn(`⚠️ Intento ${attempt} falló:`, error.message)
 
       if (attempt < maxRetries) {
-        // Esperar un poco antes de reintentar (backoff exponencial)
-        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000)
+        // Esperar un poco antes de reintentar
+        const waitTime = 1000
         console.log(`⏳ Esperando ${waitTime}ms antes de reintentar...`)
         await new Promise(resolve => setTimeout(resolve, waitTime))
       }
     }
   }
 
-  throw lastError || new Error('No se pudo cargar el logo después de varios intentos')
+  // Retornar null en lugar de lanzar error - el PDF se generará sin logo
+  console.warn('⚠️ No se pudo cargar el logo, continuando sin logo')
+  return null
 }
 
 /**
@@ -446,68 +446,73 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== COLUMNA 1: LOGO (izquierda) =====
   if (companySettings?.logoUrl) {
     try {
-      const imgData = await loadImageWithRetry(companySettings.logoUrl, 3, 30000)
+      const imgData = await loadImageWithRetry(companySettings.logoUrl)
 
-      let format = 'PNG'
-      if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
-          companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
-        format = 'JPEG'
-      }
-
-      const img = new Image()
-      img.src = imgData
-      await new Promise((resolve, reject) => {
-        img.onload = () => resolve()
-        img.onerror = (err) => reject(err)
-      })
-
-      const aspectRatio = img.width / img.height
-
-      // Altura máxima: proporcional al header
-      const maxLogoHeight = headerHeight - 15
-
-      let logoWidth, logoHeight
-
-      if (aspectRatio >= 2) {
-        // Logo muy horizontal (2:1 o más): permitir más ancho pero con límite
-        const maxHorizontalWidth = logoColumnWidth + infoColumnWidth - 20
-        logoHeight = maxLogoHeight * 0.7
-        logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxHorizontalWidth) {
-          logoWidth = maxHorizontalWidth
-          logoHeight = logoWidth / aspectRatio
+      // Si no se pudo cargar el logo, continuar sin él
+      if (!imgData) {
+        console.warn('⚠️ Logo no disponible, continuando sin logo')
+      } else {
+        let format = 'PNG'
+        if (companySettings.logoUrl.toLowerCase().includes('.jpg') ||
+            companySettings.logoUrl.toLowerCase().includes('.jpeg')) {
+          format = 'JPEG'
         }
-      } else if (aspectRatio >= 1.3) {
-        // Logo horizontal moderado (1.3:1 a 2:1): permitir más ancho
-        const maxLogoWidth = logoColumnWidth + 30
-        logoWidth = maxLogoWidth
-        logoHeight = logoWidth / aspectRatio
-        if (logoHeight > maxLogoHeight) {
+
+        const img = new Image()
+        img.src = imgData
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = (err) => reject(err)
+        })
+
+        const aspectRatio = img.width / img.height
+
+        // Altura máxima: proporcional al header
+        const maxLogoHeight = headerHeight - 15
+
+        let logoWidth, logoHeight
+
+        if (aspectRatio >= 2) {
+          // Logo muy horizontal (2:1 o más): permitir más ancho pero con límite
+          const maxHorizontalWidth = logoColumnWidth + infoColumnWidth - 20
+          logoHeight = maxLogoHeight * 0.7
+          logoWidth = logoHeight * aspectRatio
+          if (logoWidth > maxHorizontalWidth) {
+            logoWidth = maxHorizontalWidth
+            logoHeight = logoWidth / aspectRatio
+          }
+        } else if (aspectRatio >= 1.3) {
+          // Logo horizontal moderado (1.3:1 a 2:1): permitir más ancho
+          const maxLogoWidth = logoColumnWidth + 30
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
+          if (logoHeight > maxLogoHeight) {
+            logoHeight = maxLogoHeight
+            logoWidth = logoHeight * aspectRatio
+          }
+        } else if (aspectRatio >= 1) {
+          // Logo cuadrado o casi cuadrado: limitar tamaño para no superponerse
+          const maxLogoWidth = logoColumnWidth - 5
+          logoHeight = maxLogoHeight * 0.75 // Reducir altura para logos cuadrados
+          logoWidth = logoHeight * aspectRatio
+          if (logoWidth > maxLogoWidth) {
+            logoWidth = maxLogoWidth
+            logoHeight = logoWidth / aspectRatio
+          }
+        } else {
+          // Logo vertical: priorizar altura máxima
+          const maxLogoWidth = logoColumnWidth - 5
           logoHeight = maxLogoHeight
           logoWidth = logoHeight * aspectRatio
+          if (logoWidth > maxLogoWidth) {
+            logoWidth = maxLogoWidth
+            logoHeight = logoWidth / aspectRatio
+          }
         }
-      } else if (aspectRatio >= 1) {
-        // Logo cuadrado o casi cuadrado: limitar tamaño para no superponerse
-        const maxLogoWidth = logoColumnWidth - 5
-        logoHeight = maxLogoHeight * 0.75 // Reducir altura para logos cuadrados
-        logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxLogoWidth) {
-          logoWidth = maxLogoWidth
-          logoHeight = logoWidth / aspectRatio
-        }
-      } else {
-        // Logo vertical: priorizar altura máxima
-        const maxLogoWidth = logoColumnWidth - 5
-        logoHeight = maxLogoHeight
-        logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxLogoWidth) {
-          logoWidth = maxLogoWidth
-          logoHeight = logoWidth / aspectRatio
-        }
-      }
 
-      const logoYPos = currentY + (headerHeight - logoHeight) / 2 - 10
-      doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
+        const logoYPos = currentY + (headerHeight - logoHeight) / 2 - 10
+        doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
+      }
     } catch (error) {
       console.warn('⚠️ No se pudo cargar el logo:', error.message)
     }
@@ -668,6 +673,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   } else if (invoice.documentType === 'nota_venta') {
     documentLine1 = 'NOTA DE VENTA'
     documentLine2 = ''
+  } else if (invoice.documentType === 'nota_credito') {
+    documentLine1 = 'NOTA DE CRÉDITO'
+    documentLine2 = 'ELECTRÓNICA'
+  } else if (invoice.documentType === 'nota_debito') {
+    documentLine1 = 'NOTA DE DÉBITO'
+    documentLine2 = 'ELECTRÓNICA'
   }
 
   doc.setFontSize(10)
@@ -1185,7 +1196,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(6)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...DARK_GRAY)
-    const docTypeText = invoice.documentType === 'factura' ? 'FACTURA' : 'BOLETA DE VENTA'
+    const docTypeText = invoice.documentType === 'factura' ? 'FACTURA' :
+                        invoice.documentType === 'nota_credito' ? 'NOTA DE CRÉDITO' :
+                        invoice.documentType === 'nota_debito' ? 'NOTA DE DÉBITO' : 'BOLETA DE VENTA'
     doc.text(`Representación Impresa de la ${docTypeText}`, textX, textY)
     textY += 9
     doc.text('ELECTRÓNICA.', textX, textY)
