@@ -1459,7 +1459,7 @@ export const sendDebitNoteToSunat = onRequest(
     region: 'us-central1',
     timeoutSeconds: 300,
     memory: '512MiB',
-    invoker: 'public',
+    // Removed invoker: 'public' - autenticación se maneja con Firebase Auth token
   },
   async (req, res) => {
     // Manejar preflight OPTIONS request

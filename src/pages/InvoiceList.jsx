@@ -942,8 +942,8 @@ Gracias por tu preferencia.`
   }, [searchTerm, filterStatus, filterType, filterSeller, dateFilter, filterStartDate, filterEndDate])
 
   const getStatusBadge = (status, documentType) => {
-    // Para Notas de Crédito, usar estados específicos
-    if (documentType === 'nota_credito') {
+    // Para Notas de Crédito y Notas de Débito, usar estados específicos
+    if (documentType === 'nota_credito' || documentType === 'nota_debito') {
       switch (status) {
         case 'applied':
           return <Badge variant="success">Aplicada</Badge>

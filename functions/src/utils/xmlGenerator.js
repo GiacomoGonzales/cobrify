@@ -372,7 +372,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // Primero calcular la suma total SIN descuento para obtener el factor de descuento
   let sumBeforeDiscount = 0
   invoiceData.items.forEach((item) => {
-    const taxAffectation = item.taxAffectation || (igvExempt ? '20' : '10')
+    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado
+    const taxAffectation = igvExempt ? '20' : (item.taxAffectation || '10')
     const isGravado = taxAffectation === '10'
     const priceWithIGV = item.unitPrice
     const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
@@ -405,7 +406,8 @@ export function generateInvoiceXML(invoiceData, businessData) {
   let sumIGVGravadas = 0   // IGV solo de operaciones gravadas
 
   invoiceData.items.forEach((item) => {
-    const taxAffectation = item.taxAffectation || (igvExempt ? '20' : '10')
+    // REGLA: Si negocio tiene Ley de la Selva (igvExempt=true) → FORZAR exonerado
+    const taxAffectation = igvExempt ? '20' : (item.taxAffectation || '10')
     const isGravado = taxAffectation === '10'
     const isExonerado = taxAffectation === '20'
     const isInafecto = taxAffectation === '30'
@@ -1131,8 +1133,11 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
  * - '11' = Ajuste afectos al IVAP
  */
 export function generateDebitNoteXML(debitNoteData, businessData) {
-  // Configuración de impuestos (IGV)
+  // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
+  const igvRate = debitNoteData.taxConfig?.igvRate ?? 18
   const igvExempt = debitNoteData.taxConfig?.igvExempt ?? false
+  const exemptionReason = debitNoteData.taxConfig?.exemptionReason ?? ''
+  const igvMultiplier = igvRate / 100
 
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   let issueDate
