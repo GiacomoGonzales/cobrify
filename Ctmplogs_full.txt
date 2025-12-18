@@ -1,0 +1,28 @@
+2025-12-18T20:01:01.550195Z ? sendinvoicetosunat: ✅ Resultado: ÉXITO
+
+2025-12-18T20:01:01.550490Z ? sendinvoicetosunat: 📡 Método usado: qpse
+
+2025-12-18T20:01:01.550504Z ? sendinvoicetosunat: ⏳ Error temporal detectado - manteniendo como 'pending' para reintento automático
+
+2025-12-18T20:01:01.550576Z ? sendinvoicetosunat:    Código: PENDING_MANUAL, Descripción: El documento fue firmado correctamente pero el envío automático a SUNAT falló. Puedes descargarlo desde tu panel de QPse y enviarlo manualmente.
+
+2025-12-18T20:01:01.550862Z ? sendinvoicetosunat: 📁 Guardando XML y CDR para B001-84...
+
+2025-12-18T20:01:02.160675Z ? sendinvoicetosunat: ❌ Error guardando archivo en Storage: Permission 'iam.serviceAccounts.signBlob' denied on resource (or it may not exist).
+
+2025-12-18T20:01:02.161161Z ? sendinvoicetosunat: ✅ Archivos guardados - XML: NO, CDR: NO
+
+2025-12-18T20:01:02.241566Z ? sendinvoicetosunat: 💾 Estado actualizado en Firestore: pending
+
+2025-12-18T20:01:02.241729Z ? sendinvoicetosunat: ⏭️ Documento rechazado - No se incrementa el contador
+
+2025-12-18T20:02:23.361241Z I sendinvoicetosunat: 
+2025-12-18T20:02:23.587525Z I sendinvoicetosunat: 
+2025-12-18T20:02:23.595572Z ? sendinvoicetosunat: 📤 Iniciando envío a SUNAT - Usuario: xeVfBaZ1BsZB9QjUaqGBxv9DUgP2, Factura: mEtmjQBQZHkJqJlkGmwK
+
+2025-12-18T20:02:23.752486Z ? sendinvoicetosunat: 📋 Usando configuración de emisión del admin
+
+2025-12-18T20:02:23.752636Z ? sendinvoicetosunat: 🏢 Empresa: ORECLO SAC - RUC: 20613394495
+
+2025-12-18T20:02:23.792710Z ? sendinvoicetosunat: ✅ Límite OK: 3/500
+

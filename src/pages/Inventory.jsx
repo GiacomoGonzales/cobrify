@@ -1869,7 +1869,7 @@ export default function Inventory() {
         isOpen={showHistoryModal}
         onClose={closeHistoryModal}
         title={`Historial de Movimientos - ${historyProduct?.name || ''}`}
-        size="xl"
+        size="6xl"
       >
         <div className="space-y-4">
           {historyProduct && (

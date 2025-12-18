@@ -1672,31 +1672,44 @@ export default function POS() {
       await Promise.all(stockUpdates)
 
       // 4.1. Registrar movimientos de stock para historial
-      const stockMovementPromises = cart
-        .filter(item => !item.isCustom)
-        .map(async item => {
-          const productData = products.find(p => p.id === item.id)
-          if (!productData) return
-          if (productData.trackStock === false || productData.stock === null) return
+      const itemsForMovement = cart.filter(item => {
+        if (item.isCustom) return false
+        const productData = products.find(p => p.id === item.id)
+        if (!productData) {
+          console.log('📦 [StockMovement] Producto no encontrado:', item.id)
+          return false
+        }
+        if (productData.trackStock === false) {
+          console.log('📦 [StockMovement] Producto sin control de stock:', item.name)
+          return false
+        }
+        if (productData.stock === null) {
+          console.log('📦 [StockMovement] Producto con stock null (servicio):', item.name)
+          return false
+        }
+        return true
+      })
 
-          // Crear registro de movimiento de stock
-          return createStockMovement(businessId, {
+      console.log('📦 [StockMovement] Items para registrar movimiento:', itemsForMovement.length)
+
+      for (const item of itemsForMovement) {
+        try {
+          const movementResult = await createStockMovement(businessId, {
             productId: item.id,
             warehouseId: selectedWarehouse?.id || '',
             type: 'sale',
-            quantity: -item.quantity, // Negativo porque es salida
+            quantity: -item.quantity,
             reason: 'Venta',
             referenceType: 'invoice',
-            referenceId: invoiceRef?.id || '',
+            referenceId: invoiceId || '',
             userId: user?.uid,
             notes: `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
           })
-        })
-
-      // Ejecutar creación de movimientos (no bloquear la venta si falla)
-      Promise.all(stockMovementPromises).catch(err => {
-        console.error('Error al registrar movimientos de stock:', err)
-      })
+          console.log('📦 [StockMovement] Movimiento creado para:', item.name, movementResult)
+        } catch (err) {
+          console.error('📦 [StockMovement] Error al crear movimiento para:', item.name, err)
+        }
+      }
 
       // 4.5. Descontar ingredientes del inventario (para restaurantes)
       // Procesar cada producto del carrito y descontar sus ingredientes si tiene receta
