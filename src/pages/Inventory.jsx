@@ -136,6 +136,12 @@ export default function Inventory() {
     loadCompanySettings()
   }, [user, isRetailMode])
 
+  // Resetear página cuando cambia el filtro de tipo (productos/insumos)
+  useEffect(() => {
+    console.log(`🔄 [Inventory] filterType cambió a: "${filterType}"`)
+    setCurrentPage(1)
+  }, [filterType])
+
   const loadProducts = async () => {
     if (!user?.uid) return
 
@@ -416,8 +422,14 @@ export default function Inventory() {
   }
 
   // Combinar productos e ingredientes en modo retail
+  // IMPORTANTE: Este useMemo genera la lista base según el filtro de tipo
   const allItems = React.useMemo(() => {
+    console.log(`📋 [Inventory] useMemo recalculando con filterType="${filterType}"`)
+
+    // Mapear productos con itemType
     const productItems = products.map(p => ({ ...p, itemType: 'product' }))
+
+    // Mapear ingredientes solo si está en modo retail
     const ingredientItems = isRetailMode ? ingredients.map(i => ({
       ...i,
       itemType: 'ingredient',
@@ -427,20 +439,29 @@ export default function Inventory() {
       category: i.category
     })) : []
 
+    console.log(`📋 [Inventory] Datos: ${productItems.length} productos, ${ingredientItems.length} insumos`)
+
     // Filtrar según el tipo seleccionado
-    switch (filterType) {
-      case 'products':
-        return productItems
-      case 'ingredients':
-        return ingredientItems
-      case 'all':
-      default:
-        return [...productItems, ...ingredientItems]
+    let result
+    if (filterType === 'products') {
+      result = productItems
+      console.log(`📋 [Inventory] Retornando ${result.length} productos`)
+    } else if (filterType === 'ingredients') {
+      result = ingredientItems
+      console.log(`📋 [Inventory] Retornando ${result.length} insumos`)
+    } else {
+      // 'all' o default
+      result = [...productItems, ...ingredientItems]
+      console.log(`📋 [Inventory] Retornando todos: ${result.length} items`)
     }
+
+    return result
   }, [products, ingredients, filterType, isRetailMode])
 
   // Filtrar y ordenar items (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
+    console.log(`🔍 [Inventory] filteredProducts recalculando. allItems.length=${allItems.length}`)
+
     const filtered = allItems.filter(item => {
       const matchesSearch =
         item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -505,6 +526,7 @@ export default function Inventory() {
       }
     })
 
+    console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
   }, [allItems, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection])
 
@@ -858,7 +880,10 @@ export default function Inventory() {
       {isRetailMode && (
         <div className="flex gap-2 border-b border-gray-200">
           <button
-            onClick={() => setFilterType('all')}
+            onClick={() => {
+              console.log('🔘 [Inventory] Click: Todos')
+              setFilterType('all')
+            }}
             className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
               filterType === 'all'
                 ? 'border-primary-600 text-primary-600'
@@ -868,7 +893,10 @@ export default function Inventory() {
             Todos ({products.length + ingredients.length})
           </button>
           <button
-            onClick={() => setFilterType('products')}
+            onClick={() => {
+              console.log('🔘 [Inventory] Click: Productos')
+              setFilterType('products')
+            }}
             className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
               filterType === 'products'
                 ? 'border-primary-600 text-primary-600'
@@ -878,7 +906,10 @@ export default function Inventory() {
             Productos ({products.length})
           </button>
           <button
-            onClick={() => setFilterType('ingredients')}
+            onClick={() => {
+              console.log('🔘 [Inventory] Click: Insumos')
+              setFilterType('ingredients')
+            }}
             className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
               filterType === 'ingredients'
                 ? 'border-primary-600 text-primary-600'
