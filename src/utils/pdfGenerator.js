@@ -807,37 +807,82 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(pdfInvoiceDate, rightValueX, rightY)
   rightY += dataLineHeight
 
-  // Moneda
-  doc.setFont('helvetica', 'bold')
-  doc.text('MONEDA:', colRightX, rightY)
-  doc.setFont('helvetica', 'normal')
-  doc.text('SOLES', rightValueX, rightY)
-  rightY += dataLineHeight
+  // ===== CAMPOS ESPECÍFICOS PARA NOTA DE CRÉDITO/DÉBITO =====
+  if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') {
+    // Documento Afectado (OBLIGATORIO según SUNAT)
+    if (invoice.referencedDocumentId) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('DOC. AFECTADO:', colRightX, rightY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(invoice.referencedDocumentId, rightValueX, rightY)
+      rightY += dataLineHeight
+    }
 
-  // Forma de pago
-  doc.setFont('helvetica', 'bold')
-  doc.text('FORMA DE PAGO:', colRightX, rightY)
-  doc.setFont('helvetica', 'normal')
-  doc.text(paymentForm, rightValueX, rightY)
-  rightY += dataLineHeight
-
-  // Fecha de vencimiento (solo si es crédito)
-  if (invoice.documentType === 'factura' && invoice.paymentType === 'credito' && invoice.paymentDueDate) {
-    const dueDate = new Date(invoice.paymentDueDate + 'T00:00:00')
-    const dueDateStr = dueDate.toLocaleDateString('es-PE')
+    // Tipo de documento afectado
+    const refDocType = invoice.referencedDocumentType === '01' ? 'FACTURA' :
+                       invoice.referencedDocumentType === '03' ? 'BOLETA' : 'DOCUMENTO'
     doc.setFont('helvetica', 'bold')
-    doc.text('VENCIMIENTO:', colRightX, rightY)
+    doc.text('TIPO DOC. REF:', colRightX, rightY)
     doc.setFont('helvetica', 'normal')
-    doc.text(dueDateStr, rightValueX, rightY)
+    doc.text(refDocType, rightValueX, rightY)
+    rightY += dataLineHeight
+
+    // Motivo (OBLIGATORIO según SUNAT - Catálogo 09)
+    const motivoText = invoice.discrepancyCode ?
+      `${invoice.discrepancyCode} - ${invoice.discrepancyReason || ''}` :
+      (invoice.discrepancyReason || 'No especificado')
+    doc.setFont('helvetica', 'bold')
+    doc.text('MOTIVO:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    // Truncar motivo si es muy largo
+    const motivoLines = doc.splitTextToSize(motivoText, colWidth - 10)
+    doc.text(motivoLines[0], rightValueX, rightY)
+    if (motivoLines[1]) {
+      rightY += 10
+      doc.text(motivoLines[1], colRightX, rightY)
+    }
+    rightY += dataLineHeight
+
+    // Moneda
+    doc.setFont('helvetica', 'bold')
+    doc.text('MONEDA:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(invoice.currency === 'USD' ? 'DÓLARES' : 'SOLES', rightValueX, rightY)
+    rightY += dataLineHeight
+  } else {
+    // ===== CAMPOS PARA FACTURA/BOLETA/NOTA DE VENTA =====
+    // Moneda
+    doc.setFont('helvetica', 'bold')
+    doc.text('MONEDA:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text('SOLES', rightValueX, rightY)
+    rightY += dataLineHeight
+
+    // Forma de pago
+    doc.setFont('helvetica', 'bold')
+    doc.text('FORMA DE PAGO:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(paymentForm, rightValueX, rightY)
+    rightY += dataLineHeight
+
+    // Fecha de vencimiento (solo si es crédito)
+    if (invoice.documentType === 'factura' && invoice.paymentType === 'credito' && invoice.paymentDueDate) {
+      const dueDate = new Date(invoice.paymentDueDate + 'T00:00:00')
+      const dueDateStr = dueDate.toLocaleDateString('es-PE')
+      doc.setFont('helvetica', 'bold')
+      doc.text('VENCIMIENTO:', colRightX, rightY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(dueDateStr, rightValueX, rightY)
+      rightY += dataLineHeight
+    }
+
+    // Tipo de operación
+    doc.setFont('helvetica', 'bold')
+    doc.text('OPERACIÓN:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text('VENTA INTERNA', rightValueX, rightY)
     rightY += dataLineHeight
   }
-
-  // Tipo de operación
-  doc.setFont('helvetica', 'bold')
-  doc.text('OPERACIÓN:', colRightX, rightY)
-  doc.setFont('helvetica', 'normal')
-  doc.text('VENTA INTERNA', rightValueX, rightY)
-  rightY += dataLineHeight
 
   // N° de Guía (si existe)
   if (invoice.guideNumber) {
