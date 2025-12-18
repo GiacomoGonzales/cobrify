@@ -55,7 +55,7 @@ import {
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId } from '@/services/recipeService'
-import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock } from '@/services/warehouseService'
+import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -1670,6 +1670,33 @@ export default function POS() {
         })
 
       await Promise.all(stockUpdates)
+
+      // 4.1. Registrar movimientos de stock para historial
+      const stockMovementPromises = cart
+        .filter(item => !item.isCustom)
+        .map(async item => {
+          const productData = products.find(p => p.id === item.id)
+          if (!productData) return
+          if (productData.trackStock === false || productData.stock === null) return
+
+          // Crear registro de movimiento de stock
+          return createStockMovement(businessId, {
+            productId: item.id,
+            warehouseId: selectedWarehouse?.id || '',
+            type: 'sale',
+            quantity: -item.quantity, // Negativo porque es salida
+            reason: 'Venta',
+            referenceType: 'invoice',
+            referenceId: invoiceRef?.id || '',
+            userId: user?.uid,
+            notes: `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
+          })
+        })
+
+      // Ejecutar creación de movimientos (no bloquear la venta si falla)
+      Promise.all(stockMovementPromises).catch(err => {
+        console.error('Error al registrar movimientos de stock:', err)
+      })
 
       // 4.5. Descontar ingredientes del inventario (para restaurantes)
       // Procesar cada producto del carrito y descontar sus ingredientes si tiene receta

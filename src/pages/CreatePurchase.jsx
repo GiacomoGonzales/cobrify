@@ -22,7 +22,7 @@ import {
   createProduct,
   getProductCategories,
 } from '@/services/firestoreService'
-import { getWarehouses, updateWarehouseStock } from '@/services/warehouseService'
+import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 
 // Unidades de medida
 const UNITS = [
@@ -707,6 +707,30 @@ export default function CreatePurchase() {
       })
 
       await Promise.all(productUpdates)
+
+      // 3.5. Registrar movimientos de stock para historial
+      const stockMovementPromises = purchaseItems.map(async item => {
+        const product = products.find(p => p.id === item.productId)
+        if (!product) return
+        if (product.trackStock === false) return
+
+        return createStockMovement(businessId, {
+          productId: item.productId,
+          warehouseId: selectedWarehouse?.id || '',
+          type: 'entry',
+          quantity: parseFloat(item.quantity), // Positivo porque es entrada
+          reason: 'Compra',
+          referenceType: 'purchase',
+          referenceId: result.id || '',
+          userId: user?.uid,
+          notes: `Compra - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}`
+        })
+      })
+
+      // Ejecutar creación de movimientos (no bloquear si falla)
+      Promise.all(stockMovementPromises).catch(err => {
+        console.error('Error al registrar movimientos de stock:', err)
+      })
 
       // 4. Mostrar éxito y redirigir
       toast.success('Compra registrada exitosamente. Stock y costos actualizados')
