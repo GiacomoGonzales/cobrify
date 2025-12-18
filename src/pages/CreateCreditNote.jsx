@@ -11,13 +11,16 @@ import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDoc
 import { formatCurrency } from '@/lib/utils'
 
 // Catálogo 09 - Tipos de nota de crédito SUNAT
+// Nota: El código 13 "Otros conceptos" requiere información de cuotas y solo aplica a facturas a crédito
 const CREDIT_NOTE_REASONS = [
   { code: '01', description: 'Anulación de la operación' },
   { code: '02', description: 'Anulación por error en el RUC' },
   { code: '03', description: 'Corrección por error en la descripción' },
+  { code: '04', description: 'Descuento global' },
+  { code: '05', description: 'Descuento por ítem' },
   { code: '06', description: 'Devolución total' },
   { code: '07', description: 'Devolución por ítem' },
-  { code: '13', description: 'Otros conceptos' },
+  { code: '10', description: 'Otros conceptos tributarios' },
 ]
 
 export default function CreateCreditNote() {
