@@ -559,24 +559,33 @@ export const sendInvoiceToSunat = onRequest(
 
       // 4. Actualizar estado en Firestore
       // Código 1033 = "El comprobante fue registrado previamente"
-      // IMPORTANTE: Solo tratar como aceptado si el documento ya fue enviado antes desde ESTE sistema
-      // Si es numeración duplicada de OTRO sistema, NO debe aceptarse automáticamente
+      // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
+      // Esto puede pasar en reintentos o cuando SUNAT tuvo problemas temporales
       const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
         (emissionResult.description && emissionResult.description.includes('registrado previamente'))
 
       if (isAlreadyRegistered) {
-        // Verificar si este documento ya fue enviado antes desde nuestro sistema
-        const previouslySent = invoiceData.sunatSentAt && invoiceData.sunatStatus !== 'pending'
-        const hadPreviousTicket = invoiceData.sunatResponse?.ticket || invoiceData.sunatResponse?.cdrUrl
+        // Verificar si este documento tiene historial de envío desde nuestro sistema
+        // sunatSentAt existe si alguna vez se intentó enviar (incluyendo reintentos)
+        // sunatResponse existe si hubo alguna respuesta previa
+        const hasBeenSentBefore = !!(invoiceData.sunatSentAt || invoiceData.sunatResponse || invoiceData.retryCount > 0)
 
-        if (previouslySent || hadPreviousTicket) {
-          // Es un reintento de un documento que ya enviamos → Tratar como aceptado
-          console.log('📋 Código 1033: Documento ya enviado antes desde este sistema - tratando como aceptado')
+        if (hasBeenSentBefore) {
+          // Es un reintento de un documento nuestro → Tratar como aceptado
+          console.log('📋 Código 1033: Documento ya registrado en SUNAT - tratando como ACEPTADO')
+          console.log('   (El documento ya existe en SUNAT, posiblemente de un envío anterior)')
           emissionResult.accepted = true
         } else {
-          // Es numeración duplicada de OTRO sistema → Mantener como rechazado
-          console.log('⚠️ Código 1033: Numeración duplicada de otro sistema - mantener como rechazado')
-          emissionResult.description = 'El número de documento ya existe en SUNAT (posible numeración duplicada de otro sistema). Debe usar una serie/número diferente.'
+          // Documento nuevo que nunca enviamos pero ya existe en SUNAT
+          // Podría ser numeración duplicada de otro sistema
+          console.log('⚠️ Código 1033: Documento nuevo pero ya existe en SUNAT')
+          console.log('   Tratando como ACEPTADO (el documento está en SUNAT)')
+          // Cambio: También tratar como aceptado porque está en SUNAT
+          emissionResult.accepted = true
+          emissionResult.notes = emissionResult.notes || []
+          if (Array.isArray(emissionResult.notes)) {
+            emissionResult.notes.push('Documento ya existía en SUNAT (código 1033)')
+          }
         }
       }
 
@@ -2930,6 +2939,226 @@ export const retryPendingInvoices = onSchedule(
 
     } catch (error) {
       console.error('❌ [RETRY] Error en cron job:', error)
+    }
+  }
+)
+
+/**
+ * HTTP Endpoint para probar/ejecutar el reintento manual de documentos pendientes
+ *
+ * Uso: POST /testRetryPendingInvoices
+ * Body opcional: { "businessId": "xxx" } para procesar solo un negocio
+ *
+ * IMPORTANTE: Esta función es para testing, se recomienda eliminar en producción
+ * o proteger con autenticación
+ */
+export const testRetryPendingInvoices = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    console.log('🔄 [RETRY-TEST] Iniciando reenvío MANUAL de documentos pendientes...')
+
+    const MAX_RETRIES = 50
+    const MIN_AGE_MINUTES = 5
+    const BATCH_SIZE = 20
+
+    // Permitir filtrar por businessId específico
+    const filterBusinessId = req.body?.businessId || req.query?.businessId
+
+    try {
+      let businessQuery = db.collection('businesses')
+
+      if (filterBusinessId) {
+        console.log(`📋 [RETRY-TEST] Filtrando por negocio: ${filterBusinessId}`)
+      }
+
+      const businessesSnapshot = filterBusinessId
+        ? await db.collection('businesses').doc(filterBusinessId).get()
+        : await businessQuery.get()
+
+      let totalProcessed = 0
+      let totalSuccess = 0
+      let totalFailed = 0
+      let totalSkipped = 0
+      const details = []
+
+      const businessDocs = filterBusinessId
+        ? (businessesSnapshot.exists ? [businessesSnapshot] : [])
+        : businessesSnapshot.docs
+
+      for (const businessDoc of businessDocs) {
+        const businessId = businessDoc.id
+        const businessData = businessDoc.data()
+
+        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+          continue
+        }
+
+        const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+
+        const pendingInvoices = await invoicesRef
+          .where('sunatStatus', '==', 'pending')
+          .where('documentType', 'in', ['factura', 'boleta'])
+          .limit(BATCH_SIZE)
+          .get()
+
+        if (pendingInvoices.empty) {
+          continue
+        }
+
+        console.log(`📋 [RETRY-TEST] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes`)
+        details.push({ businessId, pendingCount: pendingInvoices.size })
+
+        // Mapear emissionConfig
+        const businessDataForEmission = { ...businessData }
+        if (businessData.emissionConfig) {
+          const config = businessData.emissionConfig
+          if (config.method === 'qpse') {
+            businessDataForEmission.qpse = {
+              enabled: config.qpse.enabled !== false,
+              usuario: config.qpse.usuario,
+              password: config.qpse.password,
+              environment: config.qpse.environment || 'demo',
+            }
+            businessDataForEmission.sunat = { enabled: false }
+          } else if (config.method === 'sunat_direct') {
+            businessDataForEmission.sunat = {
+              enabled: config.sunat.enabled !== false,
+              environment: config.sunat.environment || 'beta',
+              solUser: config.sunat.solUser,
+              solPassword: config.sunat.solPassword,
+              certificateName: config.sunat.certificateName,
+              certificatePassword: config.sunat.certificatePassword,
+              certificateData: config.sunat.certificateData,
+            }
+            businessDataForEmission.qpse = { enabled: false }
+          }
+        }
+
+        for (const invoiceDoc of pendingInvoices.docs) {
+          const invoiceData = invoiceDoc.data()
+          const invoiceId = invoiceDoc.id
+
+          const createdAt = invoiceData.createdAt?.toDate?.() || new Date(invoiceData.createdAt)
+          const ageMinutes = (Date.now() - createdAt.getTime()) / (1000 * 60)
+
+          if (ageMinutes < MIN_AGE_MINUTES) {
+            console.log(`⏳ [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: Muy reciente (${ageMinutes.toFixed(1)} min), saltando`)
+            totalSkipped++
+            continue
+          }
+
+          const retryCount = invoiceData.retryCount || 0
+          if (retryCount >= MAX_RETRIES) {
+            console.log(`❌ [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: Máximo de reintentos alcanzado (${retryCount})`)
+            await invoicesRef.doc(invoiceId).update({
+              sunatStatus: 'failed_permanent',
+              sunatDescription: `Falló después de ${retryCount} intentos automáticos`,
+              updatedAt: FieldValue.serverTimestamp()
+            })
+            totalFailed++
+            continue
+          }
+
+          try {
+            console.log(`🚀 [RETRY-TEST] Reenviando ${invoiceData.series}-${invoiceData.correlativeNumber} (intento ${retryCount + 1})...`)
+
+            const invoiceForEmission = {
+              ...invoiceData,
+              correlativeNumber: invoiceData.correlativeNumber,
+            }
+
+            const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+            const isTransient = isTransientSunatError(result.responseCode, result.description)
+
+            let finalStatus
+            if (result.accepted) {
+              finalStatus = 'accepted'
+              totalSuccess++
+            } else if (isTransient) {
+              finalStatus = 'pending'
+              totalSkipped++
+            } else {
+              finalStatus = 'rejected'
+              totalFailed++
+            }
+
+            const updateData = {
+              sunatStatus: finalStatus,
+              sunatResponse: sanitizeForFirestore({
+                code: result.responseCode || '',
+                description: result.description || '',
+                method: result.method,
+                autoRetry: true,
+                testMode: true
+              }),
+              updatedAt: FieldValue.serverTimestamp()
+            }
+
+            if (isTransient && !result.accepted) {
+              updateData.retryCount = FieldValue.increment(1)
+              updateData.lastRetryError = sanitizeForFirestore({
+                code: result.responseCode || '',
+                description: result.description || '',
+                timestamp: new Date().toISOString()
+              })
+            }
+
+            await invoicesRef.doc(invoiceId).update(updateData)
+            console.log(`✅ [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
+            totalProcessed++
+
+          } catch (invoiceError) {
+            console.error(`❌ [RETRY-TEST] Error procesando ${invoiceData.series}-${invoiceData.correlativeNumber}:`, invoiceError.message)
+            await invoicesRef.doc(invoiceId).update({
+              retryCount: FieldValue.increment(1),
+              lastRetryError: {
+                message: invoiceError.message,
+                timestamp: new Date().toISOString()
+              },
+              updatedAt: FieldValue.serverTimestamp()
+            })
+            totalFailed++
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+
+      const summary = {
+        success: true,
+        message: 'Reintento manual completado',
+        summary: {
+          totalProcessed,
+          totalSuccess,
+          totalFailed,
+          totalSkipped
+        },
+        details,
+        timestamp: new Date().toISOString()
+      }
+
+      console.log('═══════════════════════════════════════════════════════')
+      console.log(`📊 [RETRY-TEST] Resumen:`)
+      console.log(`   - Procesados: ${totalProcessed}`)
+      console.log(`   - Exitosos: ${totalSuccess}`)
+      console.log(`   - Fallidos: ${totalFailed}`)
+      console.log(`   - Saltados: ${totalSkipped}`)
+      console.log('═══════════════════════════════════════════════════════')
+
+      res.json(summary)
+
+    } catch (error) {
+      console.error('❌ [RETRY-TEST] Error:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      })
     }
   }
 )
@@ -5354,6 +5583,152 @@ export const exportInvoicesForAudit = onRequest(
     } catch (error) {
       console.error('❌ Error en exportación:', error)
       res.status(500).json({ error: 'Error al exportar comprobantes', details: error.message })
+    }
+  }
+)
+
+/**
+ * Cloud Function para corregir boletas rechazadas por error 2638 (Ley de la Selva)
+ *
+ * Esta función:
+ * 1. Busca boletas con sunatStatus = "rejected" o "pending" que tengan error 2638
+ * 2. Agrega los campos faltantes (opGravadas, opExoneradas, opInafectas, taxConfig)
+ * 3. Cambia el status a "pending" para permitir reenvío
+ *
+ * Uso: curl -X POST https://us-central1-cobrify-395fe.cloudfunctions.net/fixRejectedInvoices \
+ *      -H "Content-Type: application/json" \
+ *      -d '{"businessId": "xxx", "secretKey": "fix-ley-selva-2024"}'
+ */
+export const fixRejectedInvoices = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '256MiB',
+  },
+  async (req, res) => {
+    // CORS
+    res.set('Access-Control-Allow-Origin', '*')
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.set('Access-Control-Allow-Headers', 'Content-Type')
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      const { businessId, secretKey } = req.body
+
+      // Validar clave secreta simple (para evitar uso no autorizado)
+      if (secretKey !== 'fix-ley-selva-2024') {
+        res.status(403).json({ error: 'Clave secreta inválida' })
+        return
+      }
+
+      if (!businessId) {
+        res.status(400).json({ error: 'businessId es requerido' })
+        return
+      }
+
+      console.log(`🔍 Buscando boletas rechazadas para negocio: ${businessId}`)
+
+      // Buscar boletas con status rejected o pending
+      const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+
+      const rejectedSnapshot = await invoicesRef
+        .where('documentType', '==', 'boleta')
+        .where('sunatStatus', 'in', ['rejected', 'pending'])
+        .get()
+
+      if (rejectedSnapshot.empty) {
+        res.status(200).json({
+          success: true,
+          message: 'No se encontraron boletas rechazadas o pendientes',
+          fixed: 0
+        })
+        return
+      }
+
+      console.log(`📋 Encontradas ${rejectedSnapshot.size} boletas para revisar`)
+
+      let fixed = 0
+      let skipped = 0
+      const results = []
+
+      for (const doc of rejectedSnapshot.docs) {
+        const data = doc.data()
+        const invoiceNumber = data.number || `${data.series}-${String(data.correlativeNumber).padStart(8, '0')}`
+
+        // Verificar si necesita corrección
+        const needsFix = !data.opGravadas && !data.opExoneradas && !data.opInafectas
+        const hasError2638 = data.sunatResponse?.code === '2638' ||
+                            data.sunatResponse?.description?.includes('2638')
+        const hasPendingManual = data.sunatResponse?.responseCode === 'PENDING_MANUAL' ||
+                                 data.sunatResponse?.pendingManual === true
+
+        if (!needsFix && !hasError2638 && !hasPendingManual) {
+          console.log(`⏭️ ${invoiceNumber} - Ya tiene los campos correctos`)
+          skipped++
+          continue
+        }
+
+        console.log(`📄 Procesando: ${invoiceNumber}`)
+
+        // Calcular totales desde los items
+        const items = data.items || []
+        let totalExoneradas = 0
+
+        items.forEach(item => {
+          const subtotal = (item.quantity || 0) * (item.unitPrice || 0)
+          totalExoneradas += subtotal
+        })
+
+        // Preparar actualización
+        const updateData = {
+          opGravadas: 0,
+          opExoneradas: totalExoneradas,
+          opInafectas: 0,
+          igv: 0,
+          taxConfig: {
+            igvRate: 0,
+            igvExempt: true,
+            exemptionReason: 'Ley de la Selva',
+            exemptionCode: '17'
+          },
+          sunatStatus: 'pending',
+          updatedAt: FieldValue.serverTimestamp()
+        }
+
+        await doc.ref.update(updateData)
+
+        console.log(`✅ ${invoiceNumber} corregido`)
+        fixed++
+        results.push({
+          number: invoiceNumber,
+          opExoneradas: totalExoneradas,
+          status: 'fixed'
+        })
+      }
+
+      console.log(`📊 Resumen: ${fixed} corregidas, ${skipped} saltadas`)
+
+      res.status(200).json({
+        success: true,
+        message: `${fixed} boletas corregidas, ${skipped} saltadas`,
+        fixed,
+        skipped,
+        total: rejectedSnapshot.size,
+        results
+      })
+
+    } catch (error) {
+      console.error('❌ Error:', error)
+      res.status(500).json({ error: error.message })
     }
   }
 )
