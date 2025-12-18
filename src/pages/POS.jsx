@@ -1911,14 +1911,22 @@ Gracias por tu preferencia.`
 
       toast.success('Abriendo WhatsApp...')
 
-      // Usar un enlace temporal para abrir WhatsApp (más compatible con navegadores móviles)
-      const link = document.createElement('a')
-      link.href = whatsappUrl
-      link.target = '_blank'
-      link.rel = 'noopener noreferrer'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      // Detectar si es móvil para usar el método apropiado
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+      if (isMobile) {
+        // En móvil, usar location.href para que el SO abra WhatsApp directamente
+        window.location.href = whatsappUrl
+      } else {
+        // En desktop, usar enlace temporal con target blank
+        const link = document.createElement('a')
+        link.href = whatsappUrl
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
 
       return
     } catch (error) {
