@@ -60,5 +60,11 @@ service firebase.storage {
       allow read: if true; // Lectura pública
       allow write: if request.auth != null && request.auth.uid == businessId;
     }
+
+    // Path para comprobantes PDF (WhatsApp sharing)
+    match /comprobantes/{businessId}/{allFiles=**} {
+      allow read: if true; // Lectura pública para que clientes descarguen
+      allow write: if request.auth != null && request.auth.uid == businessId;
+    }
   }
 }
