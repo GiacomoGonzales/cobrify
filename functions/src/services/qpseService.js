@@ -474,16 +474,30 @@ function parseQPseResponse(qpseResponse) {
   // Buscar CDR en múltiples campos posibles (URL o contenido base64)
   const cdrUrl = qpseResponse.url_cdr || qpseResponse.cdrUrl || qpseResponse.cdr_url ||
                  qpseResponse.enlace_cdr || qpseResponse.link_cdr || ''
-  const cdrData = qpseResponse.cdr || qpseResponse.cdr_base64 || qpseResponse.cdr_content ||
-                  qpseResponse.contenido_cdr || qpseResponse.cdr_xml || ''
 
-  // Log para debugging - ver todos los campos disponibles
+  // QPse devuelve el CDR directamente en el campo "cdr" como base64
+  let cdrData = qpseResponse.cdr || qpseResponse.cdr_base64 || qpseResponse.cdr_content ||
+                qpseResponse.contenido_cdr || qpseResponse.cdr_xml || ''
+
+  // Log para debugging
   if (accepted) {
     console.log('🔍 Campos disponibles en respuesta QPse:', Object.keys(qpseResponse))
     if (cdrUrl) console.log('✅ CDR URL encontrada:', cdrUrl)
-    if (cdrData) console.log('✅ CDR Data encontrada (longitud):', cdrData.length)
+    if (cdrData) {
+      console.log('✅ CDR encontrado como contenido directo (longitud):', cdrData.length)
+      // Decodificar base64 si es necesario (QPse lo envía en base64)
+      if (cdrData.startsWith('PD94')) {
+        // Es base64 (PD94 = <?xml en base64)
+        try {
+          cdrData = Buffer.from(cdrData, 'base64').toString('utf-8')
+          console.log('✅ CDR decodificado de base64 exitosamente')
+        } catch (e) {
+          console.warn('⚠️ Error decodificando CDR base64:', e.message)
+        }
+      }
+    }
     if (!cdrUrl && !cdrData) {
-      console.warn('⚠️ No se encontró CDR en la respuesta. Campos disponibles:', JSON.stringify(qpseResponse, null, 2))
+      console.warn('⚠️ No se encontró CDR en la respuesta')
     }
   }
 

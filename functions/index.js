@@ -680,7 +680,7 @@ export const sendInvoiceToSunat = onRequest(
                 )
               }
             }
-            // Descargar y guardar CDR
+            // CDR puede venir como URL o como contenido directo (base64/XML)
             if (emissionResult.cdrUrl) {
               const cdrContent = await downloadFromUrl(emissionResult.cdrUrl)
               if (cdrContent) {
@@ -691,6 +691,10 @@ export const sendInvoiceToSunat = onRequest(
                   cdrContent
                 )
               }
+            } else if (emissionResult.cdrData) {
+              // Si el CDR viene como contenido directo (no URL) - QPse devuelve "cdr" en base64
+              console.log('📄 CDR recibido como contenido directo, guardando...')
+              cdrStorageUrl = await saveToStorage(userId, invoiceId, `${documentNumber}-CDR.xml`, emissionResult.cdrData)
             }
           }
 
@@ -747,6 +751,7 @@ export const sendInvoiceToSunat = onRequest(
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
+          cdrData: emissionResult.cdrData, // CDR como contenido directo (si no hay URL)
           xmlStorageUrl: xmlStorageUrl,  // URL en Firebase Storage
           cdrStorageUrl: cdrStorageUrl,  // URL en Firebase Storage
           ticket: emissionResult.ticket,
@@ -1286,6 +1291,7 @@ export const sendCreditNoteToSunat = onRequest(
           pdfUrl: emissionResult.pdfUrl,
           xmlUrl: emissionResult.xmlUrl,
           cdrUrl: emissionResult.cdrUrl,
+          cdrData: emissionResult.cdrData, // CDR como contenido directo (si no hay URL)
           xmlStorageUrl: xmlStorageUrl,
           cdrStorageUrl: cdrStorageUrl,
           ticket: emissionResult.ticket,
