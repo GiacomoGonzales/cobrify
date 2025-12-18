@@ -350,13 +350,46 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
     // 6. Si el envío fue exitoso, parsear respuesta
     console.log('🔍 Respuesta completa de SUNAT vía QPse:', JSON.stringify(resultadoEnvio, null, 2))
 
-    const resultado = parseQPseResponse(resultadoEnvio)
+    let resultado = parseQPseResponse(resultadoEnvio)
 
     console.log(`✅ Emisión completada - Estado: ${resultado.accepted ? 'ACEPTADO' : 'RECHAZADO'}`)
     if (!resultado.accepted) {
       console.log(`❌ Código de error: ${resultado.responseCode}`)
       console.log(`❌ Descripción: ${resultado.description}`)
       console.log(`❌ Notas: ${resultado.notes}`)
+    }
+
+    // 7. Si fue aceptado, consultar estado para obtener URLs del CDR, XML y PDF
+    if (resultado.accepted && (!resultado.cdrUrl || !resultado.xmlUrl || !resultado.pdfUrl)) {
+      console.log('📄 Consultando estado para obtener URLs de CDR/XML/PDF...')
+      try {
+        // Esperar un momento para que QPse procese el CDR
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
+        const estadoConsulta = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
+        console.log('📋 Estado consultado:', JSON.stringify(estadoConsulta, null, 2))
+
+        // Actualizar URLs si están disponibles en la consulta
+        if (estadoConsulta.url_cdr && !resultado.cdrUrl) {
+          resultado.cdrUrl = estadoConsulta.url_cdr
+          console.log(`✅ CDR URL obtenida: ${resultado.cdrUrl}`)
+        }
+        if (estadoConsulta.url_xml && !resultado.xmlUrl) {
+          resultado.xmlUrl = estadoConsulta.url_xml
+          console.log(`✅ XML URL obtenida: ${resultado.xmlUrl}`)
+        }
+        if (estadoConsulta.url_pdf && !resultado.pdfUrl) {
+          resultado.pdfUrl = estadoConsulta.url_pdf
+          console.log(`✅ PDF URL obtenida: ${resultado.pdfUrl}`)
+        }
+
+        // También actualizar hash si no lo teníamos
+        if ((estadoConsulta.hash || estadoConsulta.codigo_hash) && !resultado.hash) {
+          resultado.hash = estadoConsulta.hash || estadoConsulta.codigo_hash
+        }
+      } catch (consultaError) {
+        console.warn('⚠️ No se pudo consultar estado para URLs (no crítico):', consultaError.message)
+      }
     }
 
     return resultado
