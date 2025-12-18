@@ -360,35 +360,52 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
     }
 
     // 7. Si fue aceptado, consultar estado para obtener URLs del CDR, XML y PDF
+    // Usar reintentos porque QPse puede tardar en procesar el CDR
     if (resultado.accepted && (!resultado.cdrUrl || !resultado.xmlUrl || !resultado.pdfUrl)) {
       console.log('📄 Consultando estado para obtener URLs de CDR/XML/PDF...')
-      try {
-        // Esperar un momento para que QPse procese el CDR
-        await new Promise(resolve => setTimeout(resolve, 1500))
 
-        const estadoConsulta = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
-        console.log('📋 Estado consultado:', JSON.stringify(estadoConsulta, null, 2))
+      // Reintentar hasta 3 veces con espera incremental
+      for (let intento = 1; intento <= 3; intento++) {
+        try {
+          // Esperar antes de consultar (2s, 3s, 4s)
+          const tiempoEspera = 1000 + (intento * 1000)
+          console.log(`⏳ Intento ${intento}/3 - Esperando ${tiempoEspera}ms...`)
+          await new Promise(resolve => setTimeout(resolve, tiempoEspera))
 
-        // Actualizar URLs si están disponibles en la consulta
-        if (estadoConsulta.url_cdr && !resultado.cdrUrl) {
-          resultado.cdrUrl = estadoConsulta.url_cdr
-          console.log(`✅ CDR URL obtenida: ${resultado.cdrUrl}`)
-        }
-        if (estadoConsulta.url_xml && !resultado.xmlUrl) {
-          resultado.xmlUrl = estadoConsulta.url_xml
-          console.log(`✅ XML URL obtenida: ${resultado.xmlUrl}`)
-        }
-        if (estadoConsulta.url_pdf && !resultado.pdfUrl) {
-          resultado.pdfUrl = estadoConsulta.url_pdf
-          console.log(`✅ PDF URL obtenida: ${resultado.pdfUrl}`)
-        }
+          const estadoConsulta = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
+          console.log(`📋 Estado consultado (intento ${intento}):`, JSON.stringify(estadoConsulta, null, 2))
 
-        // También actualizar hash si no lo teníamos
-        if ((estadoConsulta.hash || estadoConsulta.codigo_hash) && !resultado.hash) {
-          resultado.hash = estadoConsulta.hash || estadoConsulta.codigo_hash
+          // Actualizar URLs si están disponibles en la consulta
+          if (estadoConsulta.url_cdr && !resultado.cdrUrl) {
+            resultado.cdrUrl = estadoConsulta.url_cdr
+            console.log(`✅ CDR URL obtenida: ${resultado.cdrUrl}`)
+          }
+          if (estadoConsulta.url_xml && !resultado.xmlUrl) {
+            resultado.xmlUrl = estadoConsulta.url_xml
+            console.log(`✅ XML URL obtenida: ${resultado.xmlUrl}`)
+          }
+          if (estadoConsulta.url_pdf && !resultado.pdfUrl) {
+            resultado.pdfUrl = estadoConsulta.url_pdf
+            console.log(`✅ PDF URL obtenida: ${resultado.pdfUrl}`)
+          }
+
+          // También actualizar hash si no lo teníamos
+          if ((estadoConsulta.hash || estadoConsulta.codigo_hash) && !resultado.hash) {
+            resultado.hash = estadoConsulta.hash || estadoConsulta.codigo_hash
+          }
+
+          // Si ya tenemos el CDR, salir del bucle
+          if (resultado.cdrUrl) {
+            console.log('✅ CDR obtenido exitosamente')
+            break
+          }
+        } catch (consultaError) {
+          console.warn(`⚠️ Error en consulta (intento ${intento}):`, consultaError.message)
         }
-      } catch (consultaError) {
-        console.warn('⚠️ No se pudo consultar estado para URLs (no crítico):', consultaError.message)
+      }
+
+      if (!resultado.cdrUrl) {
+        console.warn('⚠️ No se pudo obtener CDR después de 3 intentos')
       }
     }
 
