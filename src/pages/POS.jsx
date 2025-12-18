@@ -1865,6 +1865,18 @@ export default function POS() {
       const downloadURL = await getDownloadURL(storageRef)
       console.log('PDF subido:', downloadURL)
 
+      // Acortar URL usando TinyURL
+      let shortURL = downloadURL
+      try {
+        const tinyResponse = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(downloadURL)}`)
+        if (tinyResponse.ok) {
+          shortURL = await tinyResponse.text()
+          console.log('URL acortada:', shortURL)
+        }
+      } catch (e) {
+        console.log('No se pudo acortar URL, usando original')
+      }
+
       // Preparar datos para WhatsApp
       const cleanPhone = phone.replace(/\D/g, '')
       let formattedPhone = cleanPhone
@@ -1887,13 +1899,13 @@ export default function POS() {
 
 Gracias por tu compra en *${companySettings?.businessName || 'nuestra tienda'}*.
 
-📄 *${docTypeName}:* ${lastInvoiceData.number}
-💰 *Total:* ${total}
+*${docTypeName}:* ${lastInvoiceData.number}
+*Total:* ${total}
 
-📥 *Descarga tu comprobante aquí:*
-${downloadURL}
+*Descarga tu comprobante aquí:*
+${shortURL}
 
-¡Gracias por tu preferencia!`
+Gracias por tu preferencia.`
 
       const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
 
