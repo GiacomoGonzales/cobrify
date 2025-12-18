@@ -8,6 +8,7 @@ import {
   Package,
   Loader2,
   Calendar,
+  AlertTriangle,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -202,6 +203,13 @@ export default function StockMovements() {
         color: 'text-purple-600',
         bgColor: 'bg-purple-50',
         variant: 'default',
+      },
+      damage: {
+        label: 'Merma/Dañado',
+        icon: AlertTriangle,
+        color: 'text-red-700',
+        bgColor: 'bg-red-100',
+        variant: 'danger',
       },
     }
 

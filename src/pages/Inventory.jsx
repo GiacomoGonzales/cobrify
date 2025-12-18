@@ -119,6 +119,17 @@ export default function Inventory() {
   })
   const [isTransferring, setIsTransferring] = useState(false)
 
+  // Estado para modal de merma/daños
+  const [showDamageModal, setShowDamageModal] = useState(false)
+  const [damageProduct, setDamageProduct] = useState(null)
+  const [damageData, setDamageData] = useState({
+    warehouseId: '',
+    quantity: '',
+    reason: 'damaged',
+    notes: ''
+  })
+  const [isProcessingDamage, setIsProcessingDamage] = useState(false)
+
   // Estado para migración de stock huérfano
   const [isMigratingOrphanStock, setIsMigratingOrphanStock] = useState(false)
 
@@ -292,6 +303,104 @@ export default function Inventory() {
       quantity: '',
       notes: ''
     })
+  }
+
+  // Funciones para modal de merma/daños
+  const openDamageModal = (product) => {
+    setDamageProduct(product)
+    // Si solo hay un almacén, seleccionarlo automáticamente
+    const activeWarehouses = warehouses.filter(w => w.isActive)
+    const defaultWarehouseId = activeWarehouses.length === 1 ? activeWarehouses[0].id : ''
+    setDamageData({
+      warehouseId: defaultWarehouseId,
+      quantity: '',
+      reason: 'damaged',
+      notes: ''
+    })
+    setShowDamageModal(true)
+  }
+
+  const closeDamageModal = () => {
+    setShowDamageModal(false)
+    setDamageProduct(null)
+    setDamageData({
+      warehouseId: '',
+      quantity: '',
+      reason: 'damaged',
+      notes: ''
+    })
+  }
+
+  const handleDamage = async () => {
+    if (!user?.uid || !damageProduct) return
+
+    // Validaciones
+    if (!damageData.warehouseId) {
+      toast.error('Debes seleccionar un almacén')
+      return
+    }
+
+    const quantity = parseFloat(damageData.quantity)
+    if (!quantity || quantity <= 0) {
+      toast.error('La cantidad debe ser mayor a 0')
+      return
+    }
+
+    // Verificar stock disponible en almacén
+    const warehouseStock = damageProduct.warehouseStocks?.find(
+      ws => ws.warehouseId === damageData.warehouseId
+    )
+    const availableStock = warehouseStock?.stock || 0
+
+    if (quantity > availableStock) {
+      toast.error(`Stock insuficiente. Disponible: ${availableStock}`)
+      return
+    }
+
+    setIsProcessingDamage(true)
+    try {
+      const businessId = getBusinessId()
+      const warehouseName = warehouses.find(w => w.id === damageData.warehouseId)?.name || ''
+
+      // Mapeo de razones
+      const reasonLabels = {
+        damaged: 'Producto dañado',
+        expired: 'Producto expirado',
+        lost: 'Pérdida/Extravío',
+        theft: 'Robo',
+        other: 'Otro'
+      }
+      const reasonLabel = reasonLabels[damageData.reason] || damageData.reason
+
+      // Crear movimiento de merma
+      await createStockMovement(businessId, {
+        productId: damageProduct.id,
+        warehouseId: damageData.warehouseId,
+        type: 'damage',
+        quantity: -quantity, // Siempre negativo
+        reason: reasonLabel,
+        referenceType: 'damage_adjustment',
+        userId: user.uid,
+        notes: damageData.notes || `Merma: ${quantity} unidades - ${reasonLabel}`
+      })
+
+      // Actualizar stock del producto en el almacén
+      await updateWarehouseStock(
+        businessId,
+        damageProduct.id,
+        damageData.warehouseId,
+        -quantity
+      )
+
+      toast.success(`Merma registrada: ${quantity} unidades de ${damageProduct.name}`)
+      closeDamageModal()
+      loadProducts() // Recargar productos
+    } catch (error) {
+      console.error('Error al registrar merma:', error)
+      toast.error('Error al registrar la merma')
+    } finally {
+      setIsProcessingDamage(false)
+    }
   }
 
   // Función para manejar el ordenamiento
@@ -1072,7 +1181,7 @@ export default function Inventory() {
                     </TableHead>
                     <TableHead className="w-24 lg:w-[10%] text-right">Valor</TableHead>
                     <TableHead className="w-20 lg:w-[9%] text-center">Estado</TableHead>
-                    {warehouses.length > 1 && <TableHead className="w-20 lg:w-[5%] text-right">Acc.</TableHead>}
+                    {warehouses.length >= 1 && <TableHead className="w-20 lg:w-[8%] text-right">Acciones</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1190,10 +1299,10 @@ export default function Inventory() {
                             {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
                           </Badge>
                         </TableCell>
-                        {warehouses.length > 1 && (
-                          <TableCell className="lg:w-[5%]">
-                            <div className="flex items-center justify-end">
-                              {isProduct && (
+                        {warehouses.length >= 1 && (
+                          <TableCell className="lg:w-[8%]">
+                            <div className="flex items-center justify-end gap-1">
+                              {isProduct && warehouses.length > 1 && (
                                 <button
                                   onClick={() => openTransferModal(item)}
                                   className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -1201,6 +1310,16 @@ export default function Inventory() {
                                   disabled={getRealStock(item) === null || getRealStock(item) === 0}
                                 >
                                   <ArrowRightLeft className="w-4 h-4" />
+                                </button>
+                              )}
+                              {isProduct && (
+                                <button
+                                  onClick={() => openDamageModal(item)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Registrar merma/daño"
+                                  disabled={getRealStock(item) === null || getRealStock(item) === 0}
+                                >
+                                  <AlertTriangle className="w-4 h-4" />
                                 </button>
                               )}
                             </div>
@@ -1211,7 +1330,7 @@ export default function Inventory() {
                       {/* Fila expandible con detalle por almacén - solo para productos */}
                       {isExpanded && warehouses.length > 0 && getRealStock(item) !== null && isProduct && (
                         <TableRow className="bg-gray-50">
-                          <TableCell colSpan={warehouses.length > 1 ? 8 : 7} className="py-3">
+                          <TableCell colSpan={warehouses.length >= 1 ? 8 : 7} className="py-3">
                             <div className="pl-8 space-y-2">
                               <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
                                 <Warehouse className="w-4 h-4" />
@@ -1504,6 +1623,110 @@ export default function Inventory() {
                 <>
                   <ArrowRightLeft className="w-4 h-4 mr-2" />
                   Transferir
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Merma/Daños */}
+      <Modal
+        isOpen={showDamageModal}
+        onClose={closeDamageModal}
+        title="Registrar Merma o Daño"
+        size="md"
+      >
+        <div className="space-y-4">
+          {damageProduct && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-gray-600">Producto</p>
+              <p className="font-semibold text-gray-900">{damageProduct.name}</p>
+              <p className="text-sm text-gray-500">Código: {damageProduct.code}</p>
+            </div>
+          )}
+
+          <Select
+            label="Almacén"
+            required
+            value={damageData.warehouseId}
+            onChange={(e) => setDamageData({ ...damageData, warehouseId: e.target.value })}
+          >
+            <option value="">Seleccionar almacén</option>
+            {warehouses
+              .filter((w) => w.isActive)
+              .map((warehouse) => {
+                const warehouseStock = damageProduct?.warehouseStocks?.find(
+                  (ws) => ws.warehouseId === warehouse.id
+                )
+                const stock = warehouseStock?.stock || 0
+                return (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name} (Stock: {stock})
+                  </option>
+                )
+              })}
+          </Select>
+
+          <Select
+            label="Motivo"
+            required
+            value={damageData.reason}
+            onChange={(e) => setDamageData({ ...damageData, reason: e.target.value })}
+          >
+            <option value="damaged">Producto dañado</option>
+            <option value="expired">Producto expirado</option>
+            <option value="lost">Pérdida/Extravío</option>
+            <option value="theft">Robo</option>
+            <option value="other">Otro</option>
+          </Select>
+
+          <Input
+            label="Cantidad a descontar"
+            type="number"
+            min="1"
+            step="1"
+            required
+            value={damageData.quantity}
+            onChange={(e) => setDamageData({ ...damageData, quantity: e.target.value })}
+            placeholder="Ej: 5"
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notas (opcional)
+            </label>
+            <textarea
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              rows={3}
+              value={damageData.notes}
+              onChange={(e) => setDamageData({ ...damageData, notes: e.target.value })}
+              placeholder="Descripción del daño o motivo adicional..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={closeDamageModal}
+              disabled={isProcessingDamage}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDamage}
+              disabled={isProcessingDamage}
+            >
+              {isProcessingDamage ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Registrar Merma
                 </>
               )}
             </Button>
