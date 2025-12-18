@@ -170,6 +170,7 @@ export default function POS() {
   const [emissionDate, setEmissionDate] = useState(getLocalDateString()) // Fecha de emisión (por defecto hoy)
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
 
   // Estado para datos de mesa
   const [tableData, setTableData] = useState(null)
@@ -1843,6 +1844,7 @@ export default function POS() {
       return
     }
 
+    setSendingWhatsApp(true)
     try {
       toast.info('Generando comprobante...')
 
@@ -1928,10 +1930,12 @@ Gracias por tu preferencia.`
         document.body.removeChild(link)
       }
 
+      setSendingWhatsApp(false)
       return
     } catch (error) {
       console.error('Error al enviar por WhatsApp:', error)
       toast.error('Error al generar el comprobante. Intenta de nuevo.')
+      setSendingWhatsApp(false)
     }
   }
 
@@ -3448,9 +3452,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     variant="outline"
                     size="sm"
                     className="w-full mt-2"
+                    disabled={sendingWhatsApp}
                   >
-                    <Share2 className="w-4 h-4 mr-2" />
-                    Enviar por WhatsApp
+                    {sendingWhatsApp ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Enviar por WhatsApp
+                      </>
+                    )}
                   </Button>
                   <Button
                     onClick={clearCart}

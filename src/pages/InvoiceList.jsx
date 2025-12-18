@@ -80,6 +80,7 @@ export default function InvoiceList() {
   const [deletingInvoice, setDeletingInvoice] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false) // Estado de envío por WhatsApp
   const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true }) // Posición del menú
 
@@ -208,6 +209,7 @@ export default function InvoiceList() {
       return
     }
 
+    setSendingWhatsApp(true)
     try {
       toast.info('Generando comprobante...')
 
@@ -294,9 +296,11 @@ Gracias por tu preferencia.`
         document.body.removeChild(link)
       }
 
+      setSendingWhatsApp(false)
     } catch (error) {
       console.error('Error al enviar por WhatsApp:', error)
       toast.error('Error al generar el comprobante. Intenta de nuevo.')
+      setSendingWhatsApp(false)
     }
   }
 
@@ -2126,9 +2130,19 @@ Gracias por tu preferencia.`
                 size="sm"
                 variant="outline"
                 onClick={() => handleSendWhatsApp(viewingInvoice)}
+                disabled={sendingWhatsApp}
               >
-                <Share2 className="w-4 h-4 mr-1" />
-                WhatsApp
+                {sendingWhatsApp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4 mr-1" />
+                    WhatsApp
+                  </>
+                )}
               </Button>
               <Button
                 size="sm"
