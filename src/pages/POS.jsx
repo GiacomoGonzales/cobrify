@@ -39,7 +39,8 @@ import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo }
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { getDoc, doc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, storage } from '@/lib/firebase'
 import {
   getProducts,
   getCustomers,
@@ -1830,103 +1831,103 @@ export default function POS() {
 
   const handleSendWhatsApp = async () => {
     console.log('=== handleSendWhatsApp llamado ===')
-    console.log('lastInvoiceData:', lastInvoiceData)
-    console.log('companySettings:', companySettings)
 
     if (!lastInvoiceData) {
-      console.error('No hay datos de factura')
+      toast.error('No hay datos de factura disponibles')
+      return
+    }
+
+    const phone = lastInvoiceData.customer?.phone || customerData.phone
+    if (!phone) {
+      toast.error('El cliente no tiene un número de teléfono registrado')
+      return
+    }
+
+    try {
+      toast.info('Generando comprobante...')
+
+      // Generar el PDF como blob
+      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding)
+
+      // Preparar nombre del archivo
+      const docTypeFile = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                          lastInvoiceData.documentType === 'boleta' ? 'Boleta' :
+                          lastInvoiceData.documentType === 'nota_credito' ? 'NotaCredito' :
+                          lastInvoiceData.documentType === 'nota_debito' ? 'NotaDebito' : 'NotaVenta'
+      const fileName = `${docTypeFile}_${lastInvoiceData.number.replace(/\//g, '-')}_${Date.now()}.pdf`
+
+      // Subir a Firebase Storage
+      toast.info('Subiendo comprobante...')
+      const storageRef = ref(storage, `comprobantes/${user.uid}/${fileName}`)
+      await uploadBytes(storageRef, pdfBlob, { contentType: 'application/pdf' })
+
+      // Obtener URL de descarga
+      const downloadURL = await getDownloadURL(storageRef)
+      console.log('PDF subido:', downloadURL)
+
+      // Preparar datos para WhatsApp
+      const cleanPhone = phone.replace(/\D/g, '')
+      let formattedPhone = cleanPhone
+      if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
+        formattedPhone = '51' + formattedPhone
+      }
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '51' + formattedPhone.substring(1)
+      }
+
+      const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
+                          lastInvoiceData.documentType === 'boleta' ? 'Boleta' :
+                          lastInvoiceData.documentType === 'nota_credito' ? 'Nota de Crédito' :
+                          lastInvoiceData.documentType === 'nota_debito' ? 'Nota de Débito' : 'Nota de Venta'
+      const customerName = lastInvoiceData.customer?.name || 'Cliente'
+      const total = formatCurrency(lastInvoiceData.total)
+
+      // Crear mensaje con link de descarga
+      const message = `Hola ${customerName},
+
+Gracias por tu compra en *${companySettings?.businessName || 'nuestra tienda'}*.
+
+📄 *${docTypeName}:* ${lastInvoiceData.number}
+💰 *Total:* ${total}
+
+📥 *Descarga tu comprobante aquí:*
+${downloadURL}
+
+¡Gracias por tu preferencia!`
+
+      const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
+
+      toast.success('¡Listo! Abriendo WhatsApp...')
+
+      // Detectar si es móvil o escritorio para abrir correctamente
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      if (isMobile) {
+        window.location.href = whatsappUrl
+      } else {
+        window.open(whatsappUrl, '_blank')
+      }
+
+      return
+    } catch (error) {
+      console.error('Error al enviar por WhatsApp:', error)
+      toast.error('Error al generar el comprobante. Intenta de nuevo.')
+    }
+  }
+
+  // Función legacy para compartir en nativo (mantener por compatibilidad)
+  const handleShareNative = async () => {
+    if (!lastInvoiceData) {
       toast.error('No hay datos de factura disponibles')
       return
     }
 
     try {
-      // Verificar si está en plataforma nativa
       const { Capacitor } = await import('@capacitor/core')
       const isNative = Capacitor.isNativePlatform()
-      console.log('isNative:', isNative)
 
       if (!isNative) {
-        // En WEB - Detectar si es móvil o escritorio
-        const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-        console.log('isMobileWeb:', isMobileWeb)
-
-        const phone = lastInvoiceData.customer?.phone || customerData.phone
-        console.log('Teléfono del cliente:', phone)
-
-        if (!phone) {
-          toast.error('El cliente no tiene un número de teléfono registrado')
-          return
-        }
-
-        const cleanPhone = phone.replace(/\D/g, '')
-        const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
-                           lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
-        const customerName = lastInvoiceData.customer?.name || 'Cliente'
-
-        if (isMobileWeb) {
-          // MÓVIL WEB - Descargar PDF y abrir WhatsApp directamente con el número
-          try {
-            toast.info('Generando PDF...')
-
-            // Formatear número de teléfono con código de país
-            let formattedPhone = cleanPhone
-            if (formattedPhone.length === 9 && formattedPhone.startsWith('9')) {
-              formattedPhone = '51' + formattedPhone
-            }
-            if (formattedPhone.startsWith('0')) {
-              formattedPhone = '51' + formattedPhone.substring(1)
-            }
-
-            // Descargar el PDF
-            await generateInvoicePDF(lastInvoiceData, companySettings, true, branding)
-            toast.success('PDF descargado')
-
-            // Crear mensaje y abrir WhatsApp directamente
-            const total = formatCurrency(lastInvoiceData.total)
-            const message = `Hola ${customerName},
-
-Gracias por tu compra.
-
-${docTypeName}: ${lastInvoiceData.number}
-Total: ${total}
-
-${companySettings?.businessName || 'Tu Empresa'}`
-
-            const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`
-
-            // Pequeño delay para que el usuario vea que se descargó el PDF
-            setTimeout(() => {
-              window.location.href = whatsappUrl
-              toast.info('Adjunta el PDF descargado en WhatsApp', 5000)
-            }, 500)
-
-          } catch (error) {
-            console.error('Error:', error)
-            toast.error('Error al generar el PDF')
-          }
-          return
-        }
-
-        // ESCRITORIO WEB - Descargar PDF y abrir WhatsApp Web con mensaje corto
-        toast.info('Generando PDF...')
-        try {
-          await generateInvoicePDF(lastInvoiceData, companySettings)
-          toast.success('PDF descargado')
-        } catch (error) {
-          console.error('Error generando PDF:', error)
-          toast.error('Error al generar el PDF')
-        }
-
-        // Mensaje corto para escritorio
-        const message = `Hola ${customerName}, se adjunta su comprobante de pago. Gracias por su compra.`
-        const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-
-        // Pequeño delay para que el usuario vea el PDF descargado antes de abrir WhatsApp
-        setTimeout(() => {
-          window.open(url, '_blank')
-          toast.success('Abriendo WhatsApp...')
-        }, 500)
-
+        // Si no es nativo, usar la función de WhatsApp con link
+        await handleSendWhatsApp()
         return
       }
 
