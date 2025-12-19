@@ -1479,9 +1479,9 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
-                  {/* Reenviar a SUNAT (para facturas rechazadas o firmadas pero no enviadas) */}
+                  {/* Reenviar a SUNAT (para facturas rechazadas, firmadas o atascadas en enviando) */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed') && (
+                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'sending') && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -1521,9 +1521,9 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
-                  {/* Reenviar Nota de Crédito a SUNAT (rechazada o firmada) */}
+                  {/* Reenviar Nota de Crédito a SUNAT (rechazada, firmada o atascada) */}
                   {invoice.documentType === 'nota_credito' &&
-                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed') && (
+                   (invoice.sunatStatus === 'rejected' || invoice.sunatStatus === 'SIGNED' || invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'sending') && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
