@@ -5732,3 +5732,182 @@ export const fixRejectedInvoices = onRequest(
     }
   }
 )
+
+// ==========================================
+// URL SHORTENER FUNCTIONS (cbrfy.link)
+// ==========================================
+
+/**
+ * Genera un código corto aleatorio
+ * @param {number} length - Longitud del código (default: 6)
+ * @returns {string} Código aleatorio alfanumérico
+ */
+function generateShortCode(length = 6) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let code = ''
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
+/**
+ * Crea una URL corta para un enlace largo
+ * POST /createShortUrl
+ * Body: { url: string, businessId?: string, invoiceId?: string }
+ * Returns: { shortUrl: string, code: string }
+ */
+export const createShortUrl = onRequest(
+  {
+    region: 'us-central1',
+    cors: true,
+    maxInstances: 10,
+    invoker: 'public'
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      const { url, businessId, invoiceId } = req.body
+
+      if (!url) {
+        res.status(400).json({ error: 'URL is required' })
+        return
+      }
+
+      // Validar que sea una URL válida
+      try {
+        new URL(url)
+      } catch {
+        res.status(400).json({ error: 'Invalid URL format' })
+        return
+      }
+
+      // Verificar si ya existe una URL corta para este enlace
+      const existingSnapshot = await db.collection('shortUrls')
+        .where('originalUrl', '==', url)
+        .limit(1)
+        .get()
+
+      if (!existingSnapshot.empty) {
+        const existingDoc = existingSnapshot.docs[0]
+        const code = existingDoc.id
+        console.log(`🔗 URL ya existente, retornando código: ${code}`)
+        res.status(200).json({
+          shortUrl: `https://cbrfy.link/${code}`,
+          code,
+          existing: true
+        })
+        return
+      }
+
+      // Generar código único
+      let code = generateShortCode()
+      let attempts = 0
+      const maxAttempts = 10
+
+      // Asegurar que el código sea único
+      while (attempts < maxAttempts) {
+        const docRef = db.collection('shortUrls').doc(code)
+        const doc = await docRef.get()
+        if (!doc.exists) break
+        code = generateShortCode()
+        attempts++
+      }
+
+      if (attempts >= maxAttempts) {
+        console.error('❌ No se pudo generar código único después de varios intentos')
+        res.status(500).json({ error: 'Could not generate unique code' })
+        return
+      }
+
+      // Guardar en Firestore
+      await db.collection('shortUrls').doc(code).set({
+        originalUrl: url,
+        businessId: businessId || null,
+        invoiceId: invoiceId || null,
+        createdAt: FieldValue.serverTimestamp(),
+        hits: 0
+      })
+
+      console.log(`✅ URL corta creada: cbrfy.link/${code} -> ${url.substring(0, 50)}...`)
+
+      res.status(200).json({
+        shortUrl: `https://cbrfy.link/${code}`,
+        code,
+        existing: false
+      })
+
+    } catch (error) {
+      console.error('❌ Error creando URL corta:', error)
+      res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+/**
+ * Redirige desde URL corta a URL original
+ * Esta función maneja las peticiones a cbrfy.link/{code}
+ */
+export const redirectShortUrl = onRequest(
+  {
+    region: 'us-central1',
+    cors: true,
+    maxInstances: 50,
+    invoker: 'public'
+  },
+  async (req, res) => {
+    try {
+      // Extraer el código de la URL
+      const path = req.path || ''
+      const code = path.replace(/^\//, '').split('/')[0]
+
+      console.log(`🔗 [Redirect] Código solicitado: ${code}`)
+
+      if (!code) {
+        // Si no hay código, redirigir a la página principal de Cobrify
+        res.redirect(302, 'https://cobrifyperu.com')
+        return
+      }
+
+      // Buscar el código en Firestore
+      const docRef = db.collection('shortUrls').doc(code)
+      const doc = await docRef.get()
+
+      if (!doc.exists) {
+        console.log(`⚠️ [Redirect] Código no encontrado: ${code}`)
+        // Redirigir a página de error o página principal
+        res.redirect(302, 'https://cobrifyperu.com?error=link_not_found')
+        return
+      }
+
+      const data = doc.data()
+      const originalUrl = data.originalUrl
+
+      console.log(`✅ [Redirect] Redirigiendo ${code} -> ${originalUrl.substring(0, 50)}...`)
+
+      // Incrementar contador de hits (sin esperar)
+      docRef.update({
+        hits: FieldValue.increment(1),
+        lastAccessedAt: FieldValue.serverTimestamp()
+      }).catch(err => console.error('Error actualizando hits:', err))
+
+      // Redirigir al URL original
+      res.redirect(302, originalUrl)
+
+    } catch (error) {
+      console.error('❌ [Redirect] Error:', error)
+      res.redirect(302, 'https://cobrifyperu.com?error=server_error')
+    }
+  }
+)

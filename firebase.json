@@ -19,52 +19,71 @@
       "predeploy": []
     }
   ],
-  "hosting": {
-    "public": "dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "headers": [
-      {
-        "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|js|css|woff|woff2|ttf|eot)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "max-age=31536000,immutable"
-          }
-        ]
-      },
-      {
-        "source": "index.html",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache,no-store,must-revalidate"
-          }
-        ]
-      },
-      {
-        "source": "manifest.json",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache,no-store,must-revalidate"
-          }
-        ]
-      }
-    ],
-    "rewrites": [
-      {
-        "source": "/",
-        "function": "socialMetaTags",
-        "region": "us-central1"
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
+  "hosting": [
+    {
+      "site": "cobrify-395fe",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|js|css|woff|woff2|ttf|eot)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "max-age=31536000,immutable"
+            }
+          ]
+        },
+        {
+          "source": "index.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache,no-store,must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "manifest.json",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache,no-store,must-revalidate"
+            }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/",
+          "function": "socialMetaTags",
+          "region": "us-central1"
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "site": "cbrfy-link",
+      "public": "hosting-shortener",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "function": "redirectShortUrl",
+          "region": "us-central1"
+        }
+      ]
+    }
+  ]
 }

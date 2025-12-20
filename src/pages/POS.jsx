@@ -58,6 +58,7 @@ import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
+import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -2068,17 +2069,9 @@ export default function POS() {
       const downloadURL = await getDownloadURL(storageRef)
       console.log('PDF subido:', downloadURL)
 
-      // Acortar URL usando TinyURL
-      let shortURL = downloadURL
-      try {
-        const tinyResponse = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(downloadURL)}`)
-        if (tinyResponse.ok) {
-          shortURL = await tinyResponse.text()
-          console.log('URL acortada:', shortURL)
-        }
-      } catch (e) {
-        console.log('No se pudo acortar URL, usando original')
-      }
+      // Acortar URL usando cbrfy.link
+      const shortURL = await shortenUrl(downloadURL, user?.businessId || user?.uid, lastInvoiceData.id)
+      console.log('URL acortada:', shortURL)
 
       // Preparar datos para WhatsApp
       const cleanPhone = phone.replace(/\D/g, '')

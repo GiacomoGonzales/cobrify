@@ -54,6 +54,7 @@ import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
 import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
+import { shortenUrl } from '@/services/urlShortenerService'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
@@ -234,17 +235,9 @@ export default function InvoiceList() {
       const downloadURL = await getDownloadURL(storageRef)
       console.log('PDF subido:', downloadURL)
 
-      // Acortar URL usando TinyURL
-      let shortURL = downloadURL
-      try {
-        const tinyResponse = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(downloadURL)}`)
-        if (tinyResponse.ok) {
-          shortURL = await tinyResponse.text()
-          console.log('URL acortada:', shortURL)
-        }
-      } catch (e) {
-        console.log('No se pudo acortar URL, usando original')
-      }
+      // Acortar URL usando cbrfy.link
+      const shortURL = await shortenUrl(downloadURL, businessId, invoice.id)
+      console.log('URL acortada:', shortURL)
 
       // Preparar datos para WhatsApp
       const cleanPhone = phone.replace(/\D/g, '')
