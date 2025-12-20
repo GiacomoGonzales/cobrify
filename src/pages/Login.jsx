@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useSearchParams } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { loginSchema } from '@/utils/schemas'
@@ -82,13 +83,18 @@ export default function Login() {
     }
   }
 
-  // Mostrar splash mientras carga el branding
-  if (isLoadingBranding) {
+  // Mostrar splash mientras carga el branding (solo en móvil)
+  if (isLoadingBranding && Capacitor.isNativePlatform()) {
     return (
       <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
         <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
       </div>
     )
+  }
+
+  // En web, esperar sin mostrar nada mientras carga
+  if (isLoadingBranding) {
+    return null
   }
 
   // Si hay branding personalizado (reseller), usar esos valores

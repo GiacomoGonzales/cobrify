@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { useAuth } from './AuthContext'
 import {
   DEFAULT_BRANDING,
@@ -200,7 +201,8 @@ export function BrandingProvider({ children }) {
     return !ignoredDomains.some(d => hostname.includes(d))
   }
 
-  if (!brandingLoaded && (user || isResellerDomain())) {
+  // Solo mostrar splash en apps móviles nativas, no en web
+  if (!brandingLoaded && (user || isResellerDomain()) && Capacitor.isNativePlatform()) {
     return (
       <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
         <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />

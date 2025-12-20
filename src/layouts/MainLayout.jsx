@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/contexts/AuthContext'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -94,13 +95,18 @@ export default function MainLayout() {
     }
   }, [user?.uid, isAuthenticated])
 
-  // Mostrar splash mientras carga autenticación
-  if (isLoading) {
+  // Mostrar splash mientras carga autenticación (solo en móvil)
+  if (isLoading && Capacitor.isNativePlatform()) {
     return (
       <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
         <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
       </div>
     )
+  }
+
+  // En web, mostrar loading simple mientras carga
+  if (isLoading) {
+    return null
   }
 
   // Redirigir a login si no está autenticado
