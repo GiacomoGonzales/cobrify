@@ -2551,6 +2551,31 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         <div className="lg:sticky lg:top-4 lg:self-start">
           <Card className="flex flex-col h-full">
             <CardContent className="p-4 space-y-3">
+              {/* Vendedor - Solo si hay vendedores */}
+              {sellers.length > 0 && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                    <User className="w-3.5 h-3.5" />
+                    Vendedor
+                  </label>
+                  <select
+                    value={selectedSeller?.id || ''}
+                    onChange={e => {
+                      const seller = sellers.find(s => s.id === e.target.value)
+                      setSelectedSeller(seller || null)
+                    }}
+                    className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="">Seleccionar vendedor</option>
+                    {sellers.map(seller => (
+                      <option key={seller.id} value={seller.id}>
+                        {seller.code} - {seller.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Tipo de Comprobante */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
@@ -3011,8 +3036,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 )}
               </div>
 
-              {/* Opciones Avanzadas (Almacén, Fecha, Vendedor) */}
-              {(warehouses.length > 0 || businessSettings?.allowCustomEmissionDate || sellers.length > 0) && (
+              {/* Opciones Avanzadas (Almacén, Fecha) */}
+              {(warehouses.length > 0 || businessSettings?.allowCustomEmissionDate) && (
                 <details className="group">
                   <summary className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700 list-none">
                     <Settings2 className="w-3 h-3" />
@@ -3053,24 +3078,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         onChange={e => setEmissionDate(e.target.value)}
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
-                    )}
-                    {/* Vendedor */}
-                    {sellers.length > 0 && (
-                      <select
-                        value={selectedSeller?.id || ''}
-                        onChange={e => {
-                          const seller = sellers.find(s => s.id === e.target.value)
-                          setSelectedSeller(seller || null)
-                        }}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      >
-                        <option value="">Sin vendedor</option>
-                        {sellers.map(seller => (
-                          <option key={seller.id} value={seller.id}>
-                            {seller.code} - {seller.name}
-                          </option>
-                        ))}
-                      </select>
                     )}
                   </div>
                 </details>
