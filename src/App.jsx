@@ -160,6 +160,10 @@ function App() {
               <Route path="clientes" element={<Customers />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
+              <Route path="inventario" element={<Inventory />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="proveedores" element={<Suppliers />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
