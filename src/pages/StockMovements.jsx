@@ -253,6 +253,16 @@ export default function StockMovements() {
 
     setIsScanning(true)
     try {
+      // Verificar si el módulo de Google Barcode Scanner está disponible (solo Android)
+      const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()
+      if (!available) {
+        toast.info('Instalando módulo de escáner... Por favor espera')
+        await BarcodeScanner.installGoogleBarcodeScannerModule()
+        toast.success('Módulo instalado. Intenta escanear de nuevo.')
+        setIsScanning(false)
+        return
+      }
+
       // Verificar permisos de cámara
       const { camera } = await BarcodeScanner.checkPermissions()
       if (camera !== 'granted') {

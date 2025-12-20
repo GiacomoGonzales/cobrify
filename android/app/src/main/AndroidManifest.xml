@@ -41,6 +41,10 @@
 
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Camera Permission for Barcode Scanner -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
