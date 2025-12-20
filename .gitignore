@@ -74,3 +74,6 @@ logs_temp.txt
 # Android builds
 *.apk
 *.aab
+
+# Firebase cache
+.firebase/
