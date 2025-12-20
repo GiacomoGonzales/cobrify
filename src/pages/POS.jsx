@@ -78,6 +78,77 @@ const ORDER_TYPES = {
   'delivery': 'Delivery',
 }
 
+// Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
+const UNIT_TYPES = [
+  { code: 'NIU', label: 'Unidad' },
+  { code: 'ZZ', label: 'Servicio' },
+  { code: 'KGM', label: 'Kilogramo' },
+  { code: 'GRM', label: 'Gramo' },
+  { code: 'LTR', label: 'Litro' },
+  { code: 'MTR', label: 'Metro' },
+  { code: 'MTK', label: 'Metro cuadrado' },
+  { code: 'MTQ', label: 'Metro cúbico' },
+  { code: 'BX', label: 'Caja' },
+  { code: 'PK', label: 'Paquete' },
+  { code: 'SET', label: 'Juego' },
+  { code: 'HUR', label: 'Hora' },
+  { code: 'DZN', label: 'Docena' },
+  { code: 'PR', label: 'Par' },
+  { code: 'MIL', label: 'Millar' },
+  { code: 'TNE', label: 'Tonelada' },
+  { code: 'BJ', label: 'Balde' },
+  { code: 'BLL', label: 'Barril' },
+  { code: 'BG', label: 'Bolsa' },
+  { code: 'BO', label: 'Botella' },
+  { code: 'CT', label: 'Cartón' },
+  { code: 'CMK', label: 'Centímetro cuadrado' },
+  { code: 'CMQ', label: 'Centímetro cúbico' },
+  { code: 'CMT', label: 'Centímetro' },
+  { code: 'CEN', label: 'Ciento de unidades' },
+  { code: 'CY', label: 'Cilindro' },
+  { code: 'BE', label: 'Fardo' },
+  { code: 'GLL', label: 'Galón' },
+  { code: 'GLI', label: 'Galón inglés' },
+  { code: 'LEF', label: 'Hoja' },
+  { code: 'KTM', label: 'Kilómetro' },
+  { code: 'KWH', label: 'Kilovatio hora' },
+  { code: 'KT', label: 'Kit' },
+  { code: 'CA', label: 'Lata' },
+  { code: 'LBR', label: 'Libra' },
+  { code: 'MWH', label: 'Megavatio hora' },
+  { code: 'MGM', label: 'Miligramo' },
+  { code: 'MLT', label: 'Mililitro' },
+  { code: 'MMT', label: 'Milímetro' },
+  { code: 'MMK', label: 'Milímetro cuadrado' },
+  { code: 'MMQ', label: 'Milímetro cúbico' },
+  { code: 'UM', label: 'Millón de unidades' },
+  { code: 'ONZ', label: 'Onza' },
+  { code: 'PF', label: 'Paleta' },
+  { code: 'FOT', label: 'Pie' },
+  { code: 'FTK', label: 'Pie cuadrado' },
+  { code: 'FTQ', label: 'Pie cúbico' },
+  { code: 'C62', label: 'Pieza' },
+  { code: 'PG', label: 'Placa' },
+  { code: 'ST', label: 'Pliego' },
+  { code: 'INH', label: 'Pulgada' },
+  { code: 'TU', label: 'Tubo' },
+  { code: 'YRD', label: 'Yarda' },
+  { code: 'QD', label: 'Cuarto de docena' },
+  { code: 'HD', label: 'Media docena' },
+  { code: 'JG', label: 'Jarra' },
+  { code: 'JR', label: 'Frasco' },
+  { code: 'CH', label: 'Envase' },
+  { code: 'AV', label: 'Cápsula' },
+  { code: 'SA', label: 'Saco' },
+  { code: 'BT', label: 'Tornillo' },
+  { code: 'U2', label: 'Tableta/Blister' },
+  { code: 'DZP', label: 'Docena de paquetes' },
+  { code: 'HT', label: 'Media hora' },
+  { code: 'RL', label: 'Carrete' },
+  { code: 'SEC', label: 'Segundo' },
+  { code: 'RD', label: 'Varilla' },
+]
+
 // Helper functions for category hierarchy
 const migrateLegacyCategories = (cats) => {
   if (!cats || cats.length === 0) return []
@@ -223,7 +294,9 @@ export default function POS() {
   const [customProduct, setCustomProduct] = useState({
     name: '',
     price: '',
-    quantity: 1
+    quantity: 1,
+    unit: 'NIU',
+    taxAffectation: '10' // '10'=Gravado 18%, '20'=Exonerado, '30'=Inafecto
   })
 
   // Estado para configuración de impresión web legible
@@ -860,6 +933,9 @@ export default function POS() {
       name: customProduct.name.trim(),
       price: price,
       quantity: quantity,
+      unit: customProduct.unit || 'NIU',
+      // Si la empresa está exenta de IGV, forzar exonerado
+      taxAffectation: taxConfig.igvExempt ? '20' : (customProduct.taxAffectation || '10'),
       stock: null, // Productos personalizados no tienen control de stock
       isCustom: true,
     }
@@ -868,7 +944,7 @@ export default function POS() {
     toast.success('Producto personalizado agregado al carrito')
 
     // Resetear y cerrar modal
-    setCustomProduct({ name: '', price: '', quantity: 1 })
+    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10' })
     setShowCustomProductModal(false)
   }
 
@@ -3647,7 +3723,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         isOpen={showCustomProductModal}
         onClose={() => {
           setShowCustomProductModal(false)
-          setCustomProduct({ name: '', price: '', quantity: 1 })
+          setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10' })
         }}
         title="Agregar Producto Personalizado"
         size="md"
@@ -3708,6 +3784,47 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
           </div>
 
+          {/* Unit of Measure and Tax Type */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unidad de Medida
+              </label>
+              <select
+                value={customProduct.unit}
+                onChange={(e) => setCustomProduct({ ...customProduct, unit: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {UNIT_TYPES.map((unit) => (
+                  <option key={unit.code} value={unit.code}>
+                    {unit.label} ({unit.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de IGV
+              </label>
+              {taxConfig.igvExempt ? (
+                <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600">
+                  Exonerado (Régimen especial)
+                </div>
+              ) : (
+                <select
+                  value={customProduct.taxAffectation}
+                  onChange={(e) => setCustomProduct({ ...customProduct, taxAffectation: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="10">Gravado ({taxConfig.igvRate}%)</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                </select>
+              )}
+            </div>
+          </div>
+
           {/* Preview */}
           {customProduct.name && customProduct.price > 0 && (
             <div className="mt-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
@@ -3737,7 +3854,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               variant="outline"
               onClick={() => {
                 setShowCustomProductModal(false)
-                setCustomProduct({ name: '', price: '', quantity: 1 })
+                setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10' })
               }}
               className="flex-1"
             >
