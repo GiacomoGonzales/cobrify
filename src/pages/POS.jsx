@@ -920,7 +920,7 @@ export default function POS() {
       return
     }
 
-    const quantity = parseInt(customProduct.quantity) || 1
+    const quantity = parseFloat(customProduct.quantity) || 1
     if (quantity <= 0) {
       toast.error('La cantidad debe ser mayor a 0')
       return
@@ -3776,7 +3776,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               </label>
               <input
                 type="number"
-                min="1"
+                min="0.01"
+                step="0.01"
                 value={customProduct.quantity}
                 onChange={(e) => setCustomProduct({ ...customProduct, quantity: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -3838,7 +3839,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold text-primary-600">
-                    {formatCurrency(parseFloat(customProduct.price) * (parseInt(customProduct.quantity) || 1))}
+                    {formatCurrency(parseFloat(customProduct.price) * (parseFloat(customProduct.quantity) || 1))}
                   </p>
                   <p className="text-xs text-gray-600">
                     {formatCurrency(customProduct.price)} × {customProduct.quantity || 1}
