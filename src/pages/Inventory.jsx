@@ -238,13 +238,9 @@ export default function Inventory() {
     if (!user?.uid && !isDemoMode) return
 
     try {
-      if (isDemoMode) {
-        // Usar los mismos IDs que warehouseStocks en DemoContext
-        setWarehouses([
-          { id: '1', name: 'Almacén Principal', isDefault: true, isActive: true },
-          { id: '2', name: 'Almacén Secundario', isDefault: false, isActive: true },
-          { id: '3', name: 'Almacén de Belleza', isDefault: false, isActive: true },
-        ])
+      if (isDemoMode && demoData?.warehouses) {
+        // Usar almacenes del DemoContext para mantener sincronización con warehouseStocks
+        setWarehouses(demoData.warehouses)
         return
       }
 
@@ -919,7 +915,9 @@ export default function Inventory() {
   const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
 
   // Calcular productos con stock huérfano (pasando almacenes activos para detectar almacenes eliminados)
+  // IMPORTANTE: No calcular si los almacenes aún no se han cargado para evitar falsos positivos
   const orphanStockProducts = React.useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return []
     return getOrphanStockProducts(products, warehouses)
   }, [products, warehouses])
 

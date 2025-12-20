@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -23,6 +23,7 @@ import {
   getProductCategories,
 } from '@/services/firestoreService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
+import { getIngredients, registerPurchase as registerIngredientPurchase } from '@/services/ingredientService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 const UNITS = [
@@ -123,7 +124,10 @@ export default function CreatePurchase() {
   const toast = useToast()
   const [suppliers, setSuppliers] = useState([])
   const [products, setProducts] = useState([])
+  const [ingredients, setIngredients] = useState([])
   const [categories, setCategories] = useState([])
+  // Modo de items: 'products', 'ingredients', o 'all'
+  const [itemMode, setItemMode] = useState('products')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState(null)
@@ -148,7 +152,7 @@ export default function CreatePurchase() {
   const [firstDueDate, setFirstDueDate] = useState('') // Fecha de primera cuota
   const [installmentFrequency, setInstallmentFrequency] = useState(30) // Días entre cuotas
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '' },
+    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
   ])
 
   // Warehouses
@@ -203,11 +207,12 @@ export default function CreatePurchase() {
 
     setIsLoading(true)
     try {
-      const [suppliersResult, productsResult, categoriesResult, warehousesResult] = await Promise.all([
+      const [suppliersResult, productsResult, categoriesResult, warehousesResult, ingredientsResult] = await Promise.all([
         getSuppliers(businessId),
         getProducts(businessId),
         getProductCategories(businessId),
         getWarehouses(businessId),
+        getIngredients(businessId),
       ])
 
       if (suppliersResult.success) {
@@ -230,6 +235,10 @@ export default function CreatePurchase() {
         const defaultWarehouse = warehouseList.find(w => w.isDefault) || warehouseList[0] || null
         setSelectedWarehouse(defaultWarehouse)
       }
+
+      if (ingredientsResult.success) {
+        setIngredients(ingredientsResult.data || [])
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
       setMessage({
@@ -244,7 +253,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '' },
+      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
     ])
   }
 
@@ -304,36 +313,70 @@ export default function CreatePurchase() {
     setShowSupplierDropdown(false)
   }
 
-  // Filtrar productos según búsqueda
-  const getFilteredProducts = (index) => {
+  // Filtrar productos e ingredientes según búsqueda y modo
+  const getFilteredItems = (index) => {
     const search = (productSearches[index] || '').toLowerCase()
-    return products.filter(product => {
-      return (
-        product.name?.toLowerCase().includes(search) ||
-        product.code?.toLowerCase().includes(search) ||
-        product.category?.toLowerCase().includes(search)
-      )
-    })
+
+    let items = []
+
+    // Agregar productos si el modo lo permite
+    if (itemMode === 'products' || itemMode === 'all') {
+      const filteredProducts = products.filter(product => {
+        return (
+          product.name?.toLowerCase().includes(search) ||
+          product.code?.toLowerCase().includes(search) ||
+          product.category?.toLowerCase().includes(search)
+        )
+      }).map(p => ({ ...p, itemType: 'product' }))
+      items = [...items, ...filteredProducts]
+    }
+
+    // Agregar ingredientes si el modo lo permite
+    if (itemMode === 'ingredients' || itemMode === 'all') {
+      const filteredIngredients = ingredients.filter(ing => {
+        return ing.name?.toLowerCase().includes(search)
+      }).map(i => ({ ...i, itemType: 'ingredient' }))
+      items = [...items, ...filteredIngredients]
+    }
+
+    return items
   }
 
-  // Seleccionar producto
-  const selectProduct = (index, product) => {
-    const newItems = [...purchaseItems]
-    newItems[index].productId = product.id
-    newItems[index].productName = product.name
+  // Mantener compatibilidad con nombre anterior
+  const getFilteredProducts = getFilteredItems
 
-    // Hidratar el costo con el costo actual del producto (si existe)
-    if (product.cost && product.cost > 0) {
-      const costValue = product.cost
-      newItems[index].cost = costValue
-      // Calcular costo sin IGV automáticamente
-      newItems[index].costWithoutIGV = Math.round((costValue / 1.18) * 100) / 100
+  // Seleccionar producto o ingrediente
+  const selectProduct = (index, item) => {
+    const newItems = [...purchaseItems]
+    newItems[index].productId = item.id
+    newItems[index].productName = item.name
+    newItems[index].itemType = item.itemType || 'product'
+
+    if (item.itemType === 'ingredient') {
+      // Para ingredientes
+      newItems[index].unit = item.purchaseUnit || 'NIU'
+      // Usar último precio de compra o costo promedio
+      const costValue = item.lastPurchasePrice || item.averageCost || 0
+      if (costValue > 0) {
+        newItems[index].cost = costValue
+        newItems[index].costWithoutIGV = Math.round((costValue / 1.18) * 100) / 100
+      }
+    } else {
+      // Para productos
+      newItems[index].unit = item.unit || 'NIU'
+      // Hidratar el costo con el costo actual del producto (si existe)
+      if (item.cost && item.cost > 0) {
+        const costValue = item.cost
+        newItems[index].cost = costValue
+        // Calcular costo sin IGV automáticamente
+        newItems[index].costWithoutIGV = Math.round((costValue / 1.18) * 100) / 100
+      }
     }
 
     setPurchaseItems(newItems)
 
     const newSearches = { ...productSearches }
-    newSearches[index] = product.name
+    newSearches[index] = item.name
     setProductSearches(newSearches)
 
     const newDropdowns = { ...showProductDropdowns }
@@ -646,6 +689,8 @@ export default function CreatePurchase() {
         items: purchaseItems.map(item => ({
           productId: item.productId,
           productName: item.productName,
+          itemType: item.itemType || 'product', // 'product' o 'ingredient'
+          unit: item.unit || 'NIU',
           quantity: parseFloat(item.quantity),
           unitPrice: parseFloat(item.cost), // Precio unitario de compra (costo)
           // Campos de farmacia (lote y vencimiento)
@@ -681,8 +726,12 @@ export default function CreatePurchase() {
         throw new Error(result.error || 'Error al crear la compra')
       }
 
-      // 3. Actualizar stock y costo promedio de productos
-      const productUpdates = purchaseItems.map(async item => {
+      // Separar items por tipo
+      const productItems = purchaseItems.filter(item => item.itemType !== 'ingredient')
+      const ingredientItems = purchaseItems.filter(item => item.itemType === 'ingredient')
+
+      // 3. Actualizar stock y costo promedio de PRODUCTOS
+      const productUpdates = productItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (product) {
           // Solo actualizar si el producto maneja stock (trackStock !== false)
@@ -768,8 +817,8 @@ export default function CreatePurchase() {
 
       await Promise.all(productUpdates)
 
-      // 3.5. Registrar movimientos de stock para historial
-      const stockMovementPromises = purchaseItems.map(async item => {
+      // 3.5. Registrar movimientos de stock para historial de PRODUCTOS
+      const stockMovementPromises = productItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (!product) return
         if (product.trackStock === false) return
@@ -791,6 +840,22 @@ export default function CreatePurchase() {
       Promise.all(stockMovementPromises).catch(err => {
         console.error('Error al registrar movimientos de stock:', err)
       })
+
+      // 4. Actualizar stock de INGREDIENTES usando el servicio de ingredientes
+      const ingredientUpdates = ingredientItems.map(async item => {
+        return registerIngredientPurchase(businessId, {
+          ingredientId: item.productId,
+          ingredientName: item.productName,
+          quantity: parseFloat(item.quantity),
+          unit: item.unit || 'NIU',
+          unitPrice: parseFloat(item.cost),
+          totalCost: parseFloat(item.quantity) * parseFloat(item.cost),
+          supplier: selectedSupplier?.businessName || '',
+          invoiceNumber: invoiceNumber.trim() || ''
+        })
+      })
+
+      await Promise.all(ingredientUpdates)
 
       // 4. Mostrar éxito y redirigir
       toast.success('Compra registrada exitosamente. Stock y costos actualizados')
@@ -1146,20 +1211,59 @@ export default function CreatePurchase() {
         </CardContent>
       </Card>
 
-      {/* Productos */}
+      {/* Productos e Ingredientes */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Productos</CardTitle>
-              <p className="text-sm text-gray-500 mt-1">
-                Los precios unitarios deben incluir IGV (18%)
-              </p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Items de Compra</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Los precios unitarios deben incluir IGV (18%)
+                </p>
+              </div>
+              <Button onClick={addItem} variant="outline" size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Agregar Item
+              </Button>
             </div>
-            <Button onClick={addItem} variant="outline" size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar Producto
-            </Button>
+            {/* Tabs para seleccionar tipo de items */}
+            {ingredients.length > 0 && (
+              <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit">
+                <button
+                  onClick={() => setItemMode('products')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    itemMode === 'products'
+                      ? 'bg-white text-primary-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Package className="w-4 h-4" />
+                  Productos
+                </button>
+                <button
+                  onClick={() => setItemMode('ingredients')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    itemMode === 'ingredients'
+                      ? 'bg-white text-primary-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Beaker className="w-4 h-4" />
+                  Ingredientes
+                </button>
+                <button
+                  onClick={() => setItemMode('all')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    itemMode === 'all'
+                      ? 'bg-white text-primary-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Todos
+                </button>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0 sm:p-6 overflow-visible">
@@ -1193,7 +1297,7 @@ export default function CreatePurchase() {
                             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                             <input
                               type="text"
-                              placeholder="Buscar producto..."
+                              placeholder={itemMode === 'ingredients' ? 'Buscar ingrediente...' : itemMode === 'all' ? 'Buscar producto o ingrediente...' : 'Buscar producto...'}
                               value={productSearches[index] || item.productName || ''}
                               onChange={e => {
                                 updateProductSearch(index, e.target.value)
@@ -1205,28 +1309,45 @@ export default function CreatePurchase() {
                                 setShowProductDropdowns(newDropdowns)
                               }}
                               className={`w-full pl-7 pr-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${
-                                item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                                item.productId
+                                  ? item.itemType === 'ingredient'
+                                    ? 'border-amber-500 bg-amber-50'
+                                    : 'border-green-500 bg-green-50'
+                                  : 'border-gray-300'
                               }`}
                             />
                           </div>
-                          {/* Dropdown de productos */}
+                          {/* Dropdown de productos e ingredientes */}
                           {showProductDropdowns[index] && productSearches[index] && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                              {getFilteredProducts(index).length > 0 ? (
-                                getFilteredProducts(index).map(product => (
+                              {getFilteredItems(index).length > 0 ? (
+                                getFilteredItems(index).map(searchItem => (
                                   <div
-                                    key={product.id}
+                                    key={`${searchItem.itemType}-${searchItem.id}`}
                                     role="button"
                                     tabIndex={0}
                                     onMouseDown={e => {
                                       e.preventDefault()
                                       e.stopPropagation()
-                                      selectProduct(index, product)
+                                      selectProduct(index, searchItem)
                                     }}
                                     className="w-full text-left px-3 py-2 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-100 last:border-b-0 cursor-pointer"
                                   >
-                                    <div className="font-medium text-sm text-gray-900">{product.name}</div>
-                                    {product.code && <div className="text-xs text-gray-500">{product.code}</div>}
+                                    <div className="flex items-center gap-2">
+                                      {searchItem.itemType === 'ingredient' ? (
+                                        <Beaker className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                                      ) : (
+                                        <Package className="w-3.5 h-3.5 text-primary-600 flex-shrink-0" />
+                                      )}
+                                      <span className="font-medium text-sm text-gray-900">{searchItem.name}</span>
+                                    </div>
+                                    <div className="text-xs text-gray-500 ml-5.5 pl-0.5">
+                                      {searchItem.itemType === 'ingredient' ? (
+                                        <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
+                                      ) : (
+                                        searchItem.code || `Stock: ${searchItem.stock || 0}`
+                                      )}
+                                    </div>
                                   </div>
                                 ))
                               ) : (
@@ -1341,14 +1462,14 @@ export default function CreatePurchase() {
                   </button>
                 </div>
 
-                {/* Producto */}
+                {/* Producto o Ingrediente */}
                 <div className="flex gap-2">
                   <div className="relative flex-1" ref={el => productInputRefs.current[`mobile-${index}`] = el}>
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Buscar producto..."
+                        placeholder={itemMode === 'ingredients' ? 'Buscar ingrediente...' : itemMode === 'all' ? 'Buscar...' : 'Buscar producto...'}
                         value={productSearches[index] || item.productName || ''}
                         onChange={e => {
                           updateProductSearch(index, e.target.value)
@@ -1360,22 +1481,26 @@ export default function CreatePurchase() {
                           setShowProductDropdowns(newDropdowns)
                         }}
                         className={`w-full pl-8 pr-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 ${
-                          item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          item.productId
+                            ? item.itemType === 'ingredient'
+                              ? 'border-amber-500 bg-amber-50'
+                              : 'border-green-500 bg-green-50'
+                            : 'border-gray-300'
                         }`}
                       />
                     </div>
                     {showProductDropdowns[index] && productSearches[index] && (
                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {getFilteredProducts(index).length > 0 ? (
-                          getFilteredProducts(index).map(product => (
+                        {getFilteredItems(index).length > 0 ? (
+                          getFilteredItems(index).map(searchItem => (
                             <div
-                              key={product.id}
+                              key={`${searchItem.itemType}-${searchItem.id}`}
                               role="button"
                               tabIndex={0}
                               onMouseDown={e => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                selectProduct(index, product)
+                                selectProduct(index, searchItem)
                               }}
                               onTouchStart={e => {
                                 e.stopPropagation()
@@ -1383,12 +1508,25 @@ export default function CreatePurchase() {
                               onTouchEnd={e => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                selectProduct(index, product)
+                                selectProduct(index, searchItem)
                               }}
                               className="w-full text-left px-3 py-2 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-100 last:border-b-0 cursor-pointer"
                             >
-                              <div className="font-medium text-sm">{product.name}</div>
-                              {product.code && <div className="text-xs text-gray-500">{product.code}</div>}
+                              <div className="flex items-center gap-2">
+                                {searchItem.itemType === 'ingredient' ? (
+                                  <Beaker className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                                ) : (
+                                  <Package className="w-3.5 h-3.5 text-primary-600 flex-shrink-0" />
+                                )}
+                                <span className="font-medium text-sm">{searchItem.name}</span>
+                              </div>
+                              <div className="text-xs text-gray-500 ml-5.5 pl-0.5">
+                                {searchItem.itemType === 'ingredient' ? (
+                                  <>Stock: {searchItem.currentStock} {searchItem.purchaseUnit}</>
+                                ) : (
+                                  searchItem.code || `Stock: ${searchItem.stock || 0}`
+                                )}
+                              </div>
                             </div>
                           ))
                         ) : (
@@ -1480,14 +1618,43 @@ export default function CreatePurchase() {
             ))}
           </div>
 
-          {products.length === 0 && (
+          {products.length === 0 && ingredients.length === 0 && (
             <Alert type="warning" className="mt-4">
-              No tienes productos registrados.{' '}
+              No tienes productos ni ingredientes registrados.{' '}
               <button
                 onClick={() => navigate('/app/productos')}
                 className="underline font-medium"
               >
                 Crear producto
+              </button>
+              {' o '}
+              <button
+                onClick={() => navigate('/app/ingredientes')}
+                className="underline font-medium"
+              >
+                Crear ingrediente
+              </button>
+            </Alert>
+          )}
+          {products.length === 0 && ingredients.length > 0 && itemMode === 'products' && (
+            <Alert type="info" className="mt-4">
+              No tienes productos registrados. Cambia a "Ingredientes" para ver tus ingredientes o{' '}
+              <button
+                onClick={() => navigate('/app/productos')}
+                className="underline font-medium"
+              >
+                crea un producto
+              </button>
+            </Alert>
+          )}
+          {ingredients.length === 0 && products.length > 0 && itemMode === 'ingredients' && (
+            <Alert type="info" className="mt-4">
+              No tienes ingredientes registrados. Cambia a "Productos" para ver tus productos o{' '}
+              <button
+                onClick={() => navigate('/app/ingredientes')}
+                className="underline font-medium"
+              >
+                crea un ingrediente
               </button>
             </Alert>
           )}
