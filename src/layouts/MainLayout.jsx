@@ -11,7 +11,6 @@ export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
-  const [subscriptionLoading, setSubscriptionLoading] = useState(true)
   const location = useLocation()
 
   // Forzar reflow cuando el layout se monta para evitar conflictos de estilos después de Login
@@ -95,24 +94,11 @@ export default function MainLayout() {
     }
   }, [user?.uid, isAuthenticated])
 
-  // Esperar a que la suscripción se cargue antes de verificar acceso
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      // Dar un pequeño tiempo para que la suscripción se cargue
-      const timer = setTimeout(() => {
-        setSubscriptionLoading(false)
-      }, 300) // Reducido de 500 a 300ms
-      return () => clearTimeout(timer)
-    } else if (!isAuthenticated) {
-      setSubscriptionLoading(false)
-    }
-  }, [isLoading, isAuthenticated])
-
-  // Mostrar loading mientras carga auth o suscripción
-  if (isLoading || checkingBusiness || subscriptionLoading) {
+  // Mostrar splash mientras carga autenticación
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
+        <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
       </div>
     )
   }

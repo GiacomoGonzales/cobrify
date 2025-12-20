@@ -202,8 +202,8 @@ export function BrandingProvider({ children }) {
 
   if (!brandingLoaded && (user || isResellerDomain())) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
+      <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
+        <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
       </div>
     )
   }

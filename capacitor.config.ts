@@ -16,10 +16,8 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#2563EB',
       showSpinner: false,
-      iosSpinnerStyle: 'small',
-      spinnerColor: '#2563EB',
       launchFadeOutDuration: 300,
       splashFullScreen: true,
       splashImmersive: true

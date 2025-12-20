@@ -62,7 +62,6 @@ import Recipes from './pages/Recipes'
 import RegisterPurchase from './pages/RegisterPurchase'
 import PurchaseHistory from './pages/PurchaseHistory'
 import MobileRedirect from './components/MobileRedirect'
-import SplashScreen from './components/SplashScreen'
 import DispatchGuides from './pages/DispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
@@ -94,9 +93,8 @@ function App() {
         <BrandingProvider>
           <ToastProvider>
             <Routes>
-            {/* Landing Page / Splash - En móvil muestra splash primero */}
-            {/* En web, usa LandingRouter para detectar si es dominio de reseller */}
-            <Route path="/" element={isNative ? <SplashScreen /> : <LandingRouter />} />
+            {/* Landing Page - En móvil redirige a dashboard, en web usa LandingRouter */}
+            <Route path="/" element={isNative ? <Navigate to="/app/dashboard" replace /> : <LandingRouter />} />
 
             {/* Rutas públicas de autenticación */}
             <Route path="/login" element={<Login />} />

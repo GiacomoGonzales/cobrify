@@ -82,11 +82,11 @@ export default function Login() {
     }
   }
 
-  // Mostrar spinner mientras carga el branding (hostname o ref)
+  // Mostrar splash mientras carga el branding
   if (isLoadingBranding) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
+        <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
       </div>
     )
   }
