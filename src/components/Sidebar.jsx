@@ -269,6 +269,27 @@ function Sidebar() {
       pageId: 'products',
     },
     {
+      path: '/inventario',
+      icon: ClipboardList,
+      label: 'Inventario',
+      pageId: 'products',
+      menuId: 'inventory',
+    },
+    {
+      path: '/compras',
+      icon: ShoppingBag,
+      label: 'Compras',
+      pageId: 'purchases',
+      menuId: 'purchases',
+    },
+    {
+      path: '/proveedores',
+      icon: Truck,
+      label: 'Proveedores',
+      pageId: 'suppliers',
+      menuId: 'suppliers',
+    },
+    {
       path: '/ingredientes',
       icon: Carrot,
       label: 'Ingredientes',
