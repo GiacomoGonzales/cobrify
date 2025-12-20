@@ -1,4 +1,7 @@
 import JSZip from 'jszip'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 /**
  * Servicio para exportar XML y CDR de forma masiva para auditoría SUNAT
@@ -146,17 +149,71 @@ export const exportXMLandCDR = async (invoices, companyRuc, options = {}, onProg
 }
 
 /**
- * Descarga el archivo ZIP generado
+ * Descarga el archivo ZIP generado (funciona en web y móvil)
  */
-export const downloadZip = (blob, fileName) => {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+export const downloadZip = async (blob, fileName) => {
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      // Convertir blob a base64
+      const reader = new FileReader()
+      const base64Data = await new Promise((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64 = reader.result.split(',')[1]
+          resolve(base64)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+
+      // Crear directorio si no existe
+      const exportDir = 'SUNAT_Export'
+      try {
+        await Filesystem.mkdir({
+          path: exportDir,
+          directory: Directory.Documents,
+          recursive: true
+        })
+      } catch (mkdirError) {
+        // Directorio ya existe
+      }
+
+      // Guardar archivo
+      const result = await Filesystem.writeFile({
+        path: `${exportDir}/${fileName}`,
+        data: base64Data,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('ZIP guardado en:', result.uri)
+
+      // Compartir archivo
+      await Share.share({
+        title: fileName,
+        text: 'Exportación XML/CDR para auditoría SUNAT',
+        url: result.uri,
+        dialogTitle: 'Compartir archivos SUNAT'
+      })
+
+      return { success: true, uri: result.uri }
+    } catch (error) {
+      console.error('Error al exportar ZIP en móvil:', error)
+      throw error
+    }
+  } else {
+    // Método web tradicional
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    return { success: true }
+  }
 }
 
 /**

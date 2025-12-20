@@ -9,7 +9,10 @@ import {
   Loader2,
   Calendar,
   AlertTriangle,
+  ScanBarcode,
 } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -32,6 +35,7 @@ export default function StockMovements() {
   const [filterType, setFilterType] = useState('all')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
+  const [isScanning, setIsScanning] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -239,6 +243,52 @@ export default function StockMovements() {
 
   const hasActiveFilters = searchTerm || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
 
+  // Escanear código de barras
+  const handleScanBarcode = async () => {
+    // Solo disponible en plataformas nativas
+    if (!Capacitor.isNativePlatform()) {
+      toast.error('El escáner solo está disponible en la app móvil')
+      return
+    }
+
+    setIsScanning(true)
+    try {
+      // Verificar permisos de cámara
+      const { camera } = await BarcodeScanner.checkPermissions()
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se requiere permiso de cámara para escanear')
+          return
+        }
+      }
+
+      // Escanear código de barras
+      const { barcodes } = await BarcodeScanner.scan()
+
+      if (barcodes && barcodes.length > 0) {
+        const scannedCode = barcodes[0].rawValue
+        // Buscar si hay un producto con ese código
+        const foundProduct = products.find(p => p.code === scannedCode || p.sku === scannedCode)
+
+        if (foundProduct) {
+          setSearchTerm(scannedCode)
+          toast.success(`Producto encontrado: ${foundProduct.name}`)
+        } else {
+          setSearchTerm(scannedCode)
+          toast.warning(`No se encontró producto con código: ${scannedCode}`)
+        }
+      }
+    } catch (error) {
+      console.error('Error al escanear:', error)
+      if (error.message !== 'scan canceled') {
+        toast.error('Error al escanear código de barras')
+      }
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
@@ -267,15 +317,32 @@ export default function StockMovements() {
         <CardContent className="p-4">
           <div className="space-y-4">
             {/* Primera fila: Búsqueda */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por producto, código o notas..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por producto, código o notas..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+              {Capacitor.isNativePlatform() && (
+                <button
+                  type="button"
+                  onClick={handleScanBarcode}
+                  disabled={isScanning}
+                  className="px-3 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center"
+                  title="Escanear código de barras"
+                >
+                  {isScanning ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <ScanBarcode className="w-5 h-5" />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Segunda fila: Filtros */}

@@ -4,6 +4,9 @@ import { Upload, Download, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-r
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport }) {
   const { businessMode } = useAppContext()
@@ -224,7 +227,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     onClose()
   }
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     // Crear plantilla de ejemplo según el modo de negocio
     let template = []
 
@@ -395,7 +398,31 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       ]
     }
 
-    XLSX.writeFile(wb, businessMode === 'pharmacy' ? 'plantilla_medicamentos.xlsx' : 'plantilla_productos.xlsx')
+    const fileName = businessMode === 'pharmacy' ? 'plantilla_medicamentos.xlsx' : 'plantilla_productos.xlsx'
+
+    // Verificar si estamos en plataforma nativa (iOS/Android)
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' })
+
+        const result = await Filesystem.writeFile({
+          path: fileName,
+          data: excelBuffer,
+          directory: Directory.Documents,
+          recursive: true
+        })
+
+        await Share.share({
+          title: fileName,
+          url: result.uri,
+        })
+      } catch (error) {
+        console.error('Error al descargar plantilla:', error)
+      }
+    } else {
+      // En web: descargar directamente
+      XLSX.writeFile(wb, fileName)
+    }
   }
 
   return (

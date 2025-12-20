@@ -1,11 +1,14 @@
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 /**
  * Generar reporte de productos en Excel
  */
-export const generateProductsExcel = (products, categories, businessData) => {
+export const generateProductsExcel = async (products, categories, businessData) => {
   const workbook = XLSX.utils.book_new();
 
   // Helper para obtener nombre de categoría por ID
@@ -179,6 +182,36 @@ export const generateProductsExcel = (products, categories, businessData) => {
   // Generar nombre de archivo
   const fileName = `Productos_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
 
-  // Descargar archivo
-  XLSX.writeFile(workbook, fileName);
+  // Descargar/compartir archivo
+  const isNativePlatform = Capacitor.isNativePlatform();
+
+  if (isNativePlatform) {
+    try {
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: excelBuffer,
+        directory: Directory.Documents,
+        recursive: true
+      });
+
+      console.log('Excel guardado en:', result.uri);
+
+      await Share.share({
+        title: fileName,
+        text: 'Listado de productos',
+        url: result.uri,
+        dialogTitle: 'Compartir listado de productos'
+      });
+
+      return { success: true, uri: result.uri };
+    } catch (error) {
+      console.error('Error al exportar Excel en móvil:', error);
+      throw error;
+    }
+  } else {
+    XLSX.writeFile(workbook, fileName);
+    return { success: true };
+  }
 };

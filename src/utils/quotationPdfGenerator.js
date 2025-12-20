@@ -1088,11 +1088,45 @@ export const getQuotationPDFBase64 = async (quotation, companySettings, branding
 }
 
 /**
- * Abre el PDF en una nueva pestaña para vista previa
+ * Abre el PDF en una nueva pestaña para vista previa (o comparte en móvil)
  */
 export const previewQuotationPDF = async (quotation, companySettings, branding = null) => {
   const doc = await generateQuotationPDF(quotation, companySettings, false, branding)
-  const blobUrl = doc.output('bloburl')
-  window.open(blobUrl, '_blank')
-  return blobUrl
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      // En móvil, guardar el PDF y abrirlo con Share para vista previa
+      const pdfBase64 = doc.output('datauristring').split(',')[1]
+
+      const fileName = `Cotizacion_${quotation.number?.replace(/\//g, '-') || 'cotizacion'}.pdf`
+
+      // Guardar directamente en Documents (mejor compatibilidad con Share)
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: pdfBase64,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('PDF para vista previa guardado en:', result.uri)
+
+      // Abrir con el visor de PDF del sistema
+      await Share.share({
+        title: `Cotización ${quotation.number || ''}`,
+        url: result.uri,
+        dialogTitle: 'Ver cotización'
+      })
+
+      return result.uri
+    } catch (error) {
+      console.error('Error al generar vista previa en móvil:', error)
+      throw error
+    }
+  } else {
+    // En web, abrir en nueva pestaña
+    const blobUrl = doc.output('bloburl')
+    window.open(blobUrl, '_blank')
+    return blobUrl
+  }
 }

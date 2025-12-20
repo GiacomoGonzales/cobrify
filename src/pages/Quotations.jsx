@@ -17,7 +17,6 @@ import {
   XCircle,
   FileCheck,
   MoreVertical,
-  Share2,
   Receipt,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -251,47 +250,6 @@ export default function Quotations() {
     } finally {
       setIsConverting(false)
     }
-  }
-
-  const handleSendWhatsApp = (quotation) => {
-    if (!quotation.customer?.phone) {
-      toast.error('El cliente no tiene un número de teléfono registrado')
-      return
-    }
-
-    // Limpiar el número de teléfono (solo dígitos)
-    const phone = quotation.customer.phone.replace(/\D/g, '')
-
-    // Crear mensaje
-    const message = `Hola ${quotation.customer.name},
-
-Te envío nuestra cotización N° ${quotation.number}.
-
-Total: ${formatCurrency(quotation.total)}
-${quotation.expiryDate ? `Válida hasta: ${formatDate(getDateFromTimestamp(quotation.expiryDate))}` : ''}
-
-¿Tienes alguna pregunta? Estamos para ayudarte.
-
-Saludos,
-${companySettings?.businessName || 'Tu Empresa'}`
-
-    // Abrir WhatsApp Web
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
-    window.open(url, '_blank')
-
-    // Marcar como enviada
-    if (!isDemoMode) {
-      markQuotationAsSent(getBusinessId(), quotation.id, 'whatsapp')
-      loadQuotations()
-    } else {
-      // En modo demo, actualizar estado local
-      setQuotations(prev => prev.map(q =>
-        q.id === quotation.id
-          ? { ...q, status: 'sent', isSent: true, sentAt: new Date() }
-          : q
-      ))
-    }
-    toast.success('Abriendo WhatsApp...')
   }
 
   const handleDownloadPDF = (quotation) => {
@@ -665,18 +623,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 >
                                   <Download className="w-4 h-4 text-green-600" />
                                   <span>Descargar PDF</span>
-                                </button>
-
-                                {/* Enviar por WhatsApp */}
-                                <button
-                                  onClick={() => {
-                                    setOpenMenuId(null)
-                                    handleSendWhatsApp(quotation)
-                                  }}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                                >
-                                  <Share2 className="w-4 h-4 text-green-600" />
-                                  <span>Enviar por WhatsApp</span>
                                 </button>
 
                                 {/* Convertir a factura */}

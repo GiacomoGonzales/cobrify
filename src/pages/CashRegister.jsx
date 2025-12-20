@@ -386,7 +386,7 @@ export default function CashRegister() {
       // Usar datos de la sesión cerrada si está disponible, sino usar currentSession
       const sessionData = closedSessionData || currentSession
 
-      generateCashReportExcel(sessionData, movements, todayInvoices, businessData)
+      await generateCashReportExcel(sessionData, movements, todayInvoices, businessData)
       toast.success('Reporte Excel descargado correctamente')
     } catch (error) {
       console.error('Error al generar Excel:', error)
@@ -403,7 +403,7 @@ export default function CashRegister() {
       // Usar datos de la sesión cerrada si está disponible, sino usar currentSession
       const sessionData = closedSessionData || currentSession
 
-      generateCashReportPDF(sessionData, movements, todayInvoices, businessData)
+      await generateCashReportPDF(sessionData, movements, todayInvoices, businessData)
       toast.success('Reporte PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
@@ -1323,7 +1323,7 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    generateCashReportPDF(selectedHistorySession, historyMovements, [], businessData)
+                    await generateCashReportPDF(selectedHistorySession, historyMovements, [], businessData)
                     toast.success('PDF descargado')
                   } catch (error) {
                     toast.error('Error al generar PDF')
@@ -1340,7 +1340,7 @@ export default function CashRegister() {
                   try {
                     const businessResult = await getCompanySettings(getBusinessId())
                     const businessData = businessResult.success ? businessResult.data : null
-                    generateCashReportExcel(selectedHistorySession, historyMovements, [], businessData)
+                    await generateCashReportExcel(selectedHistorySession, historyMovements, [], businessData)
                     toast.success('Excel descargado')
                   } catch (error) {
                     toast.error('Error al generar Excel')

@@ -1,6 +1,57 @@
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
+/**
+ * Helper para exportar Excel que funciona en iOS/Android
+ */
+const saveAndShareExcel = async (workbook, fileName) => {
+  const isNativePlatform = Capacitor.isNativePlatform();
+
+  if (isNativePlatform) {
+    try {
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+
+      const excelDir = 'Comprobantes';
+      try {
+        await Filesystem.mkdir({
+          path: excelDir,
+          directory: Directory.Documents,
+          recursive: true
+        });
+      } catch (mkdirError) {
+        // Directorio ya existe
+      }
+
+      const result = await Filesystem.writeFile({
+        path: `${excelDir}/${fileName}`,
+        data: excelBuffer,
+        directory: Directory.Documents,
+        recursive: true
+      });
+
+      console.log('Excel guardado en:', result.uri);
+
+      await Share.share({
+        title: fileName,
+        text: `Reporte de comprobantes: ${fileName}`,
+        url: result.uri,
+        dialogTitle: 'Compartir Reporte de Comprobantes'
+      });
+
+      return { success: true, uri: result.uri };
+    } catch (error) {
+      console.error('Error al exportar Excel en móvil:', error);
+      throw error;
+    }
+  } else {
+    XLSX.writeFile(workbook, fileName);
+    return { success: true };
+  }
+};
 
 /**
  * Helper para formatear los métodos de pago de una factura
@@ -25,7 +76,7 @@ const formatPaymentMethods = (invoice) => {
 /**
  * Generar reporte de facturas en Excel
  */
-export const generateInvoicesExcel = (invoices, filters, businessData) => {
+export const generateInvoicesExcel = async (invoices, filters, businessData) => {
   const workbook = XLSX.utils.book_new();
 
   // Preparar datos de las facturas
@@ -161,6 +212,6 @@ export const generateInvoicesExcel = (invoices, filters, businessData) => {
   const dateInfo = filters.startDate || filters.endDate ? '_filtrado' : '';
   const fileName = `Comprobantes${filterInfo}${dateInfo}_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
 
-  // Descargar archivo
-  XLSX.writeFile(workbook, fileName);
+  // Descargar/compartir archivo
+  await saveAndShareExcel(workbook, fileName);
 };

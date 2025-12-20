@@ -15,7 +15,10 @@ import {
   RefreshCw,
   Copy,
   Trash2,
+  ScanBarcode,
 } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -51,6 +54,7 @@ export default function InventoryCountModal({
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [differenceFilter, setDifferenceFilter] = useState('all')
+  const [isScanning, setIsScanning] = useState(false)
 
   // Estadísticas
   const [countStats, setCountStats] = useState({
@@ -204,6 +208,60 @@ export default function InventoryCountModal({
         physicalCount: prev[productId].systemStock.toString(),
       }
     }))
+  }
+
+  // Función para escanear código de barras y buscar producto
+  const handleScanBarcode = async () => {
+    const isNativePlatform = Capacitor.isNativePlatform()
+    if (!isNativePlatform) {
+      toast.info('El escáner de código de barras solo está disponible en la app móvil')
+      return
+    }
+
+    setIsScanning(true)
+
+    try {
+      // Verificar y solicitar permisos de cámara
+      const { camera } = await BarcodeScanner.checkPermissions()
+
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se requiere permiso de cámara para escanear códigos')
+          setIsScanning(false)
+          return
+        }
+      }
+
+      // Escanear código de barras
+      const { barcodes } = await BarcodeScanner.scan()
+
+      if (barcodes && barcodes.length > 0) {
+        const scannedCode = barcodes[0].rawValue
+        console.log('Código escaneado:', scannedCode)
+
+        // Buscar producto por código de barras o SKU
+        const foundProduct = products.find(
+          p => p.code === scannedCode || p.sku === scannedCode || p.barcode === scannedCode
+        )
+
+        if (foundProduct) {
+          // Establecer el término de búsqueda para mostrar el producto
+          setSearchTerm(scannedCode)
+          toast.success(`Producto encontrado: ${foundProduct.name}`)
+        } else {
+          toast.error(`No se encontró producto con código: ${scannedCode}`)
+          setSearchTerm(scannedCode)
+        }
+      }
+    } catch (error) {
+      console.error('Error al escanear:', error)
+      if (error.message !== 'User cancelled the scan') {
+        toast.error('Error al escanear el código de barras')
+      }
+    } finally {
+      setIsScanning(false)
+    }
   }
 
   // Limpiar todos los conteos
@@ -512,15 +570,29 @@ export default function InventoryCountModal({
           {/* Filtros - Compacto en móvil */}
           <div className="flex-shrink-0 mb-3 space-y-2">
             {/* Búsqueda */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar producto..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar producto..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <button
+                onClick={handleScanBarcode}
+                disabled={isScanning}
+                className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                title="Escanear código de barras"
+              >
+                {isScanning ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <ScanBarcode className="w-5 h-5" />
+                )}
+              </button>
             </div>
 
             {/* Filtros y botones de acción */}

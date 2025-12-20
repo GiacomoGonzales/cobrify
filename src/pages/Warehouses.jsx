@@ -297,7 +297,7 @@ export default function Warehouses() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Warehouse className="w-7 h-7" />
@@ -305,18 +305,18 @@ export default function Warehouses() {
           </h1>
           <p className="text-gray-600 mt-1">Gestiona tus almacenes y puntos de inventario</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           {warehouses.length > 0 && (
             <Button
               variant="outline"
               onClick={() => setShowSyncModal(true)}
-              className="flex items-center gap-2"
+              className="flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               <RefreshCw className="w-4 h-4" />
               Sincronizar Stock
             </Button>
           )}
-          <Button onClick={openCreateModal} className="flex items-center gap-2">
+          <Button onClick={openCreateModal} className="flex items-center justify-center gap-2 w-full sm:w-auto">
             <Plus className="w-4 h-4" />
             Nuevo Almacén
           </Button>

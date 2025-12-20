@@ -1,11 +1,41 @@
 import * as XLSX from 'xlsx'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { Capacitor } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
+
+/**
+ * Guardar y compartir archivo Excel (iOS/Android) o descargar (web)
+ */
+const saveAndShareExcel = async (workbook, fileName) => {
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    // En móvil: guardar y compartir
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
+
+    const result = await Filesystem.writeFile({
+      path: fileName,
+      data: excelBuffer,
+      directory: Directory.Documents,
+      recursive: true
+    })
+
+    await Share.share({
+      title: fileName,
+      url: result.uri,
+    })
+  } else {
+    // En web: descargar directamente
+    XLSX.writeFile(workbook, fileName)
+  }
+}
 
 /**
  * Generar reporte de ingredientes en Excel
  */
-export const generateIngredientsExcel = (ingredients, businessData) => {
+export const generateIngredientsExcel = async (ingredients, businessData) => {
   const workbook = XLSX.utils.book_new()
 
   // Preparar datos de los ingredientes
@@ -99,14 +129,14 @@ export const generateIngredientsExcel = (ingredients, businessData) => {
   // Generar nombre de archivo
   const fileName = `Ingredientes_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`
 
-  // Descargar archivo
-  XLSX.writeFile(workbook, fileName)
+  // Descargar/compartir archivo
+  await saveAndShareExcel(workbook, fileName)
 }
 
 /**
  * Generar plantilla de ingredientes para importación
  */
-export const generateIngredientsTemplate = () => {
+export const generateIngredientsTemplate = async () => {
   const workbook = XLSX.utils.book_new()
 
   const templateData = [
@@ -172,6 +202,6 @@ export const generateIngredientsTemplate = () => {
   // Generar nombre de archivo
   const fileName = `Plantilla_Ingredientes_${format(new Date(), 'yyyy-MM-dd')}.xlsx`
 
-  // Descargar archivo
-  XLSX.writeFile(workbook, fileName)
+  // Descargar/compartir archivo
+  await saveAndShareExcel(workbook, fileName)
 }

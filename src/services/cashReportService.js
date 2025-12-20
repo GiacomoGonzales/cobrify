@@ -3,6 +3,53 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
+/**
+ * Helper para guardar y compartir archivos en móvil
+ */
+const saveAndShareFile = async (data, fileName, mimeType) => {
+  const isNativePlatform = Capacitor.isNativePlatform();
+
+  if (isNativePlatform) {
+    try {
+      const exportDir = 'Caja';
+      try {
+        await Filesystem.mkdir({
+          path: exportDir,
+          directory: Directory.Documents,
+          recursive: true
+        });
+      } catch (mkdirError) {
+        // Directorio ya existe
+      }
+
+      const result = await Filesystem.writeFile({
+        path: `${exportDir}/${fileName}`,
+        data: data,
+        directory: Directory.Documents,
+        recursive: true
+      });
+
+      console.log('Archivo guardado en:', result.uri);
+
+      await Share.share({
+        title: fileName,
+        text: `Reporte de caja: ${fileName}`,
+        url: result.uri,
+        dialogTitle: 'Compartir Reporte de Caja'
+      });
+
+      return { success: true, uri: result.uri };
+    } catch (error) {
+      console.error('Error al exportar archivo en móvil:', error);
+      throw error;
+    }
+  }
+  return null;
+};
 
 /**
  * Helper para convertir fechas (Firestore Timestamp o Date)
@@ -44,7 +91,7 @@ const formatPaymentMethods = (invoice) => {
 /**
  * Generar reporte de cierre de caja en Excel
  */
-export const generateCashReportExcel = (sessionData, movements, invoices, businessData) => {
+export const generateCashReportExcel = async (sessionData, movements, invoices, businessData) => {
   const workbook = XLSX.utils.book_new();
 
   // Convertir fechas
@@ -150,13 +197,20 @@ export const generateCashReportExcel = (sessionData, movements, invoices, busine
 
   // Generar archivo
   const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
-  XLSX.writeFile(workbook, fileName);
+
+  const isNativePlatform = Capacitor.isNativePlatform();
+  if (isNativePlatform) {
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+    await saveAndShareFile(excelBuffer, fileName);
+  } else {
+    XLSX.writeFile(workbook, fileName);
+  }
 };
 
 /**
  * Generar reporte de cierre de caja en PDF
  */
-export const generateCashReportPDF = (sessionData, movements, invoices, businessData) => {
+export const generateCashReportPDF = async (sessionData, movements, invoices, businessData) => {
   const doc = new jsPDF();
   let yPosition = 20;
 
@@ -314,5 +368,12 @@ export const generateCashReportPDF = (sessionData, movements, invoices, business
 
   // Guardar PDF
   const fileName = `Cierre_Caja_${format(closedAtDate || new Date(), 'yyyy-MM-dd_HHmm')}.pdf`;
-  doc.save(fileName);
+
+  const isNativePlatform = Capacitor.isNativePlatform();
+  if (isNativePlatform) {
+    const pdfBase64 = doc.output('datauristring').split(',')[1];
+    await saveAndShareFile(pdfBase64, fileName);
+  } else {
+    doc.save(fileName);
+  }
 };

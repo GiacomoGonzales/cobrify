@@ -164,141 +164,157 @@ export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
     }
   }
 
-  const handleClose = () => {
+  const resetState = () => {
     setFile(null)
     setPreviewData([])
     setErrors([])
     setSuccess(0)
     setImporting(false)
+  }
+
+  const handleClose = () => {
+    resetState()
     onClose()
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Importar Ingredientes">
-      <div className="space-y-4">
-        {/* Instrucciones */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-semibold text-blue-900 mb-2">Instrucciones:</h4>
-          <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-            <li>Descarga la plantilla de Excel haciendo clic en el botón de abajo</li>
-            <li>Completa los datos de los ingredientes en la plantilla</li>
-            <li>Sube el archivo completado usando el botón "Seleccionar archivo"</li>
-            <li>Revisa la vista previa y haz clic en "Importar"</li>
-          </ol>
+    <Modal isOpen={isOpen} onClose={handleClose} size="2xl">
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Importar Insumos</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Sube un archivo Excel o CSV con tus insumos
+            </p>
+          </div>
+          <button
+            onClick={handleClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        {/* Botón descargar plantilla */}
-        <Button
-          variant="outline"
-          onClick={generateIngredientsTemplate}
-          className="w-full"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Descargar Plantilla de Excel
-        </Button>
+        {/* Descargar plantilla */}
+        <div className="mb-6">
+          <button
+            onClick={generateIngredientsTemplate}
+            className="flex items-center gap-2 text-primary-600 hover:text-primary-700 text-sm font-medium"
+          >
+            <Download className="w-4 h-4" />
+            Descargar plantilla de ejemplo
+          </button>
+          <p className="text-xs text-gray-500 mt-1">
+            Columnas: nombre, unidad (kg, g, L, ml, unidades, cajas), stock inicial, stock mínimo, costo inicial
+          </p>
+        </div>
 
-        {/* Seleccionar archivo */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Archivo de Excel
-          </label>
-          <div className="flex items-center gap-3">
-            <label className="flex-1 flex items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-primary-500 transition-colors">
-              <Upload className="w-5 h-5 mr-2 text-gray-400" />
-              <span className="text-sm text-gray-600">
-                {file ? file.name : 'Seleccionar archivo Excel'}
-              </span>
+        {/* Upload area */}
+        <div className="mb-6">
+          <label className="block">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-400 transition-colors cursor-pointer">
+              <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+              <p className="text-sm font-medium text-gray-700 mb-1">
+                {file ? file.name : 'Haz clic para seleccionar un archivo'}
+              </p>
+              <p className="text-xs text-gray-500">
+                Excel (.xlsx, .xls) o CSV (.csv)
+              </p>
               <input
                 type="file"
                 accept=".xlsx,.xls,.csv"
                 onChange={handleFileChange}
                 className="hidden"
               />
-            </label>
-          </div>
+            </div>
+          </label>
         </div>
 
         {/* Errores */}
         {errors.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h4 className="font-semibold text-red-900 mb-1">Errores encontrados:</h4>
+                <h4 className="text-sm font-semibold text-red-900 mb-2">
+                  Se encontraron {errors.length} error(es):
+                </h4>
                 <ul className="text-sm text-red-700 space-y-1 max-h-40 overflow-y-auto">
-                  {errors.map((error, idx) => (
-                    <li key={idx}>• {error}</li>
+                  {errors.slice(0, 10).map((error, index) => (
+                    <li key={index}>• {error}</li>
                   ))}
+                  {errors.length > 10 && (
+                    <li className="font-medium">... y {errors.length - 10} errores más</li>
+                  )}
                 </ul>
               </div>
             </div>
           </div>
         )}
 
-        {/* Success */}
+        {/* Success message */}
         {success > 0 && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-600" />
-              <p className="text-sm text-green-800">
-                {success} ingrediente(s) importado(s) correctamente
+              <p className="text-sm font-medium text-green-900">
+                {success} insumo(s) importado(s) exitosamente
               </p>
             </div>
           </div>
         )}
 
-        {/* Vista previa */}
+        {/* Preview */}
         {previewData.length > 0 && (
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-2">
-              Vista previa ({previewData.length} ingrediente{previewData.length !== 1 ? 's' : ''})
-            </h4>
-            <div className="border rounded-lg max-h-60 overflow-auto">
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Vista previa ({previewData.length} insumos)
+            </h3>
+            <div className="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unidad</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stock Mín.</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Costo</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nombre</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Unidad</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stock</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Stock Mín.</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Costo</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {previewData.slice(0, 10).map((ingredient, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
+                  {previewData.slice(0, 50).map((ingredient, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-sm text-gray-900">{ingredient.name}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{ingredient.purchaseUnit}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{ingredient.currentStock}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{ingredient.minimumStock}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600">S/ {ingredient.averageCost.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">S/ {ingredient.averageCost.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {previewData.length > 10 && (
-                <div className="bg-gray-50 px-3 py-2 text-sm text-gray-600 text-center border-t">
-                  ... y {previewData.length - 10} ingrediente(s) más
+              {previewData.length > 50 && (
+                <div className="bg-gray-50 px-3 py-2 text-xs text-gray-500 text-center">
+                  Mostrando 50 de {previewData.length} insumos
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Botones de acción */}
-        <div className="flex gap-3 pt-4">
+        {/* Actions */}
+        <div className="flex justify-end gap-3">
           <Button
             variant="outline"
             onClick={handleClose}
             disabled={importing}
-            className="flex-1"
           >
             Cancelar
           </Button>
           <Button
             onClick={handleImport}
             disabled={previewData.length === 0 || importing || errors.length > 0}
-            className="flex-1"
           >
             {importing ? (
               <>
@@ -308,7 +324,7 @@ export default function ImportIngredientsModal({ isOpen, onClose, onImport }) {
             ) : (
               <>
                 <Upload className="w-4 h-4 mr-2" />
-                Importar {previewData.length > 0 && `(${previewData.length})`}
+                Importar {previewData.length} insumo(s)
               </>
             )}
           </Button>

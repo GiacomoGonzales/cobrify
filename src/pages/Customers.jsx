@@ -198,7 +198,7 @@ export default function Customers() {
       const businessData = settingsResult.success ? settingsResult.data : null;
 
       // Generar Excel
-      generateCustomersExcel(customers, businessData);
+      await generateCustomersExcel(customers, businessData);
       toast.success(`${customers.length} cliente(s) exportado(s) exitosamente`);
     } catch (error) {
       console.error('Error al exportar clientes:', error);

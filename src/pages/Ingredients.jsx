@@ -388,13 +388,18 @@ export default function Ingredients() {
   }
 
   // Exportar ingredientes a Excel
-  const handleExportExcel = () => {
-    const businessData = {
-      name: user?.displayName || 'Mi Negocio',
-      ruc: user?.ruc || 'N/A'
+  const handleExportExcel = async () => {
+    try {
+      const businessData = {
+        name: user?.displayName || 'Mi Negocio',
+        ruc: user?.ruc || 'N/A'
+      }
+      await generateIngredientsExcel(filteredIngredients, businessData)
+      toast.success('Excel exportado exitosamente')
+    } catch (error) {
+      console.error('Error al exportar:', error)
+      toast.error('Error al exportar Excel')
     }
-    generateIngredientsExcel(filteredIngredients, businessData)
-    toast.success('Excel descargado exitosamente')
   }
 
   // Importar ingredientes desde Excel

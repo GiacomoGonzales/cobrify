@@ -24,6 +24,7 @@ import {
   ChevronUp,
   Settings2,
   Eye,
+  ScanBarcode,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -38,6 +39,7 @@ import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES } from 
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { getDoc, doc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
@@ -171,6 +173,8 @@ export default function POS() {
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
+  const [isPrintingTicket, setIsPrintingTicket] = useState(false)
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
   // Estado para datos de mesa
   const [tableData, setTableData] = useState(null)
@@ -184,6 +188,9 @@ export default function POS() {
   // Warehouses
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+
+  // Barcode Scanner
+  const [isScanning, setIsScanning] = useState(false)
 
   // Sellers
   const [sellers, setSellers] = useState([])
@@ -640,6 +647,69 @@ export default function POS() {
       }
     }
   }, [searchTerm, products, companySettings, selectedWarehouse])
+
+  // Función para escanear código de barras
+  const handleScanBarcode = async () => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+
+    const isNativePlatform = Capacitor.isNativePlatform()
+    if (!isNativePlatform) {
+      toast.info('El escáner de código de barras solo está disponible en la app móvil')
+      return
+    }
+
+    setIsScanning(true)
+
+    try {
+      // Verificar y solicitar permisos de cámara
+      const { camera } = await BarcodeScanner.checkPermissions()
+
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se requiere permiso de cámara para escanear códigos')
+          setIsScanning(false)
+          return
+        }
+      }
+
+      // Escanear código de barras
+      const { barcodes } = await BarcodeScanner.scan()
+
+      if (barcodes && barcodes.length > 0) {
+        const scannedCode = barcodes[0].rawValue
+        console.log('Código escaneado:', scannedCode)
+
+        // Buscar producto por código de barras o SKU
+        const foundProduct = products.find(
+          p => p.code === scannedCode || p.sku === scannedCode || p.barcode === scannedCode
+        )
+
+        if (foundProduct) {
+          // Verificar stock
+          const warehouseStock = getCurrentWarehouseStock(foundProduct)
+          if (foundProduct.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
+            toast.error(`${foundProduct.name} no tiene stock disponible`)
+          } else {
+            addToCart(foundProduct)
+            toast.success(`${foundProduct.name} agregado al carrito`)
+          }
+        } else {
+          toast.error(`No se encontró producto con código: ${scannedCode}`)
+        }
+      }
+    } catch (error) {
+      console.error('Error al escanear:', error)
+      if (error.message !== 'User cancelled the scan') {
+        toast.error('Error al escanear el código de barras')
+      }
+    } finally {
+      setIsScanning(false)
+    }
+  }
 
   const addToCart = product => {
     // Bloquear si ya se completó una venta
@@ -1832,42 +1902,47 @@ export default function POS() {
 
   const handlePrintTicket = async () => {
     const isNative = Capacitor.isNativePlatform()
+    setIsPrintingTicket(true)
 
-    // Si es móvil, intentar imprimir en impresora térmica
-    if (isNative && lastInvoiceData && companySettings) {
-      try {
-        // Obtener configuración de impresora
-        const { getPrinterConfig, connectPrinter, printInvoiceTicket } = await import('@/services/thermalPrinterService')
-        const printerConfigResult = await getPrinterConfig(getBusinessId())
+    try {
+      // Si es móvil, intentar imprimir en impresora térmica
+      if (isNative && lastInvoiceData && companySettings) {
+        try {
+          // Obtener configuración de impresora
+          const { getPrinterConfig, connectPrinter, printInvoiceTicket } = await import('@/services/thermalPrinterService')
+          const printerConfigResult = await getPrinterConfig(getBusinessId())
 
-        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
-          // Reconectar a la impresora
-          const connectResult = await connectPrinter(printerConfigResult.config.address)
+          if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+            // Reconectar a la impresora
+            const connectResult = await connectPrinter(printerConfigResult.config.address)
 
-          if (!connectResult.success) {
-            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
-            toast.info('Usando impresión estándar...')
-          } else {
-            // Imprimir en impresora térmica (80mm por defecto)
-            const result = await printInvoiceTicket(lastInvoiceData, companySettings, printerConfigResult.config.paperWidth || 80)
-
-            if (result.success) {
-              toast.success('Comprobante impreso en ticketera')
-              return
-            } else {
-              toast.error('Error al imprimir en ticketera: ' + result.error)
+            if (!connectResult.success) {
+              toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
               toast.info('Usando impresión estándar...')
+            } else {
+              // Imprimir en impresora térmica (80mm por defecto)
+              const result = await printInvoiceTicket(lastInvoiceData, companySettings, printerConfigResult.config.paperWidth || 80)
+
+              if (result.success) {
+                toast.success('Comprobante impreso en ticketera')
+                return
+              } else {
+                toast.error('Error al imprimir en ticketera: ' + result.error)
+                toast.info('Usando impresión estándar...')
+              }
             }
           }
+        } catch (error) {
+          console.error('Error al imprimir en ticketera:', error)
+          toast.info('Usando impresión estándar...')
         }
-      } catch (error) {
-        console.error('Error al imprimir en ticketera:', error)
-        toast.info('Usando impresión estándar...')
       }
-    }
 
-    // Fallback: impresión estándar (web o si falla la térmica)
-    window.print()
+      // Fallback: impresión estándar (web o si falla la térmica)
+      window.print()
+    } finally {
+      setIsPrintingTicket(false)
+    }
   }
 
   const handleSendWhatsApp = async () => {
@@ -2158,16 +2233,30 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
 
           {/* Search */}
-          <div className={`relative ${saleCompleted ? 'opacity-50' : ''}`}>
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder={saleCompleted ? "Presiona 'Nueva Venta' para continuar..." : "Buscar producto por nombre o código..."}
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              disabled={saleCompleted}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-base sm:text-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
-            />
+          <div className={`flex gap-2 ${saleCompleted ? 'opacity-50' : ''}`}>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder={saleCompleted ? "Presiona 'Nueva Venta' para continuar..." : "Buscar producto por nombre o código..."}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                disabled={saleCompleted}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-base sm:text-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+              />
+            </div>
+            <button
+              onClick={handleScanBarcode}
+              disabled={saleCompleted || isScanning}
+              className="px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              title="Escanear código de barras"
+            >
+              {isScanning ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                <ScanBarcode className="w-6 h-6" />
+              )}
+            </button>
           </div>
 
           {/* Category Filter Chips */}
@@ -3450,25 +3539,48 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       variant="outline"
                       size="sm"
                       className="flex-1"
+                      disabled={isPrintingTicket}
                     >
-                      <Printer className="w-4 h-4 mr-2" />
-                      Imprimir Ticket
+                      {isPrintingTicket ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Imprimiendo...
+                        </>
+                      ) : (
+                        <>
+                          <Printer className="w-4 h-4 mr-2" />
+                          Imprimir Ticket
+                        </>
+                      )}
                     </Button>
                     <Button
                       onClick={async () => {
+                        setIsLoadingPreview(true)
                         try {
                           await previewInvoicePDF(lastInvoiceData, companySettings, branding)
                         } catch (error) {
                           console.error('Error al generar vista previa:', error)
                           toast.error('Error al generar la vista previa')
+                        } finally {
+                          setIsLoadingPreview(false)
                         }
                       }}
                       variant="outline"
                       size="sm"
                       className="flex-1"
+                      disabled={isLoadingPreview}
                     >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Vista Previa
+                      {isLoadingPreview ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Cargando...
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-4 h-4 mr-2" />
+                          Vista Previa
+                        </>
+                      )}
                     </Button>
                     <Button
                       onClick={() => {

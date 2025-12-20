@@ -26,6 +26,9 @@ import {
   getConnectionType
 } from '@/services/thermalPrinterService'
 
+// URL base de producción para el catálogo público
+const PRODUCTION_URL = 'https://cobrifyperu.com'
+
 export default function Settings() {
   const { user, isDemoMode, getBusinessId } = useAppContext()
   const toast = useToast()
@@ -190,7 +193,7 @@ export default function Settings() {
   // Generar QR del catálogo cuando cambie el slug
   useEffect(() => {
     if (catalogSlug && catalogEnabled) {
-      const catalogUrl = `${window.location.origin}/catalogo/${catalogSlug}`
+      const catalogUrl = `${PRODUCTION_URL}/catalogo/${catalogSlug}`
       QRCode.toDataURL(catalogUrl, {
         width: 300,
         margin: 2,
@@ -2219,15 +2222,14 @@ export default function Settings() {
                         />
                       </div>
                       {catalogSlug && (
-                        <a
-                          href={`/catalogo/${catalogSlug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${PRODUCTION_URL}/catalogo/${catalogSlug}`, '_blank')}
                           className="p-2.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
                           title="Ver catálogo"
                         >
                           <ExternalLink className="w-5 h-5" />
-                        </a>
+                        </button>
                       )}
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
@@ -2242,12 +2244,12 @@ export default function Settings() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-gray-500 mb-1">Enlace de tu catálogo:</p>
                           <p className="text-sm font-medium text-emerald-600 truncate">
-                            {window.location.origin}/catalogo/{catalogSlug}
+                            {PRODUCTION_URL}/catalogo/{catalogSlug}
                           </p>
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/catalogo/${catalogSlug}`)
+                            navigator.clipboard.writeText(`${PRODUCTION_URL}/catalogo/${catalogSlug}`)
                             toast.success('Enlace copiado al portapapeles')
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"

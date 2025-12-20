@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -145,6 +147,8 @@ export default function Products() {
   const [viewingProduct, setViewingProduct] = useState(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isScanningBarcode, setIsScanningBarcode] = useState(false)
+  const [isScanningSearch, setIsScanningSearch] = useState(false)
   const [noStock, setNoStock] = useState(false)
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false) // Venta por peso
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
@@ -782,11 +786,105 @@ export default function Products() {
       const businessData = settingsResult.success ? settingsResult.data : null;
 
       // Generar Excel
-      generateProductsExcel(products, categories, businessData);
+      await generateProductsExcel(products, categories, businessData);
       toast.success(`${products.length} producto(s) exportado(s) exitosamente`);
     } catch (error) {
       console.error('Error al exportar productos:', error);
       toast.error('Error al generar el archivo Excel');
+    }
+  }
+
+  // Función para escanear código de barras
+  const handleScanBarcode = async () => {
+    const isNativePlatform = Capacitor.isNativePlatform()
+    if (!isNativePlatform) {
+      toast.info('El escáner de código de barras solo está disponible en la app móvil')
+      return
+    }
+
+    setIsScanningBarcode(true)
+
+    try {
+      // Verificar y solicitar permisos de cámara
+      const { camera } = await BarcodeScanner.checkPermissions()
+
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se requiere permiso de cámara para escanear códigos')
+          setIsScanningBarcode(false)
+          return
+        }
+      }
+
+      // Escanear código de barras
+      const { barcodes } = await BarcodeScanner.scan()
+
+      if (barcodes && barcodes.length > 0) {
+        const scannedCode = barcodes[0].rawValue
+        console.log('Código escaneado:', scannedCode)
+
+        // Establecer el código en el formulario
+        setValue('code', scannedCode)
+        toast.success(`Código escaneado: ${scannedCode}`)
+      }
+    } catch (error) {
+      console.error('Error al escanear:', error)
+      if (error.message !== 'User cancelled the scan') {
+        toast.error('Error al escanear el código de barras')
+      }
+    } finally {
+      setIsScanningBarcode(false)
+    }
+  }
+
+  // Función para escanear código de barras en la búsqueda
+  const handleScanSearch = async () => {
+    const isNativePlatform = Capacitor.isNativePlatform()
+    if (!isNativePlatform) {
+      toast.info('El escáner de código de barras solo está disponible en la app móvil')
+      return
+    }
+
+    setIsScanningSearch(true)
+
+    try {
+      // Verificar y solicitar permisos de cámara
+      const { camera } = await BarcodeScanner.checkPermissions()
+
+      if (camera !== 'granted') {
+        const { camera: newPermission } = await BarcodeScanner.requestPermissions()
+        if (newPermission !== 'granted') {
+          toast.error('Se requiere permiso de cámara para escanear códigos')
+          setIsScanningSearch(false)
+          return
+        }
+      }
+
+      // Escanear código de barras
+      const { barcodes } = await BarcodeScanner.scan()
+
+      if (barcodes && barcodes.length > 0) {
+        const scannedCode = barcodes[0].rawValue
+
+        // Buscar el producto con ese código
+        const foundProduct = products.find(p => p.code === scannedCode || p.sku === scannedCode)
+
+        if (foundProduct) {
+          setSearchTerm(scannedCode)
+          toast.success(`Producto encontrado: ${foundProduct.name}`)
+        } else {
+          setSearchTerm(scannedCode)
+          toast.warning(`No se encontró producto con código: ${scannedCode}`)
+        }
+      }
+    } catch (error) {
+      console.error('Error al escanear:', error)
+      if (error.message !== 'User cancelled the scan') {
+        toast.error('Error al escanear el código de barras')
+      }
+    } finally {
+      setIsScanningSearch(false)
     }
   }
 
@@ -1660,15 +1758,32 @@ export default function Products() {
       <Card>
         <CardContent className="p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por código, nombre, categoría..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
+            <div className="flex gap-2 flex-1">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por código, nombre, categoría..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              {Capacitor.isNativePlatform() && (
+                <button
+                  type="button"
+                  onClick={handleScanSearch}
+                  disabled={isScanningSearch}
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center"
+                  title="Escanear código de barras"
+                >
+                  {isScanningSearch ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <ScanBarcode className="w-5 h-5" />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Filtro de vencimiento */}
@@ -2426,22 +2541,44 @@ export default function Products() {
               </div>
             </div>
 
-            {/* Códigos en línea */}
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="SKU / Código Interno"
-                placeholder="SKU-001"
-                error={errors.sku?.message}
-                {...register('sku')}
-                helperText="Código interno de tu negocio"
-              />
-              <Input
-                label="Código de Barras"
-                placeholder="7501234567890"
-                error={errors.code?.message}
-                {...register('code')}
-                helperText="EAN, UPC u otro"
-              />
+            {/* SKU */}
+            <Input
+              label="SKU / Código Interno"
+              placeholder="SKU-001"
+              error={errors.sku?.message}
+              {...register('sku')}
+              helperText="Código interno de tu negocio"
+            />
+
+            {/* Código de Barras con botón de escanear */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Código de Barras
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="7501234567890"
+                  className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${errors.code ? 'border-red-500' : 'border-gray-300'}`}
+                  {...register('code')}
+                />
+                <button
+                  type="button"
+                  onClick={handleScanBarcode}
+                  disabled={isScanningBarcode}
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  title="Escanear código de barras"
+                >
+                  {isScanningBarcode ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <ScanBarcode className="w-5 h-5" />
+                  )}
+                  <span className="hidden sm:inline">Escanear</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
+              {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
             </div>
           </div>
 

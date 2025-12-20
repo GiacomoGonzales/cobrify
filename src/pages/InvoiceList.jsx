@@ -631,7 +631,7 @@ Gracias por tu preferencia.`
     }
   }
 
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
     try {
       // Filtrar facturas según los criterios seleccionados
       let filteredInvoices = [...invoices];
@@ -691,7 +691,7 @@ Gracias por tu preferencia.`
       }
 
       // Generar Excel
-      generateInvoicesExcel(filteredInvoices, exportFilters, companySettings);
+      await generateInvoicesExcel(filteredInvoices, exportFilters, companySettings);
       toast.success(`${filteredInvoices.length} comprobante(s) exportado(s) exitosamente`);
       setShowExportModal(false);
     } catch (error) {
@@ -739,7 +739,7 @@ Gracias por tu preferencia.`
       )
 
       const fileName = generateZipFileName(companySettings.ruc, month, year)
-      downloadZip(blob, fileName)
+      await downloadZip(blob, fileName)
 
       const message = `Exportados: ${results.xmlCount} XML y ${results.cdrCount} CDR`
       if (results.failed > 0) {
@@ -2824,18 +2824,30 @@ Gracias por tu preferencia.`
 
           {/* Rango de fechas */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              type="date"
-              label="Fecha Desde"
-              value={exportFilters.startDate}
-              onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })}
-            />
-            <Input
-              type="date"
-              label="Fecha Hasta"
-              value={exportFilters.endDate}
-              onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })}
-            />
+            <div>
+              <Input
+                type="date"
+                label="Fecha Desde"
+                value={exportFilters.startDate}
+                onChange={(e) => setExportFilters({ ...exportFilters, startDate: e.target.value })}
+                placeholder="dd/mm/aaaa"
+              />
+              {!exportFilters.startDate && (
+                <p className="text-xs text-gray-500 mt-1">Selecciona fecha inicial</p>
+              )}
+            </div>
+            <div>
+              <Input
+                type="date"
+                label="Fecha Hasta"
+                value={exportFilters.endDate}
+                onChange={(e) => setExportFilters({ ...exportFilters, endDate: e.target.value })}
+                placeholder="dd/mm/aaaa"
+              />
+              {!exportFilters.endDate && (
+                <p className="text-xs text-gray-500 mt-1">Selecciona fecha final</p>
+              )}
+            </div>
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
