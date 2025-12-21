@@ -685,16 +685,15 @@ export default function POS() {
     }
   }, [searchTerm, selectedCategoryFilter])
 
-  // Auto-agregar producto cuando se escanea código de barras
+  // Auto-agregar producto cuando se escanea código de barras o SKU
   useEffect(() => {
     // Solo ejecutar si hay un término de búsqueda
     if (!searchTerm || searchTerm.length < 3) return
 
-    // Buscar productos que coincidan exactamente con el código de barras REAL (no SKU)
-    // El SKU es código interno del negocio, el code es el código de barras escaneado
+    // Buscar productos que coincidan exactamente con el código de barras o SKU
     const searchLower = searchTerm.toLowerCase()
     const exactMatches = products.filter(p =>
-      p.code?.toLowerCase() === searchLower
+      p.code?.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower
     )
 
     // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
