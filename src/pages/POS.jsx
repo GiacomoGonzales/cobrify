@@ -691,10 +691,10 @@ export default function POS() {
     if (!searchTerm || searchTerm.length < 3) return
 
     // Buscar productos que coincidan exactamente con el código de barras REAL (no SKU)
-    // El SKU es código interno del negocio, el barcode es el código escaneado
+    // El SKU es código interno del negocio, el code es el código de barras escaneado
     const searchLower = searchTerm.toLowerCase()
     const exactMatches = products.filter(p =>
-      p.barcode?.toLowerCase() === searchLower
+      p.code?.toLowerCase() === searchLower
     )
 
     // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
