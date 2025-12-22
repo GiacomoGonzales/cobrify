@@ -1110,7 +1110,9 @@ export default function Products() {
           }
 
           // Asignar stock al almacén específico o al predeterminado
-          if (product.stock && product.stock > 0 && product.trackStock) {
+          if (product.trackStock) {
+            // Producto CON control de stock - asignar a almacén (incluso si stock es 0)
+            const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
             let targetWarehouse = null
 
             // Intentar encontrar el almacén específico mencionado en el producto
@@ -1128,15 +1130,18 @@ export default function Products() {
             if (targetWarehouse) {
               product.warehouseStocks = [{
                 warehouseId: targetWarehouse.id,
-                stock: product.stock,
+                stock: stockValue,
                 minStock: 0
               }]
+              product.stock = stockValue
             } else {
               product.warehouseStocks = []
+              product.stock = stockValue
             }
-          } else if (!product.trackStock) {
-            // Si no controla stock, asegurar que warehouseStocks esté vacío
+          } else {
+            // Producto SIN control de stock - warehouseStocks vacío y stock null
             product.warehouseStocks = []
+            product.stock = null
           }
 
           const result = await createProduct(getBusinessId(), product)
