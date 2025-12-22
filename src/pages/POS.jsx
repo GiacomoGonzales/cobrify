@@ -71,6 +71,7 @@ const PAYMENT_METHODS = {
   TRANSFER: 'Transferencia',
   YAPE: 'Yape',
   PLIN: 'Plin',
+  RAPPI: 'Rappi',
 }
 
 const ORDER_TYPES = {
@@ -3514,6 +3515,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <option value="TRANSFER">Transferencia</option>
                         <option value="YAPE">Yape</option>
                         <option value="PLIN">Plin</option>
+                        {businessMode === 'restaurant' && (
+                          <option value="RAPPI">Rappi</option>
+                        )}
                       </Select>
 
                       {/* Monto */}
