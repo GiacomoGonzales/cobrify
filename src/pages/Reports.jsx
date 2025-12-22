@@ -416,26 +416,49 @@ export default function Reports() {
         // Soportar tanto 'name' como 'description' y tanto 'unitPrice' como 'price'
         const itemName = item.name || item.description
         const itemPrice = item.unitPrice || item.price || 0
+        const productId = item.productId || item.id
+        const quantity = item.quantity || 0
         const key = itemName
 
         if (!productSales[key]) {
           productSales[key] = {
             name: itemName,
+            productId: productId,
             quantity: 0,
             revenue: 0,
+            cost: 0,
           }
         }
-        productSales[key].quantity += item.quantity || 0
-        const itemRevenue = item.subtotal || ((item.quantity || 0) * itemPrice)
+        productSales[key].quantity += quantity
+        const itemRevenue = item.subtotal || (quantity * itemPrice)
         // Redondear a 2 decimales para evitar errores de punto flotante
         productSales[key].revenue = Number((productSales[key].revenue + itemRevenue).toFixed(2))
+
+        // Calcular costo del producto (mismo cálculo que utilidad total)
+        let itemCost = 0
+        const recipe = recipes.find(r => r.productId === productId)
+        if (recipe) {
+          // Usar costo de la receta (para productos elaborados)
+          itemCost = (recipe.totalCost || 0) * quantity
+        } else {
+          // Si no tiene receta, buscar costo del producto
+          const product = products.find(p => p.id === productId)
+          itemCost = (product?.cost || 0) * quantity
+        }
+        productSales[key].cost = Number((productSales[key].cost + itemCost).toFixed(2))
       })
     })
 
+    // Calcular utilidad y margen para cada producto
     return Object.values(productSales)
+      .map(product => ({
+        ...product,
+        profit: Number((product.revenue - product.cost).toFixed(2)),
+        profitMargin: product.revenue > 0 ? ((product.revenue - product.cost) / product.revenue) * 100 : 0
+      }))
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10)
-  }, [filteredInvoices])
+  }, [filteredInvoices, products, recipes])
 
   // Top clientes
   const topCustomers = useMemo(() => {
@@ -1851,14 +1874,17 @@ export default function Reports() {
                     <TableRow>
                       <TableHead>Posición</TableHead>
                       <TableHead>Producto</TableHead>
-                      <TableHead className="text-right">Cantidad Vendida</TableHead>
-                      <TableHead className="text-right">Ingresos Generados</TableHead>
+                      <TableHead className="text-right">Cantidad</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Costo</TableHead>
+                      <TableHead className="text-right">Utilidad</TableHead>
+                      <TableHead className="text-right">Margen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {topProducts.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                           No hay datos de productos en este período
                         </TableCell>
                       </TableRow>
@@ -1884,6 +1910,23 @@ export default function Reports() {
                           <TableCell className="text-right">{product.quantity.toFixed(2)}</TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(product.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {formatCurrency(product.cost)}
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(product.profit)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-medium ${
+                              product.profitMargin >= 30
+                                ? 'text-green-600'
+                                : product.profitMargin >= 15
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                            }`}>
+                              {product.profitMargin.toFixed(1)}%
+                            </span>
                           </TableCell>
                         </TableRow>
                       ))
