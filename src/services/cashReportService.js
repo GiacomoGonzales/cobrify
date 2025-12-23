@@ -110,7 +110,7 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     ['RESUMEN FINANCIERO'],
     ['Monto Inicial:', sessionData.openingAmount || 0],
     [''],
-    ['VENTAS DEL DÍA'],
+    ['VENTAS DE LA SESIÓN'],
     ['Total Ventas:', sessionData.totalSales || 0],
     ['Cantidad de Comprobantes:', invoices.length],
     [''],
@@ -133,10 +133,10 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
   summarySheet['!cols'] = [{ width: 30 }, { width: 20 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen');
 
-  // Hoja 2: Comprobantes del Día
+  // Hoja 2: Comprobantes de la Sesión
   if (invoices.length > 0) {
     const invoicesData = [
-      ['COMPROBANTES DEL DÍA'],
+      ['COMPROBANTES DE LA SESIÓN'],
       [''],
       ['Número', 'Tipo', 'Cliente', 'Método de Pago', 'Total', 'Fecha']
     ];
@@ -247,7 +247,7 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
     head: [['Concepto', 'Monto']],
     body: [
       ['Monto Inicial', `S/ ${(sessionData.openingAmount || 0).toFixed(2)}`],
-      ['Ventas del Día', `S/ ${(sessionData.totalSales || 0).toFixed(2)}`],
+      ['Ventas de la Sesión', `S/ ${(sessionData.totalSales || 0).toFixed(2)}`],
       ['Otros Ingresos', `S/ ${(sessionData.totalIncome || 0).toFixed(2)}`],
       ['Egresos', `S/ ${(sessionData.totalExpense || 0).toFixed(2)}`],
       ['Efectivo Esperado', `S/ ${(sessionData.expectedAmount || 0).toFixed(2)}`],
@@ -308,7 +308,7 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
 
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text(`COMPROBANTES DEL DÍA (${invoices.length})`, 20, yPosition);
+    doc.text(`COMPROBANTES DE LA SESIÓN (${invoices.length})`, 20, yPosition);
     yPosition += 8;
 
     const invoiceRows = invoices.map(invoice => [

@@ -110,16 +110,15 @@ export default function CashRegister() {
         ]
         setMovements(demoMovements)
 
-        // Filtrar facturas del día de hoy
+        // Filtrar facturas de la sesión demo (desde apertura hasta ahora)
+        const sessionOpenedAt = demoSession.openedAt
         const now = new Date()
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
 
-        const todayInvoicesList = (demoData.invoices || []).filter(invoice => {
+        const sessionInvoicesList = (demoData.invoices || []).filter(invoice => {
           const invoiceDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt)
-          return invoiceDate >= todayStart && invoiceDate <= todayEnd
+          return invoiceDate >= sessionOpenedAt && invoiceDate <= now
         })
-        setTodayInvoices(todayInvoicesList)
+        setTodayInvoices(sessionInvoicesList)
 
         setIsLoading(false)
         return
@@ -140,22 +139,23 @@ export default function CashRegister() {
         setMovements([])
       }
 
-      // Obtener facturas del día
+      // Obtener facturas de la sesión actual (desde apertura hasta ahora)
       const invoicesResult = await getInvoices(getBusinessId())
-      if (invoicesResult.success) {
+      if (invoicesResult.success && sessionResult.success && sessionResult.data) {
+        const sessionOpenedAt = sessionResult.data.openedAt?.toDate
+          ? sessionResult.data.openedAt.toDate()
+          : new Date(sessionResult.data.openedAt)
         const now = new Date()
-        const todayYear = now.getFullYear()
-        const todayMonth = now.getMonth()
-        const todayDay = now.getDate()
 
-        const todayInvoicesList = (invoicesResult.data || []).filter(invoice => {
+        const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
           const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-          // Comparar solo año, mes y día en hora local
-          return invoiceDate.getFullYear() === todayYear &&
-                 invoiceDate.getMonth() === todayMonth &&
-                 invoiceDate.getDate() === todayDay
+          // Filtrar por período de sesión: desde apertura hasta ahora
+          return invoiceDate >= sessionOpenedAt && invoiceDate <= now
         })
-        setTodayInvoices(todayInvoicesList)
+        setTodayInvoices(sessionInvoicesList)
+      } else if (invoicesResult.success) {
+        // Si no hay sesión abierta, no mostrar facturas
+        setTodayInvoices([])
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -331,6 +331,7 @@ export default function CashRegister() {
         salesTransfer: totals.salesTransfer,
         salesYape: totals.salesYape,
         salesPlin: totals.salesPlin,
+        salesRappi: totals.salesRappi,
         totalIncome: totals.income,
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
@@ -358,6 +359,7 @@ export default function CashRegister() {
         salesTransfer: totals.salesTransfer,
         salesYape: totals.salesYape,
         salesPlin: totals.salesPlin,
+        salesRappi: totals.salesRappi,
         totalIncome: totals.income,
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
@@ -596,6 +598,7 @@ export default function CashRegister() {
       salesTransfer: 0,
       salesYape: 0,
       salesPlin: 0,
+      salesRappi: 0,
       income: 0,
       expense: 0,
       expected: 0,
@@ -608,6 +611,7 @@ export default function CashRegister() {
     let salesTransfer = 0
     let salesYape = 0
     let salesPlin = 0
+    let salesRappi = 0
 
     // Filtrar facturas:
     // - Excluir notas de crédito y débito (no son ventas, son ajustes)
@@ -655,6 +659,9 @@ export default function CashRegister() {
             case 'Plin':
               salesPlin += invoiceTotal
               break
+            case 'Rappi':
+              salesRappi += invoiceTotal
+              break
           }
         } else {
           // Múltiples métodos de pago: usar los montos reales de cada pago
@@ -676,6 +683,9 @@ export default function CashRegister() {
                 break
               case 'Plin':
                 salesPlin += amount
+                break
+              case 'Rappi':
+                salesRappi += amount
                 break
             }
           })
@@ -699,12 +709,15 @@ export default function CashRegister() {
           case 'Plin':
             salesPlin += total
             break
+          case 'Rappi':
+            salesRappi += total
+            break
         }
       }
     })
 
     // Total de ventas (todos los métodos)
-    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin
+    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi
 
     // Ingresos adicionales (movimientos tipo income)
     const income = movements
@@ -732,6 +745,7 @@ export default function CashRegister() {
       salesTransfer,
       salesYape,
       salesPlin,
+      salesRappi,
       income,
       expense,
       expected,
@@ -835,7 +849,7 @@ export default function CashRegister() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Ventas del Día</p>
+                    <p className="text-sm text-gray-600">Ventas de la Sesión</p>
                     <p className="text-2xl font-bold text-green-600">
                       {formatCurrency(totals.sales)}
                     </p>
@@ -844,7 +858,7 @@ export default function CashRegister() {
                     <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">{todayInvoices.length} comprobantes</p>
+                <p className="text-xs text-gray-500 mt-2">{todayInvoices.length} comprobantes en esta caja</p>
               </CardContent>
             </Card>
 
@@ -898,7 +912,7 @@ export default function CashRegister() {
                   {/* Desglose de ventas por método */}
                   <div className="py-2 border-b">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs sm:text-sm font-medium text-gray-700">Ventas del Día:</span>
+                      <span className="text-xs sm:text-sm font-medium text-gray-700">Ventas de la Sesión:</span>
                       <span className="text-sm sm:text-base font-bold text-green-600">{formatCurrency(totals.sales)}</span>
                     </div>
                     <div className="pl-3 space-y-1 text-xs">
@@ -932,6 +946,12 @@ export default function CashRegister() {
                           <span className="font-medium">{formatCurrency(totals.salesPlin)}</span>
                         </div>
                       )}
+                      {totals.salesRappi > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• Rappi:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesRappi)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -963,7 +983,7 @@ export default function CashRegister() {
             {/* Movimientos */}
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle className="text-base sm:text-lg">Movimientos del Día</CardTitle>
+                <CardTitle className="text-base sm:text-lg">Movimientos de la Sesión</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 mb-4">
@@ -1429,7 +1449,7 @@ export default function CashRegister() {
 
           {/* Desglose de ventas esperadas */}
           <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-            <p className="text-sm font-medium text-gray-700 mb-3">Resumen de Ventas del Día:</p>
+            <p className="text-sm font-medium text-gray-700 mb-3">Resumen de Ventas de la Sesión:</p>
 
             {totals.salesCash > 0 && (
               <div className="flex justify-between text-sm">
@@ -1463,6 +1483,13 @@ export default function CashRegister() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">• Ventas en Plin:</span>
                 <span className="font-semibold text-gray-700">{formatCurrency(totals.salesPlin)}</span>
+              </div>
+            )}
+
+            {totals.salesRappi > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en Rappi:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesRappi)}</span>
               </div>
             )}
 
