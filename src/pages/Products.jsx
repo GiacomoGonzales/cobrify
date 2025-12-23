@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -810,6 +811,63 @@ export default function Products() {
     }
     setProductImage(null)
     setProductImagePreview(null)
+  }
+
+  // Handle taking photo with camera
+  const handleTakePhoto = async () => {
+    try {
+      // Solo funciona en dispositivos nativos
+      if (!Capacitor.isNativePlatform()) {
+        toast.info('La cámara solo está disponible en la app móvil')
+        return
+      }
+
+      // Solicitar permisos
+      const permissions = await CapacitorCamera.requestPermissions()
+      if (permissions.camera !== 'granted') {
+        toast.error('Se requiere permiso para usar la cámara')
+        return
+      }
+
+      // Tomar foto
+      const photo = await CapacitorCamera.getPhoto({
+        quality: 80,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: CameraSource.Camera,
+        width: 800,
+        height: 800,
+        correctOrientation: true
+      })
+
+      if (photo.base64String) {
+        // Convertir base64 a File para mantener compatibilidad con el flujo existente
+        const byteCharacters = atob(photo.base64String)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: `image/${photo.format || 'jpeg'}` })
+        const file = new File([blob], `photo_${Date.now()}.${photo.format || 'jpg'}`, { type: `image/${photo.format || 'jpeg'}` })
+
+        // Limpiar preview anterior
+        if (productImagePreview && productImagePreview.startsWith('blob:')) {
+          revokeImagePreview(productImagePreview)
+        }
+
+        // Crear preview y guardar
+        const previewUrl = createImagePreview(file)
+        setProductImage(file)
+        setProductImagePreview(previewUrl)
+        toast.success('Foto capturada correctamente')
+      }
+    } catch (error) {
+      if (error.message !== 'User cancelled photos app') {
+        console.error('Error al tomar foto:', error)
+        toast.error('Error al tomar la foto')
+      }
+    }
   }
 
   const handleDelete = async () => {
@@ -2597,18 +2655,34 @@ export default function Products() {
                         </label>
                       </div>
                     ) : (
-                      <label className="cursor-pointer block w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-                        <div className="text-center">
-                          <Camera className="w-8 h-8 text-gray-400 mx-auto" />
-                          <span className="text-xs text-gray-500 mt-1 block">Subir foto</span>
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          onChange={handleImageSelect}
-                          className="hidden"
-                        />
-                      </label>
+                      <div className="flex flex-col gap-2">
+                        {/* Opción 1: Subir archivo */}
+                        <label className="cursor-pointer block w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
+                          <div className="text-center flex items-center gap-1.5">
+                            <Upload className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs text-gray-500">Subir</span>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                        {/* Opción 2: Tomar foto (solo en app nativa) */}
+                        {Capacitor.isNativePlatform() && (
+                          <button
+                            type="button"
+                            onClick={handleTakePhoto}
+                            className="w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
+                          >
+                            <div className="text-center flex items-center gap-1.5">
+                              <Camera className="w-4 h-4 text-gray-400" />
+                              <span className="text-xs text-gray-500">Foto</span>
+                            </div>
+                          </button>
+                        )}
+                      </div>
                     )}
                     {uploadingImage && (
                       <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
