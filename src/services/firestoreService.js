@@ -569,8 +569,17 @@ export const convertNotaVentaToBoleta = async (userId, notaVentaId, customerData
       // Copiar totales
       subtotal: notaVenta.subtotal || 0,
       tax: notaVenta.tax || 0,
+      igv: notaVenta.igv || notaVenta.tax || 0,
       total: notaVenta.total || 0,
       discount: notaVenta.discount || 0,
+
+      // Copiar montos por tipo de afectación tributaria
+      opGravadas: notaVenta.opGravadas || notaVenta.subtotal || 0,
+      opExoneradas: notaVenta.opExoneradas || 0,
+      opInafectas: notaVenta.opInafectas || 0,
+
+      // Copiar configuración de impuestos
+      taxConfig: notaVenta.taxConfig || null,
 
       // Estado
       status: 'completed',

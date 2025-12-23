@@ -678,7 +678,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               <span>{formatCurrency(invoice.subtotal || 0)}</span>
             </div>
             <div className="total-row">
-              <span>IGV (18%):</span>
+              <span>IGV ({companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18}%):</span>
               <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
             </div>
           </>

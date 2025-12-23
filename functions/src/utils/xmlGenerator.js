@@ -246,11 +246,19 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   console.log(`📄 Generando XML para: ${invoiceData.documentType} (código ${documentTypeCode})`)
 
+  // DEBUG: Mostrar qué taxConfig llega
+  console.log(`🔍 DEBUG taxConfig:`)
+  console.log(`   invoiceData.taxConfig: ${JSON.stringify(invoiceData.taxConfig)}`)
+  console.log(`   businessData.emissionConfig?.taxConfig: ${JSON.stringify(businessData?.emissionConfig?.taxConfig)}`)
+
   // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
-  const igvRate = invoiceData.taxConfig?.igvRate ?? 18
-  const igvExempt = invoiceData.taxConfig?.igvExempt ?? false
-  const exemptionReason = invoiceData.taxConfig?.exemptionReason ?? ''
+  // Buscar taxConfig en: 1) invoiceData.taxConfig, 2) businessData.emissionConfig.taxConfig, 3) default 18
+  const igvRate = invoiceData.taxConfig?.igvRate ?? businessData?.emissionConfig?.taxConfig?.igvRate ?? 18
+  const igvExempt = invoiceData.taxConfig?.igvExempt ?? businessData?.emissionConfig?.taxConfig?.igvExempt ?? false
+  const exemptionReason = invoiceData.taxConfig?.exemptionReason ?? businessData?.emissionConfig?.taxConfig?.exemptionReason ?? ''
   const igvMultiplier = igvRate / 100
+
+  console.log(`💰 Configuración IGV FINAL: rate=${igvRate}%, exempt=${igvExempt}, multiplier=${igvMultiplier}`)
 
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   // Usar emissionDate primero (fecha seleccionada por el usuario), luego issueDate, luego fecha actual
@@ -867,10 +875,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
  */
 export function generateCreditNoteXML(creditNoteData, businessData) {
   // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
-  const igvRate = creditNoteData.taxConfig?.igvRate ?? 18
-  const igvExempt = creditNoteData.taxConfig?.igvExempt ?? false
-  const exemptionReason = creditNoteData.taxConfig?.exemptionReason ?? ''
+  // Buscar taxConfig en: 1) creditNoteData.taxConfig, 2) businessData.emissionConfig.taxConfig, 3) default 18
+  const igvRate = creditNoteData.taxConfig?.igvRate ?? businessData?.emissionConfig?.taxConfig?.igvRate ?? 18
+  const igvExempt = creditNoteData.taxConfig?.igvExempt ?? businessData?.emissionConfig?.taxConfig?.igvExempt ?? false
+  const exemptionReason = creditNoteData.taxConfig?.exemptionReason ?? businessData?.emissionConfig?.taxConfig?.exemptionReason ?? ''
   const igvMultiplier = igvRate / 100
+
+  console.log(`💰 NC - Configuración IGV: rate=${igvRate}%, exempt=${igvExempt}`)
 
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   let issueDate
@@ -1274,10 +1285,13 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
  */
 export function generateDebitNoteXML(debitNoteData, businessData) {
   // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
-  const igvRate = debitNoteData.taxConfig?.igvRate ?? 18
-  const igvExempt = debitNoteData.taxConfig?.igvExempt ?? false
-  const exemptionReason = debitNoteData.taxConfig?.exemptionReason ?? ''
+  // Buscar taxConfig en: 1) debitNoteData.taxConfig, 2) businessData.emissionConfig.taxConfig, 3) default 18
+  const igvRate = debitNoteData.taxConfig?.igvRate ?? businessData?.emissionConfig?.taxConfig?.igvRate ?? 18
+  const igvExempt = debitNoteData.taxConfig?.igvExempt ?? businessData?.emissionConfig?.taxConfig?.igvExempt ?? false
+  const exemptionReason = debitNoteData.taxConfig?.exemptionReason ?? businessData?.emissionConfig?.taxConfig?.exemptionReason ?? ''
   const igvMultiplier = igvRate / 100
+
+  console.log(`💰 ND - Configuración IGV: rate=${igvRate}%, exempt=${igvExempt}`)
 
   // Formatear fecha para SUNAT (YYYY-MM-DD)
   let issueDate
@@ -1585,7 +1599,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
     // Impuesto de la línea
     const lineTaxTotal = debitNoteLine.ele('cac:TaxTotal')
-    const lineIGV = isGravado ? lineTotal * 0.18 : 0
+    const lineIGV = isGravado ? lineTotal * igvMultiplier : 0
     lineTaxTotal.ele('cbc:TaxAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
       .txt(lineIGV.toFixed(2))
 

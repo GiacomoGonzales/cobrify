@@ -759,9 +759,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // Mostrar subtotal e IGV solo si NO es nota de venta O si está configurado para mostrarlo
     if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
+      const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
       printer = printer
         .text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}\n`)
-        .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
+        .text(`IGV (${igvRateDisplay}%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}\n`);
     }
 
     // Mostrar descuento si existe
@@ -1730,8 +1731,9 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 
     // Totales
     if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
+      const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
       builder.text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
-        .text(`IGV (18%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
+        .text(`IGV (${igvRateDisplay}%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
     }
 
     builder.bold(true)

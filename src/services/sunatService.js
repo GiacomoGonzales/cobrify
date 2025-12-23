@@ -70,8 +70,16 @@ export const prepareInvoiceXML = async (invoiceData, companySettings, taxConfig 
       }
     }
 
+    // Obtener taxConfig: 1) parámetro explícito, 2) del invoiceData, 3) del companySettings.emissionConfig
+    const effectiveTaxConfig = taxConfig
+      || invoiceData.taxConfig
+      || companySettings?.emissionConfig?.taxConfig
+      || null
+
+    console.log('🔍 prepareInvoiceXML - taxConfig usado:', effectiveTaxConfig)
+
     // Generar el XML UBL 2.1 con configuración de impuestos
-    const xml = generateInvoiceXML(invoiceData, companySettings, taxConfig)
+    const xml = generateInvoiceXML(invoiceData, companySettings, effectiveTaxConfig)
 
     // Generar nombre del archivo
     // Extraer series y número correlativo

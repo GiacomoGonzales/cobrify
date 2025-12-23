@@ -1083,7 +1083,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const totalsX = MARGIN_LEFT + CONTENT_WIDTH - totalsWidth
   const bankSectionWidth = totalsX - MARGIN_LEFT - 10
 
-  const igvExempt = companySettings?.taxConfig?.igvExempt || false
+  const igvExempt = companySettings?.emissionConfig?.taxConfig?.igvExempt || companySettings?.taxConfig?.igvExempt || false
+  const igvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
   const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
 
   // --- TOTALES (derecha) con borde ---
@@ -1112,7 +1113,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
   doc.setDrawColor(200, 200, 200)
   doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-  doc.text('IGV (18%)', totalsX + 5, footerY + 10)
+  doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
   doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
   footerY += totalsRowHeight
 

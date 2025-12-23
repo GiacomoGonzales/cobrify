@@ -664,7 +664,13 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       notes,
       sunatHash,
       qrCode,
+      // Tax config
+      taxConfig,
+      igvRate: igvRateParam,
     } = receiptData;
+
+    // Obtener igvRate de taxConfig o parámetro directo
+    const igvRate = taxConfig?.igvRate ?? igvRateParam ?? 18;
 
     const commands = [
       ESCPOSCommands.init(),
@@ -861,7 +867,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       const subtotalValue = subtotal || 0;
       const taxValue = tax || igv || 0;
       commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotalValue.toFixed(2) + '\n'));
-      commands.push(ESCPOSCommands.text('IGV (18%): S/ ' + taxValue.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text(`IGV (${igvRate}%): S/ ` + taxValue.toFixed(2) + '\n'));
     }
 
     if (discount && discount > 0) {
