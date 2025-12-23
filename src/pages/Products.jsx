@@ -297,6 +297,8 @@ export default function Products() {
       name: '',
       description: '',
       price: '',
+      price2: '',
+      price3: '',
       cost: '',
       unit: 'NIU',
       category: '',
@@ -518,6 +520,8 @@ export default function Products() {
       name: product.name,
       description: product.description || '',
       price: productHasVariants ? '' : (product.price?.toString() || ''),
+      price2: product.price2?.toString() || '',
+      price3: product.price3?.toString() || '',
       cost: product.cost?.toString() || '',
       unit: product.unit || 'NIU',
       category: product.category || '',
@@ -663,6 +667,9 @@ export default function Products() {
       } else {
         // Regular product without variants
         productData.price = parseFloat(data.price)
+        // Precios adicionales (solo si están habilitados y tienen valor)
+        productData.price2 = data.price2 && data.price2 !== '' ? parseFloat(data.price2) : null
+        productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
 
         // Manejar stock e initialStock
         if (noStock) {
@@ -2690,7 +2697,7 @@ export default function Products() {
               </div>
 
               <Input
-                label="Precio de Venta"
+                label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
                 type="number"
                 step="0.01"
                 required
@@ -2698,6 +2705,28 @@ export default function Products() {
                 error={errors.price?.message}
                 {...register('price')}
               />
+
+              {/* Precios adicionales - solo si está habilitado en Settings */}
+              {businessSettings?.multiplePricesEnabled && (
+                <>
+                  <Input
+                    label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00 (opcional)"
+                    error={errors.price2?.message}
+                    {...register('price2')}
+                  />
+                  <Input
+                    label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00 (opcional)"
+                    error={errors.price3?.message}
+                    {...register('price3')}
+                  />
+                </>
+              )}
 
               <Select
                 label="Unidad"

@@ -112,6 +112,14 @@ export default function Settings() {
   // Estados para fecha de emisión
   const [allowCustomEmissionDate, setAllowCustomEmissionDate] = useState(false)
 
+  // Estados para múltiples precios
+  const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(false)
+  const [priceLabels, setPriceLabels] = useState({
+    price1: 'Público',
+    price2: 'Mayorista',
+    price3: 'VIP'
+  })
+
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
 
@@ -354,6 +362,16 @@ export default function Settings() {
 
         // Cargar configuración de fecha de emisión
         setAllowCustomEmissionDate(businessData.allowCustomEmissionDate || false)
+
+        // Cargar configuración de múltiples precios
+        setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
+        if (businessData.priceLabels) {
+          setPriceLabels({
+            price1: businessData.priceLabels.price1 || 'Público',
+            price2: businessData.priceLabels.price2 || 'Mayorista',
+            price3: businessData.priceLabels.price3 || 'VIP'
+          })
+        }
 
         // Cargar configuración de privacidad
         setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
@@ -2047,6 +2065,77 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Múltiples precios por producto */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Múltiples Precios por Producto</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura hasta 3 precios diferentes por producto (ej: Público, Mayorista, VIP)
+                </p>
+                <div className="space-y-4">
+                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <label className="flex items-start space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={multiplePricesEnabled}
+                        onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                          Habilitar múltiples precios por producto
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          {multiplePricesEnabled
+                            ? '✓ Habilitado: Podrás asignar hasta 3 precios diferentes a cada producto. Al vender, podrás elegir qué precio aplicar o asignar un nivel de precio a cada cliente.'
+                            : '✗ Deshabilitado: Solo se usará un precio por producto (comportamiento normal).'}
+                        </p>
+                      </div>
+                    </label>
+
+                    {multiplePricesEnabled && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <p className="text-xs text-gray-500 mb-3">Personaliza los nombres de cada nivel de precio:</p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 1</label>
+                            <input
+                              type="text"
+                              value={priceLabels.price1}
+                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price1: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="Público"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 2</label>
+                            <input
+                              type="text"
+                              value={priceLabels.price2}
+                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price2: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="Mayorista"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 3</label>
+                            <input
+                              type="text"
+                              value={priceLabels.price3}
+                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price3: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="VIP"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Notas de Venta */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Notas de Venta</h3>
@@ -2125,6 +2214,8 @@ export default function Settings() {
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
+                      multiplePricesEnabled: multiplePricesEnabled,
+                      priceLabels: priceLabels,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success('Configuración de ventas guardada exitosamente.')

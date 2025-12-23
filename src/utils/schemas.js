@@ -35,6 +35,8 @@ export const customerSchema = z.object({
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  // Nivel de precio para sistema de múltiples precios
+  priceLevel: z.enum(['price1', 'price2', 'price3']).optional().nullable(),
 }).superRefine((data, ctx) => {
   // Solo validar si hay número de documento
   if (data.documentNumber && data.documentNumber.trim() !== '') {
@@ -112,6 +114,37 @@ export const productSchema = z.object({
         .pipe(z.number().positive('El precio debe ser mayor a 0'))
     )
     .optional(), // Optional when hasVariants is true
+  // Precios adicionales (opcionales, para sistema de múltiples precios)
+  price2: z
+    .number()
+    .positive('El precio 2 debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseFloat(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable()
+    )
+    .nullable()
+    .optional(),
+  price3: z
+    .number()
+    .positive('El precio 3 debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseFloat(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable()
+    )
+    .nullable()
+    .optional(),
   cost: z
     .number()
     .nonnegative('El costo no puede ser negativo')

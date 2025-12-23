@@ -283,6 +283,10 @@ export default function POS() {
   // Tipo de pedido (para reportes)
   const [orderType, setOrderType] = useState('takeaway')
 
+  // Modal de selección de precio (para productos con múltiples precios)
+  const [showPriceModal, setShowPriceModal] = useState(false)
+  const [productForPriceSelection, setProductForPriceSelection] = useState(null)
+
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
   const [discountPercentage, setDiscountPercentage] = useState('')
@@ -795,7 +799,7 @@ export default function POS() {
     }
   }
 
-  const addToCart = product => {
+  const addToCart = (product, selectedPrice = null) => {
     // Bloquear si ya se completó una venta
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -806,6 +810,22 @@ export default function POS() {
     if (product.hasVariants) {
       setSelectedProductForVariant(product)
       setShowVariantModal(true)
+      return
+    }
+
+    // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3)
+    if (hasMultiplePrices && selectedPrice === null) {
+      // Verificar si el cliente seleccionado tiene un nivel de precio asignado
+      if (selectedCustomer?.priceLevel) {
+        // Usar el precio automáticamente según el nivel del cliente
+        const priceKey = selectedCustomer.priceLevel // 'price1', 'price2', o 'price3'
+        const autoPrice = priceKey === 'price1' ? product.price : (product[priceKey] || product.price)
+        return addToCart({ ...product, price: autoPrice }, autoPrice)
+      }
+      // Mostrar modal para seleccionar precio
+      setProductForPriceSelection(product)
+      setShowPriceModal(true)
       return
     }
 
@@ -845,6 +865,27 @@ export default function POS() {
     } else {
       setCart([...cart, { ...product, quantity: 1 }])
     }
+  }
+
+  // Manejar selección de precio desde el modal
+  const handlePriceSelection = (priceLevel) => {
+    if (!productForPriceSelection) return
+
+    const product = productForPriceSelection
+    let selectedPrice = product.price // default price1
+
+    if (priceLevel === 'price2' && product.price2) {
+      selectedPrice = product.price2
+    } else if (priceLevel === 'price3' && product.price3) {
+      selectedPrice = product.price3
+    }
+
+    // Agregar al carrito con el precio seleccionado
+    addToCart({ ...product, price: selectedPrice }, selectedPrice)
+
+    // Cerrar modal
+    setShowPriceModal(false)
+    setProductForPriceSelection(null)
   }
 
   const addVariantToCart = (product, variant) => {
@@ -3947,6 +3988,85 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <p className="text-gray-500">No hay variantes disponibles para este producto.</p>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de Selección de Precio */}
+      <Modal
+        isOpen={showPriceModal}
+        onClose={() => {
+          setShowPriceModal(false)
+          setProductForPriceSelection(null)
+        }}
+        title={`Seleccionar precio - ${productForPriceSelection?.name || ''}`}
+        size="sm"
+      >
+        {productForPriceSelection && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Este producto tiene múltiples precios. Selecciona el precio a aplicar:
+            </p>
+
+            <div className="space-y-3">
+              {/* Precio 1 */}
+              <button
+                onClick={() => handlePriceSelection('price1')}
+                className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {businessSettings?.priceLabels?.price1 || 'Precio 1'}
+                    </p>
+                    <p className="text-xs text-gray-500">Precio principal</p>
+                  </div>
+                  <p className="text-xl font-bold text-primary-600">
+                    {formatCurrency(productForPriceSelection.price)}
+                  </p>
+                </div>
+              </button>
+
+              {/* Precio 2 */}
+              {productForPriceSelection.price2 && (
+                <button
+                  onClick={() => handlePriceSelection('price2')}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                      </p>
+                      <p className="text-xs text-gray-500">Precio alternativo</p>
+                    </div>
+                    <p className="text-xl font-bold text-green-600">
+                      {formatCurrency(productForPriceSelection.price2)}
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {/* Precio 3 */}
+              {productForPriceSelection.price3 && (
+                <button
+                  onClick={() => handlePriceSelection('price3')}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                      </p>
+                      <p className="text-xs text-gray-500">Precio especial</p>
+                    </div>
+                    <p className="text-xl font-bold text-amber-600">
+                      {formatCurrency(productForPriceSelection.price3)}
+                    </p>
+                  </div>
+                </button>
+              )}
+            </div>
           </div>
         )}
       </Modal>

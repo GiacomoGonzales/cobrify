@@ -24,7 +24,7 @@ import { formatCurrency } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
 
 export default function Customers() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -51,6 +51,7 @@ export default function Customers() {
       email: '',
       phone: '',
       address: '',
+      priceLevel: null,
     },
   })
 
@@ -116,6 +117,7 @@ export default function Customers() {
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
+      priceLevel: customer.priceLevel || null,
     })
     setIsModalOpen(true)
   }
@@ -547,6 +549,27 @@ export default function Customers() {
             error={errors.address?.message}
             {...register('address')}
           />
+
+          {/* Nivel de precio - solo si está habilitado múltiples precios */}
+          {businessSettings?.multiplePricesEnabled && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nivel de Precio
+              </label>
+              <select
+                {...register('priceLevel')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Sin nivel asignado</option>
+                <option value="price1">{businessSettings?.priceLabels?.price1 || 'Precio 1'}</option>
+                <option value="price2">{businessSettings?.priceLabels?.price2 || 'Precio 2'}</option>
+                <option value="price3">{businessSettings?.priceLabels?.price3 || 'Precio 3'}</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Si asignas un nivel, el cliente verá automáticamente ese precio en el POS.
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3 pt-4">
             <Button type="button" variant="outline" onClick={closeModal} disabled={isSaving}>

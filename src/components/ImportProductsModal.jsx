@@ -120,6 +120,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         description: String(row.descripcion || row.Descripcion || row.DESCRIPCION || row.description || row.Description || row.DESCRIPTION || '').trim(),
         cost: row.costo || row.Costo || row.COSTO || row.cost || row.Cost || row.COST || row.valor_unitario || row.valor_Unitario || row.VALOR_UNITARIO || row.precio_unitario || row.Precio_Unitario || row.PRECIO_UNITARIO || null,
         price: parseFloat(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE || row.precio_compra || row.Precio_Compra || row.PRECIO_COMPRA || 0),
+        price2: row.precio2 || row.Precio2 || row.PRECIO2 || row.price2 || row.Price2 || row.PRICE2 || null,
+        price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
         stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
@@ -163,6 +165,21 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
       if (isNaN(product.price) || product.price < 0) {
         errors.push(`Fila ${rowNum}: Precio inválido (${row.precio || row.price})`)
         return
+      }
+
+      // Parsear precio2 y precio3 (opcionales)
+      if (product.price2 !== null && product.price2 !== '' && product.price2 !== undefined) {
+        const price2Num = parseFloat(product.price2)
+        product.price2 = isNaN(price2Num) || price2Num <= 0 ? null : price2Num
+      } else {
+        product.price2 = null
+      }
+
+      if (product.price3 !== null && product.price3 !== '' && product.price3 !== undefined) {
+        const price3Num = parseFloat(product.price3)
+        product.price3 = isNaN(price3Num) || price3Num <= 0 ? null : price3Num
+      } else {
+        product.price3 = null
       }
 
       // Validar stock si existe
@@ -250,6 +267,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           ubicacion: 'Estante A-1',
           costo: 0.80,
           precio: 1.50,
+          precio2: 1.30,
+          precio3: 1.10,
           stock: 500,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -273,6 +292,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           ubicacion: 'Estante B-2',
           costo: 0.50,
           precio: 1.20,
+          precio2: 1.00,
+          precio3: 0.85,
           stock: 200,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -296,6 +317,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           ubicacion: 'Estante C-1',
           costo: 0.30,
           precio: 0.80,
+          precio2: '',
+          precio3: '',
           stock: 100,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -314,6 +337,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           descripcion: 'Descripción del producto',
           costo: 8.50,
           precio: 10.50,
+          precio2: 9.50,
+          precio3: 8.80,
           stock: 100,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -328,6 +353,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           descripcion: 'No controla inventario',
           costo: 20.00,
           precio: 25.00,
+          precio2: '',
+          precio3: '',
           stock: '',
           trackStock: 'NO',
           unidad: 'SERVICIO',
@@ -342,6 +369,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           descripcion: 'Sin código interno',
           costo: 12.00,
           precio: 15.00,
+          precio2: 13.50,
+          precio3: 12.00,
           stock: 50,
           trackStock: 'SI',
           unidad: 'UNIDAD',
