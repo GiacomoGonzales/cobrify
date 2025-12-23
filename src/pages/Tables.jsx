@@ -27,6 +27,7 @@ import {
   reserveTable,
   cancelReservation,
   transferTable,
+  moveOrderToTable,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder } from '@/services/orderService'
@@ -298,7 +299,7 @@ export default function Tables() {
 
     setEditingTable(table)
     setFormData({
-      number: table.number.toString(),
+      number: String(table.number),
       capacity: table.capacity.toString(),
       zone: table.zone,
     })
@@ -308,15 +309,15 @@ export default function Tables() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!formData.number || formData.number < 1) {
-      toast.error('Ingresa un número de mesa válido')
+    if (!formData.number || formData.number.trim() === '') {
+      toast.error('Ingresa un nombre o número de mesa')
       return
     }
 
     setIsSaving(true)
     try {
       const tableData = {
-        number: parseInt(formData.number),
+        number: formData.number.trim(),
         capacity: parseInt(formData.capacity),
         zone: formData.zone,
       }
@@ -440,6 +441,31 @@ export default function Tables() {
     } catch (error) {
       console.error('Error al transferir mesa:', error)
       toast.error('Error al transferir mesa')
+    }
+  }
+
+  const handleMoveTable = async (sourceTableId, destinationTableId, destinationTableNumber) => {
+    // Verificar si está en modo demo
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      setIsActionModalOpen(false)
+      return
+    }
+
+    try {
+      const result = await moveOrderToTable(getBusinessId(), sourceTableId, destinationTableId)
+      if (result.success) {
+        toast.success(`Orden movida a Mesa ${destinationTableNumber}`)
+        loadTables()
+        setIsActionModalOpen(false)
+        setSelectedTable(null)
+        setSelectedOrder(null)
+      } else {
+        toast.error('Error al mover orden: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al mover orden:', error)
+      toast.error('Error al mover orden')
     }
   }
 
@@ -910,14 +936,13 @@ export default function Tables() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Número de Mesa *
+              Nombre o Número de Mesa *
             </label>
             <Input
-              type="number"
-              min="1"
+              type="text"
               value={formData.number}
               onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-              placeholder="Ej: 1"
+              placeholder="Ej: 1, Mesa VIP, Terraza A"
               required
             />
           </div>
@@ -985,6 +1010,7 @@ export default function Tables() {
         }}
         table={selectedTable}
         waiters={waiters}
+        availableTables={tables.filter(t => t.status === 'available')}
         onOccupy={handleOccupyTable}
         onRelease={handleReleaseTable}
         onReserve={handleReserveTable}
@@ -993,6 +1019,7 @@ export default function Tables() {
         onEditOrder={handleEditOrder}
         onSplitBill={handleSplitBill}
         onTransferTable={handleTransferTable}
+        onMoveTable={handleMoveTable}
         onPrintPreBill={handlePrintPreBill}
       />
 

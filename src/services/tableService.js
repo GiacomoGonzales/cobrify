@@ -316,6 +316,80 @@ export const updateTableAmount = async (businessId, tableId, amount) => {
 }
 
 /**
+ * Mover una orden a otra mesa
+ */
+export const moveOrderToTable = async (businessId, sourceTableId, destinationTableId) => {
+  try {
+    // Obtener datos de la mesa origen
+    const sourceTableRef = doc(db, 'businesses', businessId, 'tables', sourceTableId)
+    const sourceTableSnap = await getDoc(sourceTableRef)
+
+    if (!sourceTableSnap.exists()) {
+      return { success: false, error: 'Mesa origen no encontrada' }
+    }
+
+    const sourceTableData = sourceTableSnap.data()
+
+    if (sourceTableData.status !== 'occupied') {
+      return { success: false, error: 'La mesa origen no está ocupada' }
+    }
+
+    if (!sourceTableData.currentOrder) {
+      return { success: false, error: 'La mesa origen no tiene una orden activa' }
+    }
+
+    // Obtener datos de la mesa destino
+    const destTableRef = doc(db, 'businesses', businessId, 'tables', destinationTableId)
+    const destTableSnap = await getDoc(destTableRef)
+
+    if (!destTableSnap.exists()) {
+      return { success: false, error: 'Mesa destino no encontrada' }
+    }
+
+    const destTableData = destTableSnap.data()
+
+    if (destTableData.status !== 'available') {
+      return { success: false, error: 'La mesa destino no está disponible' }
+    }
+
+    // Actualizar la orden con la nueva mesa
+    const orderRef = doc(db, 'businesses', businessId, 'orders', sourceTableData.currentOrder)
+    await updateDoc(orderRef, {
+      tableId: destinationTableId,
+      tableNumber: destTableData.number,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Ocupar la mesa destino con los datos de la orden
+    await updateDoc(destTableRef, {
+      status: 'occupied',
+      currentOrder: sourceTableData.currentOrder,
+      waiter: sourceTableData.waiter,
+      waiterId: sourceTableData.waiterId,
+      startTime: sourceTableData.startTime,
+      amount: sourceTableData.amount,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Liberar la mesa origen (sin completar la orden)
+    await updateDoc(sourceTableRef, {
+      status: 'available',
+      currentOrder: null,
+      waiter: null,
+      waiterId: null,
+      startTime: null,
+      amount: 0,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al mover orden a otra mesa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Transferir una mesa a otro mozo
  */
 export const transferTable = async (businessId, tableId, transferData) => {
@@ -448,6 +522,7 @@ export default {
   reserveTable,
   cancelReservation,
   updateTableAmount,
+  moveOrderToTable,
   transferTable,
   getTablesByZone,
   getTablesByStatus,

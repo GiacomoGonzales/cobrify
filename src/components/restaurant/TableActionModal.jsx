@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -18,14 +18,17 @@ export default function TableActionModal({
   onEditOrder,
   onSplitBill,
   onTransferTable,
+  onMoveTable,
   onPrintPreBill,
   waiters = [],
+  availableTables = [],
 }) {
   const [isLoading, setIsLoading] = useState(false)
-  const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel', 'transfer'
+  const [action, setAction] = useState(null) // 'occupy', 'release', 'reserve', 'cancel', 'transfer', 'move'
 
   // Form states
   const [selectedWaiter, setSelectedWaiter] = useState('')
+  const [selectedDestinationTable, setSelectedDestinationTable] = useState('')
   const [reservationTime, setReservationTime] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -35,6 +38,7 @@ export default function TableActionModal({
   const handleClose = () => {
     setAction(null)
     setSelectedWaiter('')
+    setSelectedDestinationTable('')
     setReservationTime('')
     setCustomerName('')
     setCustomerPhone('')
@@ -120,6 +124,24 @@ export default function TableActionModal({
       handleClose()
     } catch (error) {
       console.error('Error al transferir mesa:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleMove = async () => {
+    if (!selectedDestinationTable) {
+      alert('Por favor selecciona una mesa destino')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const destTable = availableTables.find(t => t.id === selectedDestinationTable)
+      await onMoveTable(table.id, destTable.id, destTable.number)
+      handleClose()
+    } catch (error) {
+      console.error('Error al mover mesa:', error)
     } finally {
       setIsLoading(false)
     }
@@ -270,9 +292,18 @@ export default function TableActionModal({
                     className="flex items-center justify-center gap-2"
                   >
                     <UserCheck className="w-5 h-5" />
-                    Transferir Mesa
+                    Transferir Mozo
                   </Button>
                 </div>
+
+                <Button
+                  onClick={() => setAction('move')}
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  <ArrowRightLeft className="w-5 h-5" />
+                  Cambiar Mesa
+                </Button>
 
                 <Button
                   onClick={() => setAction('release')}
@@ -442,6 +473,68 @@ export default function TableActionModal({
                 <>
                   <UserCheck className="w-4 h-4 mr-2" />
                   Transferir Mesa
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    // Formulario para mover mesa
+    if (action === 'move') {
+      return (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              Vas a mover la orden de la <strong>Mesa {table.number}</strong> a otra mesa disponible.
+            </p>
+            <p className="text-xs text-blue-600 mt-1">
+              La orden, el mozo y el consumo se moverán a la nueva mesa.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Seleccionar Mesa Destino *
+            </label>
+            <Select
+              value={selectedDestinationTable}
+              onChange={(e) => setSelectedDestinationTable(e.target.value)}
+              required
+            >
+              <option value="">-- Seleccionar mesa --</option>
+              {availableTables.map((t) => (
+                <option key={t.id} value={t.id}>
+                  Mesa {t.number} - {t.zone} ({t.capacity} personas)
+                </option>
+              ))}
+            </Select>
+            {availableTables.length === 0 && (
+              <p className="text-sm text-amber-600 mt-2">
+                No hay mesas disponibles para mover la orden.
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => setAction(null)} className="flex-1">
+              Atrás
+            </Button>
+            <Button
+              onClick={handleMove}
+              disabled={isLoading || !selectedDestinationTable}
+              className="flex-1 bg-primary-600 hover:bg-primary-700"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Moviendo...
+                </>
+              ) : (
+                <>
+                  <ArrowRightLeft className="w-4 h-4 mr-2" />
+                  Cambiar Mesa
                 </>
               )}
             </Button>
