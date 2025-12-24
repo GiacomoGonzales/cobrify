@@ -1722,6 +1722,7 @@ export default function Settings() {
                         { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
                       ].map((item) => (
                         <label
@@ -1765,6 +1766,7 @@ export default function Settings() {
                         { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                       ].map((item) => (
                         <label
                           key={item.id}
@@ -1806,6 +1808,7 @@ export default function Settings() {
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
                       ].map((item) => (
                         <label
