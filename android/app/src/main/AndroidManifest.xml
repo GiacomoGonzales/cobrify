@@ -37,6 +37,16 @@
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/colorPrimary"
         />
+
+        <!-- Notification Listener Service para detectar notificaciones de Yape/Plin -->
+        <service
+            android:name=".plugins.NotificationService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 
     <!-- Permissions -->

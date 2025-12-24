@@ -44,6 +44,7 @@ import ResellerSettings from './pages/reseller/ResellerSettings'
 import Users from './pages/Users'
 import BusinessManagement from './pages/BusinessManagement'
 import GetMyUID from './pages/GetMyUID'
+import NotificationTest from './pages/NotificationTest'
 import Quotations from './pages/Quotations'
 import CreateQuotation from './pages/CreateQuotation'
 import StockMovements from './pages/StockMovements'
@@ -109,6 +110,9 @@ function App() {
 
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />
+
+            {/* Página de prueba - Detector de notificaciones Yape (solo para testing) */}
+            <Route path="/test-notifications" element={<NotificationTest />} />
 
             {/* Rutas de demo (sin autenticación, con datos de ejemplo) */}
             <Route path="/demo" element={<Demo />} />
