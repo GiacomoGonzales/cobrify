@@ -1212,7 +1212,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ========== QR Y VALIDACIÓN SUNAT ==========
 
-  footerY = totalsStartY + totalsRowHeight * 3 + 15
+  // Ajustar posición Y después de los totales (4 filas si hay descuento, 3 si no)
+  footerY = totalsStartY + totalsRowHeight * totalsSectionRows + 15
 
   // Verificar si hay cuotas para mostrar
   const hasCuotas = invoice.documentType === 'factura' &&
