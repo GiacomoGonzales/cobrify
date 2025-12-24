@@ -22,6 +22,7 @@ import {
   Building2,
   Landmark,
   Receipt,
+  TrendingUp,
   // Iconos para modo restaurante
   UtensilsCrossed,
   Grid3x3,
@@ -205,6 +206,13 @@ function Sidebar() {
       // Ahora controlado por el usuario en Preferencias (no requiresFeature)
     },
     {
+      path: '/flujo-caja',
+      icon: TrendingUp,
+      label: 'Flujo de Caja',
+      pageId: 'reports',
+      menuId: 'cash-flow',
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -338,6 +346,13 @@ function Sidebar() {
       menuId: 'expenses',
     },
     {
+      path: '/flujo-caja',
+      icon: TrendingUp,
+      label: 'Flujo de Caja',
+      pageId: 'reports',
+      menuId: 'cash-flow',
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -447,6 +462,13 @@ function Sidebar() {
       label: 'Gastos',
       pageId: 'expenses',
       menuId: 'expenses',
+    },
+    {
+      path: '/flujo-caja',
+      icon: TrendingUp,
+      label: 'Flujo de Caja',
+      pageId: 'reports',
+      menuId: 'cash-flow',
     },
     {
       path: '/configuracion',

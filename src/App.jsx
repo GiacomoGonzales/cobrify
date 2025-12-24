@@ -68,6 +68,7 @@ import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
 import Loans from './pages/Loans'
+import CashFlow from './pages/CashFlow'
 // Pharmacy pages
 import Laboratories from './pages/Laboratories'
 import ExpiryAlerts from './pages/ExpiryAlerts'
@@ -139,6 +140,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
               {/* Rutas de modo restaurante en demo */}
               <Route path="mesas" element={<Tables />} />
@@ -172,6 +174,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="ingredientes" element={<Ingredients />} />
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
@@ -210,6 +213,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />

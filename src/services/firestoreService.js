@@ -1150,6 +1150,108 @@ export const getCashMovements = async (userId, sessionId) => {
 }
 
 /**
+ * Obtener todos los movimientos de caja (para Flujo de Caja)
+ */
+export const getAllCashMovements = async (userId) => {
+  try {
+    const snapshot = await getDocs(
+      collection(db, 'businesses', userId, 'cashMovements')
+    )
+
+    const movements = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0)
+        const dateB = b.createdAt?.toDate?.() || new Date(0)
+        return dateB - dateA
+      })
+
+    return { success: true, data: movements }
+  } catch (error) {
+    console.error('Error al obtener todos los movimientos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// ==================== MOVIMIENTOS FINANCIEROS (Flujo de Caja) ====================
+
+/**
+ * Crear un movimiento financiero (para Flujo de Caja)
+ */
+export const createFinancialMovement = async (userId, movementData) => {
+  try {
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'financialMovements'), {
+      ...movementData,
+      createdAt: serverTimestamp(),
+      createdBy: userId,
+    })
+    return { success: true, id: docRef.id }
+  } catch (error) {
+    console.error('Error al crear movimiento financiero:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener todos los movimientos financieros
+ */
+export const getFinancialMovements = async (userId) => {
+  try {
+    const snapshot = await getDocs(
+      collection(db, 'businesses', userId, 'financialMovements')
+    )
+
+    const movements = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .sort((a, b) => {
+        const dateA = a.date?.toDate?.() || a.createdAt?.toDate?.() || new Date(0)
+        const dateB = b.date?.toDate?.() || b.createdAt?.toDate?.() || new Date(0)
+        return dateB - dateA
+      })
+
+    return { success: true, data: movements }
+  } catch (error) {
+    console.error('Error al obtener movimientos financieros:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar un movimiento financiero
+ */
+export const updateFinancialMovement = async (userId, movementId, movementData) => {
+  try {
+    await updateDoc(doc(db, 'businesses', userId, 'financialMovements', movementId), {
+      ...movementData,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar movimiento financiero:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Eliminar un movimiento financiero
+ */
+export const deleteFinancialMovement = async (userId, movementId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', userId, 'financialMovements', movementId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar movimiento financiero:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Actualizar un movimiento de caja
  */
 export const updateCashMovement = async (userId, movementId, movementData) => {
