@@ -1090,11 +1090,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // --- TOTALES (derecha) con borde ---
   const totalsRowHeight = 15
   const totalsStartY = footerY
+  const hasDiscount = (invoice.discount || 0) > 0
+  const totalsSectionRows = hasDiscount ? 4 : 3
 
   // Borde exterior de totales
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(0.5)
-  doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * 3 + 6)
+  doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalsSectionRows + 6)
 
   // Fila 1: OP. GRAVADA
   doc.setFillColor(250, 250, 250)
@@ -1108,7 +1110,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('S/ ' + (invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
   footerY += totalsRowHeight
 
-  // Fila 2: IGV
+  // Fila 2: DESCUENTO (solo si hay descuento)
+  if (hasDiscount) {
+    doc.setFillColor(255, 245, 245)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.setTextColor(180, 0, 0)
+    doc.text('DESCUENTO', totalsX + 5, footerY + 10)
+    doc.text('- S/ ' + (invoice.discount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.setTextColor(...BLACK)
+    footerY += totalsRowHeight
+  }
+
+  // Fila: IGV
   doc.setFillColor(255, 255, 255)
   doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
   doc.setDrawColor(200, 200, 200)
@@ -1117,7 +1132,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
   footerY += totalsRowHeight
 
-  // Fila 3: TOTAL (fondo oscuro)
+  // Fila: TOTAL (fondo oscuro)
   doc.setFillColor(...ACCENT_COLOR)
   doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
   doc.setTextColor(255, 255, 255)
