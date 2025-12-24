@@ -948,7 +948,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const QR_BOX_HEIGHT = 75
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
   const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0
-  const TOTALS_SECTION_HEIGHT = 55
+  const HAS_DISCOUNT = (invoice.discount || 0) > 0
+  const TOTALS_SECTION_HEIGHT = HAS_DISCOUNT ? 70 : 55 // 15px extra si hay descuento
   const SON_SECTION_HEIGHT = 22
 
   // Posición Y donde termina el área de productos (empieza el pie fijo)
@@ -1090,8 +1091,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // --- TOTALES (derecha) con borde ---
   const totalsRowHeight = 15
   const totalsStartY = footerY
-  const hasDiscount = (invoice.discount || 0) > 0
-  const totalsSectionRows = hasDiscount ? 4 : 3
+  const totalsSectionRows = HAS_DISCOUNT ? 4 : 3
 
   // Borde exterior de totales
   doc.setDrawColor(...BLACK)
@@ -1111,7 +1111,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   footerY += totalsRowHeight
 
   // Fila 2: DESCUENTO (solo si hay descuento)
-  if (hasDiscount) {
+  if (HAS_DISCOUNT) {
     doc.setFillColor(255, 245, 245)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
     doc.setDrawColor(200, 200, 200)
