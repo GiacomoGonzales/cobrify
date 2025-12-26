@@ -5,6 +5,7 @@ import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscri
 import { notifyPaymentReceived } from '@/services/notificationService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   Users,
   Search,
@@ -69,6 +70,7 @@ const STATUS_LABELS = {
 
 export default function AdminUsers() {
   const toast = useToast()
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -152,6 +154,12 @@ export default function AdminUsers() {
   const [showEditLimitModal, setShowEditLimitModal] = useState(false)
   const [editingMaxBranches, setEditingMaxBranches] = useState(1)
   const [savingMaxBranches, setSavingMaxBranches] = useState(false)
+
+  // Estados para eliminar usuario
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [deletingUser, setDeletingUser] = useState(false)
+  const [deleteWithData, setDeleteWithData] = useState(false)
 
   useEffect(() => {
     loadUsers()
@@ -368,6 +376,41 @@ export default function AdminUsers() {
       setActionMenuUser(null)
     } catch (error) {
       console.error('Error updating user:', error)
+    }
+  }
+
+  // Eliminar usuario completamente
+  async function handleDeleteUser() {
+    if (!userToDelete || !currentUser) return
+
+    setDeletingUser(true)
+    try {
+      const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/deleteUser', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminUid: currentUser.uid,
+          userIdToDelete: userToDelete.id,
+          deleteData: deleteWithData
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success(`Usuario eliminado exitosamente`)
+        setShowDeleteModal(false)
+        setUserToDelete(null)
+        setDeleteWithData(false)
+        loadUsers() // Recargar la lista
+      } else {
+        toast.error(result.error || 'Error al eliminar usuario')
+      }
+    } catch (error) {
+      console.error('Error eliminando usuario:', error)
+      toast.error('Error al eliminar usuario')
+    } finally {
+      setDeletingUser(false)
     }
   }
 
@@ -1395,6 +1438,18 @@ export default function AdminUsers() {
                                 <CheckCircle className="w-4 h-4" /> Reactivar
                               </button>
                             )}
+                            <div className="border-t border-gray-100 my-1" />
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                setUserToDelete(user)
+                                setShowDeleteModal(true)
+                                setActionMenuUser(null)
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <Trash2 className="w-4 h-4" /> Eliminar cuenta
+                            </button>
                           </div>
                         )}
                       </div>
@@ -2587,6 +2642,91 @@ export default function AdminUsers() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && userToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Eliminar Usuario</h2>
+                  <p className="text-sm text-gray-500">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Negocio:</span> {userToDelete.businessName}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Email:</span> {userToDelete.email}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">RUC:</span> {userToDelete.ruc || 'N/A'}
+                </p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  <strong>Advertencia:</strong> Se eliminará la cuenta de Firebase Auth y el documento del usuario.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteWithData}
+                  onChange={(e) => setDeleteWithData(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Eliminar también los datos</p>
+                  <p className="text-xs text-gray-500">
+                    Incluye facturas, productos, clientes, almacenes y demás información del negocio
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setUserToDelete(null)
+                  setDeleteWithData(false)
+                }}
+                disabled={deletingUser}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deletingUser}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {deletingUser ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar Usuario
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

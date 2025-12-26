@@ -2511,6 +2511,151 @@ export const createReseller = onRequest(
 )
 
 // ========================================
+// ELIMINAR USUARIO - Admin Only
+// ========================================
+
+/**
+ * Cloud Function: Eliminar usuario completamente
+ * Solo puede ser llamada por administradores
+ * Elimina: Auth, documento de usuario, y subcollecciones
+ */
+export const deleteUser = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    invoker: 'public',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    // Handle preflight
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      const { adminUid, userIdToDelete, deleteData } = req.body
+
+      if (!adminUid || !userIdToDelete) {
+        res.status(400).json({ success: false, error: 'Faltan parámetros requeridos' })
+        return
+      }
+
+      // Verificar que quien llama es admin
+      const adminDoc = await db.collection('admins').doc(adminUid).get()
+      if (!adminDoc.exists) {
+        res.status(403).json({ success: false, error: 'No autorizado - Solo administradores' })
+        return
+      }
+
+      // No permitir que un admin se elimine a sí mismo
+      if (adminUid === userIdToDelete) {
+        res.status(400).json({ success: false, error: 'No puedes eliminarte a ti mismo' })
+        return
+      }
+
+      console.log(`🗑️ Admin ${adminUid} eliminando usuario ${userIdToDelete}`)
+
+      const deletedItems = []
+
+      // 1. Eliminar de Firebase Authentication
+      try {
+        await auth.deleteUser(userIdToDelete)
+        deletedItems.push('Firebase Auth')
+        console.log(`✅ Usuario eliminado de Firebase Auth`)
+      } catch (authError) {
+        // Si el usuario no existe en Auth, continuar
+        if (authError.code !== 'auth/user-not-found') {
+          console.error(`⚠️ Error eliminando de Auth: ${authError.message}`)
+        } else {
+          console.log(`ℹ️ Usuario no encontrado en Firebase Auth (ya eliminado o nunca existió)`)
+        }
+      }
+
+      // 2. Eliminar documento del usuario
+      const userRef = db.collection('users').doc(userIdToDelete)
+      const userDoc = await userRef.get()
+
+      if (userDoc.exists) {
+        // Si deleteData es true, eliminar también subcollecciones
+        if (deleteData) {
+          const subcollections = ['invoices', 'products', 'customers', 'warehouses', 'branches', 'expenses', 'purchases', 'quotations', 'dispatchGuides', 'cashMovements']
+
+          for (const subcollection of subcollections) {
+            try {
+              const subRef = userRef.collection(subcollection)
+              const subDocs = await subRef.limit(500).get()
+
+              if (!subDocs.empty) {
+                const batch = db.batch()
+                subDocs.docs.forEach(doc => batch.delete(doc.ref))
+                await batch.commit()
+                deletedItems.push(`${subcollection} (${subDocs.size} docs)`)
+                console.log(`✅ Eliminados ${subDocs.size} documentos de ${subcollection}`)
+              }
+            } catch (subError) {
+              console.error(`⚠️ Error eliminando ${subcollection}: ${subError.message}`)
+            }
+          }
+        }
+
+        // Eliminar el documento principal del usuario
+        await userRef.delete()
+        deletedItems.push('Documento de usuario')
+        console.log(`✅ Documento de usuario eliminado`)
+      }
+
+      // 3. Eliminar suscripción si existe
+      try {
+        const subscriptionRef = db.collection('subscriptions').doc(userIdToDelete)
+        const subscriptionDoc = await subscriptionRef.get()
+        if (subscriptionDoc.exists) {
+          await subscriptionRef.delete()
+          deletedItems.push('Suscripción')
+          console.log(`✅ Suscripción eliminada`)
+        }
+      } catch (subError) {
+        console.error(`⚠️ Error eliminando suscripción: ${subError.message}`)
+      }
+
+      // 4. Eliminar de resellers si existe
+      try {
+        const resellerRef = db.collection('resellers').doc(userIdToDelete)
+        const resellerDoc = await resellerRef.get()
+        if (resellerDoc.exists) {
+          await resellerRef.delete()
+          deletedItems.push('Reseller')
+          console.log(`✅ Reseller eliminado`)
+        }
+      } catch (resellerError) {
+        console.error(`⚠️ Error eliminando reseller: ${resellerError.message}`)
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Usuario eliminado exitosamente`,
+        deletedItems
+      })
+
+    } catch (error) {
+      console.error('❌ Error eliminando usuario:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+// ========================================
 // GUÍAS DE REMISIÓN - Cloud Functions
 // ========================================
 
