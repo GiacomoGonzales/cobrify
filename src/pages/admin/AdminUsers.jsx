@@ -50,6 +50,7 @@ import {
   updateBranch,
   deleteBranch
 } from '@/services/branchService'
+import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/warehouseService'
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-800',
@@ -755,11 +756,22 @@ export default function AdminUsers() {
         }
 
         // Crear nueva sucursal
-        await createBranch(branchesUserToEdit.id, {
+        const branchResult = await createBranch(branchesUserToEdit.id, {
           ...branchForm,
           createdBy: 'admin'
         })
-        toast.success('Sucursal creada')
+
+        // Crear almacén por defecto para la nueva sucursal
+        if (branchResult.success && branchResult.id) {
+          await createWarehouse(branchesUserToEdit.id, {
+            name: branchForm.name,
+            address: branchForm.address || '',
+            location: branchForm.location || '',
+            branchId: branchResult.id,
+            isDefault: true
+          })
+        }
+        toast.success('Sucursal creada con almacén por defecto')
       }
 
       // Recargar sucursales
@@ -802,11 +814,21 @@ export default function AdminUsers() {
   // Eliminar sucursal
   async function handleDeleteBranch(branchId) {
     if (!branchesUserToEdit) return
-    if (!confirm('¿Estás seguro de desactivar esta sucursal?')) return
+    if (!confirm('¿Estás seguro de eliminar esta sucursal?\n\nTambién se eliminarán los almacenes asociados a esta sucursal.')) return
 
     try {
+      // Primero, eliminar los almacenes asociados a esta sucursal
+      const warehousesResult = await getWarehouses(branchesUserToEdit.id)
+      if (warehousesResult.success) {
+        const branchWarehouses = warehousesResult.data.filter(w => w.branchId === branchId)
+        for (const warehouse of branchWarehouses) {
+          await deleteWarehouse(branchesUserToEdit.id, warehouse.id)
+        }
+      }
+
+      // Luego eliminar la sucursal
       await deleteBranch(branchesUserToEdit.id, branchId)
-      toast.success('Sucursal desactivada')
+      toast.success('Sucursal y almacenes eliminados')
 
       // Recargar sucursales
       const result = await getBranches(branchesUserToEdit.id)
@@ -815,7 +837,7 @@ export default function AdminUsers() {
       }
     } catch (error) {
       console.error('Error deleting branch:', error)
-      toast.error('Error al desactivar sucursal')
+      toast.error('Error al eliminar sucursal')
     }
   }
 
@@ -2201,7 +2223,7 @@ export default function AdminUsers() {
                     className="ml-2 px-2.5 py-0.5 bg-cyan-100 text-cyan-700 text-xs font-medium rounded-full hover:bg-cyan-200 transition-colors flex items-center gap-1"
                     title="Editar límite de sucursales"
                   >
-                    {branches.filter(b => b.isActive !== false).length}/
+                    {branches.filter(b => b.isActive !== false).length + 1}/
                     {branchesUserToEdit.limits?.maxBranches === -1 ? '∞' : (branchesUserToEdit.limits?.maxBranches ?? 1)}
                     <Edit2 className="w-3 h-3" />
                   </button>
@@ -2285,17 +2307,17 @@ export default function AdminUsers() {
                             <button
                               onClick={() => handleEditBranch(branch)}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                              title="Editar sucursal"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            {!branch.isDefault && (
-                              <button
-                                onClick={() => handleDeleteBranch(branch.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleDeleteBranch(branch.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Eliminar sucursal"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       </div>

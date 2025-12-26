@@ -248,6 +248,8 @@ service cloud.firestore {
 
       // Subcollection: Warehouses (Almacenes)
       match /warehouses/{warehouseId} {
+        // Admins pueden leer/escribir cualquier almacén
+        allow read, write: if isAdmin();
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }

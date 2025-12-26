@@ -1,20 +1,44 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
-import { Upload, Download, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { getActiveBranches } from '@/services/branchService'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport }) {
-  const { businessMode } = useAppContext()
+  const { businessMode, getBusinessId } = useAppContext()
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [previewData, setPreviewData] = useState([])
   const [errors, setErrors] = useState([])
   const [success, setSuccess] = useState(0)
+  const [branches, setBranches] = useState([])
+  const [selectedBranchId, setSelectedBranchId] = useState('') // '' = Sucursal Principal
+
+  // Cargar sucursales al abrir el modal
+  useEffect(() => {
+    if (isOpen) {
+      loadBranches()
+    }
+  }, [isOpen])
+
+  const loadBranches = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+
+      const result = await getActiveBranches(businessId)
+      if (result.success) {
+        setBranches(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0]
@@ -218,7 +242,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     setSuccess(0)
 
     try {
-      const result = await onImport(previewData)
+      // Pasar branchId seleccionado (null para Sucursal Principal)
+      const branchId = selectedBranchId || null
+      const result = await onImport(previewData, branchId)
       setSuccess(result.success || previewData.length)
 
       if (result.errors && result.errors.length > 0) {
@@ -245,6 +271,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     setPreviewData([])
     setErrors([])
     setSuccess(0)
+    setSelectedBranchId('')
   }
 
   const handleClose = () => {
@@ -480,6 +507,31 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             <X className="w-6 h-6" />
           </button>
         </div>
+
+        {/* Selector de Sucursal */}
+        {branches.length > 0 && (
+          <div className="mb-6 p-4 bg-cyan-50 border border-cyan-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Store className="w-5 h-5 text-cyan-600" />
+              <label className="text-sm font-medium text-gray-900">
+                Sucursal destino para los productos
+              </label>
+            </div>
+            <select
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm"
+            >
+              <option value="">Sucursal Principal</option>
+              {branches.map(branch => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-2">
+              Los almacenes se crearán/asociarán a esta sucursal. Si el producto ya existe, se actualizará el stock en el almacén de esta sucursal.
+            </p>
+          </div>
+        )}
 
         {/* Descargar plantilla */}
         <div className="mb-6">

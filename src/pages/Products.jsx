@@ -1057,7 +1057,7 @@ export default function Products() {
     }
   }
 
-  const handleImportProducts = async (productsToImport) => {
+  const handleImportProducts = async (productsToImport, targetBranchId = null) => {
     if (!user?.uid) return { success: 0, errors: ['Usuario no autenticado'] }
 
     const errors = []
@@ -1068,9 +1068,15 @@ export default function Products() {
       const warehousesResult = await getWarehouses(getBusinessId())
       let existingWarehouses = warehousesResult.success ? warehousesResult.data : []
 
-      // Crear un mapa de almacenes por nombre para búsqueda rápida
+      // Filtrar almacenes por sucursal seleccionada
+      const branchWarehouses = existingWarehouses.filter(wh => {
+        const whBranchId = wh.branchId || null
+        return whBranchId === targetBranchId
+      })
+
+      // Crear un mapa de almacenes por nombre para búsqueda rápida (solo de la sucursal seleccionada)
       const warehouseMap = new Map()
-      existingWarehouses.forEach(wh => {
+      branchWarehouses.forEach(wh => {
         warehouseMap.set(wh.name.toLowerCase().trim(), wh)
       })
 
@@ -1088,15 +1094,16 @@ export default function Products() {
         }
       }
 
-      // Crear almacenes nuevos
+      // Crear almacenes nuevos (asociados a la sucursal seleccionada)
       if (uniqueWarehouseNames.size > 0) {
         for (const warehouseName of uniqueWarehouseNames) {
           const newWarehouse = {
             name: warehouseName,
             location: warehouseName,
             description: `Almacén creado automáticamente durante importación de productos`,
-            isDefault: existingWarehouses.length === 0, // Solo el primero es default si no hay almacenes
-            isActive: true
+            isDefault: branchWarehouses.length === 0, // Solo el primero es default si no hay almacenes en la sucursal
+            isActive: true,
+            branchId: targetBranchId // Asociar a la sucursal seleccionada
           }
 
           const createResult = await createWarehouse(getBusinessId(), newWarehouse)
@@ -1104,6 +1111,7 @@ export default function Products() {
           if (createResult.success) {
             const createdWarehouse = createResult.data
             existingWarehouses.push(createdWarehouse)
+            branchWarehouses.push(createdWarehouse)
             warehouseMap.set(warehouseName.toLowerCase().trim(), createdWarehouse)
             console.log('✅ Almacén creado:', createdWarehouse)
           } else {
@@ -1116,22 +1124,27 @@ export default function Products() {
         }
       }
 
-      // Obtener almacén predeterminado como fallback
+      // Obtener almacén predeterminado como fallback (de la sucursal seleccionada)
       let defaultWarehouse = null
-      const defaultWarehouseResult = await getDefaultWarehouse(getBusinessId())
 
-      if (defaultWarehouseResult.success && defaultWarehouseResult.data) {
-        defaultWarehouse = defaultWarehouseResult.data
-      } else if (existingWarehouses.length === 0) {
-        // NO HAY ALMACENES - Crear uno automáticamente como fallback
-        console.log('No se encontró ningún almacén, creando almacén principal...')
+      // Buscar almacén default de la sucursal seleccionada
+      defaultWarehouse = branchWarehouses.find(wh => wh.isDefault) || branchWarehouses[0]
+
+      if (!defaultWarehouse && branchWarehouses.length === 0) {
+        // NO HAY ALMACENES en esta sucursal - Crear uno automáticamente como fallback
+        console.log('No se encontró ningún almacén en la sucursal, creando almacén...')
+
+        const branchName = targetBranchId
+          ? (await getActiveBranches(getBusinessId())).data?.find(b => b.id === targetBranchId)?.name || 'Sucursal'
+          : 'Principal'
 
         const newWarehouse = {
-          name: 'Almacén Principal',
-          location: 'Principal',
+          name: `Almacén ${branchName}`,
+          location: branchName,
           description: 'Almacén creado automáticamente durante importación de productos',
           isDefault: true,
-          isActive: true
+          isActive: true,
+          branchId: targetBranchId // Asociar a la sucursal seleccionada
         }
 
         const createResult = await createWarehouse(getBusinessId(), newWarehouse)
@@ -1139,8 +1152,9 @@ export default function Products() {
         if (createResult.success) {
           defaultWarehouse = createResult.data
           existingWarehouses.push(defaultWarehouse)
-          warehouseMap.set('almacén principal', defaultWarehouse)
-          toast.info('Almacén principal creado automáticamente')
+          branchWarehouses.push(defaultWarehouse)
+          warehouseMap.set(newWarehouse.name.toLowerCase(), defaultWarehouse)
+          toast.info(`Almacén "${newWarehouse.name}" creado automáticamente`)
           console.log('✅ Almacén creado:', defaultWarehouse)
         } else {
           console.error('❌ Error al crear almacén:', createResult.error)
@@ -1184,7 +1198,20 @@ export default function Products() {
         }
       }
 
+      // Obtener productos existentes para verificar duplicados
+      const existingProductsResult = await getProducts(getBusinessId())
+      const existingProducts = existingProductsResult.success ? existingProductsResult.data : []
+
+      // Crear mapas para búsqueda rápida por SKU y código de barras
+      const productBySku = new Map()
+      const productByCode = new Map()
+      existingProducts.forEach(p => {
+        if (p.sku) productBySku.set(p.sku.toLowerCase().trim(), p)
+        if (p.code) productByCode.set(p.code.toLowerCase().trim(), p)
+      })
+
       // Importar productos
+      let updatedCount = 0
       for (let i = 0; i < productsToImport.length; i++) {
         const product = productsToImport[i]
 
@@ -1198,47 +1225,104 @@ export default function Products() {
             }
           }
 
-          // Asignar stock al almacén específico o al predeterminado
-          if (product.trackStock) {
-            // Producto CON control de stock - asignar a almacén (incluso si stock es 0)
-            const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
-            let targetWarehouse = null
-
-            // Intentar encontrar el almacén específico mencionado en el producto
-            if (product.warehouse && product.warehouse.trim() !== '') {
-              const warehouseKey = product.warehouse.trim().toLowerCase()
-              targetWarehouse = warehouseMap.get(warehouseKey)
-            }
-
-            // Si no se encontró almacén específico, usar el predeterminado
-            if (!targetWarehouse && defaultWarehouse) {
-              targetWarehouse = defaultWarehouse
-            }
-
-            // Asignar stock al almacén encontrado
-            if (targetWarehouse) {
-              product.warehouseStocks = [{
-                warehouseId: targetWarehouse.id,
-                stock: stockValue,
-                minStock: 0
-              }]
-              product.stock = stockValue
-            } else {
-              product.warehouseStocks = []
-              product.stock = stockValue
-            }
-          } else {
-            // Producto SIN control de stock - warehouseStocks vacío y stock null
-            product.warehouseStocks = []
-            product.stock = null
+          // Determinar el almacén destino
+          let targetWarehouse = null
+          if (product.warehouse && product.warehouse.trim() !== '') {
+            const warehouseKey = product.warehouse.trim().toLowerCase()
+            targetWarehouse = warehouseMap.get(warehouseKey)
+          }
+          if (!targetWarehouse && defaultWarehouse) {
+            targetWarehouse = defaultWarehouse
           }
 
-          const result = await createProduct(getBusinessId(), product)
+          // Buscar si el producto ya existe (por SKU o código de barras)
+          let existingProduct = null
+          if (product.sku) {
+            existingProduct = productBySku.get(product.sku.toLowerCase().trim())
+          }
+          if (!existingProduct && product.code) {
+            existingProduct = productByCode.get(product.code.toLowerCase().trim())
+          }
 
-          if (result.success) {
-            successCount++
+          if (existingProduct) {
+            // PRODUCTO EXISTE - Solo agregar/actualizar stock en el almacén de la sucursal
+            if (product.trackStock && targetWarehouse) {
+              const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
+              const currentWarehouseStocks = existingProduct.warehouseStocks || []
+
+              // Buscar si ya tiene stock en este almacén
+              const existingStockIndex = currentWarehouseStocks.findIndex(ws => ws.warehouseId === targetWarehouse.id)
+
+              let newWarehouseStocks
+              if (existingStockIndex >= 0) {
+                // Actualizar stock existente en este almacén
+                newWarehouseStocks = [...currentWarehouseStocks]
+                newWarehouseStocks[existingStockIndex] = {
+                  ...newWarehouseStocks[existingStockIndex],
+                  stock: stockValue
+                }
+              } else {
+                // Agregar nuevo almacén al producto
+                newWarehouseStocks = [
+                  ...currentWarehouseStocks,
+                  {
+                    warehouseId: targetWarehouse.id,
+                    stock: stockValue,
+                    minStock: 0
+                  }
+                ]
+              }
+
+              // Calcular stock total
+              const totalStock = newWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+              const updateResult = await updateProduct(getBusinessId(), existingProduct.id, {
+                warehouseStocks: newWarehouseStocks,
+                stock: totalStock
+              })
+
+              if (updateResult.success) {
+                updatedCount++
+                // Actualizar el producto en el mapa para siguientes iteraciones
+                existingProduct.warehouseStocks = newWarehouseStocks
+                existingProduct.stock = totalStock
+              } else {
+                errors.push(`Producto "${product.name}": ${updateResult.error}`)
+              }
+            } else {
+              // Producto existe pero no tiene control de stock o no hay almacén destino
+              updatedCount++ // Contarlo como procesado
+            }
           } else {
-            errors.push(`Producto "${product.name}": ${result.error}`)
+            // PRODUCTO NO EXISTE - Crear nuevo
+            if (product.trackStock) {
+              const stockValue = (product.stock !== null && product.stock !== undefined) ? product.stock : 0
+              if (targetWarehouse) {
+                product.warehouseStocks = [{
+                  warehouseId: targetWarehouse.id,
+                  stock: stockValue,
+                  minStock: 0
+                }]
+                product.stock = stockValue
+              } else {
+                product.warehouseStocks = []
+                product.stock = stockValue
+              }
+            } else {
+              product.warehouseStocks = []
+              product.stock = null
+            }
+
+            const result = await createProduct(getBusinessId(), product)
+
+            if (result.success) {
+              successCount++
+              // Agregar al mapa para detectar duplicados en el mismo archivo
+              if (product.sku) productBySku.set(product.sku.toLowerCase().trim(), { ...product, id: result.id })
+              if (product.code) productByCode.set(product.code.toLowerCase().trim(), { ...product, id: result.id })
+            } else {
+              errors.push(`Producto "${product.name}": ${result.error}`)
+            }
           }
         } catch (error) {
           errors.push(`Producto "${product.name}": ${error.message}`)
@@ -1248,15 +1332,20 @@ export default function Products() {
       // Recargar productos después de la importación
       await loadProducts()
 
-      if (successCount > 0) {
-        toast.success(`${successCount} producto(s) importado(s) exitosamente`)
+      // Mostrar mensajes de resultado
+      if (successCount > 0 && updatedCount > 0) {
+        toast.success(`${successCount} producto(s) creado(s), ${updatedCount} actualizado(s)`)
+      } else if (successCount > 0) {
+        toast.success(`${successCount} producto(s) creado(s) exitosamente`)
+      } else if (updatedCount > 0) {
+        toast.success(`${updatedCount} producto(s) actualizado(s) con nuevo stock`)
       }
 
       if (errors.length > 0) {
-        toast.error(`${errors.length} producto(s) no pudieron ser importados`)
+        toast.error(`${errors.length} producto(s) con errores`)
       }
 
-      return { success: successCount, errors }
+      return { success: successCount + updatedCount, errors }
     } catch (error) {
       console.error('Error en importación:', error)
       return { success: successCount, errors: [...errors, 'Error general en la importación'] }
