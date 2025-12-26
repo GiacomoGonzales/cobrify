@@ -33,7 +33,7 @@ import {
   deleteWarehouse,
   syncAllProductsStock,
 } from '@/services/warehouseService'
-import { getProducts, getAllWarehouseSeries } from '@/services/firestoreService'
+import { getProducts, getAllBranchSeries } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { FileText } from 'lucide-react'
 
@@ -60,7 +60,8 @@ export default function Warehouses() {
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [syncPreview, setSyncPreview] = useState(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
-  const [warehouseSeries, setWarehouseSeries] = useState({})
+  const [branchSeries, setBranchSeries] = useState({})
+  const [globalSeries, setGlobalSeries] = useState({})
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -138,10 +139,11 @@ export default function Warehouses() {
         toast.error(result.error || 'Error al cargar almacenes')
       }
 
-      // Cargar series de almacenes
-      const seriesResult = await getAllWarehouseSeries(getBusinessId())
+      // Cargar series por sucursal y globales
+      const seriesResult = await getAllBranchSeries(getBusinessId())
       if (seriesResult.success) {
-        setWarehouseSeries(seriesResult.data || {})
+        setBranchSeries(seriesResult.data || {})
+        setGlobalSeries(seriesResult.globalSeries || {})
       }
     } catch (error) {
       console.error('Error al cargar almacenes:', error)
@@ -541,7 +543,10 @@ export default function Warehouses() {
               </TableHeader>
               <TableBody>
                 {filteredWarehouses.map((warehouse) => {
-                  const wSeries = warehouseSeries[warehouse.id]
+                  // Buscar series: por sucursal si tiene branchId, o globales si es Sucursal Principal
+                  const wSeries = warehouse.branchId
+                    ? branchSeries[warehouse.branchId]
+                    : globalSeries
                   return (
                     <TableRow key={warehouse.id}>
                       <TableCell>
@@ -563,7 +568,7 @@ export default function Warehouses() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {wSeries ? (
+                        {wSeries && (wSeries.factura || wSeries.boleta) ? (
                           <div className="flex items-center gap-1">
                             <FileText className="w-4 h-4 text-blue-500" />
                             <div className="text-xs">
