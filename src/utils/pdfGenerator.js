@@ -402,7 +402,7 @@ const hexToRgb = (hex) => {
  * Genera un PDF profesional estilo apisunat.com
  * Diseño con pie de página fijo y espacio flexible para productos
  */
-export const generateInvoicePDF = async (invoice, companySettings, download = true, branding = null) => {
+export const generateInvoicePDF = async (invoice, companySettings, download = true, branding = null, branches = []) => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
@@ -548,37 +548,59 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
   const showBusinessName = businessName && businessName !== companyName
 
-  // Construir dirección completa (priorizar: sucursal > almacén > empresa)
-  let fullAddress = ''
-  // Usar dirección de sucursal, luego almacén, luego empresa
-  if (invoice.branchAddress) {
-    fullAddress = invoice.branchAddress
-  } else if (invoice.warehouseAddress) {
-    fullAddress = invoice.warehouseAddress
-  } else if (companySettings?.address) {
-    fullAddress = companySettings.address
-    // Agregar ubicación solo si usamos dirección de empresa
-    if (companySettings?.district || companySettings?.province || companySettings?.department) {
-      const locationParts = [
-        companySettings?.district,
-        companySettings?.province,
-        companySettings?.department
-      ].filter(Boolean)
-      if (locationParts.length > 0) {
-        fullAddress += (fullAddress ? ' - ' : '') + locationParts.join(', ')
+  // Preparar lista de sucursales/direcciones para mostrar
+  // Si hay branches, mostrar todas. Si no, usar la dirección de la empresa
+  let branchLocations = []
+  const activeBranches = branches.filter(b => b.isActive !== false)
+
+  if (activeBranches.length > 0) {
+    // Agregar "Sucursal Principal" (datos de la empresa) si tiene dirección
+    if (companySettings?.address) {
+      let mainAddress = companySettings.address
+      if (companySettings?.district || companySettings?.province || companySettings?.department) {
+        const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+        if (locationParts.length > 0) mainAddress += ' - ' + locationParts.join(', ')
       }
+      branchLocations.push({
+        name: 'Principal',
+        address: mainAddress,
+        phone: companySettings?.phone || ''
+      })
+    }
+    // Agregar sucursales adicionales
+    activeBranches.forEach(branch => {
+      if (branch.address || branch.phone) {
+        branchLocations.push({
+          name: branch.name || 'Sucursal',
+          address: branch.address || '',
+          phone: branch.phone || ''
+        })
+      }
+    })
+  } else {
+    // Sin sucursales, usar dirección de la empresa o del comprobante
+    let fullAddress = ''
+    if (invoice.branchAddress) {
+      fullAddress = invoice.branchAddress
+    } else if (invoice.warehouseAddress) {
+      fullAddress = invoice.warehouseAddress
+    } else if (companySettings?.address) {
+      fullAddress = companySettings.address
+      if (companySettings?.district || companySettings?.province || companySettings?.department) {
+        const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+        if (locationParts.length > 0) fullAddress += ' - ' + locationParts.join(', ')
+      }
+    }
+    const phone = invoice.branchPhone || invoice.warehousePhone || companySettings?.phone || ''
+    if (fullAddress || phone) {
+      branchLocations.push({ name: '', address: fullAddress, phone })
     }
   }
 
-  // Usar teléfono de sucursal, luego almacén, luego empresa
-  const phone = invoice.branchPhone || invoice.warehousePhone || companySettings?.phone || ''
   const email = companySettings?.email || ''
   const website = companySettings?.website || ''
 
   // Calcular contenido y altura para centrar verticalmente
-  let infoLines = []
-
-  // Nombre comercial (título principal)
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   const nameLines = doc.splitTextToSize(companyName, infoColumnWidth - 10)
@@ -586,8 +608,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Contar líneas totales para centrar
   let totalLines = nameLines.length
   if (showBusinessName) totalLines += 1
-  if (fullAddress) totalLines += Math.ceil(fullAddress.length / 50)
-  if (phone || email) totalLines += 1
+  // Líneas para sucursales (cada sucursal = 1 línea)
+  totalLines += branchLocations.length
+  if (email) totalLines += 1
   if (website) totalLines += 1
 
   const lineSpacing = 10
@@ -612,27 +635,27 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     infoY += 10
   }
 
-  // Dirección completa
-  if (fullAddress) {
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...MEDIUM_GRAY)
-    const addrLines = doc.splitTextToSize(fullAddress, infoColumnWidth - 10)
-    addrLines.slice(0, 2).forEach(line => {
-      doc.text(line, infoCenterX, infoY, { align: 'center' })
+  // Mostrar sucursales/direcciones
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...MEDIUM_GRAY)
+  branchLocations.forEach(loc => {
+    let line = ''
+    if (loc.name) line += loc.name + ': '
+    if (loc.address) line += loc.address
+    if (loc.phone) line += (loc.address ? ' - ' : '') + 'Tel: ' + loc.phone
+    if (line) {
+      // Truncar si es muy largo
+      const maxWidth = infoColumnWidth - 10
+      const truncatedLines = doc.splitTextToSize(line, maxWidth)
+      doc.text(truncatedLines[0], infoCenterX, infoY, { align: 'center' })
       infoY += 9
-    })
-  }
+    }
+  })
 
-  // Teléfono y Email en la misma línea
-  if (phone || email) {
-    doc.setFontSize(7)
-    doc.setTextColor(...MEDIUM_GRAY)
-    let contactLine = ''
-    if (phone) contactLine += `Tel: ${phone}`
-    if (phone && email) contactLine += '  |  '
-    if (email) contactLine += `Email: ${email}`
-    doc.text(contactLine, infoCenterX, infoY, { align: 'center' })
+  // Email
+  if (email) {
+    doc.text(`Email: ${email}`, infoCenterX, infoY, { align: 'center' })
     infoY += 9
   }
 
@@ -1414,16 +1437,16 @@ export const generateSimpleInvoicePDF = async (invoice) => {
 /**
  * Exporta el PDF como blob para enviar por WhatsApp u otros usos
  */
-export const getInvoicePDFBlob = async (invoice, companySettings, branding = null) => {
-  const doc = await generateInvoicePDF(invoice, companySettings, false, branding)
+export const getInvoicePDFBlob = async (invoice, companySettings, branding = null, branches = []) => {
+  const doc = await generateInvoicePDF(invoice, companySettings, false, branding, branches)
   return doc.output('blob')
 }
 
 /**
  * Abre el PDF en una nueva pestaña para vista previa (o comparte en móvil)
  */
-export const previewInvoicePDF = async (invoice, companySettings, branding = null) => {
-  const doc = await generateInvoicePDF(invoice, companySettings, false, branding)
+export const previewInvoicePDF = async (invoice, companySettings, branding = null, branches = []) => {
+  const doc = await generateInvoicePDF(invoice, companySettings, false, branding, branches)
   const isNativePlatform = Capacitor.isNativePlatform()
 
   if (isNativePlatform) {

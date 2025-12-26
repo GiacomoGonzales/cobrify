@@ -639,6 +639,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     }
 
     // Dirección (company-info) - CENTRADO - Priorizar: sucursal > almacén > empresa
+    console.log('📍 Datos de dirección para ticket:', {
+      branchAddress: invoice.branchAddress,
+      branchPhone: invoice.branchPhone,
+      warehouseAddress: invoice.warehouseAddress,
+      warehousePhone: invoice.warehousePhone,
+      businessAddress: business.address,
+      businessPhone: business.phone
+    });
     const displayAddress = invoice.branchAddress || invoice.warehouseAddress || business.address || 'Direccion no configurada';
     printer = printer.align('center').text(convertSpanishText(displayAddress + '\n'));
 

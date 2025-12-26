@@ -3884,7 +3884,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <Button
                       onClick={() => {
                         try {
-                          generateInvoicePDF(lastInvoiceData, companySettings, true, branding)
+                          generateInvoicePDF(lastInvoiceData, companySettings, true, branding, branches)
                         } catch (error) {
                           console.error('Error al generar PDF:', error)
                           toast.error('Error al generar el PDF')

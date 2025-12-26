@@ -1667,7 +1667,7 @@ Gracias por tu preferencia.`
                     onClick={async () => {
                       setOpenMenuId(null)
                       try {
-                        const result = await generateInvoicePDF(invoice, companySettings, true, branding)
+                        const result = await generateInvoicePDF(invoice, companySettings, true, branding, branches)
                         if (result?.fileName) {
                           toast.success(`PDF guardado: ${result.fileName}`)
                         } else {
@@ -2225,7 +2225,7 @@ Gracias por tu preferencia.`
                     return
                   }
                   try {
-                    const result = await generateInvoicePDF(viewingInvoice, companySettings, true, branding)
+                    const result = await generateInvoicePDF(viewingInvoice, companySettings, true, branding, branches)
                     if (result?.fileName) {
                       toast.success(`PDF guardado: ${result.fileName}`)
                     } else {
