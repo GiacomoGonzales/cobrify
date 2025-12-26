@@ -16,6 +16,7 @@ import {
   Eye,
   Ban,
   CheckCircle,
+  Check,
   Clock,
   AlertTriangle,
   Mail,
@@ -135,6 +136,9 @@ export default function AdminUsers() {
   const [branches, setBranches] = useState([])
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [savingBranch, setSavingBranch] = useState(false)
+  const [mainBranchName, setMainBranchName] = useState('Sucursal Principal')
+  const [editingMainBranch, setEditingMainBranch] = useState(false)
+  const [savingMainBranch, setSavingMainBranch] = useState(false)
   const [editingBranch, setEditingBranch] = useState(null)
   const [branchForm, setBranchForm] = useState({
     name: '',
@@ -708,6 +712,8 @@ export default function AdminUsers() {
     setLoadingBranches(true)
     setBranches([])
     setEditingBranch(null)
+    setEditingMainBranch(false)
+    setMainBranchName(user.mainBranchName || 'Sucursal Principal')
     setBranchForm({
       name: '',
       address: '',
@@ -727,6 +733,39 @@ export default function AdminUsers() {
       toast.error('Error al cargar sucursales')
     } finally {
       setLoadingBranches(false)
+    }
+  }
+
+  // Guardar nombre de sucursal principal
+  async function handleSaveMainBranchName() {
+    if (!branchesUserToEdit) return
+    if (!mainBranchName.trim()) {
+      toast.error('El nombre de la sucursal es requerido')
+      return
+    }
+
+    setSavingMainBranch(true)
+    try {
+      const userRef = doc(db, 'users', branchesUserToEdit.id)
+      await updateDoc(userRef, {
+        mainBranchName: mainBranchName.trim()
+      })
+
+      // Actualizar el usuario en la lista local
+      setUsers(users.map(u =>
+        u.id === branchesUserToEdit.id
+          ? { ...u, mainBranchName: mainBranchName.trim() }
+          : u
+      ))
+      setBranchesUserToEdit(prev => ({ ...prev, mainBranchName: mainBranchName.trim() }))
+
+      toast.success('Nombre de sucursal actualizado')
+      setEditingMainBranch(false)
+    } catch (error) {
+      console.error('Error al guardar nombre:', error)
+      toast.error('Error al guardar el nombre')
+    } finally {
+      setSavingMainBranch(false)
     }
   }
 
@@ -2257,16 +2296,54 @@ export default function AdminUsers() {
                     <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-medium text-gray-900">Sucursal Principal</h4>
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                              Por defecto
-                            </span>
-                          </div>
+                          {editingMainBranch ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={mainBranchName}
+                                onChange={(e) => setMainBranchName(e.target.value)}
+                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                placeholder="Nombre de la sucursal"
+                                autoFocus
+                              />
+                              <button
+                                onClick={handleSaveMainBranchName}
+                                disabled={savingMainBranch}
+                                className="px-3 py-1.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+                              >
+                                {savingMainBranch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingMainBranch(false)
+                                  setMainBranchName(branchesUserToEdit?.mainBranchName || 'Sucursal Principal')
+                                }}
+                                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-gray-900">{mainBranchName}</h4>
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                Por defecto
+                              </span>
+                            </div>
+                          )}
                           <p className="text-sm text-gray-500 mt-1">
                             Usa las series globales del negocio (configuradas en Ajustes)
                           </p>
                         </div>
+                        {!editingMainBranch && (
+                          <button
+                            onClick={() => setEditingMainBranch(true)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                            title="Editar nombre"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
