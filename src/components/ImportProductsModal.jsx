@@ -304,6 +304,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio: 1.50,
           precio2: 1.30,
           precio3: 1.10,
+          precio4: 0.95,
           stock: 500,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -329,6 +330,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio: 1.20,
           precio2: 1.00,
           precio3: 0.85,
+          precio4: 0.70,
           stock: 200,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -354,6 +356,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio: 0.80,
           precio2: '',
           precio3: '',
+          precio4: '',
           stock: 100,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -374,6 +377,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio: 10.50,
           precio2: 9.50,
           precio3: 8.80,
+          precio4: 8.00,
           stock: 100,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -390,6 +394,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio: 25.00,
           precio2: '',
           precio3: '',
+          precio4: '',
           stock: '',
           trackStock: 'NO',
           unidad: 'SERVICIO',
@@ -406,6 +411,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           precio: 15.00,
           precio2: 13.50,
           precio3: 12.00,
+          precio4: 11.00,
           stock: 50,
           trackStock: 'SI',
           unidad: 'UNIDAD',
@@ -438,6 +444,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 12 }, // ubicacion
         { wch: 8 },  // costo
         { wch: 8 },  // precio
+        { wch: 8 },  // precio2
+        { wch: 8 },  // precio3
+        { wch: 8 },  // precio4
         { wch: 8 },  // stock
         { wch: 10 }, // trackStock
         { wch: 10 }, // unidad
@@ -453,9 +462,12 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 40 }, // descripcion
         { wch: 10 }, // costo
         { wch: 10 }, // precio
+        { wch: 10 }, // precio2
+        { wch: 10 }, // precio3
+        { wch: 10 }, // precio4
         { wch: 10 }, // stock
-        { wch: 15 }, // trackStock
-        { wch: 15 }, // unidad
+        { wch: 12 }, // trackStock
+        { wch: 12 }, // unidad
         { wch: 20 }, // categoria
         { wch: 25 }, // almacen
         { wch: 15 }  // afectacion_igv
@@ -543,7 +555,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, stock, trackStock (SI/NO), unidad, categoria, almacen, afectacion_igv (GRAVADO/EXONERADO/INAFECTO)
+            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2, precio3, precio4, stock, trackStock (SI/NO), unidad, categoria, almacen, afectacion_igv
           </p>
         </div>
 
