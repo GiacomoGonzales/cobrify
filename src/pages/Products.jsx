@@ -217,7 +217,7 @@ export default function Products() {
   const [trackExpiration, setTrackExpiration] = useState(false) // Control de vencimiento
   const [catalogVisible, setCatalogVisible] = useState(false) // Visible en catálogo público
   const [expandedProduct, setExpandedProduct] = useState(null)
-  const [selectedWarehouse, setSelectedWarehouse] = useState('') // Almacén para stock inicial
+  const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({}) // Stock inicial por almacén { warehouseId: quantity }
 
   // Paginación en cliente
   const [currentPage, setCurrentPage] = useState(1)
@@ -444,9 +444,8 @@ export default function Products() {
     setVariants([])
     setNewAttributeName('')
     setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
-    // Resetear almacén seleccionado al almacén por defecto
-    const defaultWh = warehouses.find(wh => wh.isDefault)
-    setSelectedWarehouse(defaultWh?.id || (warehouses.length > 0 ? warehouses[0].id : ''))
+    // Resetear stocks iniciales por almacén
+    setWarehouseInitialStocks({})
     reset({
       code: '',
       sku: '',
@@ -571,7 +570,7 @@ export default function Products() {
   const closeModal = () => {
     setIsModalOpen(false)
     setEditingProduct(null)
-    setSelectedWarehouse('')
+    setWarehouseInitialStocks({}) // Limpiar stocks por almacén
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
     setNewPresentation({ name: '', factor: '', price: '' })
@@ -738,19 +737,26 @@ export default function Products() {
               }
             }
           } else {
-            // Al crear, initialStock y stock son el mismo valor inicial
-            const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
-            productData.stock = initialStockValue
-            productData.initialStock = initialStockValue
-
-            // Si hay stock inicial y almacenes disponibles, asignar al almacén seleccionado
-            if (initialStockValue && initialStockValue > 0 && selectedWarehouse) {
-              productData.warehouseStocks = [{
-                warehouseId: selectedWarehouse,
-                stock: initialStockValue,
+            // Al crear, calcular stock total sumando todos los almacenes
+            const warehouseStocksArray = Object.entries(warehouseInitialStocks)
+              .filter(([_, qty]) => qty && parseInt(qty) > 0)
+              .map(([warehouseId, qty]) => ({
+                warehouseId,
+                stock: parseInt(qty),
                 minStock: 0
-              }]
+              }))
+
+            // Si hay stocks por almacén, usar esos
+            if (warehouseStocksArray.length > 0) {
+              const totalStock = warehouseStocksArray.reduce((sum, ws) => sum + ws.stock, 0)
+              productData.stock = totalStock
+              productData.initialStock = totalStock
+              productData.warehouseStocks = warehouseStocksArray
             } else {
+              // Fallback: si no hay almacenes o no se ingresó stock por almacén, usar el campo simple
+              const initialStockValue = data.initialStock === '' ? null : parseInt(data.initialStock)
+              productData.stock = initialStockValue
+              productData.initialStock = initialStockValue
               productData.warehouseStocks = []
             }
           }
@@ -3289,35 +3295,75 @@ export default function Products() {
                   </div>
                 )}
 
-                {/* Stock Inicial */}
-                <Input
-                  label="Stock Inicial"
-                  type="number"
-                  placeholder="0"
-                  error={errors.initialStock?.message}
-                  {...register('initialStock')}
-                  disabled={editingProduct && user?.role !== 'business_owner'}
-                  helperText={editingProduct ? "Dato histórico" : "Cantidad inicial"}
-                />
+                {/* Stock Inicial - Solo para edición (dato histórico) */}
+                {editingProduct && (
+                  <Input
+                    label="Stock Inicial"
+                    type="number"
+                    placeholder="0"
+                    error={errors.initialStock?.message}
+                    {...register('initialStock')}
+                    disabled={user?.role !== 'business_owner'}
+                    helperText="Dato histórico"
+                  />
+                )}
 
-                {/* Almacén (solo al crear) */}
+                {/* Stock por Almacén (solo al crear) */}
                 {!editingProduct && warehouses.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Almacén
+                  <div className="col-span-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stock Inicial por Almacén
                     </label>
-                    <select
-                      value={selectedWarehouse}
-                      onChange={(e) => setSelectedWarehouse(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
+                    <div className="space-y-2">
                       {warehouses.filter(wh => wh.isActive).map((wh) => (
-                        <option key={wh.id} value={wh.id}>
-                          {wh.name} {wh.isDefault ? '(Predeterminado)' : ''}
-                        </option>
+                        <div key={wh.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-700">
+                              {wh.name}
+                            </span>
+                            {wh.isDefault && (
+                              <span className="ml-2 text-xs text-primary-600">(Principal)</span>
+                            )}
+                          </div>
+                          <div className="w-28">
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="0"
+                              value={warehouseInitialStocks[wh.id] || ''}
+                              onChange={(e) => setWarehouseInitialStocks(prev => ({
+                                ...prev,
+                                [wh.id]: e.target.value
+                              }))}
+                              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-right"
+                            />
+                          </div>
+                          <span className="text-xs text-gray-500 w-12">uds.</span>
+                        </div>
                       ))}
-                    </select>
+                    </div>
+                    {/* Total */}
+                    {Object.values(warehouseInitialStocks).some(v => v && parseInt(v) > 0) && (
+                      <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Stock Total:</span>
+                        <span className="text-sm font-bold text-primary-600">
+                          {Object.values(warehouseInitialStocks).reduce((sum, v) => sum + (parseInt(v) || 0), 0)} unidades
+                        </span>
+                      </div>
+                    )}
                   </div>
+                )}
+
+                {/* Si no hay almacenes, mostrar campo simple */}
+                {!editingProduct && warehouses.length === 0 && (
+                  <Input
+                    label="Stock Inicial"
+                    type="number"
+                    placeholder="0"
+                    error={errors.initialStock?.message}
+                    {...register('initialStock')}
+                    helperText="Cantidad inicial"
+                  />
                 )}
 
                 {/* Fecha de Vencimiento (solo si está activado) */}
