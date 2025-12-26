@@ -16,6 +16,84 @@ import {
 import { db } from '@/lib/firebase'
 
 /**
+ * Helper: Actualizar stock de ingrediente en un almacén específico
+ * Similar a updateWarehouseStock en warehouseService
+ */
+export const updateIngredientWarehouseStock = (ingredient, warehouseId, quantityChange) => {
+  const currentStock = ingredient.currentStock || 0
+  const warehouseStocks = ingredient.warehouseStocks || []
+
+  // Buscar el almacén en el array
+  const warehouseIndex = warehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+  let updatedWarehouseStocks = [...warehouseStocks]
+
+  if (warehouseIndex >= 0) {
+    // Actualizar stock existente
+    const currentWarehouseStock = updatedWarehouseStocks[warehouseIndex].stock || 0
+    updatedWarehouseStocks[warehouseIndex] = {
+      ...updatedWarehouseStocks[warehouseIndex],
+      stock: Math.max(0, currentWarehouseStock + quantityChange)
+    }
+  } else if (quantityChange > 0) {
+    // Agregar nuevo almacén solo si es entrada de stock
+    updatedWarehouseStocks.push({
+      warehouseId,
+      stock: quantityChange
+    })
+  }
+
+  // Calcular stock total
+  const newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+  return {
+    ...ingredient,
+    currentStock: newTotalStock,
+    warehouseStocks: updatedWarehouseStocks
+  }
+}
+
+/**
+ * Helper: Obtener stock de un ingrediente en un almacén específico
+ */
+export const getIngredientStockInWarehouse = (ingredient, warehouseId) => {
+  if (!ingredient.warehouseStocks || ingredient.warehouseStocks.length === 0) {
+    // Si no tiene warehouseStocks, asumir que todo el stock está en el almacén principal
+    return warehouseId ? 0 : (ingredient.currentStock || 0)
+  }
+
+  const warehouseStock = ingredient.warehouseStocks.find(ws => ws.warehouseId === warehouseId)
+  return warehouseStock?.stock || 0
+}
+
+/**
+ * Helper: Obtener stock total de un ingrediente para una sucursal
+ */
+export const getIngredientStockForBranch = (ingredient, warehouses, branchFilter) => {
+  if (!ingredient.warehouseStocks || ingredient.warehouseStocks.length === 0) {
+    // Sin warehouseStocks, retornar stock total solo para 'all' o 'main'
+    if (branchFilter === 'all' || branchFilter === 'main') {
+      return ingredient.currentStock || 0
+    }
+    return 0
+  }
+
+  // Filtrar almacenes según sucursal
+  let filteredWarehouses = warehouses
+  if (branchFilter === 'main') {
+    filteredWarehouses = warehouses.filter(w => !w.branchId)
+  } else if (branchFilter !== 'all') {
+    filteredWarehouses = warehouses.filter(w => w.branchId === branchFilter)
+  }
+
+  const warehouseIds = filteredWarehouses.map(w => w.id)
+
+  return ingredient.warehouseStocks
+    .filter(ws => warehouseIds.includes(ws.warehouseId))
+    .reduce((sum, ws) => sum + (ws.stock || 0), 0)
+}
+
+/**
  * Conversión de unidades de medida
  */
 export const convertUnit = (value, fromUnit, toUnit) => {
@@ -157,6 +235,7 @@ export const deleteIngredient = async (businessId, ingredientId) => {
 
 /**
  * Registrar una compra de ingrediente
+ * Ahora soporta warehouseId para stock por almacén
  */
 export const registerPurchase = async (businessId, purchaseData) => {
   try {
@@ -168,6 +247,7 @@ export const registerPurchase = async (businessId, purchaseData) => {
 
     batch.set(purchaseRef, {
       ...purchaseData,
+      warehouseId: purchaseData.warehouseId || null,
       purchaseDate: purchaseData.purchaseDate || Timestamp.now(),
       createdAt: Timestamp.now()
     })
@@ -183,6 +263,7 @@ export const registerPurchase = async (businessId, purchaseData) => {
     const currentData = ingredientDoc.data()
     const currentStock = currentData.currentStock || 0
     const currentAvgCost = currentData.averageCost || 0
+    const warehouseStocks = currentData.warehouseStocks || []
 
     // Convertir cantidad comprada a la unidad de almacenamiento si es necesario
     const quantityToAdd = convertUnit(
@@ -191,29 +272,55 @@ export const registerPurchase = async (businessId, purchaseData) => {
       currentData.purchaseUnit
     )
 
-    const newStock = currentStock + quantityToAdd
+    // Actualizar warehouseStocks si se especificó un almacén
+    let updatedWarehouseStocks = [...warehouseStocks]
+    if (purchaseData.warehouseId) {
+      const warehouseIndex = updatedWarehouseStocks.findIndex(
+        ws => ws.warehouseId === purchaseData.warehouseId
+      )
+
+      if (warehouseIndex >= 0) {
+        updatedWarehouseStocks[warehouseIndex] = {
+          ...updatedWarehouseStocks[warehouseIndex],
+          stock: (updatedWarehouseStocks[warehouseIndex].stock || 0) + quantityToAdd
+        }
+      } else {
+        updatedWarehouseStocks.push({
+          warehouseId: purchaseData.warehouseId,
+          stock: quantityToAdd
+        })
+      }
+    }
+
+    // Calcular nuevo stock total
+    const newStock = purchaseData.warehouseId
+      ? updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      : currentStock + quantityToAdd
 
     // Calcular nuevo costo promedio ponderado
-    // Si el costo actual es 0, solo usar el valor de la nueva compra
-    // (esto evita diluir el precio cuando hay stock inicial sin costo)
     let newAvgCost
     if (currentAvgCost === 0 || currentStock === 0) {
-      // Primera compra o stock sin costo: usar precio de compra directamente
       newAvgCost = purchaseData.unitPrice
     } else {
-      // Calcular promedio ponderado con stock existente
       const totalCurrentValue = currentStock * currentAvgCost
       const totalPurchaseValue = quantityToAdd * purchaseData.unitPrice
       newAvgCost = (totalCurrentValue + totalPurchaseValue) / newStock
     }
 
-    batch.update(ingredientRef, {
+    const updateData = {
       currentStock: newStock,
       averageCost: newAvgCost,
       lastPurchasePrice: purchaseData.unitPrice,
       lastPurchaseDate: purchaseData.purchaseDate || Timestamp.now(),
       updatedAt: Timestamp.now()
-    })
+    }
+
+    // Solo actualizar warehouseStocks si se usó almacén
+    if (purchaseData.warehouseId) {
+      updateData.warehouseStocks = updatedWarehouseStocks
+    }
+
+    batch.update(ingredientRef, updateData)
 
     // 3. Crear movimiento de stock
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
@@ -225,6 +332,7 @@ export const registerPurchase = async (businessId, purchaseData) => {
       type: 'purchase',
       quantity: quantityToAdd,
       unit: currentData.purchaseUnit,
+      warehouseId: purchaseData.warehouseId || null,
       reason: `Compra - ${purchaseData.supplier || 'Sin proveedor'}`,
       relatedPurchaseId: purchaseRef.id,
       beforeStock: currentStock,
@@ -272,8 +380,9 @@ export const getPurchases = async (businessId, filters = {}) => {
 
 /**
  * Descontar ingredientes del stock (cuando se vende un plato)
+ * Ahora soporta warehouseId para descuento por almacén
  */
-export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName) => {
+export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null) => {
   try {
     const batch = writeBatch(db)
 
@@ -288,6 +397,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
 
       const currentData = ingredientDoc.data()
       const currentStock = currentData.currentStock || 0
+      const warehouseStocks = currentData.warehouseStocks || []
 
       // Convertir cantidad a descontar a la unidad de almacenamiento
       const quantityToDeduct = convertUnit(
@@ -296,13 +406,43 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         currentData.purchaseUnit
       )
 
-      const newStock = Math.max(0, currentStock - quantityToDeduct)
+      let newStock
+      let updatedWarehouseStocks = [...warehouseStocks]
+      const effectiveWarehouseId = warehouseId || ingredient.warehouseId
 
-      // Actualizar stock
-      batch.update(ingredientRef, {
+      if (effectiveWarehouseId && warehouseStocks.length > 0) {
+        // Descontar del almacén específico
+        const warehouseIndex = updatedWarehouseStocks.findIndex(
+          ws => ws.warehouseId === effectiveWarehouseId
+        )
+
+        if (warehouseIndex >= 0) {
+          const currentWarehouseStock = updatedWarehouseStocks[warehouseIndex].stock || 0
+          updatedWarehouseStocks[warehouseIndex] = {
+            ...updatedWarehouseStocks[warehouseIndex],
+            stock: Math.max(0, currentWarehouseStock - quantityToDeduct)
+          }
+        }
+
+        // Recalcular stock total
+        newStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      } else {
+        // Sin almacén específico, descontar del stock general
+        newStock = Math.max(0, currentStock - quantityToDeduct)
+      }
+
+      // Preparar datos de actualización
+      const updateData = {
         currentStock: newStock,
         updatedAt: Timestamp.now()
-      })
+      }
+
+      if (effectiveWarehouseId && warehouseStocks.length > 0) {
+        updateData.warehouseStocks = updatedWarehouseStocks
+      }
+
+      // Actualizar stock
+      batch.update(ingredientRef, updateData)
 
       // Crear movimiento de stock
       const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
@@ -314,6 +454,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         type: 'sale',
         quantity: quantityToDeduct,
         unit: currentData.purchaseUnit,
+        warehouseId: effectiveWarehouseId || null,
         reason: `Venta: ${productName}`,
         relatedSaleId: relatedSaleId,
         beforeStock: currentStock,
@@ -361,8 +502,9 @@ export const getStockMovements = async (businessId, filters = {}) => {
 
 /**
  * Ajustar stock manualmente
+ * Ahora soporta warehouseId para ajuste por almacén
  */
-export const adjustStock = async (businessId, ingredientId, ingredientName, newStock, reason) => {
+export const adjustStock = async (businessId, ingredientId, ingredientName, newStock, reason, warehouseId = null) => {
   try {
     const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', ingredientId)
     const ingredientDoc = await getDoc(ingredientRef)
@@ -373,27 +515,63 @@ export const adjustStock = async (businessId, ingredientId, ingredientName, newS
 
     const currentData = ingredientDoc.data()
     const currentStock = currentData.currentStock || 0
+    const warehouseStocks = currentData.warehouseStocks || []
 
     const batch = writeBatch(db)
 
-    // Actualizar stock
-    batch.update(ingredientRef, {
-      currentStock: newStock,
+    let updatedWarehouseStocks = [...warehouseStocks]
+    let newTotalStock = newStock
+    let beforeWarehouseStock = 0
+
+    if (warehouseId) {
+      // Ajustar stock en almacén específico
+      const warehouseIndex = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === warehouseId)
+
+      if (warehouseIndex >= 0) {
+        beforeWarehouseStock = updatedWarehouseStocks[warehouseIndex].stock || 0
+        updatedWarehouseStocks[warehouseIndex] = {
+          ...updatedWarehouseStocks[warehouseIndex],
+          stock: newStock
+        }
+      } else {
+        updatedWarehouseStocks.push({
+          warehouseId,
+          stock: newStock
+        })
+      }
+
+      // Recalcular stock total
+      newTotalStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    }
+
+    // Preparar datos de actualización
+    const updateData = {
+      currentStock: newTotalStock,
       updatedAt: Timestamp.now()
-    })
+    }
+
+    if (warehouseId) {
+      updateData.warehouseStocks = updatedWarehouseStocks
+    }
+
+    // Actualizar stock
+    batch.update(ingredientRef, updateData)
 
     // Crear movimiento
     const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
     const movementRef = doc(movementsRef)
 
+    const beforeStock = warehouseId ? beforeWarehouseStock : currentStock
+
     batch.set(movementRef, {
       ingredientId,
       ingredientName,
       type: 'adjustment',
-      quantity: Math.abs(newStock - currentStock),
+      quantity: Math.abs(newStock - beforeStock),
       unit: currentData.purchaseUnit,
+      warehouseId: warehouseId || null,
       reason: reason || 'Ajuste manual de inventario',
-      beforeStock: currentStock,
+      beforeStock: beforeStock,
       afterStock: newStock,
       createdAt: Timestamp.now()
     })

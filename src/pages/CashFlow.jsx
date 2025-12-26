@@ -3,6 +3,8 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getInvoices, getPurchases, getLoans, getAllCashMovements, getFinancialMovements, createFinancialMovement, deleteFinancialMovement } from '@/services/firestoreService'
 import { getExpenses, EXPENSE_CATEGORIES } from '@/services/expenseService'
+import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
 import {
   TrendingUp,
   TrendingDown,
@@ -35,7 +37,8 @@ import {
   PiggyBank,
   LogOut,
   Home,
-  Trash2
+  Trash2,
+  Store
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -188,6 +191,11 @@ export default function CashFlow() {
   const [loans, setLoans] = useState([])
   const [financialMovements, setFinancialMovements] = useState([])
 
+  // Sucursales
+  const [branches, setBranches] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [branchFilter, setBranchFilter] = useState('all') // 'all', 'main', or branch.id
+
   // Modal de nuevo movimiento
   const [showModal, setShowModal] = useState(false)
   const [savingMovement, setSavingMovement] = useState(false)
@@ -197,7 +205,8 @@ export default function CashFlow() {
     amount: '',
     description: '',
     paymentMethod: 'efectivo',
-    date: getLocalDateString()
+    date: getLocalDateString(),
+    branchId: ''
   })
 
   const [selectedPeriod, setSelectedPeriod] = useState('monthly')
@@ -269,13 +278,15 @@ export default function CashFlow() {
         return
       }
 
-      const [invoicesRes, expensesData, purchasesRes, loansRes, cashMovementsRes, financialRes] = await Promise.all([
+      const [invoicesRes, expensesData, purchasesRes, loansRes, cashMovementsRes, financialRes, branchesRes, warehousesRes] = await Promise.all([
         getInvoices(user.uid),
         getExpenses(user.uid, { startDate: dateRange.startDate, endDate: dateRange.endDate }),
         getPurchases(user.uid),
         getLoans(user.uid),
         getAllCashMovements(user.uid),
-        getFinancialMovements(user.uid)
+        getFinancialMovements(user.uid),
+        getActiveBranches(user.uid),
+        getWarehouses(user.uid)
       ])
 
       if (invoicesRes.success) {
@@ -300,6 +311,15 @@ export default function CashFlow() {
         setFinancialMovements(financialRes.data || [])
       }
 
+      if (branchesRes.success) {
+        setBranches(branchesRes.data || [])
+      }
+
+      if (warehousesRes.success) {
+        const activeWarehouses = (warehousesRes.data || []).filter(w => w.isActive !== false)
+        setWarehouses(activeWarehouses)
+      }
+
     } catch (error) {
       console.error('Error cargando datos:', error)
       toast.error('Error al cargar los datos')
@@ -308,15 +328,74 @@ export default function CashFlow() {
     }
   }
 
+  // Helper: Obtener IDs de almacenes para una sucursal
+  const getWarehouseIdsForBranch = useMemo(() => {
+    if (branchFilter === 'all') return null // No filtrar
+    if (branchFilter === 'main') {
+      return warehouses.filter(w => !w.branchId).map(w => w.id)
+    }
+    return warehouses.filter(w => w.branchId === branchFilter).map(w => w.id)
+  }, [warehouses, branchFilter])
+
+  // Helper: Filtrar por sucursal según el tipo de documento
+  const filterByBranch = (item, type) => {
+    if (branchFilter === 'all') return true
+
+    switch (type) {
+      case 'invoice':
+        // Facturas: filtrar por branchId
+        if (branchFilter === 'main') {
+          return !item.branchId || item.branchId === 'main'
+        }
+        return item.branchId === branchFilter
+
+      case 'expense':
+        // Gastos: filtrar por branchId
+        if (branchFilter === 'main') {
+          return !item.branchId || item.branchId === '' || item.branchId === 'main'
+        }
+        return item.branchId === branchFilter
+
+      case 'purchase':
+        // Compras: filtrar por warehouseId
+        const purchaseWarehouseId = item.warehouseId || item.items?.[0]?.warehouseId
+        if (!purchaseWarehouseId) {
+          return branchFilter === 'main'
+        }
+        return getWarehouseIdsForBranch?.includes(purchaseWarehouseId)
+
+      case 'cashMovement':
+      case 'financialMovement':
+        // Movimientos: filtrar por branchId
+        if (branchFilter === 'main') {
+          return !item.branchId || item.branchId === '' || item.branchId === 'main'
+        }
+        return item.branchId === branchFilter
+
+      case 'loan':
+        // Préstamos: filtrar por branchId
+        if (branchFilter === 'main') {
+          return !item.branchId || item.branchId === '' || item.branchId === 'main'
+        }
+        return item.branchId === branchFilter
+
+      default:
+        return true
+    }
+  }
+
   // Calcular flujo de caja
   const cashFlowData = useMemo(() => {
     // INGRESOS
-    // 1. Ventas pagadas (filtradas por fecha)
+    // 1. Ventas pagadas (filtradas por fecha y sucursal)
     // Las facturas usan 'status' para el estado general: 'paid', 'pending', etc.
     // Y 'paymentStatus' para notas de venta a crédito: 'paid', 'partial', 'pending'
     const paidInvoices = invoices.filter(inv => {
       const inRange = isInDateRange(inv.createdAt, dateRange.startDate, dateRange.endDate)
       if (!inRange) return false
+
+      // Filtrar por sucursal
+      if (!filterByBranch(inv, 'invoice')) return false
 
       // Una factura se considera como ingreso si:
       // 1. Su status es 'paid' (factura/boleta normal pagada)
@@ -342,26 +421,26 @@ export default function CashFlow() {
 
     // 2. Otros ingresos (movimientos de caja tipo income)
     const otherIncome = cashMovements
-      .filter(m => m.type === 'income' && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate))
+      .filter(m => m.type === 'income' && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
     // 3. Préstamos recibidos (monto del préstamo cuando se recibió en el período)
     const loansReceived = loans.filter(loan =>
-      isInDateRange(loan.createdAt || loan.issueDate, dateRange.startDate, dateRange.endDate)
+      isInDateRange(loan.createdAt || loan.issueDate, dateRange.startDate, dateRange.endDate) && filterByBranch(loan, 'loan')
     )
     const loansIncome = loansReceived.reduce((sum, loan) => sum + (loan.amount || 0), 0)
 
     // 4. Movimientos financieros tipo ingreso (Aporte Capital, Venta Activo, etc.)
     const financialIncomeMovements = financialMovements.filter(m =>
-      m.type === 'income' && isFinancialMovementInRange(m, dateRange.startDate, dateRange.endDate)
+      m.type === 'income' && isFinancialMovementInRange(m, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'financialMovement')
     )
     const financialIncome = financialIncomeMovements.reduce((sum, m) => sum + (m.amount || 0), 0)
 
     const totalIncome = salesIncome + otherIncome + loansIncome + financialIncome
 
     // EGRESOS
-    // 1. Gastos operativos
-    const filteredExpenses = expenses.filter(e => isInDateRange(e.date, dateRange.startDate, dateRange.endDate))
+    // 1. Gastos operativos (filtrados por fecha y sucursal)
+    const filteredExpenses = expenses.filter(e => isInDateRange(e.date, dateRange.startDate, dateRange.endDate) && filterByBranch(e, 'expense'))
     const expensesTotal = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
 
     // Agrupar gastos por categoría
@@ -373,21 +452,21 @@ export default function CashFlow() {
       return acc
     }, {})
 
-    // 2. Compras pagadas
+    // 2. Compras pagadas (filtradas por sucursal)
     const paidPurchases = purchases.filter(p => {
       const inRange = isInDateRange(p.createdAt, dateRange.startDate, dateRange.endDate)
-      return inRange && p.paymentStatus === 'paid'
+      return inRange && p.paymentStatus === 'paid' && filterByBranch(p, 'purchase')
     })
     const purchasesTotal = paidPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
 
     // 3. Otros egresos (movimientos de caja tipo expense)
     const otherExpenses = cashMovements
-      .filter(m => m.type === 'expense' && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate))
+      .filter(m => m.type === 'expense' && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
-    // 4. Cuotas de préstamos pagadas
+    // 4. Cuotas de préstamos pagadas (filtradas por sucursal)
     const paidLoanInstallments = []
-    loans.forEach(loan => {
+    loans.filter(loan => filterByBranch(loan, 'loan')).forEach(loan => {
       (loan.installments || []).forEach(inst => {
         if (inst.status === 'paid' && inst.paidAt && isInDateRange(inst.paidAt, dateRange.startDate, dateRange.endDate)) {
           paidLoanInstallments.push({
@@ -403,7 +482,7 @@ export default function CashFlow() {
 
     // 5. Movimientos financieros tipo egreso (Retiro Dueño, Compra Activo, etc.)
     const financialExpenseMovements = financialMovements.filter(m =>
-      m.type === 'expense' && isFinancialMovementInRange(m, dateRange.startDate, dateRange.endDate)
+      m.type === 'expense' && isFinancialMovementInRange(m, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'financialMovement')
     )
     const financialExpenses = financialExpenseMovements.reduce((sum, m) => sum + (m.amount || 0), 0)
 
@@ -413,9 +492,12 @@ export default function CashFlow() {
     const balance = totalIncome - totalExpenses
 
     // PROYECCIONES
-    // Cuentas por cobrar (facturas pendientes de pago)
+    // Cuentas por cobrar (facturas pendientes de pago, filtradas por sucursal)
     // Incluye: status='pending' (facturas normales) o notas de venta con paymentStatus='pending'/'partial'
     const pendingInvoices = invoices.filter(inv => {
+      // Filtrar por sucursal primero
+      if (!filterByBranch(inv, 'invoice')) return false
+
       // Facturas/boletas con status pending
       if (inv.status === 'pending') return true
       // Notas de venta con pagos pendientes
@@ -430,18 +512,18 @@ export default function CashFlow() {
       return sum + ((inv.total || 0) - paid)
     }, 0)
 
-    // Cuentas por pagar (compras a crédito pendientes)
+    // Cuentas por pagar (compras a crédito pendientes, filtradas por sucursal)
     const pendingPurchases = purchases.filter(p =>
-      p.paymentType === 'credito' && p.paymentStatus === 'pending'
+      p.paymentType === 'credito' && p.paymentStatus === 'pending' && filterByBranch(p, 'purchase')
     )
     const purchasesPayable = pendingPurchases.reduce((sum, p) => {
       const paid = p.paidAmount || 0
       return sum + ((p.total || 0) - paid)
     }, 0)
 
-    // Cuotas de préstamos pendientes
+    // Cuotas de préstamos pendientes (filtradas por sucursal)
     const pendingLoanInstallments = []
-    loans.forEach(loan => {
+    loans.filter(loan => filterByBranch(loan, 'loan')).forEach(loan => {
       if (loan.status !== 'paid') {
         (loan.installments || []).forEach(inst => {
           if (inst.status === 'pending') {
@@ -498,7 +580,7 @@ export default function CashFlow() {
       pendingLoanInstallments,
       projectedBalance
     }
-  }, [invoices, expenses, purchases, cashMovements, loans, financialMovements, dateRange])
+  }, [invoices, expenses, purchases, cashMovements, loans, financialMovements, dateRange, branchFilter, getWarehouseIdsForBranch])
 
   // Formatear moneda
   function formatCurrency(amount) {
@@ -536,7 +618,8 @@ export default function CashFlow() {
       amount: '',
       description: '',
       paymentMethod: 'efectivo',
-      date: getLocalDateString()
+      date: getLocalDateString(),
+      branchId: ''
     })
     setShowModal(true)
   }
@@ -564,6 +647,7 @@ export default function CashFlow() {
         paymentMethod: newMovement.paymentMethod,
         date: new Date(newMovement.date + 'T12:00:00'),
         dateString: newMovement.date, // YYYY-MM-DD para filtros sin problema de zona horaria
+        branchId: newMovement.branchId || '',
       }
 
       const result = await createFinancialMovement(user.uid, movementData)
@@ -696,9 +780,38 @@ export default function CashFlow() {
         </div>
       </div>
 
-      {/* Filtros de fecha */}
+      {/* Filtros de fecha y sucursal */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col gap-4">
+          {/* Filtro de sucursal */}
+          {branches.length > 0 && (
+            <div className="flex flex-col sm:flex-row gap-3 pb-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-gray-500" />
+                <span className="text-sm text-gray-600 font-medium">Sucursal:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: 'all', label: 'Todas' },
+                  { value: 'main', label: 'Principal' },
+                  ...branches.map(b => ({ value: b.id, label: b.name }))
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setBranchFilter(option.value)}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      branchFilter === option.value
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Botones de período - Grid en móvil, flex en desktop */}
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
             <button
@@ -1494,6 +1607,26 @@ export default function CashFlow() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                 />
               </div>
+
+              {/* Sucursal */}
+              {branches.length > 0 && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Store className="w-4 h-4 inline mr-1" />
+                    Sucursal
+                  </label>
+                  <select
+                    value={newMovement.branchId}
+                    onChange={e => setNewMovement({ ...newMovement, branchId: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Descripción */}
               <div className="mb-6">

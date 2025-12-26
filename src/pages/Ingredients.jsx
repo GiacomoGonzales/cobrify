@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download, Store } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -18,8 +18,11 @@ import {
   updateIngredient,
   deleteIngredient,
   registerPurchase,
-  getPurchases
+  getPurchases,
+  getIngredientStockForBranch
 } from '@/services/ingredientService'
+import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
 import { generateIngredientsExcel } from '@/services/ingredientExportService'
 import ImportIngredientsModal from '@/components/ImportIngredientsModal'
 
@@ -85,6 +88,11 @@ export default function Ingredients() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
 
+  // Sucursales y almacenes
+  const [branches, setBranches] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
+
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -109,12 +117,36 @@ export default function Ingredients() {
     quantity: '',
     unitPrice: '',
     supplier: '',
-    invoiceNumber: ''
+    invoiceNumber: '',
+    warehouseId: ''
   })
 
   useEffect(() => {
     loadIngredients()
+    loadBranchesAndWarehouses()
   }, [user])
+
+  const loadBranchesAndWarehouses = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    const businessId = getBusinessId()
+    try {
+      const [branchesResult, warehousesResult] = await Promise.all([
+        getActiveBranches(businessId),
+        getWarehouses(businessId)
+      ])
+
+      if (branchesResult.success) {
+        setBranches(branchesResult.data || [])
+      }
+      if (warehousesResult.success) {
+        const activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        setWarehouses(activeWarehouses)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales/almacenes:', error)
+    }
+  }
 
   const loadIngredients = async () => {
     if (!user?.uid && !isDemoMode) return
@@ -315,7 +347,8 @@ export default function Ingredients() {
         unitPrice: unitPrice,
         totalCost: quantity * unitPrice,
         supplier: purchaseData.supplier || 'Sin proveedor',
-        invoiceNumber: purchaseData.invoiceNumber
+        invoiceNumber: purchaseData.invoiceNumber,
+        warehouseId: purchaseData.warehouseId || null
       })
 
       if (result.success) {
@@ -350,11 +383,14 @@ export default function Ingredients() {
 
   const openPurchaseModal = (ingredient) => {
     setSelectedIngredient(ingredient)
+    // Seleccionar almacén por defecto (principal de la sucursal principal)
+    const defaultWarehouse = warehouses.find(w => w.isDefault && !w.branchId) || warehouses[0]
     setPurchaseData({
       quantity: 0,
       unitPrice: ingredient.lastPurchasePrice || ingredient.averageCost || 0,
       supplier: ingredient.supplier || '',
-      invoiceNumber: ''
+      invoiceNumber: '',
+      warehouseId: defaultWarehouse?.id || ''
     })
     setShowPurchaseModal(true)
   }
@@ -382,7 +418,8 @@ export default function Ingredients() {
       quantity: '',
       unitPrice: '',
       supplier: '',
-      invoiceNumber: ''
+      invoiceNumber: '',
+      warehouseId: ''
     })
     setSelectedIngredient(null)
   }
@@ -429,6 +466,16 @@ export default function Ingredients() {
     }
   }
 
+  // Helper para obtener stock de un ingrediente según el filtro de sucursal
+  const getStockForBranch = useMemo(() => {
+    return (ingredient) => {
+      if (filterBranch === 'all') {
+        return ingredient.currentStock || 0
+      }
+      return getIngredientStockForBranch(ingredient, warehouses, filterBranch)
+    }
+  }, [warehouses, filterBranch])
+
   // Filter ingredients
   const filteredIngredients = ingredients.filter(ingredient => {
     const matchesSearch = ingredient.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -436,12 +483,20 @@ export default function Ingredients() {
     return matchesSearch && matchesCategory
   })
 
-  // Stats
-  const stats = {
-    total: ingredients.length,
-    lowStock: ingredients.filter(i => i.currentStock <= i.minimumStock).length,
-    totalValue: ingredients.reduce((sum, i) => sum + (i.currentStock * i.averageCost), 0)
-  }
+  // Stats (calculados según sucursal filtrada)
+  const stats = useMemo(() => {
+    return {
+      total: ingredients.length,
+      lowStock: ingredients.filter(i => {
+        const stock = getStockForBranch(i)
+        return stock <= (i.minimumStock || 0)
+      }).length,
+      totalValue: ingredients.reduce((sum, i) => {
+        const stock = getStockForBranch(i)
+        return sum + (stock * (i.averageCost || 0))
+      }, 0)
+    }
+  }, [ingredients, getStockForBranch])
 
   const getCategoryLabel = (category) => {
     const cat = CATEGORIES.find(c => c.value === category)
@@ -449,10 +504,11 @@ export default function Ingredients() {
   }
 
   const getStockStatus = (ingredient) => {
-    if (ingredient.currentStock <= 0) {
+    const stock = getStockForBranch(ingredient)
+    if (stock <= 0) {
       return <Badge variant="danger">Sin stock</Badge>
     }
-    if (ingredient.currentStock <= ingredient.minimumStock) {
+    if (stock <= (ingredient.minimumStock || 0)) {
       return <Badge variant="warning">Stock bajo</Badge>
     }
     return <Badge variant="success">Stock OK</Badge>
@@ -558,7 +614,7 @@ export default function Ingredients() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -575,6 +631,23 @@ export default function Ingredients() {
                 <option key={cat.value} value={cat.value}>{cat.label}</option>
               ))}
             </Select>
+            {/* Filtro de Sucursal */}
+            {branches.length > 0 && (
+              <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
+                <Store className="w-4 h-4 text-gray-400 ml-3" />
+                <select
+                  value={filterBranch}
+                  onChange={e => setFilterBranch(e.target.value)}
+                  className="flex-1 px-3 py-2.5 text-sm bg-transparent border-none focus:outline-none focus:ring-0"
+                >
+                  <option value="all">Todas las sucursales</option>
+                  <option value="main">Sucursal Principal</option>
+                  {branches.map(branch => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -629,8 +702,11 @@ export default function Ingredients() {
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="font-semibold">{parseFloat(ingredient.currentStock || 0).toFixed(2)} {ingredient.purchaseUnit}</p>
+                      <p className="font-semibold">{parseFloat(getStockForBranch(ingredient)).toFixed(2)} {ingredient.purchaseUnit}</p>
                       <p className="text-xs text-gray-500">Mín: {parseFloat(ingredient.minimumStock || 0).toFixed(2)}</p>
+                      {filterBranch !== 'all' && ingredient.currentStock !== getStockForBranch(ingredient) && (
+                        <p className="text-xs text-blue-500">Total: {parseFloat(ingredient.currentStock || 0).toFixed(2)}</p>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -837,6 +913,50 @@ export default function Ingredients() {
             onChange={e => setPurchaseData({ ...purchaseData, invoiceNumber: e.target.value })}
             placeholder="F001-123"
           />
+
+          {/* Selector de Almacén */}
+          {warehouses.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Store className="w-4 h-4 inline mr-1" />
+                Almacén de Ingreso
+              </label>
+              <select
+                value={purchaseData.warehouseId}
+                onChange={e => setPurchaseData({ ...purchaseData, warehouseId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Sin almacén específico</option>
+                {/* Almacenes de Sucursal Principal */}
+                {warehouses.filter(w => !w.branchId).length > 0 && (
+                  <optgroup label="Sucursal Principal">
+                    {warehouses.filter(w => !w.branchId).map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {/* Almacenes de otras sucursales */}
+                {branches.map(branch => {
+                  const branchWarehouses = warehouses.filter(w => w.branchId === branch.id)
+                  if (branchWarehouses.length === 0) return null
+                  return (
+                    <optgroup key={branch.id} label={branch.name}>
+                      {branchWarehouses.map(warehouse => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                El stock ingresará a este almacén
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-4">
             <Button

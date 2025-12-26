@@ -25,8 +25,11 @@ import {
   Settings2,
   Eye,
   ScanBarcode,
+  Store,
+  Warehouse,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -58,6 +61,7 @@ import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
+import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
@@ -221,6 +225,7 @@ const getProductExpirationStatus = (product) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
@@ -258,9 +263,13 @@ export default function POS() {
   const [customerSearchTerm, setCustomerSearchTerm] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
 
-  // Warehouses
+  // Warehouses (para stock/inventario)
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+
+  // Branches/Sucursales (para series de documentos)
+  const [branches, setBranches] = useState([])
+  const [selectedBranch, setSelectedBranch] = useState(null)
 
   // Barcode Scanner
   const [isScanning, setIsScanning] = useState(false)
@@ -617,14 +626,52 @@ export default function POS() {
       }
 
       // Cargar almacenes y seleccionar el default
+      let warehouseList = []
       const warehousesResult = await getWarehouses(businessId)
       if (warehousesResult.success) {
-        const warehouseList = warehousesResult.data || []
+        const allWarehouses = warehousesResult.data || []
+        // Filtrar almacenes según permisos del usuario
+        warehouseList = filterWarehousesByAccess(allWarehouses)
         setWarehouses(warehouseList)
+      }
 
-        // Seleccionar almacén por defecto
-        const defaultWarehouse = warehouseList.find(w => w.isDefault) || warehouseList[0] || null
-        setSelectedWarehouse(defaultWarehouse)
+      // Cargar sucursales adicionales (la principal es implícita y usa series globales)
+      const branchesResult = await getActiveBranches(businessId)
+      if (branchesResult.success) {
+        const allBranches = branchesResult.data || []
+        // Filtrar sucursales según permisos del usuario
+        const branchList = filterBranchesByAccess(allBranches)
+        setBranches(branchList)
+
+        // Verificar si el usuario tiene acceso a la Sucursal Principal
+        // Si allowedBranches tiene valores y NO incluye 'main', NO tiene acceso a la principal
+        const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
+
+        if (hasMainAccess) {
+          // Usuario tiene acceso a la principal
+          setSelectedBranch(null)
+          // Seleccionar almacén por defecto de la sucursal principal
+          const mainWarehouses = warehouseList.filter(w => w.isActive && !w.branchId)
+          if (mainWarehouses.length > 0) {
+            setSelectedWarehouse(mainWarehouses.find(w => w.isDefault) || mainWarehouses[0])
+          } else if (warehouseList.length > 0) {
+            // Fallback: cualquier almacén disponible
+            setSelectedWarehouse(warehouseList.find(w => w.isDefault) || warehouseList[0])
+          }
+        } else if (branchList.length > 0) {
+          // Usuario NO tiene acceso a la principal, seleccionar la primera sucursal permitida
+          setSelectedBranch(branchList[0])
+          // También seleccionar el almacén de esa sucursal
+          const branchWarehouses = warehouseList.filter(w => w.isActive && w.branchId === branchList[0].id)
+          if (branchWarehouses.length > 0) {
+            setSelectedWarehouse(branchWarehouses.find(w => w.isDefault) || branchWarehouses[0])
+          }
+        }
+      } else {
+        // Si no hay sucursales, usar almacén por defecto
+        if (warehouseList.length > 0) {
+          setSelectedWarehouse(warehouseList.find(w => w.isDefault) || warehouseList[0])
+        }
       }
 
       // Cargar vendedores activos
@@ -814,12 +861,12 @@ export default function POS() {
     }
 
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
-    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3)
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4)
     if (hasMultiplePrices && selectedPrice === null) {
       // Verificar si el cliente seleccionado tiene un nivel de precio asignado
       if (selectedCustomer?.priceLevel) {
         // Usar el precio automáticamente según el nivel del cliente
-        const priceKey = selectedCustomer.priceLevel // 'price1', 'price2', o 'price3'
+        const priceKey = selectedCustomer.priceLevel // 'price1', 'price2', 'price3', o 'price4'
         const autoPrice = priceKey === 'price1' ? product.price : (product[priceKey] || product.price)
         return addToCart({ ...product, price: autoPrice }, autoPrice)
       }
@@ -878,6 +925,8 @@ export default function POS() {
       selectedPrice = product.price2
     } else if (priceLevel === 'price3' && product.price3) {
       selectedPrice = product.price3
+    } else if (priceLevel === 'price4' && product.price4) {
+      selectedPrice = product.price4
     }
 
     // Agregar al carrito con el precio seleccionado
@@ -1582,13 +1631,13 @@ export default function POS() {
 
       const businessId = getBusinessId()
 
-      // 1. Obtener siguiente número de documento
-      const numberResult = await getNextDocumentNumber(businessId, documentType)
+      // 1. Obtener siguiente número de documento (priorizando series de sucursal, luego almacén)
+      const numberResult = await getNextDocumentNumber(businessId, documentType, selectedWarehouse?.id, selectedBranch?.id)
       if (!numberResult.success) {
         console.error('❌ Error detallado al generar número:', numberResult.error)
         throw new Error(numberResult.error || 'Error al generar número de comprobante')
       }
-      console.log('✅ Número generado:', numberResult.number)
+      console.log('✅ Número generado:', numberResult.number, 'Sucursal:', selectedBranch?.name || 'N/A', 'Almacén:', selectedWarehouse?.name || 'Global')
 
       // 2. Preparar items de la factura
       const items = cart.map(item => ({
@@ -1692,6 +1741,16 @@ export default function POS() {
         sellerId: selectedSeller?.id || null,
         sellerName: selectedSeller?.name || null,
         sellerCode: selectedSeller?.code || null,
+        // Información del almacén/punto de venta (para inventario)
+        warehouseId: selectedWarehouse?.id || null,
+        warehouseName: selectedWarehouse?.name || null,
+        warehouseAddress: selectedWarehouse?.address || null,
+        warehousePhone: selectedWarehouse?.phone || null,
+        // Información de la sucursal (para series de documentos y datos del comprobante)
+        branchId: selectedBranch?.id || null,
+        branchName: selectedBranch?.name || null,
+        branchAddress: selectedBranch?.address || null,
+        branchPhone: selectedBranch?.phone || null,
         // Forma de pago (solo para facturas) - Contado/Crédito con cuotas
         ...(documentType === 'factura' && {
           paymentType: paymentType, // 'contado' o 'credito'
@@ -2585,32 +2644,129 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         <div className="lg:sticky lg:top-4 lg:self-start">
           <Card className="flex flex-col h-full">
             <CardContent className="p-4 space-y-3">
-              {/* Vendedor - Solo si hay vendedores */}
-              {sellers.length > 0 && (
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-                    <User className="w-3.5 h-3.5" />
-                    Vendedor
-                  </label>
-                  <select
-                    value={selectedSeller?.id || ''}
-                    onChange={e => {
-                      const seller = sellers.find(s => s.id === e.target.value)
-                      setSelectedSeller(seller || null)
-                    }}
-                    className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  >
-                    <option value="">Seleccionar vendedor</option>
-                    {sellers.map(seller => (
-                      <option key={seller.id} value={seller.id}>
-                        {seller.code} - {seller.name}
+              {/* 1. Sucursal (para series de documentos) */}
+              {(() => {
+                // Verificar si el usuario tiene acceso a la Sucursal Principal
+                const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
+                // Contar opciones disponibles
+                const availableOptions = (hasMainAccess ? 1 : 0) + branches.length
+
+                // Solo mostrar si hay más de una opción o hay sucursales
+                return availableOptions > 0 && (branches.length > 0 || !hasMainAccess) && (
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                      <Store className="w-3.5 h-3.5" />
+                      Sucursal
+                    </label>
+                    <select
+                      value={selectedBranch?.id || ''}
+                      onChange={e => {
+                        if (e.target.value === '') {
+                          setSelectedBranch(null)
+                          // Seleccionar primer almacén de sucursal principal
+                          const mainWarehouses = warehouses.filter(w => w.isActive && !w.branchId)
+                          if (mainWarehouses.length > 0) {
+                            setSelectedWarehouse(mainWarehouses.find(w => w.isDefault) || mainWarehouses[0])
+                          }
+                        } else {
+                          const branch = branches.find(b => b.id === e.target.value)
+                          setSelectedBranch(branch)
+                          // Seleccionar primer almacén de esta sucursal
+                          const branchWarehouses = warehouses.filter(w => w.isActive && w.branchId === e.target.value)
+                          if (branchWarehouses.length > 0) {
+                            setSelectedWarehouse(branchWarehouses.find(w => w.isDefault) || branchWarehouses[0])
+                          }
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      {/* Solo mostrar Sucursal Principal si el usuario tiene acceso */}
+                      {hasMainAccess && <option value="">Sucursal Principal</option>}
+                      {branches.map(branch => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.name}
                       </option>
                     ))}
                   </select>
                 </div>
-              )}
+                )
+              })()}
 
-              {/* Tipo de Comprobante */}
+              {/* 2. Almacén (para inventario) - Filtrado por sucursal */}
+              {(() => {
+                // Filtrar almacenes por sucursal seleccionada
+                const filteredWarehouses = warehouses.filter(w => {
+                  if (!w.isActive) return false
+                  if (!selectedBranch) {
+                    // Sucursal Principal: mostrar almacenes sin branchId
+                    return !w.branchId
+                  }
+                  // Sucursal específica: mostrar almacenes de esa sucursal
+                  return w.branchId === selectedBranch.id
+                })
+
+                return filteredWarehouses.length > 0 && businessMode !== 'restaurant' && (
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                      <Warehouse className="w-3.5 h-3.5" />
+                      Almacén
+                    </label>
+                    <select
+                      value={selectedWarehouse?.id || ''}
+                      onChange={e => {
+                        const warehouse = warehouses.find(w => w.id === e.target.value)
+                        setSelectedWarehouse(warehouse)
+                      }}
+                      className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      {filteredWarehouses.map(warehouse => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })()}
+
+              {/* 3. Vendedor - Filtrado por sucursal */}
+              {(() => {
+                // Filtrar vendedores por sucursal seleccionada
+                const filteredSellers = sellers.filter(s => {
+                  if (!selectedBranch) {
+                    // Sucursal Principal: mostrar vendedores sin branchId
+                    return !s.branchId
+                  }
+                  // Sucursal específica: mostrar vendedores de esa sucursal
+                  return s.branchId === selectedBranch.id
+                })
+
+                return filteredSellers.length > 0 && (
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                      <User className="w-3.5 h-3.5" />
+                      Vendedor
+                    </label>
+                    <select
+                      value={selectedSeller?.id || ''}
+                      onChange={e => {
+                        const seller = sellers.find(s => s.id === e.target.value)
+                        setSelectedSeller(seller || null)
+                      }}
+                      className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="">Seleccionar vendedor</option>
+                      {filteredSellers.map(seller => (
+                        <option key={seller.id} value={seller.id}>
+                          {seller.code} - {seller.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })()}
+
+              {/* 4. Tipo de Comprobante */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2648,7 +2804,31 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </div>
               </div>
 
-              {/* Panel de Cliente - Siempre Visible */}
+              {/* 5. Fecha de Emisión */}
+              {businessSettings?.allowCustomEmissionDate && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    Fecha de Emisión
+                  </label>
+                  <input
+                    type="date"
+                    value={emissionDate}
+                    max={getLocalDateString()}
+                    min={(() => {
+                      const today = new Date()
+                      const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
+                      const minDate = new Date(today)
+                      minDate.setDate(today.getDate() - maxDaysBack)
+                      return getLocalDateString(minDate)
+                    })()}
+                    onChange={e => setEmissionDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  />
+                </div>
+              )}
+
+              {/* 6. Panel de Cliente - Siempre Visible */}
               <div className="space-y-2">
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
                   <User className="w-3.5 h-3.5" />
@@ -3030,28 +3210,64 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   </>
                 ) : (
-                  /* Nota de venta - campos mínimos + teléfono para WhatsApp */
+                  /* Nota de venta - con búsqueda de DNI/RUC */
                   <div className="space-y-2">
-                    <div className="flex gap-2 min-w-0">
+                    <div className="flex gap-2">
+                      <select
+                        value={customerData.documentType || ID_TYPES.DNI}
+                        onChange={e => setCustomerData({
+                          ...customerData,
+                          documentType: e.target.value,
+                          documentNumber: '',
+                          name: '',
+                          businessName: ''
+                        })}
+                        className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      >
+                        <option value={ID_TYPES.DNI}>DNI</option>
+                        <option value={ID_TYPES.RUC}>RUC</option>
+                        <option value={ID_TYPES.CE}>CE</option>
+                      </select>
                       <input
                         type="text"
-                        maxLength={11}
+                        maxLength={customerData.documentType === ID_TYPES.RUC ? 11 : customerData.documentType === ID_TYPES.CE ? 12 : 8}
                         value={customerData.documentNumber}
                         onChange={e => setCustomerData({
                           ...customerData,
-                          documentNumber: e.target.value.replace(/\D/g, '')
+                          documentNumber: customerData.documentType === ID_TYPES.CE
+                            ? e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+                            : e.target.value.replace(/\D/g, '')
                         })}
-                        placeholder="DNI/RUC (opcional)"
-                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        placeholder={customerData.documentType === ID_TYPES.RUC ? '20123456789 (opcional)' : '12345678 (opcional)'}
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
-                      <input
-                        type="text"
-                        value={customerData.name}
-                        onChange={e => setCustomerData({ ...customerData, name: e.target.value })}
-                        placeholder="Nombre"
-                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLookupDocument}
+                        disabled={isLookingUp || !customerData.documentNumber ||
+                          (customerData.documentType === ID_TYPES.RUC ? customerData.documentNumber.length !== 11 :
+                           customerData.documentType === ID_TYPES.CE ? customerData.documentNumber.length < 9 :
+                           customerData.documentNumber.length !== 8)}
+                        className="px-2"
+                      >
+                        {isLookingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                      </Button>
                     </div>
+                    <input
+                      type="text"
+                      value={customerData.documentType === ID_TYPES.RUC ? customerData.businessName : customerData.name}
+                      onChange={e => setCustomerData({
+                        ...customerData,
+                        ...(customerData.documentType === ID_TYPES.RUC
+                          ? { businessName: e.target.value }
+                          : { name: e.target.value }
+                        )
+                      })}
+                      placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social (opcional)' : 'Nombre (opcional)'}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
                     <input
                       type="tel"
                       value={customerData.phone}
@@ -3069,53 +3285,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 )}
               </div>
-
-              {/* Opciones Avanzadas (Almacén, Fecha) */}
-              {(warehouses.length > 0 || businessSettings?.allowCustomEmissionDate) && (
-                <details className="group">
-                  <summary className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700 list-none">
-                    <Settings2 className="w-3 h-3" />
-                    <span>Opciones avanzadas</span>
-                    <ChevronDown className="w-3 h-3 ml-auto group-open:rotate-180 transition-transform" />
-                  </summary>
-                  <div className="pt-2 space-y-2">
-                    {/* Almacén */}
-                    {warehouses.length > 0 && businessMode !== 'restaurant' && (
-                      <select
-                        value={selectedWarehouse?.id || ''}
-                        onChange={e => {
-                          const warehouse = warehouses.find(w => w.id === e.target.value)
-                          setSelectedWarehouse(warehouse)
-                        }}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      >
-                        {warehouses.filter(w => w.isActive).map(warehouse => (
-                          <option key={warehouse.id} value={warehouse.id}>
-                            {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {/* Fecha de Emisión */}
-                    {businessSettings?.allowCustomEmissionDate && (
-                      <input
-                        type="date"
-                        value={emissionDate}
-                        max={getLocalDateString()}
-                        min={(() => {
-                          const today = new Date()
-                          const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
-                          const minDate = new Date(today)
-                          minDate.setDate(today.getDate() - maxDaysBack)
-                          return getLocalDateString(minDate)
-                        })()}
-                        onChange={e => setEmissionDate(e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      />
-                    )}
-                  </div>
-                </details>
-              )}
 
               {/* Tipo de pedido para restaurante */}
               {businessMode === 'restaurant' && (
@@ -4062,6 +4231,26 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                     <p className="text-xl font-bold text-amber-600">
                       {formatCurrency(productForPriceSelection.price3)}
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {/* Precio 4 */}
+              {productForPriceSelection.price4 && (
+                <button
+                  onClick={() => handlePriceSelection('price4')}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                      </p>
+                      <p className="text-xs text-gray-500">Precio personalizado</p>
+                    </div>
+                    <p className="text-xl font-bold text-purple-600">
+                      {formatCurrency(productForPriceSelection.price4)}
                     </p>
                   </div>
                 </button>

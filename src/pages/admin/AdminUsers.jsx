@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion } from 'firebase/firestore'
-import { PLANS, updateUserFeatures } from '@/services/subscriptionService'
+import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { notifyPaymentReceived } from '@/services/notificationService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import { useToast } from '@/contexts/ToastContext'
@@ -39,8 +39,17 @@ import {
   DollarSign,
   Receipt,
   Upload,
-  Landmark
+  Landmark,
+  Store,
+  MapPin,
+  Phone
 } from 'lucide-react'
+import {
+  getBranches,
+  createBranch,
+  updateBranch,
+  deleteBranch
+} from '@/services/branchService'
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-800',
@@ -118,6 +127,26 @@ export default function AdminUsers() {
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [paymentUserToEdit, setPaymentUserToEdit] = useState(null)
   const [processingPayment, setProcessingPayment] = useState(false)
+
+  // Estados para modal de sucursales
+  const [showBranchesModal, setShowBranchesModal] = useState(false)
+  const [branchesUserToEdit, setBranchesUserToEdit] = useState(null)
+  const [branches, setBranches] = useState([])
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [savingBranch, setSavingBranch] = useState(false)
+  const [editingBranch, setEditingBranch] = useState(null)
+  const [branchForm, setBranchForm] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    location: '',
+    isDefault: false
+  })
+  // Estados para editar límite de sucursales
+  const [showEditLimitModal, setShowEditLimitModal] = useState(false)
+  const [editingMaxBranches, setEditingMaxBranches] = useState(1)
+  const [savingMaxBranches, setSavingMaxBranches] = useState(false)
 
   useEffect(() => {
     loadUsers()
@@ -668,6 +697,175 @@ export default function AdminUsers() {
       alert('Error al guardar features')
     } finally {
       setSavingFeatures(false)
+    }
+  }
+
+  // Abrir modal de sucursales
+  async function openBranchesModal(user) {
+    setBranchesUserToEdit(user)
+    setShowBranchesModal(true)
+    setLoadingBranches(true)
+    setBranches([])
+    setEditingBranch(null)
+    setBranchForm({
+      name: '',
+      address: '',
+      phone: '',
+      email: '',
+      location: '',
+      isDefault: false
+    })
+
+    try {
+      const result = await getBranches(user.id)
+      if (result.success) {
+        setBranches(result.data)
+      }
+    } catch (error) {
+      console.error('Error loading branches:', error)
+      toast.error('Error al cargar sucursales')
+    } finally {
+      setLoadingBranches(false)
+    }
+  }
+
+  // Crear o actualizar sucursal
+  async function handleSaveBranch() {
+    if (!branchesUserToEdit) return
+    if (!branchForm.name.trim()) {
+      toast.error('El nombre de la sucursal es requerido')
+      return
+    }
+
+    setSavingBranch(true)
+    try {
+      if (editingBranch) {
+        // Actualizar sucursal existente
+        await updateBranch(branchesUserToEdit.id, editingBranch.id, branchForm)
+        toast.success('Sucursal actualizada')
+      } else {
+        // Verificar límite de sucursales antes de crear
+        const maxBranches = branchesUserToEdit.limits?.maxBranches ?? 1
+        const activeBranches = branches.filter(b => b.isActive !== false).length
+
+        if (maxBranches !== -1 && activeBranches >= maxBranches) {
+          toast.error(`Límite alcanzado: ${activeBranches}/${maxBranches} sucursales. Aumenta el límite en la suscripción.`)
+          setSavingBranch(false)
+          return
+        }
+
+        // Crear nueva sucursal
+        await createBranch(branchesUserToEdit.id, {
+          ...branchForm,
+          createdBy: 'admin'
+        })
+        toast.success('Sucursal creada')
+      }
+
+      // Recargar sucursales
+      const result = await getBranches(branchesUserToEdit.id)
+      if (result.success) {
+        setBranches(result.data)
+      }
+
+      // Limpiar formulario
+      setEditingBranch(null)
+      setBranchForm({
+        name: '',
+        address: '',
+        phone: '',
+        email: '',
+        location: '',
+        isDefault: false
+      })
+    } catch (error) {
+      console.error('Error saving branch:', error)
+      toast.error('Error al guardar sucursal')
+    } finally {
+      setSavingBranch(false)
+    }
+  }
+
+  // Editar sucursal
+  function handleEditBranch(branch) {
+    setEditingBranch(branch)
+    setBranchForm({
+      name: branch.name || '',
+      address: branch.address || '',
+      phone: branch.phone || '',
+      email: branch.email || '',
+      location: branch.location || '',
+      isDefault: branch.isDefault || false
+    })
+  }
+
+  // Eliminar sucursal
+  async function handleDeleteBranch(branchId) {
+    if (!branchesUserToEdit) return
+    if (!confirm('¿Estás seguro de desactivar esta sucursal?')) return
+
+    try {
+      await deleteBranch(branchesUserToEdit.id, branchId)
+      toast.success('Sucursal desactivada')
+
+      // Recargar sucursales
+      const result = await getBranches(branchesUserToEdit.id)
+      if (result.success) {
+        setBranches(result.data)
+      }
+    } catch (error) {
+      console.error('Error deleting branch:', error)
+      toast.error('Error al desactivar sucursal')
+    }
+  }
+
+  // Cancelar edición de sucursal
+  function handleCancelBranchEdit() {
+    setEditingBranch(null)
+    setBranchForm({
+      name: '',
+      address: '',
+      phone: '',
+      email: '',
+      location: '',
+      isDefault: false
+    })
+  }
+
+  // Abrir modal para editar límite de sucursales
+  function openEditLimitModal() {
+    setEditingMaxBranches(branchesUserToEdit?.limits?.maxBranches ?? 1)
+    setShowEditLimitModal(true)
+  }
+
+  // Guardar nuevo límite de sucursales
+  async function handleSaveMaxBranches() {
+    if (!branchesUserToEdit) return
+
+    setSavingMaxBranches(true)
+    try {
+      await updateMaxBranches(branchesUserToEdit.id, editingMaxBranches)
+
+      // Actualizar el usuario en el estado local
+      setBranchesUserToEdit(prev => ({
+        ...prev,
+        limits: { ...prev.limits, maxBranches: editingMaxBranches }
+      }))
+
+      // Actualizar lista de usuarios
+      setUsers(prev => prev.map(u =>
+        u.id === branchesUserToEdit.id
+          ? { ...u, limits: { ...u.limits, maxBranches: editingMaxBranches } }
+          : u
+      ))
+
+      toast.success('Límite de sucursales actualizado')
+      setShowEditLimitModal(false)
+    } catch (error) {
+      console.error('Error updating max branches:', error)
+      toast.error('Error al actualizar límite')
+    } finally {
+      setSavingMaxBranches(false)
     }
   }
 
@@ -1325,6 +1523,16 @@ export default function AdminUsers() {
                   )}
                 </button>
 
+                <button
+                  onClick={() => {
+                    openBranchesModal(selectedUser)
+                  }}
+                  className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 bg-cyan-100 text-cyan-700 rounded-lg hover:bg-cyan-200 text-xs sm:text-sm"
+                >
+                  <Store className="w-4 h-4 sm:w-5 sm:h-5" />
+                  Sucursales
+                </button>
+
                 {selectedUser.status !== 'suspended' ? (
                   <button
                     onClick={() => {
@@ -1977,6 +2185,312 @@ export default function AdminUsers() {
           loading={processingPayment}
           toast={toast}
         />
+      )}
+
+      {/* Modal de Sucursales */}
+      {showBranchesModal && branchesUserToEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl w-full max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+                  <Store className="w-5 h-5 text-cyan-600" />
+                  Gestionar Sucursales
+                  <button
+                    onClick={openEditLimitModal}
+                    className="ml-2 px-2.5 py-0.5 bg-cyan-100 text-cyan-700 text-xs font-medium rounded-full hover:bg-cyan-200 transition-colors flex items-center gap-1"
+                    title="Editar límite de sucursales"
+                  >
+                    {branches.filter(b => b.isActive !== false).length}/
+                    {branchesUserToEdit.limits?.maxBranches === -1 ? '∞' : (branchesUserToEdit.limits?.maxBranches ?? 1)}
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                </h2>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">{branchesUserToEdit.businessName}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBranchesModal(false)
+                  setBranchesUserToEdit(null)
+                  setBranches([])
+                  setEditingBranch(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-6">
+              {/* Lista de sucursales existentes */}
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">Sucursales Activas</h3>
+                {loadingBranches ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-cyan-600" />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Sucursal Principal Implícita - siempre existe */}
+                    <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-medium text-gray-900">Sucursal Principal</h4>
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                              Por defecto
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Usa las series globales del negocio (configuradas en Ajustes)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sucursales adicionales configuradas */}
+                    {branches.filter(b => b.isActive).length === 0 ? (
+                      <div className="text-center py-4 text-gray-400 text-sm">
+                        No hay sucursales adicionales configuradas
+                      </div>
+                    ) : (
+                  <div className="space-y-3">
+                    {branches.filter(b => b.isActive).map(branch => (
+                      <div
+                        key={branch.id}
+                        className={`p-4 border rounded-lg ${editingBranch?.id === branch.id ? 'border-cyan-500 bg-cyan-50' : 'border-gray-200'}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-gray-900">{branch.name}</h4>
+                              {branch.isDefault && (
+                                <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full">
+                                  Principal
+                                </span>
+                              )}
+                            </div>
+                            {branch.address && (
+                              <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                                <MapPin className="w-3 h-3" /> {branch.address}
+                              </p>
+                            )}
+                            {branch.phone && (
+                              <p className="text-sm text-gray-500 flex items-center gap-1">
+                                <Phone className="w-3 h-3" /> {branch.phone}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditBranch(branch)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            {!branch.isDefault && (
+                              <button
+                                onClick={() => handleDeleteBranch(branch.id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Formulario para crear/editar sucursal */}
+              <div className="border-t pt-6">
+                <h3 className="font-medium text-gray-900 mb-4">
+                  {editingBranch ? 'Editar Sucursal' : 'Nueva Sucursal Adicional'}
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nombre de la Sucursal *
+                    </label>
+                    <input
+                      type="text"
+                      value={branchForm.name}
+                      onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
+                      placeholder="Ej: Tienda Centro, Sucursal Norte"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Dirección
+                    </label>
+                    <input
+                      type="text"
+                      value={branchForm.address}
+                      onChange={e => setBranchForm({ ...branchForm, address: e.target.value })}
+                      placeholder="Dirección completa para comprobantes"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Teléfono
+                      </label>
+                      <input
+                        type="text"
+                        value={branchForm.phone}
+                        onChange={e => setBranchForm({ ...branchForm, phone: e.target.value })}
+                        placeholder="01-1234567"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={branchForm.email}
+                        onChange={e => setBranchForm({ ...branchForm, email: e.target.value })}
+                        placeholder="sucursal@empresa.com"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ciudad/Ubicación
+                    </label>
+                    <input
+                      type="text"
+                      value={branchForm.location}
+                      onChange={e => setBranchForm({ ...branchForm, location: e.target.value })}
+                      placeholder="Lima, Arequipa, etc."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                    />
+                  </div>
+
+                  {!editingBranch && branches.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="isDefault"
+                        checked={branchForm.isDefault}
+                        onChange={e => setBranchForm({ ...branchForm, isDefault: e.target.checked })}
+                        className="w-4 h-4 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
+                      />
+                      <label htmlFor="isDefault" className="text-sm text-gray-700">
+                        Establecer como sucursal principal
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    {editingBranch && (
+                      <button
+                        onClick={handleCancelBranchEdit}
+                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSaveBranch}
+                      disabled={savingBranch || !branchForm.name.trim()}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+                    >
+                      {savingBranch ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          {editingBranch ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                          {editingBranch ? 'Actualizar' : 'Crear Sucursal Adicional'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info sobre series */}
+              <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
+                <h4 className="font-medium text-cyan-800 mb-1">Series Automáticas</h4>
+                <p className="text-sm text-cyan-700">
+                  Al crear una sucursal, se generan automáticamente las series de documentos (F001, B001, etc.).
+                  Las series se incrementan para cada nueva sucursal (F002, B002...).
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para editar límite de sucursales */}
+      {showEditLimitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Store className="w-5 h-5 text-cyan-600" />
+              Límite de Sucursales
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Configura cuántas sucursales puede tener este cliente. Usa -1 para ilimitado.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Máximo de sucursales
+                </label>
+                <input
+                  type="number"
+                  min="-1"
+                  value={editingMaxBranches}
+                  onChange={e => setEditingMaxBranches(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  -1 = Ilimitado, 1 = Una sucursal, 2+ = Múltiples
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowEditLimitModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveMaxBranches}
+                  disabled={savingMaxBranches}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50"
+                >
+                  {savingMaxBranches ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Guardar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
@@ -6,6 +7,7 @@ import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
 import LandingRouter from './components/LandingRouter'
 import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -83,6 +85,25 @@ import CatalogoPublico from './pages/CatalogoPublico'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
+
+  // Configurar StatusBar globalmente al iniciar la app
+  useEffect(() => {
+    const configureStatusBar = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          // El contenido NO se superpone con el status bar
+          await StatusBar.setOverlaysWebView({ overlay: false })
+          // Texto blanco sobre fondo oscuro
+          await StatusBar.setStyle({ style: Style.Dark })
+          // Color de fondo azul primario
+          await StatusBar.setBackgroundColor({ color: '#1e40af' })
+        } catch (error) {
+          console.warn('Error configurando StatusBar:', error)
+        }
+      }
+    }
+    configureStatusBar()
+  }, [])
 
   return (
     <Router

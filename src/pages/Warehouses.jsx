@@ -14,6 +14,9 @@ import {
   Package,
   RefreshCw,
   AlertTriangle,
+  Phone,
+  Store,
+  Search,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -30,17 +33,22 @@ import {
   deleteWarehouse,
   syncAllProductsStock,
 } from '@/services/warehouseService'
-import { getProducts } from '@/services/firestoreService'
+import { getProducts, getAllWarehouseSeries } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
+import { FileText } from 'lucide-react'
 
 // Schema de validación
 const warehouseSchema = z.object({
   name: z.string().min(1, 'Nombre es requerido'),
   location: z.string().optional(),
+  address: z.string().optional(), // Dirección completa para comprobantes
+  phone: z.string().optional(), // Teléfono del local
   isDefault: z.boolean().optional(),
+  branchId: z.string().optional(), // Sucursal a la que pertenece
 })
 
 export default function Warehouses() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, isDemoMode } = useAppContext()
   const toast = useToast()
   const [warehouses, setWarehouses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -52,6 +60,10 @@ export default function Warehouses() {
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [syncPreview, setSyncPreview] = useState(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+  const [warehouseSeries, setWarehouseSeries] = useState({})
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
   const {
     register,
@@ -69,7 +81,50 @@ export default function Warehouses() {
 
   useEffect(() => {
     loadWarehouses()
+    loadBranches()
   }, [user])
+
+  // Cargar sucursales para filtro y asignación
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
+
+  // Filtrar almacenes
+  const filteredWarehouses = warehouses.filter(warehouse => {
+    // Filtrar por búsqueda
+    const search = searchTerm.toLowerCase()
+    const matchesSearch = !searchTerm ||
+      warehouse.name?.toLowerCase().includes(search) ||
+      warehouse.location?.toLowerCase().includes(search)
+
+    // Filtrar por sucursal
+    let matchesBranch = true
+    if (filterBranch !== 'all') {
+      if (filterBranch === 'main') {
+        matchesBranch = !warehouse.branchId
+      } else {
+        matchesBranch = warehouse.branchId === filterBranch
+      }
+    }
+
+    return matchesSearch && matchesBranch
+  })
+
+  // Helper para obtener nombre de sucursal
+  const getBranchName = (branchId) => {
+    if (!branchId) return 'Sucursal Principal'
+    const branch = branches.find(b => b.id === branchId)
+    return branch?.name || 'Sin asignar'
+  }
 
   const loadWarehouses = async () => {
     if (!user?.uid) return
@@ -82,6 +137,12 @@ export default function Warehouses() {
       } else {
         toast.error(result.error || 'Error al cargar almacenes')
       }
+
+      // Cargar series de almacenes
+      const seriesResult = await getAllWarehouseSeries(getBusinessId())
+      if (seriesResult.success) {
+        setWarehouseSeries(seriesResult.data || {})
+      }
     } catch (error) {
       console.error('Error al cargar almacenes:', error)
       toast.error('Error al cargar almacenes')
@@ -92,10 +153,15 @@ export default function Warehouses() {
 
   const openCreateModal = () => {
     setEditingWarehouse(null)
+    // No marcamos isDefault aquí, el servicio lo detectará automáticamente
+    // si es el primer almacén de la sucursal
     reset({
       name: '',
       location: '',
-      isDefault: warehouses.length === 0, // Primero es default automáticamente
+      address: '',
+      phone: '',
+      isDefault: false,
+      branchId: '',
     })
     setIsModalOpen(true)
   }
@@ -105,7 +171,10 @@ export default function Warehouses() {
     reset({
       name: warehouse.name,
       location: warehouse.location || '',
+      address: warehouse.address || '',
+      phone: warehouse.phone || '',
       isDefault: warehouse.isDefault || false,
+      branchId: warehouse.branchId || '',
     })
     setIsModalOpen(true)
   }
@@ -355,16 +424,79 @@ export default function Warehouses() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Almacén Principal</p>
-                <p className="text-lg font-bold text-gray-900 mt-2">
-                  {warehouses.find((w) => w.isDefault)?.name || 'No definido'}
+                <p className="text-sm font-medium text-gray-600">
+                  {branches.length > 0 ? 'Almacenes Principales' : 'Almacén Principal'}
                 </p>
+                {branches.length > 0 ? (
+                  <div className="mt-2 space-y-1">
+                    {/* Principal de Sucursal Principal */}
+                    {(() => {
+                      const mainDefault = warehouses.find(w => w.isDefault && !w.branchId)
+                      return mainDefault ? (
+                        <p className="text-sm text-gray-700">
+                          <span className="text-primary-600 font-medium">Principal:</span> {mainDefault.name}
+                        </p>
+                      ) : null
+                    })()}
+                    {/* Principales por sucursal */}
+                    {branches.slice(0, 3).map(branch => {
+                      const branchDefault = warehouses.find(w => w.isDefault && w.branchId === branch.id)
+                      return branchDefault ? (
+                        <p key={branch.id} className="text-sm text-gray-700">
+                          <span className="text-blue-600 font-medium">{branch.name}:</span> {branchDefault.name}
+                        </p>
+                      ) : null
+                    })}
+                    {branches.length > 3 && (
+                      <p className="text-xs text-gray-500">+{branches.length - 3} más...</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-lg font-bold text-gray-900 mt-2">
+                    {warehouses.find((w) => w.isDefault)?.name || 'No definido'}
+                  </p>
+                )}
               </div>
               <Package className="w-10 h-10 text-purple-500" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Filtros */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o ubicación..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            {/* Filtro de Sucursal */}
+            {branches.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <Store className="w-4 h-4 text-gray-500" />
+                <select
+                  value={filterBranch}
+                  onChange={e => setFilterBranch(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Todas las sucursales</option>
+                  <option value="main">Sucursal Principal</option>
+                  {branches.map(branch => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabla de almacenes */}
       <Card>
@@ -376,87 +508,123 @@ export default function Warehouses() {
             <div className="flex justify-center items-center py-8">
               <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
             </div>
-          ) : warehouses.length === 0 ? (
+          ) : filteredWarehouses.length === 0 ? (
             <div className="text-center py-12">
               <Warehouse className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                No hay almacenes registrados
+                {searchTerm || filterBranch !== 'all' ? 'No se encontraron almacenes' : 'No hay almacenes registrados'}
               </h3>
               <p className="text-gray-600 mb-4">
-                Crea tu primer almacén para comenzar a gestionar inventario
+                {searchTerm || filterBranch !== 'all'
+                  ? 'Intenta con otros filtros de búsqueda'
+                  : 'Crea tu primer almacén para comenzar a gestionar inventario'}
               </p>
-              <Button onClick={openCreateModal}>
-                <Plus className="w-4 h-4 mr-2" />
-                Crear Primer Almacén
-              </Button>
+              {!searchTerm && filterBranch === 'all' && (
+                <Button onClick={openCreateModal}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Crear Primer Almacén
+                </Button>
+              )}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>Sucursal</TableHead>
                   <TableHead>Ubicación</TableHead>
+                  <TableHead>Series</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Principal</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {warehouses.map((warehouse) => (
-                  <TableRow key={warehouse.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Warehouse className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">{warehouse.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{warehouse.location || 'No especificada'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {warehouse.isActive ? (
-                        <Badge variant="success" className="flex items-center gap-1 w-fit">
-                          <CheckCircle className="w-3 h-3" />
-                          Activo
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="flex items-center gap-1 w-fit">
-                          <XCircle className="w-3 h-3" />
-                          Inactivo
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {warehouse.isDefault ? (
-                        <Badge variant="primary" className="w-fit">Principal</Badge>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditModal(warehouse)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeletingWarehouse(warehouse)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredWarehouses.map((warehouse) => {
+                  const wSeries = warehouseSeries[warehouse.id]
+                  return (
+                    <TableRow key={warehouse.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Warehouse className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium">{warehouse.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Store className="w-4 h-4" />
+                          <span className="text-sm">{getBranchName(warehouse.branchId)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <MapPin className="w-4 h-4" />
+                          <span>{warehouse.location || 'No especificada'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {wSeries ? (
+                          <div className="flex items-center gap-1">
+                            <FileText className="w-4 h-4 text-blue-500" />
+                            <div className="text-xs">
+                              <span className="font-mono text-gray-700">
+                                F:{wSeries.factura?.serie || '-'}
+                              </span>
+                              <span className="mx-1 text-gray-400">|</span>
+                              <span className="font-mono text-gray-700">
+                                B:{wSeries.boleta?.serie || '-'}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Sin configurar
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {warehouse.isActive ? (
+                          <Badge variant="success" className="flex items-center gap-1 w-fit">
+                            <CheckCircle className="w-3 h-3" />
+                            Activo
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                            <XCircle className="w-3 h-3" />
+                            Inactivo
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {warehouse.isDefault ? (
+                          <Badge variant="primary" className="w-fit">Principal</Badge>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditModal(warehouse)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingWarehouse(warehouse)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}
@@ -483,13 +651,69 @@ export default function Warehouses() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Ubicación
+              Ubicación (referencia)
             </label>
             <Input
               {...register('location')}
               placeholder="Ej: Lima - Cercado"
               error={errors.location?.message}
             />
+          </div>
+
+          {/* Sucursal */}
+          {branches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sucursal
+              </label>
+              <select
+                {...register('branchId')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Sucursal Principal</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Selecciona a qué sucursal pertenece este almacén
+              </p>
+            </div>
+          )}
+
+          {/* Datos para comprobantes */}
+          <div className="pt-4 border-t">
+            <p className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Datos para Comprobantes
+            </p>
+            <p className="text-xs text-gray-500 mb-3">
+              Estos datos aparecerán en las facturas y boletas emitidas desde este local
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dirección del Local
+                </label>
+                <Input
+                  {...register('address')}
+                  placeholder="Ej: Av. Grau 123, Cercado de Lima"
+                  error={errors.address?.message}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Teléfono del Local
+                </label>
+                <Input
+                  {...register('phone')}
+                  placeholder="Ej: 01-234-5678"
+                  error={errors.phone?.message}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

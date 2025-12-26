@@ -27,6 +27,7 @@ export const PLANS = {
       maxInvoicesPerMonth: -1, // ilimitado durante prueba
       maxCustomers: -1, // ilimitado
       maxProducts: -1, // ilimitado
+      maxBranches: 1, // 1 sucursal en prueba
       sunatIntegration: false, // Bloqueado en prueba
       multiUser: false
     }
@@ -46,6 +47,7 @@ export const PLANS = {
       maxInvoicesPerMonth: 500, // Límite por QPse
       maxCustomers: -1, // ilimitado
       maxProducts: -1, // ilimitado
+      maxBranches: 1, // 1 sucursal incluida, admin puede aumentar
       sunatIntegration: true,
       multiUser: true // Todos los planes son multiusuario
     }
@@ -61,6 +63,7 @@ export const PLANS = {
       maxInvoicesPerMonth: 500, // 500 comprobantes/mes renovables
       maxCustomers: -1,
       maxProducts: -1,
+      maxBranches: 1,
       sunatIntegration: true,
       multiUser: true
     },
@@ -77,6 +80,7 @@ export const PLANS = {
       maxInvoicesPerMonth: 500, // 500 comprobantes/mes renovables
       maxCustomers: -1,
       maxProducts: -1,
+      maxBranches: 1,
       sunatIntegration: true,
       multiUser: true
     },
@@ -97,6 +101,7 @@ export const PLANS = {
       maxInvoicesPerMonth: -1, // ILIMITADO con CDT propio
       maxCustomers: -1,
       maxProducts: -1,
+      maxBranches: 1,
       sunatIntegration: true,
       multiUser: true
     }
@@ -112,6 +117,7 @@ export const PLANS = {
       maxInvoicesPerMonth: -1, // ILIMITADO con CDT propio
       maxCustomers: -1,
       maxProducts: -1,
+      maxBranches: 1,
       sunatIntegration: true,
       multiUser: true
     },
@@ -128,6 +134,7 @@ export const PLANS = {
       maxInvoicesPerMonth: -1, // ILIMITADO con CDT propio
       maxCustomers: -1,
       maxProducts: -1,
+      maxBranches: 1,
       sunatIntegration: true,
       multiUser: true
     },
@@ -147,6 +154,7 @@ export const PLANS = {
       maxInvoicesPerMonth: -1, // Ilimitado
       maxCustomers: -1, // Ilimitado
       maxProducts: -1, // Ilimitado
+      maxBranches: -1, // Ilimitado
       sunatIntegration: true,
       multiUser: true
     }
@@ -484,11 +492,27 @@ export const updateUserFeatures = async (userId, features) => {
   }
 };
 
+// Actualizar límite de sucursales de un usuario (Admin)
+// Permite al admin aumentar o disminuir el límite de sucursales individualmente
+export const updateMaxBranches = async (userId, maxBranches) => {
+  try {
+    const subscriptionRef = doc(db, 'subscriptions', userId);
+    await updateDoc(subscriptionRef, {
+      'limits.maxBranches': maxBranches,
+      updatedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error al actualizar límite de sucursales:', error);
+    throw error;
+  }
+};
+
 // Verificar límites de uso
 // IMPORTANTE: Para facturas, el límite depende del método de emisión configurado:
 // - QPse: 500 comprobantes/mes (limitado por el plan)
 // - SUNAT Directo: Ilimitado (sin importar el plan, porque usan su CDT)
-export const checkUsageLimits = (subscription, type, emissionMethod = null) => {
+export const checkUsageLimits = (subscription, type, emissionMethod = null, currentCount = 0) => {
   if (!subscription || !subscription.limits) return true;
 
   const limits = subscription.limits;
@@ -509,6 +533,9 @@ export const checkUsageLimits = (subscription, type, emissionMethod = null) => {
     case 'product':
       return limits.maxProducts === -1 ||
              (usage.totalProducts || 0) < limits.maxProducts;
+    case 'branch':
+      // Verificar límite de sucursales (currentCount es el número actual de sucursales)
+      return limits.maxBranches === -1 || currentCount < limits.maxBranches;
     case 'sunat':
       return limits.sunatIntegration === true;
     default:

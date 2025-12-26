@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Minus, Trash2, ShoppingCart, Save, X, Loader2, Package } from 'lucide-react'
+import { Plus, Minus, Trash2, ShoppingCart, Save, X, Loader2, Package, Store } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -9,6 +9,8 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { formatCurrency } from '@/lib/utils'
 import { getIngredients, registerPurchase } from '@/services/ingredientService'
+import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
 
 const UNITS = [
   { value: 'kg', label: 'kg' },
@@ -28,6 +30,10 @@ export default function RegisterPurchase() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Sucursales y almacenes
+  const [branches, setBranches] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+
   // Purchase cart
   const [cart, setCart] = useState([])
 
@@ -35,30 +41,50 @@ export default function RegisterPurchase() {
   const [purchaseInfo, setPurchaseInfo] = useState({
     supplier: '',
     invoiceNumber: '',
-    purchaseDate: new Date().toISOString().split('T')[0]
+    purchaseDate: new Date().toISOString().split('T')[0],
+    warehouseId: ''
   })
 
   // Search
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
-    loadIngredients()
+    loadData()
   }, [user])
 
-  const loadIngredients = async () => {
+  const loadData = async () => {
     if (!user?.uid) return
 
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const result = await getIngredients(businessId)
+      const [ingredientsResult, branchesResult, warehousesResult] = await Promise.all([
+        getIngredients(businessId),
+        getActiveBranches(businessId),
+        getWarehouses(businessId)
+      ])
 
-      if (result.success) {
-        setIngredients(result.data || [])
+      if (ingredientsResult.success) {
+        setIngredients(ingredientsResult.data || [])
+      }
+
+      if (branchesResult.success) {
+        setBranches(branchesResult.data || [])
+      }
+
+      if (warehousesResult.success) {
+        const activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        setWarehouses(activeWarehouses)
+
+        // Seleccionar almacén por defecto
+        const defaultWarehouse = activeWarehouses.find(w => w.isDefault && !w.branchId) || activeWarehouses[0]
+        if (defaultWarehouse) {
+          setPurchaseInfo(prev => ({ ...prev, warehouseId: defaultWarehouse.id }))
+        }
       }
     } catch (error) {
       console.error('Error:', error)
-      toast.error('Error al cargar ingredientes')
+      toast.error('Error al cargar datos')
     } finally {
       setIsLoading(false)
     }
@@ -171,7 +197,8 @@ export default function RegisterPurchase() {
           unitPrice: unitPrice,
           totalCost: quantity * unitPrice,
           supplier: purchaseInfo.supplier,
-          invoiceNumber: purchaseInfo.invoiceNumber
+          invoiceNumber: purchaseInfo.invoiceNumber,
+          warehouseId: purchaseInfo.warehouseId || null
         })
       })
 
@@ -181,10 +208,12 @@ export default function RegisterPurchase() {
 
       // Limpiar formulario
       setCart([])
+      const defaultWarehouse = warehouses.find(w => w.isDefault && !w.branchId) || warehouses[0]
       setPurchaseInfo({
         supplier: '',
         invoiceNumber: '',
-        purchaseDate: new Date().toISOString().split('T')[0]
+        purchaseDate: new Date().toISOString().split('T')[0],
+        warehouseId: defaultWarehouse?.id || ''
       })
 
       // Volver a ingredientes
@@ -308,6 +337,50 @@ export default function RegisterPurchase() {
                 value={purchaseInfo.purchaseDate}
                 onChange={e => setPurchaseInfo({ ...purchaseInfo, purchaseDate: e.target.value })}
               />
+
+              {/* Selector de Almacén */}
+              {warehouses.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Store className="w-4 h-4 inline mr-1" />
+                    Almacén de Ingreso
+                  </label>
+                  <select
+                    value={purchaseInfo.warehouseId}
+                    onChange={e => setPurchaseInfo({ ...purchaseInfo, warehouseId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin almacén específico</option>
+                    {/* Almacenes de Sucursal Principal */}
+                    {warehouses.filter(w => !w.branchId).length > 0 && (
+                      <optgroup label="Sucursal Principal">
+                        {warehouses.filter(w => !w.branchId).map(warehouse => (
+                          <option key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {/* Almacenes de otras sucursales */}
+                    {branches.map(branch => {
+                      const branchWarehouses = warehouses.filter(w => w.branchId === branch.id)
+                      if (branchWarehouses.length === 0) return null
+                      return (
+                        <optgroup key={branch.id} label={branch.name}>
+                          {branchWarehouses.map(warehouse => (
+                            <option key={warehouse.id} value={warehouse.id}>
+                              {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )
+                    })}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    El stock ingresará a este almacén
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

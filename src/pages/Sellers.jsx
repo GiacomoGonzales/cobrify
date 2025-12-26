@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Plus, Edit, Trash2, UserCheck, DollarSign, ShoppingCart, TrendingUp, Loader2 } from 'lucide-react'
+import { Users, Plus, Edit, Trash2, UserCheck, DollarSign, ShoppingCart, TrendingUp, Loader2, Store, Search } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import SellerFormModal from '@/components/SellerFormModal'
 import { formatCurrency } from '@/lib/utils'
+import { getActiveBranches } from '@/services/branchService'
 
 // Datos de ejemplo para modo demo
 const DEMO_SELLERS = [
@@ -71,7 +72,7 @@ const DEMO_STATS = {
 }
 
 export default function Sellers() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, user } = useAppContext()
   const toast = useToast()
 
   const [sellers, setSellers] = useState([])
@@ -79,11 +80,52 @@ export default function Sellers() {
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingSeller, setEditingSeller] = useState(null)
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Cargar datos de Firestore
   useEffect(() => {
     loadSellers()
+    loadBranches()
   }, [])
+
+  // Cargar sucursales para filtro
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
+
+  // Filtrar vendedores
+  const filteredSellers = sellers.filter(seller => {
+    // Filtrar por búsqueda
+    const search = searchTerm.toLowerCase()
+    const matchesSearch = !searchTerm ||
+      seller.name?.toLowerCase().includes(search) ||
+      seller.code?.toLowerCase().includes(search) ||
+      seller.dni?.includes(search) ||
+      seller.email?.toLowerCase().includes(search)
+
+    // Filtrar por sucursal
+    let matchesBranch = true
+    if (filterBranch !== 'all') {
+      if (filterBranch === 'main') {
+        matchesBranch = !seller.branchId
+      } else {
+        matchesBranch = seller.branchId === filterBranch
+      }
+    }
+
+    return matchesSearch && matchesBranch
+  })
 
   const loadSellers = async () => {
     setIsLoading(true)
@@ -273,21 +315,62 @@ export default function Sellers() {
         </div>
       )}
 
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, código, DNI..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            {/* Filtro de Sucursal */}
+            {branches.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <Store className="w-4 h-4 text-gray-500" />
+                <select
+                  value={filterBranch}
+                  onChange={e => setFilterBranch(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Todas las sucursales</option>
+                  <option value="main">Sucursal Principal</option>
+                  {branches.map(branch => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Sellers Table */}
       <Card>
         <CardHeader>
           <CardTitle>Lista de Vendedores</CardTitle>
         </CardHeader>
         <CardContent>
-          {sellers.length === 0 ? (
+          {filteredSellers.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No hay vendedores registrados</h3>
-              <p className="text-gray-600 mb-4">Comienza agregando tu primer vendedor</p>
-              <Button onClick={handleCreate}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Vendedor
-              </Button>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {searchTerm || filterBranch !== 'all' ? 'No se encontraron vendedores' : 'No hay vendedores registrados'}
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {searchTerm || filterBranch !== 'all' ? 'Intenta con otros filtros de búsqueda' : 'Comienza agregando tu primer vendedor'}
+              </p>
+              {!searchTerm && filterBranch === 'all' && (
+                <Button onClick={handleCreate}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nuevo Vendedor
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -305,7 +388,7 @@ export default function Sellers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sellers.map((seller) => (
+                  {filteredSellers.map((seller) => (
                     <TableRow key={seller.id}>
                       <TableCell className="font-medium">{seller.code}</TableCell>
                       <TableCell>
@@ -313,6 +396,14 @@ export default function Sellers() {
                           <p className="font-medium text-gray-900">{seller.name}</p>
                           {seller.dni && (
                             <p className="text-sm text-gray-500">DNI: {seller.dni}</p>
+                          )}
+                          {branches.length > 0 && (
+                            <p className="text-xs text-blue-600 mt-0.5">
+                              <Store className="w-3 h-3 inline mr-1" />
+                              {seller.branchId
+                                ? branches.find(b => b.id === seller.branchId)?.name || 'Sucursal'
+                                : 'Sucursal Principal'}
+                            </p>
                           )}
                         </div>
                       </TableCell>

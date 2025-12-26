@@ -122,6 +122,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         price: parseFloat(row.precio || row.Precio || row.PRECIO || row.price || row.Price || row.PRICE || row.precio_compra || row.Precio_Compra || row.PRECIO_COMPRA || 0),
         price2: row.precio2 || row.Precio2 || row.PRECIO2 || row.price2 || row.Price2 || row.PRICE2 || null,
         price3: row.precio3 || row.Precio3 || row.PRECIO3 || row.price3 || row.Price3 || row.PRICE3 || null,
+        price4: row.precio4 || row.Precio4 || row.PRECIO4 || row.price4 || row.Price4 || row.PRICE4 || null,
         stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
@@ -167,7 +168,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         return
       }
 
-      // Parsear precio2 y precio3 (opcionales)
+      // Parsear precio2, precio3 y precio4 (opcionales)
       if (product.price2 !== null && product.price2 !== '' && product.price2 !== undefined) {
         const price2Num = parseFloat(product.price2)
         product.price2 = isNaN(price2Num) || price2Num <= 0 ? null : price2Num
@@ -180,6 +181,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         product.price3 = isNaN(price3Num) || price3Num <= 0 ? null : price3Num
       } else {
         product.price3 = null
+      }
+
+      if (product.price4 !== null && product.price4 !== '' && product.price4 !== undefined) {
+        const price4Num = parseFloat(product.price4)
+        product.price4 = isNaN(price4Num) || price4Num <= 0 ? null : price4Num
+      } else {
+        product.price4 = null
       }
 
       // Validar stock si existe

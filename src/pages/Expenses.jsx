@@ -9,6 +9,7 @@ import {
   EXPENSE_CATEGORIES,
   EXPENSE_PAYMENT_METHODS
 } from '@/services/expenseService'
+import { getActiveBranches } from '@/services/branchService'
 import {
   Receipt,
   Plus,
@@ -35,7 +36,8 @@ import {
   Building,
   MoreHorizontal,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  Store
 } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
@@ -143,6 +145,10 @@ export default function Expenses() {
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
+
+  // Sucursales
+  const [branches, setBranches] = useState([])
+  const [branchFilter, setBranchFilter] = useState('all') // 'all', 'main', or branch.id
   const [dateRange, setDateRange] = useState({
     startDate: getLocalDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     endDate: getLocalDateString()
@@ -166,15 +172,29 @@ export default function Expenses() {
     paymentMethod: 'efectivo',
     reference: '',
     supplier: '',
-    notes: ''
+    notes: '',
+    branchId: '' // '' = gasto general/corporativo
   })
 
-  // Cargar gastos
+  // Cargar gastos y sucursales
   useEffect(() => {
     if (user?.uid) {
       loadExpenses()
+      loadBranches()
     }
   }, [user?.uid, dateRange])
+
+  async function loadBranches() {
+    if (isDemoMode) return
+    try {
+      const result = await getActiveBranches(user.uid)
+      if (result.success) {
+        setBranches(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   async function loadExpenses() {
     setLoading(true)
@@ -224,6 +244,17 @@ export default function Expenses() {
       result = result.filter(e => e.paymentMethod === paymentMethodFilter)
     }
 
+    // Filtro de sucursal
+    if (branchFilter !== 'all') {
+      if (branchFilter === 'main') {
+        // Sucursal principal (sin branchId)
+        result = result.filter(e => !e.branchId || e.branchId === '' || e.branchId === 'main')
+      } else {
+        // Sucursal específica
+        result = result.filter(e => e.branchId === branchFilter)
+      }
+    }
+
     // Ordenar
     result.sort((a, b) => {
       let aVal = a[sortField]
@@ -238,7 +269,14 @@ export default function Expenses() {
     })
 
     return result
-  }, [expenses, searchTerm, categoryFilter, paymentMethodFilter, sortField, sortDirection])
+  }, [expenses, searchTerm, categoryFilter, paymentMethodFilter, branchFilter, sortField, sortDirection])
+
+  // Helper para obtener nombre de sucursal
+  const getBranchName = (branchId) => {
+    if (!branchId || branchId === '' || branchId === 'main') return 'Sucursal Principal'
+    const branch = branches.find(b => b.id === branchId)
+    return branch?.name || 'Sucursal Principal'
+  }
 
   // Calcular totales
   const totals = useMemo(() => {
@@ -272,7 +310,8 @@ export default function Expenses() {
       paymentMethod: 'efectivo',
       reference: '',
       supplier: '',
-      notes: ''
+      notes: '',
+      branchId: ''
     })
     setShowModal(true)
   }
@@ -288,7 +327,8 @@ export default function Expenses() {
       paymentMethod: expense.paymentMethod || 'efectivo',
       reference: expense.reference || '',
       supplier: expense.supplier || '',
-      notes: expense.notes || ''
+      notes: expense.notes || '',
+      branchId: expense.branchId || ''
     })
     setShowModal(true)
   }
@@ -527,6 +567,24 @@ export default function Expenses() {
             ))}
           </select>
 
+          {/* Branch Filter */}
+          {branches.length > 0 && (
+            <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
+              <Store className="w-4 h-4 text-gray-400 ml-3" />
+              <select
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                className="px-3 py-2 bg-transparent border-none focus:outline-none focus:ring-0"
+              >
+                <option value="all">Todas las sucursales</option>
+                <option value="main">Sucursal Principal</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-2">
             <button
@@ -631,6 +689,12 @@ export default function Expenses() {
                         <p className="font-medium text-gray-900">{expense.description}</p>
                         {expense.reference && (
                           <p className="text-xs text-gray-500">Ref: {expense.reference}</p>
+                        )}
+                        {branches.length > 0 && (
+                          <p className="text-xs text-blue-600 mt-0.5">
+                            <Store className="w-3 h-3 inline mr-1" />
+                            {getBranchName(expense.branchId)}
+                          </p>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -774,6 +838,29 @@ export default function Expenses() {
                   />
                 </div>
               </div>
+
+              {/* Sucursal */}
+              {branches.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <Store className="w-4 h-4 inline mr-1" />
+                    Sucursal
+                  </label>
+                  <select
+                    value={form.branchId}
+                    onChange={e => setForm({ ...form, branchId: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  >
+                    <option value="">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selecciona a qué sucursal corresponde este gasto
+                  </p>
+                </div>
+              )}
 
               {/* Método de pago */}
               <div>

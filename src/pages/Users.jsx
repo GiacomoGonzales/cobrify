@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck } from 'lucide-react'
+import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -19,6 +19,8 @@ import {
   toggleUserStatus,
   deleteManagedUser,
 } from '@/services/userManagementService'
+import { getWarehouses } from '@/services/warehouseService'
+import { getActiveBranches } from '@/services/branchService'
 import { formatDate } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
@@ -29,11 +31,15 @@ export default function Users() {
   const toast = useToast()
   const [users, setUsers] = useState([])
   const [agents, setAgents] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [branches, setBranches] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
   const [selectedPages, setSelectedPages] = useState([])
+  const [selectedWarehouses, setSelectedWarehouses] = useState([])
+  const [selectedBranches, setSelectedBranches] = useState([])
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -52,6 +58,8 @@ export default function Users() {
 
   useEffect(() => {
     loadUsers()
+    loadWarehouses()
+    loadBranches()
     if (isRealEstateMode) {
       loadAgents()
     }
@@ -89,10 +97,40 @@ export default function Users() {
     }
   }
 
+  const loadWarehouses = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getWarehouses(businessId)
+      if (result.success) {
+        setWarehouses(result.data.filter(w => w.isActive !== false))
+      }
+    } catch (error) {
+      console.log('Error loading warehouses:', error.message)
+      setWarehouses([])
+    }
+  }
+
+  const loadBranches = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getActiveBranches(businessId)
+      if (result.success) {
+        setBranches(result.data)
+      }
+    } catch (error) {
+      console.log('Error loading branches:', error.message)
+      setBranches([])
+    }
+  }
+
   const openCreateModal = () => {
     setIsEditMode(false)
     setSelectedUser(null)
     setSelectedPages([])
+    setSelectedWarehouses([])
+    setSelectedBranches([])
     setSelectedAgentId('')
     reset({
       email: '',
@@ -106,6 +144,8 @@ export default function Users() {
     setIsEditMode(true)
     setSelectedUser(userToEdit)
     setSelectedPages(userToEdit.allowedPages || [])
+    setSelectedWarehouses(userToEdit.allowedWarehouses || [])
+    setSelectedBranches(userToEdit.allowedBranches || [])
     setSelectedAgentId(userToEdit.agentId || '')
     reset({
       email: userToEdit.email,
@@ -132,6 +172,44 @@ export default function Users() {
     }
   }
 
+  const toggleWarehouseSelection = (warehouseId) => {
+    setSelectedWarehouses((prev) => {
+      if (prev.includes(warehouseId)) {
+        return prev.filter((id) => id !== warehouseId)
+      } else {
+        return [...prev, warehouseId]
+      }
+    })
+  }
+
+  const toggleBranchSelection = (branchId) => {
+    setSelectedBranches((prev) => {
+      if (prev.includes(branchId)) {
+        return prev.filter((id) => id !== branchId)
+      } else {
+        return [...prev, branchId]
+      }
+    })
+  }
+
+  const selectAllWarehouses = () => {
+    if (selectedWarehouses.length === warehouses.length) {
+      setSelectedWarehouses([])
+    } else {
+      setSelectedWarehouses(warehouses.map((w) => w.id))
+    }
+  }
+
+  const selectAllBranches = () => {
+    // +1 para incluir 'main' (Sucursal Principal)
+    if (selectedBranches.length === branches.length + 1) {
+      setSelectedBranches([])
+    } else {
+      // Incluir 'main' y todas las sucursales
+      setSelectedBranches(['main', ...branches.map((b) => b.id)])
+    }
+  }
+
   const onSubmit = async (data) => {
     try {
       if (selectedPages.length === 0) {
@@ -146,6 +224,8 @@ export default function Users() {
         // Actualizar usuario existente
         const updateData = {
           displayName: data.displayName,
+          allowedWarehouses: selectedWarehouses,
+          allowedBranches: selectedBranches,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -172,6 +252,8 @@ export default function Users() {
           password: data.password,
           displayName: data.displayName,
           allowedPages: selectedPages,
+          allowedWarehouses: selectedWarehouses,
+          allowedBranches: selectedBranches,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -187,6 +269,7 @@ export default function Users() {
           setIsModalOpen(false)
           reset()
           setSelectedPages([])
+          setSelectedWarehouses([])
           setSelectedAgentId('')
           loadUsers()
         } else {
@@ -292,7 +375,8 @@ export default function Users() {
                   <TableHead>Email</TableHead>
                   <TableHead>Estado</TableHead>
                   {isRealEstateMode && <TableHead>Agente</TableHead>}
-                  <TableHead>Páginas Permitidas</TableHead>
+                  <TableHead>Páginas</TableHead>
+                  <TableHead>Almacenes</TableHead>
                   <TableHead>Creado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -300,7 +384,7 @@ export default function Users() {
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={isRealEstateMode ? 7 : 6} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={isRealEstateMode ? 8 : 7} className="text-center py-8 text-gray-500">
                       <UsersIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
                       <p>No hay usuarios creados</p>
                       <p className="text-sm">Crea tu primer usuario para comenzar</p>
@@ -330,8 +414,17 @@ export default function Users() {
                       )}
                       <TableCell>
                         <span className="text-sm font-semibold text-primary-600">
-                          {userItem.allowedPages?.length || 0} páginas
+                          {userItem.allowedPages?.length || 0}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        {!userItem.allowedWarehouses || userItem.allowedWarehouses.length === 0 ? (
+                          <span className="text-sm text-green-600 font-medium">Todos</span>
+                        ) : (
+                          <span className="text-sm font-semibold text-amber-600">
+                            {userItem.allowedWarehouses.length} de {warehouses.length}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
                         {userItem.createdAt
@@ -528,6 +621,157 @@ export default function Users() {
               </div>
             )}
           </div>
+
+          {/* Restricción de Almacenes */}
+          {warehouses.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Warehouse className="w-5 h-5 text-amber-600" />
+                  Restricción de Almacenes
+                </h3>
+                <button
+                  type="button"
+                  onClick={selectAllWarehouses}
+                  className="text-sm text-amber-600 hover:text-amber-700 font-medium"
+                >
+                  {selectedWarehouses.length === warehouses.length
+                    ? 'Desmarcar Todos'
+                    : 'Marcar Todos'}
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-600">
+                Selecciona los almacenes a los que este usuario tendrá acceso.
+                Si no seleccionas ninguno, tendrá acceso a todos.
+              </p>
+
+              <div className="border border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto">
+                <div className="space-y-3">
+                  {warehouses.map((warehouse) => (
+                    <label
+                      key={warehouse.id}
+                      className="flex items-center p-3 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedWarehouses.includes(warehouse.id)}
+                        onChange={() => toggleWarehouseSelection(warehouse.id)}
+                        className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                      />
+                      <div className="ml-3">
+                        <p className="font-medium text-gray-900">{warehouse.name}</p>
+                        {warehouse.address && (
+                          <p className="text-xs text-gray-500">{warehouse.address}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {selectedWarehouses.length === 0 ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-800">
+                    Este usuario tendrá acceso a <span className="font-semibold">todos los almacenes</span>
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-800">
+                    Acceso restringido a <span className="font-semibold">{selectedWarehouses.length}</span> almacén
+                    {selectedWarehouses.length !== 1 ? 'es' : ''}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Restricción de Sucursales */}
+          {branches.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Store className="w-5 h-5 text-cyan-600" />
+                  Restricción de Sucursales
+                </h3>
+                <button
+                  type="button"
+                  onClick={selectAllBranches}
+                  className="text-sm text-cyan-600 hover:text-cyan-700 font-medium"
+                >
+                  {selectedBranches.length === branches.length + 1
+                    ? 'Desmarcar Todas'
+                    : 'Marcar Todas'}
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-600">
+                Selecciona las sucursales a las que este usuario tendrá acceso.
+                Si no seleccionas ninguna, tendrá acceso a todas.
+              </p>
+
+              <div className="border border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto">
+                <div className="space-y-3">
+                  {/* Sucursal Principal (siempre mostrar primero) */}
+                  <label
+                    className="flex items-center p-3 hover:bg-cyan-50 rounded-lg cursor-pointer transition-colors border-b border-gray-100 pb-4"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedBranches.includes('main')}
+                      onChange={() => toggleBranchSelection('main')}
+                      className="w-5 h-5 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
+                    />
+                    <div className="ml-3">
+                      <p className="font-medium text-gray-900">
+                        Sucursal Principal
+                        <span className="ml-2 text-xs text-green-600">(Sede Central)</span>
+                      </p>
+                      <p className="text-xs text-gray-500">Acceso a la sucursal principal del negocio</p>
+                    </div>
+                  </label>
+                  {/* Otras sucursales */}
+                  {branches.map((branch) => (
+                    <label
+                      key={branch.id}
+                      className="flex items-center p-3 hover:bg-cyan-50 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedBranches.includes(branch.id)}
+                        onChange={() => toggleBranchSelection(branch.id)}
+                        className="w-5 h-5 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
+                      />
+                      <div className="ml-3">
+                        <p className="font-medium text-gray-900">
+                          {branch.name}
+                        </p>
+                        {branch.address && (
+                          <p className="text-xs text-gray-500">{branch.address}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {selectedBranches.length === 0 ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-800">
+                    Este usuario tendrá acceso a <span className="font-semibold">todas las sucursales</span>
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
+                  <p className="text-sm text-cyan-800">
+                    Acceso restringido a <span className="font-semibold">{selectedBranches.length}</span> sucursal
+                    {selectedBranches.length !== 1 ? 'es' : ''}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Botones */}
           <div className="flex gap-3 pt-4">

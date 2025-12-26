@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker } from 'lucide-react'
+import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -23,6 +23,7 @@ import {
   getProductCategories,
 } from '@/services/firestoreService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
+import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase } from '@/services/ingredientService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -155,9 +156,10 @@ export default function CreatePurchase() {
     { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
   ])
 
-  // Warehouses
+  // Warehouses y Branches
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+  const [branches, setBranches] = useState([])
 
   // Estados para el autocompletado de proveedor
   const [supplierSearch, setSupplierSearch] = useState('')
@@ -207,12 +209,13 @@ export default function CreatePurchase() {
 
     setIsLoading(true)
     try {
-      const [suppliersResult, productsResult, categoriesResult, warehousesResult, ingredientsResult] = await Promise.all([
+      const [suppliersResult, productsResult, categoriesResult, warehousesResult, ingredientsResult, branchesResult] = await Promise.all([
         getSuppliers(businessId),
         getProducts(businessId),
         getProductCategories(businessId),
         getWarehouses(businessId),
         getIngredients(businessId),
+        getActiveBranches(businessId),
       ])
 
       if (suppliersResult.success) {
@@ -228,16 +231,22 @@ export default function CreatePurchase() {
       }
 
       if (warehousesResult.success) {
-        const warehouseList = warehousesResult.data || []
-        setWarehouses(warehouseList)
+        // Solo almacenes activos
+        const activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        setWarehouses(activeWarehouses)
 
-        // Seleccionar almacén por defecto
-        const defaultWarehouse = warehouseList.find(w => w.isDefault) || warehouseList[0] || null
+        // Seleccionar almacén por defecto de la sucursal principal
+        const mainBranchWarehouses = activeWarehouses.filter(w => !w.branchId)
+        const defaultWarehouse = mainBranchWarehouses.find(w => w.isDefault) || mainBranchWarehouses[0] || activeWarehouses[0] || null
         setSelectedWarehouse(defaultWarehouse)
       }
 
       if (ingredientsResult.success) {
         setIngredients(ingredientsResult.data || [])
+      }
+
+      if (branchesResult.success) {
+        setBranches(branchesResult.data || [])
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -686,6 +695,9 @@ export default function CreatePurchase() {
         } : null,
         invoiceNumber: invoiceNumber.trim() || null,
         invoiceDate: new Date(invoiceDate),
+        // Almacén donde ingresa la mercadería
+        warehouseId: selectedWarehouse?.id || null,
+        warehouseName: selectedWarehouse?.name || null,
         items: purchaseItems.map(item => ({
           productId: item.productId,
           productName: item.productName,
@@ -1001,21 +1013,42 @@ export default function CreatePurchase() {
             {warehouses.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Store className="w-4 h-4 inline mr-1" />
                   Almacén de Ingreso <span className="text-red-500">*</span>
                 </label>
-                <Select
+                <select
                   value={selectedWarehouse?.id || ''}
                   onChange={e => {
                     const warehouse = warehouses.find(w => w.id === e.target.value)
                     setSelectedWarehouse(warehouse)
                   }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  {warehouses.filter(w => w.isActive).map(warehouse => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
-                    </option>
-                  ))}
-                </Select>
+                  {/* Almacenes de Sucursal Principal */}
+                  {warehouses.filter(w => !w.branchId).length > 0 && (
+                    <optgroup label="Sucursal Principal">
+                      {warehouses.filter(w => !w.branchId).map(warehouse => (
+                        <option key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {/* Almacenes de otras sucursales */}
+                  {branches.map(branch => {
+                    const branchWarehouses = warehouses.filter(w => w.branchId === branch.id)
+                    if (branchWarehouses.length === 0) return null
+                    return (
+                      <optgroup key={branch.id} label={branch.name}>
+                        {branchWarehouses.map(warehouse => (
+                          <option key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name} {warehouse.isDefault ? '(Principal)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )
+                  })}
+                </select>
                 <p className="text-xs text-gray-500 mt-1">
                   El stock ingresará a este almacén
                 </p>

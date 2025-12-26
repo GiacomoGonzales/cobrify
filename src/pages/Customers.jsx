@@ -292,16 +292,18 @@ export default function Customers() {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
-            <div className="flex-shrink-0 w-full sm:w-auto sm:min-w-[220px]">
-              <Select
+            {/* Ordenar */}
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <TrendingUp className="w-4 h-4 text-gray-500" />
+              <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                className="w-full"
+                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
               >
                 <option value="name">Ordenar por Nombre</option>
                 <option value="orders">Ordenar por Pedidos</option>
                 <option value="spent">Ordenar por Total Gastado</option>
-              </Select>
+              </select>
             </div>
           </div>
         </CardContent>
@@ -564,6 +566,7 @@ export default function Customers() {
                 <option value="price1">{businessSettings?.priceLabels?.price1 || 'Precio 1'}</option>
                 <option value="price2">{businessSettings?.priceLabels?.price2 || 'Precio 2'}</option>
                 <option value="price3">{businessSettings?.priceLabels?.price3 || 'Precio 3'}</option>
+                <option value="price4">{businessSettings?.priceLabels?.price4 || 'Precio 4'}</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
                 Si asignas un nivel, el cliente verá automáticamente ese precio en el POS.

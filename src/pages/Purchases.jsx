@@ -19,9 +19,12 @@ import {
   CreditCard,
   Clock,
   List,
+  Store,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -61,9 +64,34 @@ export default function Purchases() {
   // Filtro de tipo de pago
   const [paymentFilter, setPaymentFilter] = useState('all') // 'all', 'contado', 'credito', 'pending'
 
+  // Filtro de sucursal
+  const [branches, setBranches] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', or branch.id
+
   useEffect(() => {
     loadPurchases()
+    loadBranches()
+    loadWarehouses()
   }, [user])
+
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    const result = await getActiveBranches(getBusinessId())
+    if (result.success) {
+      setBranches(result.data || [])
+    }
+  }
+
+  const loadWarehouses = async () => {
+    if (!user?.uid || isDemoMode) return
+    const result = await getWarehouses(getBusinessId())
+    if (result.success) {
+      // Solo almacenes activos
+      const activeWarehouses = (result.data || []).filter(w => w.isActive !== false)
+      setWarehouses(activeWarehouses)
+    }
+  }
 
   const loadPurchases = async () => {
     if (!user?.uid) return
@@ -276,9 +304,43 @@ export default function Purchases() {
     return true
   }
 
+  // Obtener IDs de almacenes por sucursal
+  const getWarehouseIdsForBranch = useMemo(() => {
+    if (filterBranch === 'all') return null // No filtrar
+    if (filterBranch === 'main') {
+      return warehouses.filter(w => !w.branchId).map(w => w.id)
+    }
+    return warehouses.filter(w => w.branchId === filterBranch).map(w => w.id)
+  }, [warehouses, filterBranch])
+
+  // Filtrar por sucursal
+  const filterByBranch = (purchase) => {
+    if (filterBranch === 'all') return true
+    if (!getWarehouseIdsForBranch || getWarehouseIdsForBranch.length === 0) return false
+
+    // Verificar si el warehouseId de la compra está en los almacenes de la sucursal
+    const purchaseWarehouseId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
+    if (!purchaseWarehouseId) return filterBranch === 'main' // Si no tiene almacén, asumimos sucursal principal
+    return getWarehouseIdsForBranch.includes(purchaseWarehouseId)
+  }
+
+  // Obtener nombre de sucursal para una compra
+  const getBranchName = (purchase) => {
+    const purchaseWarehouseId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
+    if (!purchaseWarehouseId) return 'Sucursal Principal'
+
+    const warehouse = warehouses.find(w => w.id === purchaseWarehouseId)
+    if (!warehouse) return 'Sucursal Principal'
+    if (!warehouse.branchId) return 'Sucursal Principal'
+
+    const branch = branches.find(b => b.id === warehouse.branchId)
+    return branch?.name || 'Sucursal Principal'
+  }
+
   const filteredPurchases = purchases
     .filter(filterByDate) // Filtrar por fecha
     .filter(filterByPayment) // Filtrar por tipo de pago
+    .filter(filterByBranch) // Filtrar por sucursal
     .filter(purchase => {
       // Si no hay término de búsqueda, mostrar todas las compras
       if (!searchTerm || searchTerm.trim() === '') return true
@@ -308,10 +370,10 @@ export default function Purchases() {
       return sortDirection === 'asc' ? comparison : -comparison
     })
 
-  // Compras filtradas solo por fecha (para las estadísticas, sin búsqueda de texto)
+  // Compras filtradas por fecha y sucursal (para las estadísticas, sin búsqueda de texto)
   const dateFilteredPurchases = useMemo(() => {
-    return purchases.filter(filterByDate)
-  }, [purchases, dateFilter, customStartDate, customEndDate])
+    return purchases.filter(filterByDate).filter(filterByBranch)
+  }, [purchases, dateFilter, customStartDate, customEndDate, filterBranch, getWarehouseIdsForBranch])
 
   // Estadísticas
   const stats = useMemo(() => {
@@ -477,6 +539,34 @@ export default function Purchases() {
               ))}
             </div>
           </div>
+
+          {/* Filtro de sucursal */}
+          {branches.length > 0 && (
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-gray-500" />
+                <span className="text-sm text-gray-600 font-medium">Sucursal:</span>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
+                  <Store className="w-4 h-4 text-gray-400 ml-3" />
+                  <select
+                    value={filterBranch}
+                    onChange={(e) => setFilterBranch(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm bg-transparent border-none focus:outline-none focus:ring-0"
+                  >
+                    <option value="all">Todas las sucursales</option>
+                    <option value="main">Sucursal Principal</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -613,6 +703,12 @@ export default function Purchases() {
                         <p className="text-xs text-gray-500">
                           {purchase.supplier?.documentNumber || ''}
                         </p>
+                        {branches.length > 0 && (
+                          <p className="text-xs text-blue-600 mt-0.5">
+                            <Store className="w-3 h-3 inline mr-1" />
+                            {getBranchName(purchase)}
+                          </p>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>

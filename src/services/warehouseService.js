@@ -89,10 +89,22 @@ export const getWarehouse = async (businessId, warehouseId) => {
 export const createWarehouse = async (businessId, warehouseData) => {
   try {
     const warehousesRef = collection(db, 'businesses', businessId, 'warehouses')
+    const branchId = warehouseData.branchId || null
 
-    // Si es el primer almacén o se marca como default, actualizar otros
+    // Si se marca como default, quitar default solo de almacenes de la misma sucursal
     if (warehouseData.isDefault) {
-      await unsetDefaultWarehouses(businessId)
+      await unsetDefaultWarehouses(businessId, null, branchId)
+    } else {
+      // Verificar si es el primer almacén de esta sucursal - hacerlo default automáticamente
+      const snapshot = await getDocs(warehousesRef)
+      const branchWarehouses = snapshot.docs.filter(doc => {
+        const data = doc.data()
+        const docBranchId = data.branchId || null
+        return docBranchId === branchId && data.isActive !== false
+      })
+      if (branchWarehouses.length === 0) {
+        warehouseData.isDefault = true
+      }
     }
 
     const newWarehouse = {
@@ -116,10 +128,11 @@ export const createWarehouse = async (businessId, warehouseData) => {
 export const updateWarehouse = async (businessId, warehouseId, warehouseData) => {
   try {
     const warehouseRef = doc(db, 'businesses', businessId, 'warehouses', warehouseId)
+    const branchId = warehouseData.branchId || null
 
-    // Si se marca como default, quitar default de otros
+    // Si se marca como default, quitar default solo de almacenes de la misma sucursal
     if (warehouseData.isDefault) {
-      await unsetDefaultWarehouses(businessId, warehouseId)
+      await unsetDefaultWarehouses(businessId, warehouseId, branchId)
     }
 
     await updateDoc(warehouseRef, {
@@ -178,17 +191,26 @@ export const deleteWarehouse = async (businessId, warehouseId) => {
 }
 
 /**
- * Quitar isDefault de todos los almacenes (helper interno)
+ * Quitar isDefault de almacenes de la misma sucursal (helper interno)
+ * @param {string} businessId - ID del negocio
+ * @param {string|null} exceptId - ID del almacén a excluir (no quitarle el default)
+ * @param {string|null} branchId - ID de la sucursal (null = sucursal principal)
  */
-const unsetDefaultWarehouses = async (businessId, exceptId = null) => {
+const unsetDefaultWarehouses = async (businessId, exceptId = null, branchId = null) => {
   try {
     const warehousesRef = collection(db, 'businesses', businessId, 'warehouses')
     const snapshot = await getDocs(warehousesRef)
 
     const batch = writeBatch(db)
-    snapshot.forEach((doc) => {
-      if (doc.id !== exceptId && doc.data().isDefault === true) {
-        batch.update(doc.ref, { isDefault: false })
+    snapshot.forEach((docSnapshot) => {
+      const data = docSnapshot.data()
+      const docBranchId = data.branchId || null
+
+      // Solo afectar almacenes de la misma sucursal
+      if (docSnapshot.id !== exceptId &&
+          data.isDefault === true &&
+          docBranchId === branchId) {
+        batch.update(docSnapshot.ref, { isDefault: false })
       }
     })
 
@@ -199,25 +221,40 @@ const unsetDefaultWarehouses = async (businessId, exceptId = null) => {
 }
 
 /**
- * Obtener almacén por defecto
+ * Obtener almacén por defecto (de una sucursal específica o global)
+ * @param {string} businessId - ID del negocio
+ * @param {string|null} branchId - ID de la sucursal (null = sucursal principal, undefined = cualquiera)
  */
-export const getDefaultWarehouse = async (businessId) => {
+export const getDefaultWarehouse = async (businessId, branchId = undefined) => {
   try {
     const warehousesRef = collection(db, 'businesses', businessId, 'warehouses')
     const snapshot = await getDocs(warehousesRef)
 
     let defaultWarehouse = null
-    snapshot.forEach((doc) => {
-      const data = doc.data()
-      if (data.isDefault === true) {
-        defaultWarehouse = { id: doc.id, ...data }
+    let firstBranchWarehouse = null
+
+    snapshot.forEach((docSnapshot) => {
+      const data = docSnapshot.data()
+      const docBranchId = data.branchId || null
+
+      // Si se especifica branchId, filtrar por esa sucursal
+      if (branchId !== undefined && docBranchId !== branchId) {
+        return
+      }
+
+      // Guardar el primer almacén de la sucursal como fallback
+      if (!firstBranchWarehouse && data.isActive !== false) {
+        firstBranchWarehouse = { id: docSnapshot.id, ...data }
+      }
+
+      if (data.isDefault === true && data.isActive !== false) {
+        defaultWarehouse = { id: docSnapshot.id, ...data }
       }
     })
 
-    // Si no hay default, retornar el primero
-    if (!defaultWarehouse && !snapshot.empty) {
-      const firstDoc = snapshot.docs[0]
-      defaultWarehouse = { id: firstDoc.id, ...firstDoc.data() }
+    // Si no hay default, retornar el primero de la sucursal
+    if (!defaultWarehouse && firstBranchWarehouse) {
+      defaultWarehouse = firstBranchWarehouse
     }
 
     return { success: true, data: defaultWarehouse }

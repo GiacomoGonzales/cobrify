@@ -1,7 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { prepareLogoForPrinting } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
 
@@ -362,24 +360,25 @@ export const isPrinterReady = () => {
 };
 
 /**
- * Guardar configuración de impresora en Firestore
- * @param {string} userId - ID del usuario
+ * Guardar configuración de impresora en localStorage (por dispositivo)
+ * @param {string} userId - ID del usuario (usado como prefijo para evitar conflictos)
  * @param {Object} printerConfig - Configuración de la impresora
  */
 export const savePrinterConfig = async (userId, printerConfig) => {
   try {
-    const configRef = doc(db, 'businesses', userId);
-    await setDoc(configRef, {
-      printerConfig: {
-        address: printerConfig.address,
-        name: printerConfig.name,
-        type: printerConfig.type || 'bluetooth', // bluetooth o wifi
-        paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
-        enabled: printerConfig.enabled !== false,
-        webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
-        updatedAt: new Date()
-      }
-    }, { merge: true });
+    const configData = {
+      address: printerConfig.address,
+      name: printerConfig.name,
+      type: printerConfig.type || 'bluetooth', // bluetooth o wifi
+      paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
+      enabled: printerConfig.enabled !== false,
+      webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
+      updatedAt: new Date().toISOString()
+    };
+
+    // Guardar en localStorage (configuración local por dispositivo)
+    localStorage.setItem('factuya_printerConfig', JSON.stringify(configData));
+    console.log('✅ Configuración de impresora guardada localmente');
 
     return { success: true };
   } catch (error) {
@@ -389,16 +388,18 @@ export const savePrinterConfig = async (userId, printerConfig) => {
 };
 
 /**
- * Obtener configuración de impresora guardada
- * @param {string} userId - ID del usuario
+ * Obtener configuración de impresora guardada desde localStorage (por dispositivo)
+ * @param {string} userId - ID del usuario (no usado, mantenido por compatibilidad)
  */
 export const getPrinterConfig = async (userId) => {
   try {
-    const configRef = doc(db, 'businesses', userId);
-    const configDoc = await getDoc(configRef);
+    // Leer de localStorage (configuración local por dispositivo)
+    const savedConfig = localStorage.getItem('factuya_printerConfig');
 
-    if (configDoc.exists() && configDoc.data().printerConfig) {
-      return { success: true, config: configDoc.data().printerConfig };
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig);
+      console.log('📱 Configuración de impresora cargada desde dispositivo');
+      return { success: true, config };
     }
 
     return { success: true, config: null };
@@ -637,12 +638,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       printer = printer.align('center').text(convertSpanishText(business.businessName + '\n'));
     }
 
-    // Dirección (company-info) - CENTRADO
-    printer = printer.align('center').text(convertSpanishText((business.address || 'Direccion no configurada') + '\n'));
+    // Dirección (company-info) - CENTRADO - Priorizar: sucursal > almacén > empresa
+    const displayAddress = invoice.branchAddress || invoice.warehouseAddress || business.address || 'Direccion no configurada';
+    printer = printer.align('center').text(convertSpanishText(displayAddress + '\n'));
 
-    // Teléfono (company-info) - CENTRADO
-    if (business.phone) {
-      printer = printer.align('center').text(convertSpanishText(`Tel: ${business.phone}\n`));
+    // Teléfono (company-info) - CENTRADO - Priorizar: sucursal > almacén > empresa
+    const displayPhone = invoice.branchPhone || invoice.warehousePhone || business.phone;
+    if (displayPhone) {
+      printer = printer.align('center').text(convertSpanishText(`Tel: ${displayPhone}\n`));
     }
 
     // Email (company-info) - CENTRADO
@@ -1648,12 +1651,14 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       builder.text(`RUC: ${business.ruc || '00000000000'}`).newLine();
     }
 
-    // Dirección
-    builder.text(business.address || 'Direccion no configurada').newLine();
+    // Dirección - Priorizar: sucursal > almacén > empresa
+    const displayAddr = invoice.branchAddress || invoice.warehouseAddress || business.address || 'Direccion no configurada';
+    builder.text(displayAddr).newLine();
 
-    // Teléfono
-    if (business.phone) {
-      builder.text(`Tel: ${business.phone}`).newLine();
+    // Teléfono - Priorizar: sucursal > almacén > empresa
+    const displayPh = invoice.branchPhone || invoice.warehousePhone || business.phone;
+    if (displayPh) {
+      builder.text(`Tel: ${displayPh}`).newLine();
     }
 
     builder.newLine()

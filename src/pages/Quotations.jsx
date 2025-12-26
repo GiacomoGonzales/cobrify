@@ -18,6 +18,7 @@ import {
   FileCheck,
   MoreVertical,
   Receipt,
+  Store,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -26,7 +27,6 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
-import Select from '@/components/ui/Select'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import {
   getQuotations,
@@ -39,9 +39,10 @@ import {
 import { createInvoice, getCompanySettings, getNextDocumentNumber } from '@/services/firestoreService'
 import { generateQuotationPDF, previewQuotationPDF } from '@/utils/quotationPdfGenerator'
 import { preloadLogo } from '@/utils/pdfGenerator'
+import { getActiveBranches } from '@/services/branchService'
 
 export default function Quotations() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess } = useAppContext()
   const navigate = useNavigate()
   const toast = useToast()
   const [quotations, setQuotations] = useState([])
@@ -49,6 +50,8 @@ export default function Quotations() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
   const [viewingQuotation, setViewingQuotation] = useState(null)
   const [deletingQuotation, setDeletingQuotation] = useState(null)
   const [convertingQuotation, setConvertingQuotation] = useState(null)
@@ -65,7 +68,22 @@ export default function Quotations() {
 
   useEffect(() => {
     loadQuotations()
+    loadBranches()
   }, [user])
+
+  // Cargar sucursales para filtro
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   // Verificar cotizaciones expiradas
   useEffect(() => {
@@ -310,7 +328,17 @@ export default function Quotations() {
 
     const matchesStatus = filterStatus === 'all' || quotation.status === filterStatus
 
-    return matchesSearch && matchesStatus
+    // Filtrar por sucursal
+    let matchesBranch = true
+    if (filterBranch !== 'all') {
+      if (filterBranch === 'main') {
+        matchesBranch = !quotation.branchId
+      } else {
+        matchesBranch = quotation.branchId === filterBranch
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesBranch
   })
 
   const getStatusBadge = status => {
@@ -449,19 +477,40 @@ export default function Quotations() {
 
             {/* Filtros */}
             <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-              <Select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                className="w-full sm:w-56"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="draft">Borrador</option>
-                <option value="sent">Enviadas</option>
-                <option value="accepted">Aceptadas</option>
-                <option value="rejected">Rechazadas</option>
-                <option value="expired">Vencidas</option>
-                <option value="converted">Convertidas</option>
-              </Select>
+              {/* Filtro de Sucursal */}
+              {branches.length > 0 && (
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <Store className="w-4 h-4 text-gray-500" />
+                  <select
+                    value={filterBranch}
+                    onChange={e => setFilterBranch(e.target.value)}
+                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Todas las sucursales</option>
+                    <option value="main">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Filtro de Estado */}
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <FileText className="w-4 h-4 text-gray-500" />
+                <select
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="draft">Borrador</option>
+                  <option value="sent">Enviadas</option>
+                  <option value="accepted">Aceptadas</option>
+                  <option value="rejected">Rechazadas</option>
+                  <option value="expired">Vencidas</option>
+                  <option value="converted">Convertidas</option>
+                </select>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -473,16 +522,16 @@ export default function Quotations() {
           <CardContent className="p-12 text-center">
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm || filterStatus !== 'all'
+              {searchTerm || filterStatus !== 'all' || filterBranch !== 'all'
                 ? 'No se encontraron cotizaciones'
                 : 'No hay cotizaciones registradas'}
             </h3>
             <p className="text-gray-600 mb-4">
-              {searchTerm || filterStatus !== 'all'
+              {searchTerm || filterStatus !== 'all' || filterBranch !== 'all'
                 ? 'Intenta con otros filtros de búsqueda'
                 : 'Comienza creando tu primera cotización'}
             </p>
-            {!searchTerm && filterStatus === 'all' && (
+            {!searchTerm && filterStatus === 'all' && filterBranch === 'all' && (
               <Link to="/app/cotizaciones/nueva">
                 <Button>
                   <Plus className="w-4 h-4 mr-2" />

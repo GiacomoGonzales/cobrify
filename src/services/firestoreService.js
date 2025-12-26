@@ -13,6 +13,7 @@ import {
   limit,
   startAfter,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
 
@@ -639,40 +640,219 @@ export const convertNotaVentaToBoleta = async (userId, notaVentaId, customerData
 
 /**
  * Obtener siguiente número de documento
+ * @param {string} userId - ID del negocio
+ * @param {string} documentType - Tipo de documento (factura, boleta, etc.)
+ * @param {string} warehouseId - ID del almacén (compatibilidad hacia atrás)
+ * @param {string} branchId - ID de la sucursal (nuevo, prioritario sobre warehouseId)
  */
-export const getNextDocumentNumber = async (userId, documentType) => {
+export const getNextDocumentNumber = async (userId, documentType, warehouseId = null, branchId = null) => {
   try {
-    // Las series ahora están en businesses/{userId}
+    const docRef = doc(db, 'businesses', userId)
+
+    // Usar transacción atómica para evitar números duplicados
+    const result = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(docRef)
+
+      if (!docSnap.exists()) {
+        throw new Error('Negocio no encontrado')
+      }
+
+      const data = docSnap.data()
+      let typeData = null
+      let seriesPath = ''
+
+      // 1. Primero intentar con branchSeries (sucursales - nuevo sistema)
+      if (branchId && data.branchSeries && data.branchSeries[branchId]) {
+        const branchSeries = data.branchSeries[branchId]
+        if (branchSeries[documentType]) {
+          typeData = branchSeries[documentType]
+          seriesPath = `branchSeries.${branchId}.${documentType}`
+        }
+      }
+
+      // 2. Fallback a warehouseSeries (compatibilidad hacia atrás)
+      if (!typeData && warehouseId && data.warehouseSeries && data.warehouseSeries[warehouseId]) {
+        const warehouseSeries = data.warehouseSeries[warehouseId]
+        if (warehouseSeries[documentType]) {
+          typeData = warehouseSeries[documentType]
+          seriesPath = `warehouseSeries.${warehouseId}.${documentType}`
+        }
+      }
+
+      // 3. Fallback a series globales si no hay series específicas
+      if (!typeData && data.series && data.series[documentType]) {
+        typeData = data.series[documentType]
+        seriesPath = `series.${documentType}`
+      }
+
+      if (!typeData) {
+        throw new Error(`Series no configuradas para ${documentType}`)
+      }
+
+      const nextNumber = (typeData.lastNumber || 0) + 1
+      const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
+
+      // Actualizar el último número de forma atómica
+      transaction.update(docRef, {
+        [`${seriesPath}.lastNumber`]: nextNumber,
+        updatedAt: serverTimestamp(),
+      })
+
+      return {
+        number: formattedNumber,
+        series: typeData.serie,
+        correlativeNumber: nextNumber,
+        warehouseId: warehouseId,
+        branchId: branchId
+      }
+    })
+
+    return {
+      success: true,
+      ...result
+    }
+  } catch (error) {
+    console.error('Error al obtener siguiente número:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener series de un almacén específico
+ */
+export const getWarehouseSeries = async (userId, warehouseId) => {
+  try {
     const docRef = doc(db, 'businesses', userId)
     const docSnap = await getDoc(docRef)
 
-    if (docSnap.exists()) {
-      const data = docSnap.data()
-      const series = data.series
-
-      if (series && series[documentType]) {
-        const typeData = series[documentType]
-        const nextNumber = typeData.lastNumber + 1
-        const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
-
-        // Actualizar el último número
-        await updateDoc(docRef, {
-          [`series.${documentType}.lastNumber`]: nextNumber,
-          updatedAt: serverTimestamp(),
-        })
-
-        return {
-          success: true,
-          number: formattedNumber,
-          series: typeData.serie,
-          correlativeNumber: nextNumber
-        }
-      }
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Negocio no encontrado' }
     }
 
-    return { success: false, error: 'Series no encontradas' }
+    const data = docSnap.data()
+
+    if (data.warehouseSeries && data.warehouseSeries[warehouseId]) {
+      return { success: true, data: data.warehouseSeries[warehouseId] }
+    }
+
+    // Si no hay series específicas, devolver null
+    return { success: true, data: null }
   } catch (error) {
-    console.error('Error al obtener siguiente número:', error)
+    console.error('Error al obtener series del almacén:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar series de un almacén específico
+ */
+export const updateWarehouseSeries = async (userId, warehouseId, seriesData) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+
+    await updateDoc(docRef, {
+      [`warehouseSeries.${warehouseId}`]: seriesData,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar series del almacén:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener todas las series por almacén
+ */
+export const getAllWarehouseSeries = async (userId) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Negocio no encontrado' }
+    }
+
+    const data = docSnap.data()
+    return {
+      success: true,
+      data: data.warehouseSeries || {},
+      globalSeries: data.series || {}
+    }
+  } catch (error) {
+    console.error('Error al obtener series por almacén:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// ==================== BRANCH SERIES (SUCURSALES) ====================
+
+/**
+ * Obtener series de una sucursal específica
+ */
+export const getBranchSeriesFS = async (userId, branchId) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Negocio no encontrado' }
+    }
+
+    const data = docSnap.data()
+
+    if (data.branchSeries && data.branchSeries[branchId]) {
+      return { success: true, data: data.branchSeries[branchId] }
+    }
+
+    // Si no hay series específicas, devolver null
+    return { success: true, data: null }
+  } catch (error) {
+    console.error('Error al obtener series de la sucursal:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar series de una sucursal específica
+ */
+export const updateBranchSeriesFS = async (userId, branchId, seriesData) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+
+    await updateDoc(docRef, {
+      [`branchSeries.${branchId}`]: seriesData,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar series de la sucursal:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener todas las series por sucursal
+ */
+export const getAllBranchSeriesFS = async (userId) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Negocio no encontrado' }
+    }
+
+    const data = docSnap.data()
+    return {
+      success: true,
+      data: data.branchSeries || {},
+      globalSeries: data.series || {}
+    }
+  } catch (error) {
+    console.error('Error al obtener series por sucursal:', error)
     return { success: false, error: error.message }
   }
 }
@@ -999,22 +1179,49 @@ export const saveProductCategories = async (userId, categories) => {
 
 /**
  * Obtener sesión de caja actual (abierta)
+ * @param {string} userId - ID del negocio
+ * @param {string|null} branchId - ID de la sucursal (null = Sucursal Principal)
  */
-export const getCashRegisterSession = async userId => {
+export const getCashRegisterSession = async (userId, branchId = null) => {
   try {
-    const q = query(
-      collection(db, 'businesses', userId, 'cashSessions'),
-      where('status', '==', 'open')
-    )
+    // Construir query base
+    let q
+    if (branchId) {
+      // Sucursal específica
+      q = query(
+        collection(db, 'businesses', userId, 'cashSessions'),
+        where('status', '==', 'open'),
+        where('branchId', '==', branchId)
+      )
+    } else {
+      // Sucursal Principal (sin branchId o branchId = null)
+      q = query(
+        collection(db, 'businesses', userId, 'cashSessions'),
+        where('status', '==', 'open')
+      )
+    }
     const snapshot = await getDocs(q)
 
     if (snapshot.empty) {
       return { success: true, data: null }
     }
 
+    // Filtrar resultados si es sucursal principal (sin branchId)
+    let filteredDocs = snapshot.docs
+    if (!branchId) {
+      filteredDocs = snapshot.docs.filter(doc => {
+        const data = doc.data()
+        return !data.branchId || data.branchId === null
+      })
+    }
+
+    if (filteredDocs.length === 0) {
+      return { success: true, data: null }
+    }
+
     // Si hay múltiples sesiones abiertas (no debería pasar), tomar la más reciente
-    let mostRecentSession = snapshot.docs[0]
-    snapshot.docs.forEach(doc => {
+    let mostRecentSession = filteredDocs[0]
+    filteredDocs.forEach(doc => {
       const currentOpenedAt = doc.data().openedAt?.toDate?.() || new Date(0)
       const mostRecentOpenedAt = mostRecentSession.data().openedAt?.toDate?.() || new Date(0)
       if (currentOpenedAt > mostRecentOpenedAt) {
@@ -1037,22 +1244,32 @@ export const getCashRegisterSession = async userId => {
 
 /**
  * Abrir caja
+ * @param {string} userId - ID del negocio
+ * @param {number} openingAmount - Monto inicial
+ * @param {string|null} branchId - ID de la sucursal (null = Sucursal Principal)
  */
-export const openCashRegister = async (userId, openingAmount) => {
+export const openCashRegister = async (userId, openingAmount, branchId = null) => {
   try {
-    // Verificar que no haya una caja abierta
-    const currentSession = await getCashRegisterSession(userId)
+    // Verificar que no haya una caja abierta para esta sucursal
+    const currentSession = await getCashRegisterSession(userId, branchId)
     if (currentSession.success && currentSession.data) {
-      return { success: false, error: 'Ya hay una caja abierta' }
+      return { success: false, error: 'Ya hay una caja abierta para esta sucursal' }
     }
 
-    const docRef = await addDoc(collection(db, 'businesses', userId, 'cashSessions'), {
+    const sessionData = {
       openingAmount,
       status: 'open',
       openedAt: serverTimestamp(),
       openedBy: userId,
       createdAt: serverTimestamp(),
-    })
+    }
+
+    // Solo agregar branchId si no es null (sucursal adicional)
+    if (branchId) {
+      sessionData.branchId = branchId
+    }
+
+    const docRef = await addDoc(collection(db, 'businesses', userId, 'cashSessions'), sessionData)
 
     return { success: true, id: docRef.id }
   } catch (error) {
@@ -1290,7 +1507,7 @@ export const deleteCashMovement = async (userId, movementId) => {
  */
 export const getCashRegisterHistory = async (userId, options = {}) => {
   try {
-    const { limit: maxResults = 30 } = options
+    const { limit: maxResults = 30, branchId = null } = options
 
     // Query simple sin orderBy para evitar necesitar índice compuesto
     const q = query(
@@ -1299,12 +1516,22 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
     )
     const snapshot = await getDocs(q)
 
-    // Ordenar en el cliente por closedAt descendente
+    // Filtrar por sucursal y ordenar en el cliente por closedAt descendente
     const sessions = snapshot.docs
       .map(doc => ({
         id: doc.id,
         ...doc.data(),
       }))
+      .filter(session => {
+        // Filtrar por sucursal
+        if (branchId) {
+          // Sucursal específica
+          return session.branchId === branchId
+        } else {
+          // Sucursal Principal (sin branchId)
+          return !session.branchId
+        }
+      })
       .sort((a, b) => {
         const dateA = a.closedAt?.toDate?.() || new Date(0)
         const dateB = b.closedAt?.toDate?.() || new Date(0)

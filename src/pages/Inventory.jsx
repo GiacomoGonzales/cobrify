@@ -21,11 +21,13 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   ScanBarcode,
+  Store,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Link } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -40,6 +42,7 @@ import { getProducts, getProductCategories, updateProduct } from '@/services/fir
 import { getIngredients } from '@/services/ingredientService'
 import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements } from '@/services/warehouseService'
+import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
 import { getCompanySettings } from '@/services/firestoreService'
 
@@ -92,6 +95,7 @@ const getRealStockValue = (item) => {
 
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
+  const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
   const isRetailMode = businessMode === 'retail'
 
@@ -114,8 +118,11 @@ export default function Inventory() {
   const [sortField, setSortField] = useState('name') // 'name', 'code', 'price', 'stock', 'category'
   const [sortDirection, setSortDirection] = useState('asc') // 'asc' o 'desc'
 
-  // Warehouses y transferencias
+  // Warehouses, sucursales y transferencias
   const [warehouses, setWarehouses] = useState([])
+  const [allWarehouses, setAllWarehouses] = useState([]) // Todos los almacenes (para transferencias entre sucursales)
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferProduct, setTransferProduct] = useState(null)
   const [transferData, setTransferData] = useState({
@@ -157,6 +164,7 @@ export default function Inventory() {
     }
     loadCategories()
     loadWarehouses()
+    loadBranches()
     loadCompanySettings()
   }, [user, isRetailMode])
 
@@ -165,6 +173,57 @@ export default function Inventory() {
     console.log(`🔄 [Inventory] filterType cambió a: "${filterType}"`)
     setCurrentPage(1)
   }, [filterType])
+
+  // Resetear página cuando cambia el filtro de sucursal
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterBranch])
+
+  // Obtener almacenes filtrados por sucursal seleccionada
+  const getFilteredWarehouses = React.useCallback(() => {
+    if (filterBranch === 'all') {
+      return warehouses
+    }
+    if (filterBranch === 'main') {
+      return warehouses.filter(w => !w.branchId)
+    }
+    return warehouses.filter(w => w.branchId === filterBranch)
+  }, [warehouses, filterBranch])
+
+  const filteredWarehouses = React.useMemo(() => getFilteredWarehouses(), [getFilteredWarehouses])
+
+  // Calcular stock considerando solo los almacenes de la sucursal seleccionada
+  const getStockForBranch = React.useCallback((item) => {
+    // Si no tiene control de stock, retornar null
+    if (item.stock === null || item.stock === undefined) {
+      return null
+    }
+
+    const warehouseStocks = item.warehouseStocks || []
+    if (warehouseStocks.length === 0) {
+      // Si no tiene warehouseStocks y estamos viendo todas las sucursales, usar stock general
+      if (filterBranch === 'all') {
+        return item.stock || 0
+      }
+      // Si hay filtro de sucursal pero no hay warehouseStocks, es 0 para esa sucursal
+      return 0
+    }
+
+    // Obtener IDs de almacenes filtrados
+    const filteredWarehouseIds = filteredWarehouses.map(w => w.id)
+
+    // Si estamos viendo todas las sucursales, sumar todo
+    if (filterBranch === 'all') {
+      return warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    }
+
+    // Filtrar y sumar solo los almacenes de la sucursal seleccionada
+    const branchStock = warehouseStocks
+      .filter(ws => filteredWarehouseIds.includes(ws.warehouseId))
+      .reduce((sum, ws) => sum + (ws.stock || 0), 0)
+
+    return branchStock
+  }, [filterBranch, filteredWarehouses])
 
   const loadProducts = async () => {
     if (!user?.uid) return
@@ -241,15 +300,35 @@ export default function Inventory() {
       if (isDemoMode && demoData?.warehouses) {
         // Usar almacenes del DemoContext para mantener sincronización con warehouseStocks
         setWarehouses(demoData.warehouses)
+        setAllWarehouses(demoData.warehouses)
         return
       }
 
       const result = await getWarehouses(getBusinessId())
       if (result.success) {
-        setWarehouses(result.data || [])
+        // Guardar todos los almacenes (para transferencias entre sucursales)
+        const allWarehousesData = result.data || []
+        setAllWarehouses(allWarehousesData)
+
+        // Filtrar almacenes según permisos del usuario
+        const filteredWarehouses = filterWarehousesByAccess(allWarehousesData)
+        setWarehouses(filteredWarehouses)
       }
     } catch (error) {
       console.error('Error al cargar almacenes:', error)
+    }
+  }
+
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        setBranches(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
     }
   }
 
@@ -765,17 +844,18 @@ export default function Inventory() {
       const matchesCategory =
         filterCategory === 'all' || item.category === filterCategory
 
-      const realStock = getRealStockValue(item)
+      // Usar stock filtrado por sucursal
+      const branchStock = getStockForBranch(item)
       let matchesStatus = true
       if (filterStatus === 'low') {
         // Stock bajo: entre 1 y 3 (no incluye agotados)
-        matchesStatus = realStock !== null && realStock > 0 && realStock < 4
+        matchesStatus = branchStock !== null && branchStock > 0 && branchStock < 4
       } else if (filterStatus === 'out') {
         // Agotados: stock = 0
-        matchesStatus = realStock === 0
+        matchesStatus = branchStock === 0
       } else if (filterStatus === 'normal') {
         // Normal: sin control de stock o stock >= 4
-        matchesStatus = realStock === null || realStock >= 4
+        matchesStatus = branchStock === null || branchStock >= 4
       }
 
       return matchesSearch && matchesCategory && matchesStatus
@@ -799,8 +879,9 @@ export default function Inventory() {
           bValue = b.price || 0
           break
         case 'stock':
-          aValue = a.stock !== null && a.stock !== undefined ? a.stock : -1
-          bValue = b.stock !== null && b.stock !== undefined ? b.stock : -1
+          // Ordenar por stock de la sucursal seleccionada
+          aValue = getStockForBranch(a) ?? -1
+          bValue = getStockForBranch(b) ?? -1
           break
         case 'category':
           aValue = getCategoryPath(productCategories, a.category) || ''
@@ -822,7 +903,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection])
+  }, [allItems, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection, getStockForBranch])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -846,7 +927,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategory, filterStatus])
+  }, [searchTerm, filterCategory, filterStatus, filterBranch])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -888,20 +969,20 @@ export default function Inventory() {
     return allCategories
   }, [products, ingredients, productCategories, isRetailMode])
 
-  // Calcular estadísticas (optimizado con useMemo)
+  // Calcular estadísticas (optimizado con useMemo, filtradas por sucursal)
   const statistics = React.useMemo(() => {
-    const itemsWithStock = allItems.filter(i => getRealStockValue(i) !== null)
+    const itemsWithStock = allItems.filter(i => getStockForBranch(i) !== null)
     const lowStockItems = itemsWithStock.filter(i => {
-      const realStock = getRealStockValue(i)
-      return realStock !== null && realStock < 4
+      const branchStock = getStockForBranch(i)
+      return branchStock !== null && branchStock < 4
     })
-    const outOfStockItems = itemsWithStock.filter(i => getRealStockValue(i) === 0)
+    const outOfStockItems = itemsWithStock.filter(i => getStockForBranch(i) === 0)
     const totalValue = itemsWithStock.reduce((sum, i) => {
-      const realStock = getRealStockValue(i) || 0
+      const branchStock = getStockForBranch(i) || 0
       const price = i.itemType === 'ingredient' ? (i.averageCost || 0) : (i.price || 0)
-      return sum + (realStock * price)
+      return sum + (branchStock * price)
     }, 0)
-    const totalUnits = itemsWithStock.reduce((sum, i) => sum + (getRealStockValue(i) || 0), 0)
+    const totalUnits = itemsWithStock.reduce((sum, i) => sum + (getStockForBranch(i) || 0), 0)
 
     return {
       productsWithStock: itemsWithStock,
@@ -910,7 +991,7 @@ export default function Inventory() {
       totalValue,
       totalUnits
     }
-  }, [allItems])
+  }, [allItems, getStockForBranch])
 
   const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
 
@@ -939,8 +1020,8 @@ export default function Inventory() {
     return warehouses.find(w => w.isDefault) || warehouses[0] || null
   }, [warehouses])
 
-  // Alias para usar la función global dentro del componente
-  const getRealStock = getRealStockValue
+  // Alias para usar stock filtrado por sucursal
+  const getRealStock = getStockForBranch
 
   // Función para migrar todo el stock huérfano al almacén por defecto
   // También limpia referencias a almacenes eliminados
@@ -1292,6 +1373,24 @@ export default function Inventory() {
                   <option value="out">Agotados</option>
                 </Select>
               </div>
+
+              {/* Branch Filter */}
+              {branches.length > 0 && (
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <Store className="w-4 h-4 text-gray-500" />
+                  <select
+                    value={filterBranch}
+                    onChange={e => setFilterBranch(e.target.value)}
+                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Todas las sucursales</option>
+                    <option value="main">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
@@ -1537,50 +1636,154 @@ export default function Inventory() {
                         )}
                       </TableRow>
 
-                      {/* Fila expandible con detalle por almacén - solo para productos */}
-                      {isExpanded && warehouses.length > 0 && getRealStock(item) !== null && isProduct && (
+                      {/* Fila expandible con detalle por sucursal y almacén - solo para productos */}
+                      {isExpanded && filteredWarehouses.length > 0 && getRealStock(item) !== null && isProduct && (
                         <TableRow className="bg-gray-50">
-                          <TableCell colSpan={warehouses.length >= 1 ? 8 : 7} className="py-3">
-                            <div className="pl-8 space-y-2">
+                          <TableCell colSpan={8} className="py-3">
+                            <div className="pl-8 space-y-4">
                               <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
-                                <Warehouse className="w-4 h-4" />
-                                <span className="font-medium">Stock por Almacén:</span>
+                                <Store className="w-4 h-4" />
+                                <span className="font-medium">
+                                  {filterBranch === 'all' ? 'Stock por Sucursal y Almacén:' : 'Stock por Almacén:'}
+                                </span>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {warehouses.map(warehouse => {
-                                  const warehouseStock = hasWarehouseStocks
-                                    ? item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
-                                    : null
-                                  const stock = warehouseStock?.stock || 0
 
-                                  return (
-                                    <div
-                                      key={warehouse.id}
-                                      className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <span className="text-sm font-medium text-gray-700">
-                                          {warehouse.name}
-                                        </span>
-                                        {warehouse.isDefault && (
-                                          <Badge variant="default" className="text-xs">Principal</Badge>
+                              {/* Agrupar almacenes por sucursal */}
+                              {(() => {
+                                // Almacenes de la sucursal principal (sin branchId)
+                                const mainBranchWarehouses = filteredWarehouses.filter(w => !w.branchId)
+                                // Agrupar el resto por branchId
+                                const warehousesByBranch = filteredWarehouses
+                                  .filter(w => w.branchId)
+                                  .reduce((acc, warehouse) => {
+                                    const branchId = warehouse.branchId
+                                    if (!acc[branchId]) {
+                                      acc[branchId] = []
+                                    }
+                                    acc[branchId].push(warehouse)
+                                    return acc
+                                  }, {})
+
+                                return (
+                                  <div className="space-y-4">
+                                    {/* Sucursal Principal */}
+                                    {mainBranchWarehouses.length > 0 && (
+                                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {filterBranch === 'all' && (
+                                          <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-4 h-4 text-primary-600" />
+                                            <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                            <Badge variant="default" className="text-xs ml-2">
+                                              {mainBranchWarehouses.reduce((sum, w) => {
+                                                const ws = item.warehouseStocks?.find(ws => ws.warehouseId === w.id)
+                                                return sum + (ws?.stock || 0)
+                                              }, 0)} total
+                                            </Badge>
+                                          </div>
                                         )}
+                                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {mainBranchWarehouses.map(warehouse => {
+                                            const warehouseStock = hasWarehouseStocks
+                                              ? item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                              : null
+                                            const stock = warehouseStock?.stock || 0
+
+                                            return (
+                                              <div
+                                                key={warehouse.id}
+                                                className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-lg"
+                                              >
+                                                <div className="flex items-center space-x-2">
+                                                  <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                  <span className="text-sm text-gray-700">
+                                                    {warehouse.name}
+                                                  </span>
+                                                  {warehouse.isDefault && (
+                                                    <Badge variant="secondary" className="text-xs">Ppal</Badge>
+                                                  )}
+                                                </div>
+                                                <span
+                                                  className={`font-semibold text-sm ${
+                                                    stock >= 4
+                                                      ? 'text-green-600'
+                                                      : stock > 0
+                                                      ? 'text-yellow-600'
+                                                      : 'text-red-600'
+                                                  }`}
+                                                >
+                                                  {stock}
+                                                </span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
                                       </div>
-                                      <span
-                                        className={`font-semibold ${
-                                          stock >= 4
-                                            ? 'text-green-600'
-                                            : stock > 0
-                                            ? 'text-yellow-600'
-                                            : 'text-red-600'
-                                        }`}
-                                      >
-                                        {stock}
-                                      </span>
-                                    </div>
-                                  )
-                                })}
-                              </div>
+                                    )}
+
+                                    {/* Otras sucursales */}
+                                    {Object.entries(warehousesByBranch).map(([branchId, branchWarehouses]) => {
+                                      const branch = branches.find(b => b.id === branchId)
+                                      const branchTotal = branchWarehouses.reduce((sum, w) => {
+                                        const ws = item.warehouseStocks?.find(ws => ws.warehouseId === w.id)
+                                        return sum + (ws?.stock || 0)
+                                      }, 0)
+
+                                      return (
+                                        <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                          {filterBranch === 'all' && (
+                                            <div className="bg-blue-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                              <Store className="w-4 h-4 text-blue-600" />
+                                              <span className="font-medium text-blue-700">
+                                                {branch?.name || 'Sucursal sin nombre'}
+                                              </span>
+                                              <Badge variant="secondary" className="text-xs ml-2">
+                                                {branchTotal} total
+                                              </Badge>
+                                            </div>
+                                          )}
+                                          <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                            {branchWarehouses.map(warehouse => {
+                                              const warehouseStock = hasWarehouseStocks
+                                                ? item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                                : null
+                                              const stock = warehouseStock?.stock || 0
+
+                                              return (
+                                                <div
+                                                  key={warehouse.id}
+                                                  className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-lg"
+                                                >
+                                                  <div className="flex items-center space-x-2">
+                                                    <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                    <span className="text-sm text-gray-700">
+                                                      {warehouse.name}
+                                                    </span>
+                                                    {warehouse.isDefault && (
+                                                      <Badge variant="secondary" className="text-xs">Ppal</Badge>
+                                                    )}
+                                                  </div>
+                                                  <span
+                                                    className={`font-semibold text-sm ${
+                                                      stock >= 4
+                                                        ? 'text-green-600'
+                                                        : stock > 0
+                                                        ? 'text-yellow-600'
+                                                        : 'text-red-600'
+                                                    }`}
+                                                  >
+                                                    {stock}
+                                                  </span>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
+
                               {!hasWarehouseStocks && (
                                 <p className="text-xs text-gray-500 mt-2">
                                   Stock no distribuido por almacenes
@@ -1742,41 +1945,118 @@ export default function Inventory() {
             </div>
           )}
 
-          <Select
-            label="Almacén de Origen"
-            required
-            value={transferData.fromWarehouse}
-            onChange={(e) => setTransferData({ ...transferData, fromWarehouse: e.target.value })}
-          >
-            <option value="">Selecciona almacén origen</option>
-            {warehouses.filter(w => w.isActive).map(warehouse => {
-              const warehouseStock = transferProduct?.warehouseStocks?.find(
-                ws => ws.warehouseId === warehouse.id
-              )
-              const stock = warehouseStock?.stock || 0
-              return (
-                <option key={warehouse.id} value={warehouse.id} disabled={stock === 0}>
-                  {warehouse.name} - Stock: {stock}
-                </option>
-              )
-            })}
-          </Select>
+          {/* Indicador de transferencia entre sucursales */}
+          {(() => {
+            const fromWarehouse = allWarehouses.find(w => w.id === transferData.fromWarehouse)
+            const toWarehouse = allWarehouses.find(w => w.id === transferData.toWarehouse)
+            const isCrossBranch = fromWarehouse && toWarehouse &&
+              (fromWarehouse.branchId || null) !== (toWarehouse.branchId || null)
 
-          <Select
-            label="Almacén de Destino"
-            required
-            value={transferData.toWarehouse}
-            onChange={(e) => setTransferData({ ...transferData, toWarehouse: e.target.value })}
-          >
-            <option value="">Selecciona almacén destino</option>
-            {warehouses
-              .filter(w => w.isActive && w.id !== transferData.fromWarehouse)
-              .map(warehouse => (
-                <option key={warehouse.id} value={warehouse.id}>
-                  {warehouse.name}
-                </option>
-              ))}
-          </Select>
+            if (isCrossBranch) {
+              const fromBranch = fromWarehouse.branchId
+                ? branches.find(b => b.id === fromWarehouse.branchId)?.name
+                : 'Sucursal Principal'
+              const toBranch = toWarehouse.branchId
+                ? branches.find(b => b.id === toWarehouse.branchId)?.name
+                : 'Sucursal Principal'
+
+              return (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                  <Store className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm text-amber-700">
+                    Transferencia entre sucursales: <strong>{fromBranch}</strong> → <strong>{toBranch}</strong>
+                  </span>
+                </div>
+              )
+            }
+            return null
+          })()}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Almacén de Origen <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={transferData.fromWarehouse}
+              onChange={(e) => setTransferData({ ...transferData, fromWarehouse: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Selecciona almacén origen</option>
+              {/* Almacenes de Sucursal Principal */}
+              {allWarehouses.filter(w => w.isActive && !w.branchId).length > 0 && (
+                <optgroup label="📍 Sucursal Principal">
+                  {allWarehouses.filter(w => w.isActive && !w.branchId).map(warehouse => {
+                    const warehouseStock = transferProduct?.warehouseStocks?.find(
+                      ws => ws.warehouseId === warehouse.id
+                    )
+                    const stock = warehouseStock?.stock || 0
+                    return (
+                      <option key={warehouse.id} value={warehouse.id} disabled={stock === 0}>
+                        {warehouse.name} - Stock: {stock}
+                      </option>
+                    )
+                  })}
+                </optgroup>
+              )}
+              {/* Almacenes agrupados por sucursal */}
+              {branches.map(branch => {
+                const branchWarehouses = allWarehouses.filter(w => w.isActive && w.branchId === branch.id)
+                if (branchWarehouses.length === 0) return null
+                return (
+                  <optgroup key={branch.id} label={`📍 ${branch.name}`}>
+                    {branchWarehouses.map(warehouse => {
+                      const warehouseStock = transferProduct?.warehouseStocks?.find(
+                        ws => ws.warehouseId === warehouse.id
+                      )
+                      const stock = warehouseStock?.stock || 0
+                      return (
+                        <option key={warehouse.id} value={warehouse.id} disabled={stock === 0}>
+                          {warehouse.name} - Stock: {stock}
+                        </option>
+                      )
+                    })}
+                  </optgroup>
+                )
+              })}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Almacén de Destino <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={transferData.toWarehouse}
+              onChange={(e) => setTransferData({ ...transferData, toWarehouse: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Selecciona almacén destino</option>
+              {/* Almacenes de Sucursal Principal */}
+              {allWarehouses.filter(w => w.isActive && !w.branchId && w.id !== transferData.fromWarehouse).length > 0 && (
+                <optgroup label="📍 Sucursal Principal">
+                  {allWarehouses.filter(w => w.isActive && !w.branchId && w.id !== transferData.fromWarehouse).map(warehouse => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/* Almacenes agrupados por sucursal */}
+              {branches.map(branch => {
+                const branchWarehouses = allWarehouses.filter(w => w.isActive && w.branchId === branch.id && w.id !== transferData.fromWarehouse)
+                if (branchWarehouses.length === 0) return null
+                return (
+                  <optgroup key={branch.id} label={`📍 ${branch.name}`}>
+                    {branchWarehouses.map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              })}
+            </select>
+          </div>
 
           <Input
             label="Cantidad a Transferir"

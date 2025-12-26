@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -8,6 +8,7 @@ import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings } from 
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import { generateDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
+import { getActiveBranches } from '@/services/branchService'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -79,7 +80,7 @@ const DEMO_GUIDES = [
 ]
 
 export default function DispatchGuides() {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, filterBranchesByAccess, user } = useAppContext()
   const toast = useToast()
 
   const [guides, setGuides] = useState([])
@@ -90,12 +91,30 @@ export default function DispatchGuides() {
   const [companySettings, setCompanySettings] = useState(null) // Datos de la empresa
   const [selectedGuide, setSelectedGuide] = useState(null) // Guía seleccionada para ver detalles
   const [editingGuide, setEditingGuide] = useState(null) // Guía en edición
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
   // Cargar guías y datos de empresa al montar el componente
   useEffect(() => {
     loadGuides()
     loadCompanySettings()
+    loadBranches()
   }, [])
+
+  // Cargar sucursales para filtro
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   const loadGuides = async () => {
     setIsLoading(true)
@@ -229,12 +248,33 @@ export default function DispatchGuides() {
     }
   }
 
-  // Calcular estadísticas
+  // Filtrar guías
+  const filteredGuides = guides.filter(guide => {
+    // Filtrar por búsqueda
+    const search = searchTerm.toLowerCase()
+    const matchesSearch = !searchTerm ||
+      guide.number?.toLowerCase().includes(search) ||
+      guide.destination?.address?.toLowerCase().includes(search)
+
+    // Filtrar por sucursal
+    let matchesBranch = true
+    if (filterBranch !== 'all') {
+      if (filterBranch === 'main') {
+        matchesBranch = !guide.branchId
+      } else {
+        matchesBranch = guide.branchId === filterBranch
+      }
+    }
+
+    return matchesSearch && matchesBranch
+  })
+
+  // Calcular estadísticas (sobre guías filtradas)
   const stats = {
-    total: guides.length,
-    inTransit: guides.filter(g => g.status === 'in_transit').length,
-    delivered: guides.filter(g => g.status === 'delivered').length,
-    thisMonth: guides.filter(g => {
+    total: filteredGuides.length,
+    inTransit: filteredGuides.filter(g => g.status === 'in_transit').length,
+    delivered: filteredGuides.filter(g => g.status === 'delivered').length,
+    thisMonth: filteredGuides.filter(g => {
       if (!g.createdAt) return false
       const guideDate = g.createdAt.toDate ? g.createdAt.toDate() : new Date(g.createdAt)
       const now = new Date()
@@ -363,6 +403,46 @@ export default function DispatchGuides() {
         </Card>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="space-y-4">
+            {/* Barra de búsqueda */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por número o destino..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            {/* Filtros */}
+            {branches.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+                {/* Filtro de Sucursal */}
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <Store className="w-4 h-4 text-gray-500" />
+                  <select
+                    value={filterBranch}
+                    onChange={e => setFilterBranch(e.target.value)}
+                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Todas las sucursales</option>
+                    <option value="main">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Guides List */}
       <Card>
         <CardHeader>
@@ -374,21 +454,27 @@ export default function DispatchGuides() {
               <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-gray-600">Cargando guías de remisión...</p>
             </div>
-          ) : guides.length === 0 ? (
+          ) : filteredGuides.length === 0 ? (
             <div className="text-center py-12">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                 <Truck className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                No hay guías de remisión registradas
+                {searchTerm || filterBranch !== 'all'
+                  ? 'No se encontraron guías de remisión'
+                  : 'No hay guías de remisión registradas'}
               </h3>
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                Comienza a emitir guías de remisión electrónicas para documentar el transporte de tus mercancías.
+                {searchTerm || filterBranch !== 'all'
+                  ? 'Intenta con otros filtros de búsqueda'
+                  : 'Comienza a emitir guías de remisión electrónicas para documentar el transporte de tus mercancías.'}
               </p>
-              <Button onClick={handleCreateGuide}>
-                <Plus className="w-5 h-5 mr-2" />
-                Crear Primera Guía de Remisión
-              </Button>
+              {!searchTerm && filterBranch === 'all' && (
+                <Button onClick={handleCreateGuide}>
+                  <Plus className="w-5 h-5 mr-2" />
+                  Crear Primera Guía de Remisión
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -422,7 +508,7 @@ export default function DispatchGuides() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {guides.map((guide) => (
+                  {filteredGuides.map((guide) => (
                     <tr key={guide.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">

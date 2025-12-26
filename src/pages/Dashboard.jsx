@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   TrendingUp,
   Loader2,
+  Store,
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
@@ -21,9 +22,10 @@ import SalesChart from '@/components/charts/SalesChart'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomers, getProducts } from '@/services/firestoreService'
 import { useBranding } from '@/contexts/BrandingContext'
+import { getActiveBranches } from '@/services/branchService'
 
 export default function Dashboard() {
-  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, isAdmin, isBusinessOwner, filterBranchesByAccess } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
   const [invoices, setInvoices] = useState([])
@@ -31,6 +33,8 @@ export default function Dashboard() {
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [hideDashboardData, setHideDashboardData] = useState(false)
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
 
   // Determinar el prefijo de ruta según el contexto
   const getRoutePrefix = () => {
@@ -45,7 +49,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData()
+    loadBranches()
   }, [user, isDemoMode])
+
+  // Cargar sucursales para filtro
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   const loadDashboardData = async () => {
     if (isDemoMode && demoData) {
@@ -131,11 +150,18 @@ export default function Dashboard() {
     return inv.createdAt.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt)
   }
 
+  // Filtrar por sucursal primero
+  const branchFilteredInvoices = filterBranch === 'all'
+    ? invoices
+    : filterBranch === 'main'
+      ? invoices.filter(inv => !inv.branchId)
+      : invoices.filter(inv => inv.branchId === filterBranch)
+
   // Filtrar facturas válidas para cálculos de ventas:
   // - Excluir notas de crédito y débito (no son ventas, son ajustes)
   // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
   // - Excluir documentos anulados (notas de venta, boletas, facturas)
-  const validInvoicesForSales = invoices.filter(inv => {
+  const validInvoicesForSales = branchFilteredInvoices.filter(inv => {
     // Excluir notas de crédito y débito (no son ventas)
     if (inv.documentType === 'nota_credito' || inv.documentType === 'nota_debito') {
       return false
@@ -171,7 +197,7 @@ export default function Dashboard() {
     .reduce((sum, inv) => sum + (inv.total || 0), 0)
 
   // Facturas pendientes
-  const pendingInvoices = invoices.filter(inv => inv.status === 'pending')
+  const pendingInvoices = branchFilteredInvoices.filter(inv => inv.status === 'pending')
 
   // Productos con stock bajo (< 4)
   const lowStockProducts = products.filter(p => p.stock !== null && p.stock < 4)
@@ -295,12 +321,31 @@ export default function Dashboard() {
             Bienvenido{branding?.companyName ? ` a ${branding.companyName}` : ''} - Resumen de tu negocio
           </p>
         </div>
-        <Link to={`${routePrefix}/pos`} className="w-full sm:w-auto">
-          <Button className="w-full sm:w-auto">
-            <Package className="w-4 h-4 mr-2" />
-            Punto de Venta
-          </Button>
-        </Link>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Selector de Sucursal */}
+          {branches.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <Store className="w-4 h-4 text-gray-500" />
+              <select
+                value={filterBranch}
+                onChange={e => setFilterBranch(e.target.value)}
+                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Todas las sucursales</option>
+                <option value="main">Sucursal Principal</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <Link to={`${routePrefix}/pos`} className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto">
+              <Package className="w-4 h-4 mr-2" />
+              Punto de Venta
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}

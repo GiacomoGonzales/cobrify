@@ -102,7 +102,7 @@ export const getAvailablePagesByMode = (businessMode) => {
  */
 export const createManagedUser = async (ownerId, userData) => {
   try {
-    const { email, password, displayName, allowedPages } = userData
+    const { email, password, displayName, allowedPages, allowedWarehouses } = userData
 
     // 1. Crear usuario en Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
@@ -116,6 +116,7 @@ export const createManagedUser = async (ownerId, userData) => {
       displayName,
       role: 'user', // Rol genérico para usuarios creados
       allowedPages: allowedPages || [], // Array de IDs de páginas permitidas
+      allowedWarehouses: allowedWarehouses || [], // Array de IDs de almacenes permitidos (vacío = todos)
       ownerId, // ID del usuario que lo creó (dueño del negocio)
       isActive: true,
       createdAt: serverTimestamp(),

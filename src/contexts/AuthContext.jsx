@@ -23,6 +23,8 @@ export const AuthProvider = ({ children }) => {
   const [hasAccess, setHasAccess] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
+  const [allowedWarehouses, setAllowedWarehouses] = useState([]) // Almacenes permitidos (vacío = todos)
+  const [allowedBranches, setAllowedBranches] = useState([]) // Sucursales permitidas (vacío = todas)
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
@@ -136,7 +138,11 @@ export const AuthProvider = ({ children }) => {
                 const userData = userDataResult.data
                 setUserPermissions(userData)
                 setAllowedPages(userData.allowedPages || [])
+                setAllowedWarehouses(userData.allowedWarehouses || [])
+                setAllowedBranches(userData.allowedBranches || [])
                 console.log('✅ Permisos cargados:', userData.allowedPages)
+                console.log('🏪 Almacenes permitidos:', userData.allowedWarehouses || 'Todos')
+                console.log('🏢 Sucursales permitidas:', userData.allowedBranches || 'Todas')
 
                 // Si el usuario no está activo, cerrar sesión
                 if (!userData.isActive) {
@@ -148,15 +154,18 @@ export const AuthProvider = ({ children }) => {
                 console.warn('⚠️ No se encontraron datos de usuario en Firestore')
                 // Usuario no tiene datos en Firestore, permitir acceso total temporalmente
                 setAllowedPages([])
+                setAllowedWarehouses([])
               }
             } catch (error) {
               console.error('Error al cargar permisos:', error)
               setAllowedPages([])
+              setAllowedWarehouses([])
             }
           } else {
             // Super Admin o Business Owner tienen acceso total
             setAllowedPages([])
-            console.log('👑 Business Owner o Admin - Acceso total')
+            setAllowedWarehouses([])
+            console.log('👑 Business Owner o Admin - Acceso total a todos los almacenes')
           }
 
           // Obtener suscripción con timeout
@@ -295,6 +304,7 @@ export const AuthProvider = ({ children }) => {
           setHasAccess(false)
           setUserPermissions(null)
           setAllowedPages([])
+          setAllowedWarehouses([])
           setBusinessMode(null) // null cuando no hay usuario
           setBusinessSettings(null)
           setUserFeatures({ productImages: false })
@@ -391,6 +401,7 @@ export const AuthProvider = ({ children }) => {
       setHasAccess(false)
       setUserPermissions(null)
       setAllowedPages([])
+      setAllowedWarehouses([])
       setBusinessMode(null) // null para que muestre skeleton hasta que se cargue el nuevo modo
       setBusinessSettings(null)
       setUserFeatures({ productImages: false })
@@ -448,6 +459,60 @@ export const AuthProvider = ({ children }) => {
     return allowedPages.includes(pageId)
   }
 
+  // Función helper para verificar si el usuario tiene acceso a un almacén
+  const hasWarehouseAccess = (warehouseId) => {
+    // Super Admin siempre tiene acceso
+    if (isAdmin) return true
+
+    // Business Owner siempre tiene acceso a todos los almacenes
+    if (isBusinessOwner) return true
+
+    // Si allowedWarehouses está vacío, tiene acceso a todos (sin restricciones)
+    if (!allowedWarehouses || allowedWarehouses.length === 0) return true
+
+    // Verificar si el almacén está en la lista de permitidos
+    return allowedWarehouses.includes(warehouseId)
+  }
+
+  // Función para filtrar lista de almacenes según permisos
+  const filterWarehousesByAccess = (warehouses) => {
+    // Super Admin o Business Owner ven todos
+    if (isAdmin || isBusinessOwner) return warehouses
+
+    // Si no hay restricciones, mostrar todos
+    if (!allowedWarehouses || allowedWarehouses.length === 0) return warehouses
+
+    // Filtrar solo los permitidos
+    return warehouses.filter(w => allowedWarehouses.includes(w.id))
+  }
+
+  // Función helper para verificar si el usuario tiene acceso a una sucursal
+  const hasBranchAccess = (branchId) => {
+    // Super Admin siempre tiene acceso
+    if (isAdmin) return true
+
+    // Business Owner siempre tiene acceso a todas las sucursales
+    if (isBusinessOwner) return true
+
+    // Si allowedBranches está vacío, tiene acceso a todas (sin restricciones)
+    if (!allowedBranches || allowedBranches.length === 0) return true
+
+    // Verificar si la sucursal está en la lista de permitidas
+    return allowedBranches.includes(branchId)
+  }
+
+  // Función para filtrar lista de sucursales según permisos
+  const filterBranchesByAccess = (branches) => {
+    // Super Admin o Business Owner ven todas
+    if (isAdmin || isBusinessOwner) return branches
+
+    // Si no hay restricciones, mostrar todas
+    if (!allowedBranches || allowedBranches.length === 0) return branches
+
+    // Filtrar solo las permitidas
+    return branches.filter(b => allowedBranches.includes(b.id))
+  }
+
   // Función helper para obtener el Business ID (owner del negocio)
   // Si es sub-usuario, retorna el ownerId; si es business owner o admin, retorna su propio uid
   const getBusinessId = () => {
@@ -483,7 +548,13 @@ export const AuthProvider = ({ children }) => {
     hasAccess,
     userPermissions,
     allowedPages,
+    allowedWarehouses, // Almacenes permitidos para el usuario
+    allowedBranches, // Sucursales permitidas para el usuario
     hasPageAccess,
+    hasWarehouseAccess, // Función para verificar acceso a un almacén
+    filterWarehousesByAccess, // Función para filtrar almacenes según permisos
+    hasBranchAccess, // Función para verificar acceso a una sucursal
+    filterBranchesByAccess, // Función para filtrar sucursales según permisos
     getBusinessId, // Función para obtener el ID del negocio (owner)
     businessMode, // Modo de negocio: 'retail' | 'restaurant'
     businessSettings, // Configuración completa del negocio (incluye dispatchGuidesEnabled)

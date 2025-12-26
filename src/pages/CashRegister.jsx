@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2 } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { getActiveBranches } from '@/services/branchService'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -23,12 +24,16 @@ import {
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
   const [movements, setMovements] = useState([])
   const [todayInvoices, setTodayInvoices] = useState([])
+
+  // Sucursales
+  const [branches, setBranches] = useState([])
+  const [selectedBranch, setSelectedBranch] = useState(null) // null = Sucursal Principal
 
   // Tab state: 'current' o 'history'
   const [activeTab, setActiveTab] = useState('current')
@@ -71,9 +76,29 @@ export default function CashRegister() {
 
   useEffect(() => {
     if (user?.uid) {
-      loadData()
+      loadBranches()
     }
   }, [user])
+
+  // Recargar datos cuando cambia la sucursal seleccionada
+  useEffect(() => {
+    if (user?.uid) {
+      loadData()
+    }
+  }, [user, selectedBranch])
+
+  // Cargar sucursales
+  const loadBranches = async () => {
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success && result.data.length > 0) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data) : result.data
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   const loadData = async () => {
     setIsLoading(true)
@@ -124,8 +149,9 @@ export default function CashRegister() {
         return
       }
 
-      // Obtener sesión actual
-      const sessionResult = await getCashRegisterSession(getBusinessId())
+      // Obtener sesión actual para la sucursal seleccionada
+      const branchId = selectedBranch?.id || null
+      const sessionResult = await getCashRegisterSession(getBusinessId(), branchId)
       if (sessionResult.success && sessionResult.data) {
         setCurrentSession(sessionResult.data)
 
@@ -150,7 +176,17 @@ export default function CashRegister() {
         const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
           const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
           // Filtrar por período de sesión: desde apertura hasta ahora
-          return invoiceDate >= sessionOpenedAt && invoiceDate <= now
+          if (!(invoiceDate >= sessionOpenedAt && invoiceDate <= now)) {
+            return false
+          }
+          // Filtrar por sucursal
+          if (branchId) {
+            // Sucursal específica
+            return invoice.branchId === branchId
+          } else {
+            // Sucursal Principal (sin branchId)
+            return !invoice.branchId
+          }
         })
         setTodayInvoices(sessionInvoicesList)
       } else if (invoicesResult.success) {
@@ -225,7 +261,8 @@ export default function CashRegister() {
         return
       }
 
-      const result = await getCashRegisterHistory(getBusinessId())
+      const branchId = selectedBranch?.id || null
+      const result = await getCashRegisterHistory(getBusinessId(), { branchId })
       if (result.success) {
         setHistoryData(result.data || [])
       } else {
@@ -262,12 +299,12 @@ export default function CashRegister() {
     }
   }
 
-  // Cargar historial cuando se cambia a esa pestaña
+  // Cargar historial cuando se cambia a esa pestaña o cuando cambia la sucursal
   useEffect(() => {
-    if (activeTab === 'history' && historyData.length === 0 && user?.uid) {
+    if (activeTab === 'history' && user?.uid) {
       loadHistory()
     }
-  }, [activeTab, user?.uid])
+  }, [activeTab, user?.uid, selectedBranch])
 
   const handleOpenCashRegister = async () => {
     if (!openingAmount || parseFloat(openingAmount) < 0) {
@@ -296,7 +333,8 @@ export default function CashRegister() {
         return
       }
 
-      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount))
+      const branchId = selectedBranch?.id || null
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId)
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
@@ -771,6 +809,33 @@ export default function CashRegister() {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Caja</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
         </div>
+
+        {/* Selector de Sucursal */}
+        {branches.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Store className="w-4 h-4 text-gray-500" />
+            <select
+              value={selectedBranch?.id || ''}
+              onChange={e => {
+                if (e.target.value === '') {
+                  setSelectedBranch(null)
+                } else {
+                  const branch = branches.find(b => b.id === e.target.value)
+                  setSelectedBranch(branch)
+                }
+                // El useEffect recargará datos automáticamente al cambiar selectedBranch
+              }}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Sucursal Principal</option>
+              {branches.map(branch => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {activeTab === 'current' && (
           !currentSession ? (

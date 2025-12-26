@@ -19,6 +19,7 @@ import {
   Truck,
   Wrench,
   Building,
+  Store,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import RealEstateReports from './RealEstateReports'
@@ -29,6 +30,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getCustomersWithStats, getProducts } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
+import { getActiveBranches } from '@/services/branchService'
 import {
   exportGeneralReport,
   exportSalesReport,
@@ -120,7 +122,7 @@ const exportExcelFile = async (workbook, fileName) => {
 }
 
 export default function Reports() {
-  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess } = useAppContext()
 
   // Si estamos en modo inmobiliaria, renderizar el componente especializado
   if (businessMode === 'real_estate') {
@@ -137,10 +139,27 @@ export default function Reports() {
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
+  const [branches, setBranches] = useState([])
+  const [filterBranch, setFilterBranch] = useState('all')
 
   useEffect(() => {
     loadData()
+    loadBranches()
   }, [user])
+
+  // Cargar sucursales para filtro
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+        setBranches(branchList)
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -221,6 +240,7 @@ export default function Reports() {
     // Primero filtrar facturas para evitar duplicados:
     // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
+    // - Filtrar por sucursal si está seleccionada
     const validInvoices = invoices.filter(invoice => {
       // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
       if (invoice.convertedFrom) {
@@ -229,6 +249,14 @@ export default function Reports() {
       // Si el documento está anulado, no contar
       if (invoice.status === 'cancelled' || invoice.status === 'voided') {
         return false
+      }
+      // Filtrar por sucursal
+      if (filterBranch !== 'all') {
+        if (filterBranch === 'main') {
+          if (invoice.branchId) return false // Solo sucursal principal (sin branchId)
+        } else {
+          if (invoice.branchId !== filterBranch) return false
+        }
       }
       return true
     })
@@ -295,7 +323,7 @@ export default function Reports() {
         return invoiceDate >= filterDate
       })
       .map(addCostCalculations)
-  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost])
+  }, [invoices, dateRange, customStartDate, customEndDate, calculateItemCost, filterBranch])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -1166,6 +1194,23 @@ export default function Reports() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+          {/* Selector de Sucursal */}
+          {branches.length > 0 && (
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <Store className="w-4 h-4 text-gray-500" />
+              <select
+                value={filterBranch}
+                onChange={e => setFilterBranch(e.target.value)}
+                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Todas las sucursales</option>
+                <option value="main">Sucursal Principal</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <Select
             value={dateRange}
             onChange={e => setDateRange(e.target.value)}

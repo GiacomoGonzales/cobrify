@@ -29,6 +29,7 @@ import {
   Code,
   FileCheck,
   Archive,
+  Store,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -55,6 +56,7 @@ import { Capacitor } from '@capacitor/core'
 import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import { shortenUrl } from '@/services/urlShortenerService'
+import { getActiveBranches } from '@/services/branchService'
 
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
@@ -75,6 +77,8 @@ export default function InvoiceList() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [filterSeller, setFilterSeller] = useState('all')
+  const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', o branchId
+  const [branches, setBranches] = useState([])
   const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [filterStartDate, setFilterStartDate] = useState('')
   const [filterEndDate, setFilterEndDate] = useState('')
@@ -300,7 +304,21 @@ Gracias por tu preferencia.`
 
   useEffect(() => {
     loadInvoices()
+    loadBranches()
   }, [user])
+
+  // Cargar sucursales para filtro
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getActiveBranches(getBusinessId())
+      if (result.success) {
+        setBranches(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales:', error)
+    }
+  }
 
   const loadInvoices = async () => {
     if (!user?.uid) return
@@ -919,7 +937,18 @@ Gracias por tu preferencia.`
       const matchesType = filterType === 'all' || invoice.documentType === filterType
       const matchesSeller = filterSeller === 'all' || invoice.createdBy === filterSeller
 
-      return matchesSearch && matchesStatus && matchesType && matchesSeller
+      // Filtrar por sucursal
+      let matchesBranch = true
+      if (filterBranch !== 'all') {
+        if (filterBranch === 'main') {
+          // Sucursal Principal = sin branchId o branchId null
+          matchesBranch = !invoice.branchId
+        } else {
+          matchesBranch = invoice.branchId === filterBranch
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesBranch
     })
 
   // Apply pagination
@@ -1248,10 +1277,26 @@ Gracias por tu preferencia.`
                 </option>
               ))}
             </select>
+            {/* Filtro de Sucursal */}
+            {branches.length > 0 && (
+              <select
+                value={filterBranch}
+                onChange={e => setFilterBranch(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+              >
+                <option value="all">Todas las sucursales</option>
+                <option value="main">Sucursal Principal</option>
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Botón limpiar filtros */}
-          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || dateFilter !== 'all') && (
+          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || dateFilter !== 'all') && (
             <div className="flex justify-end">
               <button
                 onClick={() => {
@@ -1261,6 +1306,7 @@ Gracias por tu preferencia.`
                   setFilterType('all')
                   setFilterStatus('all')
                   setFilterSeller('all')
+                  setFilterBranch('all')
                 }}
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >

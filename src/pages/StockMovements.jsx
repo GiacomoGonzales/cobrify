@@ -10,6 +10,7 @@ import {
   Calendar,
   AlertTriangle,
   ScanBarcode,
+  Store,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -22,15 +23,18 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { getStockMovements } from '@/services/warehouseService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getProducts } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
 
 export default function StockMovements() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const [movements, setMovements] = useState([])
   const [warehouses, setWarehouses] = useState([])
+  const [branches, setBranches] = useState([])
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [filterBranch, setFilterBranch] = useState('all')
   const [filterWarehouse, setFilterWarehouse] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [filterDateFrom, setFilterDateFrom] = useState('')
@@ -86,27 +90,49 @@ export default function StockMovements() {
 
       const businessId = getBusinessId()
 
-      const [movementsResult, warehousesResult, productsResult] = await Promise.all([
+      const [movementsResult, warehousesResult, productsResult, branchesResult] = await Promise.all([
         getStockMovements(businessId),
         getWarehouses(businessId),
         getProducts(businessId),
+        getActiveBranches(businessId),
       ])
 
+      const branchesData = branchesResult.success ? branchesResult.data || [] : []
+      setBranches(branchesData)
+
       if (movementsResult.success) {
-        // Enriquecer movimientos con nombres de productos y almacenes
+        // Helper para obtener nombre de sucursal
+        const getBranchName = (branchId) => {
+          if (!branchId) return 'Sucursal Principal'
+          const branch = branchesData.find(b => b.id === branchId)
+          return branch?.name || 'Sucursal desconocida'
+        }
+
+        // Enriquecer movimientos con nombres de productos, almacenes y sucursales
         const enrichedMovements = movementsResult.data.map(mov => {
           const product = productsResult.data?.find(p => p.id === mov.productId)
           const warehouse = warehousesResult.data?.find(w => w.id === mov.warehouseId)
           const fromWarehouse = warehousesResult.data?.find(w => w.id === mov.fromWarehouse)
           const toWarehouse = warehousesResult.data?.find(w => w.id === mov.toWarehouse)
 
+          // Determinar si es transferencia entre sucursales
+          const isCrossBranchTransfer = fromWarehouse && toWarehouse &&
+            (fromWarehouse.branchId || null) !== (toWarehouse.branchId || null)
+
           return {
             ...mov,
             productName: product?.name || 'Producto desconocido',
             productCode: product?.code || '-',
             warehouseName: warehouse?.name || 'Almacén desconocido',
+            warehouseBranchId: warehouse?.branchId || null,
+            warehouseBranchName: getBranchName(warehouse?.branchId),
             fromWarehouseName: fromWarehouse?.name,
+            fromWarehouseBranchId: fromWarehouse?.branchId || null,
+            fromWarehouseBranchName: fromWarehouse ? getBranchName(fromWarehouse.branchId) : null,
             toWarehouseName: toWarehouse?.name,
+            toWarehouseBranchId: toWarehouse?.branchId || null,
+            toWarehouseBranchName: toWarehouse ? getBranchName(toWarehouse.branchId) : null,
+            isCrossBranchTransfer,
           }
         })
 
@@ -128,12 +154,35 @@ export default function StockMovements() {
     }
   }
 
+  // Obtener almacenes filtrados por sucursal seleccionada
+  const filteredWarehouses = warehouses.filter(w => {
+    if (filterBranch === 'all') return true
+    if (filterBranch === 'main') return !w.branchId
+    return w.branchId === filterBranch
+  })
+
+  // Resetear filtro de almacén cuando cambia la sucursal
+  const handleBranchChange = (branchId) => {
+    setFilterBranch(branchId)
+    setFilterWarehouse('all') // Resetear almacén al cambiar sucursal
+  }
+
   // Filtrar movimientos
   const filteredMovements = movements.filter(movement => {
     const matchesSearch =
       movement.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       movement.productCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       movement.notes?.toLowerCase().includes(searchTerm.toLowerCase())
+
+    // Filtro de sucursal
+    let matchesBranch = true
+    if (filterBranch !== 'all') {
+      const targetBranchId = filterBranch === 'main' ? null : filterBranch
+      matchesBranch =
+        movement.warehouseBranchId === targetBranchId ||
+        movement.fromWarehouseBranchId === targetBranchId ||
+        movement.toWarehouseBranchId === targetBranchId
+    }
 
     const matchesWarehouse =
       filterWarehouse === 'all' ||
@@ -161,7 +210,7 @@ export default function StockMovements() {
       }
     }
 
-    return matchesSearch && matchesWarehouse && matchesType && matchesDate
+    return matchesSearch && matchesBranch && matchesWarehouse && matchesType && matchesDate
   })
 
   const getMovementTypeInfo = (type) => {
@@ -235,13 +284,14 @@ export default function StockMovements() {
   // Limpiar filtros
   const clearFilters = () => {
     setSearchTerm('')
+    setFilterBranch('all')
     setFilterWarehouse('all')
     setFilterType('all')
     setFilterDateFrom('')
     setFilterDateTo('')
   }
 
-  const hasActiveFilters = searchTerm || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
+  const hasActiveFilters = searchTerm || filterBranch !== 'all' || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
 
   // Escanear código de barras
   const handleScanBarcode = async () => {
@@ -356,14 +406,32 @@ export default function StockMovements() {
             </div>
 
             {/* Segunda fila: Filtros */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {/* Sucursal */}
+              {branches.length > 0 && (
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2">
+                  <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  <select
+                    value={filterBranch}
+                    onChange={e => handleBranchChange(e.target.value)}
+                    className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Todas las sucursales</option>
+                    <option value="main">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Almacén */}
               <Select
                 value={filterWarehouse}
                 onChange={e => setFilterWarehouse(e.target.value)}
               >
                 <option value="all">Todos los almacenes</option>
-                {warehouses.map(warehouse => (
+                {filteredWarehouses.map(warehouse => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.name}
                   </option>
@@ -520,22 +588,51 @@ export default function StockMovements() {
                               <div>
                                 <p className="text-gray-500">
                                   <span className="text-gray-400">De:</span> {movement.fromWarehouseName}
+                                  {branches.length > 0 && movement.fromWarehouseBranchName && (
+                                    <span className="text-xs text-gray-400 ml-1">({movement.fromWarehouseBranchName})</span>
+                                  )}
                                 </p>
                                 <p className="font-medium">
                                   <span className="text-gray-400">A:</span> {movement.warehouseName}
+                                  {branches.length > 0 && movement.warehouseBranchName && (
+                                    <span className="text-xs text-gray-400 ml-1">({movement.warehouseBranchName})</span>
+                                  )}
                                 </p>
+                                {movement.isCrossBranchTransfer && (
+                                  <Badge variant="warning" className="mt-1 text-xs">
+                                    <Store className="w-3 h-3 mr-1 inline" />
+                                    Entre sucursales
+                                  </Badge>
+                                )}
                               </div>
                             ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
                               <div>
                                 <p className="font-medium">
                                   <span className="text-gray-400">De:</span> {movement.warehouseName}
+                                  {branches.length > 0 && movement.warehouseBranchName && (
+                                    <span className="text-xs text-gray-400 ml-1">({movement.warehouseBranchName})</span>
+                                  )}
                                 </p>
                                 <p className="text-gray-500">
                                   <span className="text-gray-400">A:</span> {movement.toWarehouseName}
+                                  {branches.length > 0 && movement.toWarehouseBranchName && (
+                                    <span className="text-xs text-gray-400 ml-1">({movement.toWarehouseBranchName})</span>
+                                  )}
                                 </p>
+                                {movement.isCrossBranchTransfer && (
+                                  <Badge variant="warning" className="mt-1 text-xs">
+                                    <Store className="w-3 h-3 mr-1 inline" />
+                                    Entre sucursales
+                                  </Badge>
+                                )}
                               </div>
                             ) : (
-                              <p className="font-medium">{movement.warehouseName}</p>
+                              <div>
+                                <p className="font-medium">{movement.warehouseName}</p>
+                                {branches.length > 0 && movement.warehouseBranchName && (
+                                  <p className="text-xs text-gray-400">{movement.warehouseBranchName}</p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </TableCell>

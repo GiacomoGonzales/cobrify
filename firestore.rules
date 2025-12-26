@@ -373,6 +373,16 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
+
+      // Subcollection: Branches (Sucursales - configuradas por admin)
+      match /branches/{branchId} {
+        // Admins pueden leer/escribir cualquier sucursal
+        allow read, write: if isAdmin();
+        // Owners y sub-usuarios pueden leer sucursales de su negocio
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Solo admins pueden crear/modificar sucursales (se configuran desde panel admin)
+        // Pero owners también pueden leer para usar en POS
+      }
     }
   }
 }

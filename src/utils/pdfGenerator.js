@@ -548,23 +548,30 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
   const showBusinessName = businessName && businessName !== companyName
 
-  // Construir dirección completa
+  // Construir dirección completa (priorizar: sucursal > almacén > empresa)
   let fullAddress = ''
-  if (companySettings?.address) {
+  // Usar dirección de sucursal, luego almacén, luego empresa
+  if (invoice.branchAddress) {
+    fullAddress = invoice.branchAddress
+  } else if (invoice.warehouseAddress) {
+    fullAddress = invoice.warehouseAddress
+  } else if (companySettings?.address) {
     fullAddress = companySettings.address
-  }
-  if (companySettings?.district || companySettings?.province || companySettings?.department) {
-    const locationParts = [
-      companySettings?.district,
-      companySettings?.province,
-      companySettings?.department
-    ].filter(Boolean)
-    if (locationParts.length > 0) {
-      fullAddress += (fullAddress ? ' - ' : '') + locationParts.join(', ')
+    // Agregar ubicación solo si usamos dirección de empresa
+    if (companySettings?.district || companySettings?.province || companySettings?.department) {
+      const locationParts = [
+        companySettings?.district,
+        companySettings?.province,
+        companySettings?.department
+      ].filter(Boolean)
+      if (locationParts.length > 0) {
+        fullAddress += (fullAddress ? ' - ' : '') + locationParts.join(', ')
+      }
     }
   }
 
-  const phone = companySettings?.phone || ''
+  // Usar teléfono de sucursal, luego almacén, luego empresa
+  const phone = invoice.branchPhone || invoice.warehousePhone || companySettings?.phone || ''
   const email = companySettings?.email || ''
   const website = companySettings?.website || ''
 

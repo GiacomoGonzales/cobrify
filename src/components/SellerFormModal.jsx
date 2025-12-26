@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Loader2, User } from 'lucide-react'
+import { Loader2, User, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { createSeller, updateSeller } from '@/services/sellerService'
+import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
@@ -12,15 +13,32 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
+  const [branches, setBranches] = useState([])
   const [formData, setFormData] = useState({
     name: '',
     code: '',
     phone: '',
     email: '',
     dni: '',
+    branchId: '', // Sucursal asignada
   })
 
   const [errors, setErrors] = useState({})
+
+  // Cargar sucursales
+  useEffect(() => {
+    const loadBranches = async () => {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getActiveBranches(businessId)
+      if (result.success) {
+        setBranches(result.data || [])
+      }
+    }
+    if (isOpen) {
+      loadBranches()
+    }
+  }, [isOpen, getBusinessId])
 
   // Cargar datos del vendedor si es edición
   useEffect(() => {
@@ -31,6 +49,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         phone: seller.phone || '',
         email: seller.email || '',
         dni: seller.dni || '',
+        branchId: seller.branchId || '',
       })
     } else {
       // Reset form for new seller
@@ -40,6 +59,7 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         phone: '',
         email: '',
         dni: '',
+        branchId: '',
       })
     }
     setErrors({})
@@ -159,6 +179,32 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
             maxLength="8"
           />
         </div>
+
+        {/* Sucursal */}
+        {branches.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Store className="w-4 h-4 inline mr-1" />
+              Sucursal
+            </label>
+            <select
+              name="branchId"
+              value={formData.branchId}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Sucursal Principal</option>
+              {branches.map(branch => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Sucursal donde trabaja el vendedor
+            </p>
+          </div>
+        )}
 
         {/* Teléfono */}
         <div>

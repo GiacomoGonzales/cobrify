@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -25,6 +25,9 @@ import {
   testPrinter,
   getConnectionType
 } from '@/services/thermalPrinterService'
+import { getWarehouses } from '@/services/warehouseService'
+import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -48,6 +51,31 @@ export default function Settings() {
     guia_remision: { serie: 'T001', lastNumber: 0 },
   })
   const [editingSeries, setEditingSeries] = useState(false)
+
+  // Estados para series por almacén (legacy - para compatibilidad)
+  const [warehouses, setWarehouses] = useState([])
+  const [warehouseSeries, setWarehouseSeries] = useState({})
+  const [editingWarehouseId, setEditingWarehouseId] = useState(null)
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false)
+
+  // Estados para series por sucursal (nuevo sistema)
+  const [branches, setBranches] = useState([])
+  const [branchSeries, setBranchSeries] = useState({})
+  const [editingBranchId, setEditingBranchId] = useState(null)
+  const [loadingBranches, setLoadingBranches] = useState(false)
+
+  // Series por defecto para nuevos almacenes
+  const defaultSeries = {
+    factura: { serie: 'F001', lastNumber: 0 },
+    boleta: { serie: 'B001', lastNumber: 0 },
+    nota_venta: { serie: 'N001', lastNumber: 0 },
+    cotizacion: { serie: 'C001', lastNumber: 0 },
+    nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
+    nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+    nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+    nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+    guia_remision: { serie: 'T001', lastNumber: 0 },
+  }
 
   // Estados para SUNAT
   const [sunatConfig, setSunatConfig] = useState({
@@ -117,7 +145,8 @@ export default function Settings() {
   const [priceLabels, setPriceLabels] = useState({
     price1: 'Público',
     price2: 'Mayorista',
-    price3: 'VIP'
+    price3: 'VIP',
+    price4: 'Especial'
   })
 
   // Estados para privacidad
@@ -369,7 +398,8 @@ export default function Settings() {
           setPriceLabels({
             price1: businessData.priceLabels.price1 || 'Público',
             price2: businessData.priceLabels.price2 || 'Mayorista',
-            price3: businessData.priceLabels.price3 || 'VIP'
+            price3: businessData.priceLabels.price3 || 'VIP',
+            price4: businessData.priceLabels.price4 || 'Especial'
           })
         }
 
@@ -394,12 +424,13 @@ export default function Settings() {
           setRestaurantConfig(businessData.restaurantConfig)
         }
 
-        // Cargar configuración de impresora
-        if (businessData.printerConfig) {
+        // Cargar configuración de impresora desde localStorage (por dispositivo)
+        const localPrinterConfig = await getPrinterConfig(getBusinessId())
+        if (localPrinterConfig.success && localPrinterConfig.config) {
           // Merge con valores por defecto para asegurar que todos los campos existan
           setPrinterConfig(prev => ({
             ...prev,
-            ...businessData.printerConfig
+            ...localPrinterConfig.config
           }))
         }
       }
@@ -409,6 +440,194 @@ export default function Settings() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Cargar almacenes y sus series
+  const loadWarehousesAndSeries = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    setLoadingWarehouses(true)
+    try {
+      // Cargar almacenes
+      const warehousesResult = await getWarehouses(getBusinessId())
+      if (warehousesResult.success) {
+        setWarehouses(warehousesResult.data || [])
+      }
+
+      // Cargar series por almacén
+      const seriesResult = await getAllWarehouseSeries(getBusinessId())
+      if (seriesResult.success) {
+        setWarehouseSeries(seriesResult.data || {})
+      }
+    } catch (error) {
+      console.error('Error al cargar almacenes y series:', error)
+    } finally {
+      setLoadingWarehouses(false)
+    }
+  }
+
+  // Cargar almacenes cuando se abre el tab de series
+  useEffect(() => {
+    if (activeTab === 'series' && user?.uid && !isDemoMode) {
+      loadWarehousesAndSeries()
+    }
+  }, [activeTab, user?.uid])
+
+  // Manejar cambio de serie de almacén
+  const handleWarehouseSeriesChange = (warehouseId, docType, field, value) => {
+    setWarehouseSeries(prev => ({
+      ...prev,
+      [warehouseId]: {
+        ...defaultSeries,
+        ...(prev[warehouseId] || {}),
+        [docType]: {
+          ...(prev[warehouseId]?.[docType] || defaultSeries[docType]),
+          [field]: field === 'lastNumber' ? parseInt(value) || 0 : value.toUpperCase()
+        }
+      }
+    }))
+  }
+
+  // Guardar series de un almacén
+  const handleSaveWarehouseSeries = async (warehouseId) => {
+    if (!user?.uid) return
+
+    setIsSaving(true)
+    try {
+      const seriesToSave = warehouseSeries[warehouseId] || defaultSeries
+      const result = await updateWarehouseSeries(getBusinessId(), warehouseId, seriesToSave)
+
+      if (result.success) {
+        toast.success('Series del almacén actualizadas')
+        setEditingWarehouseId(null)
+      } else {
+        toast.error(result.error || 'Error al guardar series')
+      }
+    } catch (error) {
+      console.error('Error al guardar series:', error)
+      toast.error('Error al guardar series')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Inicializar series de un almacén si no existen
+  const initializeWarehouseSeries = (warehouseId, warehouseIndex) => {
+    if (!warehouseSeries[warehouseId]) {
+      // Generar series únicas basadas en el índice del almacén
+      const suffix = String(warehouseIndex + 1).padStart(2, '0')
+      const newSeries = {
+        factura: { serie: `F0${suffix}`, lastNumber: 0 },
+        boleta: { serie: `B0${suffix}`, lastNumber: 0 },
+        nota_venta: { serie: `N0${suffix}`, lastNumber: 0 },
+        cotizacion: { serie: `C0${suffix}`, lastNumber: 0 },
+        nota_credito_factura: { serie: `FN${suffix}`, lastNumber: 0 },
+        nota_credito_boleta: { serie: `BN${suffix}`, lastNumber: 0 },
+        nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
+        nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
+        guia_remision: { serie: `T0${suffix}`, lastNumber: 0 },
+      }
+      setWarehouseSeries(prev => ({
+        ...prev,
+        [warehouseId]: newSeries
+      }))
+    }
+    setEditingWarehouseId(warehouseId)
+  }
+
+  // ====== FUNCIONES PARA SUCURSALES ======
+
+  // Cargar sucursales y sus series
+  const loadBranchesAndSeries = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    setLoadingBranches(true)
+    try {
+      // Cargar sucursales activas
+      const branchesResult = await getActiveBranches(getBusinessId())
+      if (branchesResult.success) {
+        setBranches(branchesResult.data || [])
+      }
+
+      // Cargar series por sucursal
+      const seriesResult = await getAllBranchSeriesFS(getBusinessId())
+      if (seriesResult.success) {
+        setBranchSeries(seriesResult.data || {})
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales y series:', error)
+    } finally {
+      setLoadingBranches(false)
+    }
+  }
+
+  // Cargar sucursales cuando se abre el tab de series
+  useEffect(() => {
+    if (activeTab === 'series' && user?.uid && !isDemoMode) {
+      loadBranchesAndSeries()
+    }
+  }, [activeTab, user?.uid])
+
+  // Manejar cambio de serie de sucursal
+  const handleBranchSeriesChange = (branchId, docType, field, value) => {
+    setBranchSeries(prev => ({
+      ...prev,
+      [branchId]: {
+        ...defaultSeries,
+        ...(prev[branchId] || {}),
+        [docType]: {
+          ...(prev[branchId]?.[docType] || defaultSeries[docType]),
+          [field]: field === 'lastNumber' ? parseInt(value) || 0 : value.toUpperCase()
+        }
+      }
+    }))
+  }
+
+  // Guardar series de una sucursal
+  const handleSaveBranchSeries = async (branchId) => {
+    if (!user?.uid) return
+
+    setIsSaving(true)
+    try {
+      const seriesToSave = branchSeries[branchId] || defaultSeries
+      const result = await updateBranchSeriesFS(getBusinessId(), branchId, seriesToSave)
+
+      if (result.success) {
+        toast.success('Series de la sucursal actualizadas')
+        setEditingBranchId(null)
+      } else {
+        toast.error(result.error || 'Error al guardar series')
+      }
+    } catch (error) {
+      console.error('Error al guardar series:', error)
+      toast.error('Error al guardar series')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Inicializar series de una sucursal si no existen
+  const initializeBranchSeries = (branchId, branchIndex) => {
+    if (!branchSeries[branchId]) {
+      // Generar series únicas basadas en el índice de la sucursal
+      const suffix = String(branchIndex + 1).padStart(3, '0')
+      const newSeries = {
+        factura: { serie: `F${suffix}`, lastNumber: 0 },
+        boleta: { serie: `B${suffix}`, lastNumber: 0 },
+        nota_venta: { serie: `N${suffix}`, lastNumber: 0 },
+        cotizacion: { serie: `C${suffix}`, lastNumber: 0 },
+        nota_credito_factura: { serie: `FC${suffix}`, lastNumber: 0 },
+        nota_credito_boleta: { serie: `BC${suffix}`, lastNumber: 0 },
+        nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
+        nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
+        guia_remision: { serie: `T${suffix}`, lastNumber: 0 },
+      }
+      setBranchSeries(prev => ({
+        ...prev,
+        [branchId]: newSeries
+      }))
+    }
+    setEditingBranchId(branchId)
   }
 
   const handleLogoUpload = async (e) => {
@@ -2098,7 +2317,7 @@ export default function Settings() {
                     {multiplePricesEnabled && (
                       <div className="mt-4 pt-4 border-t border-gray-200">
                         <p className="text-xs text-gray-500 mb-3">Personaliza los nombres de cada nivel de precio:</p>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Precio 1</label>
                             <input
@@ -2127,6 +2346,16 @@ export default function Settings() {
                               onChange={(e) => setPriceLabels(prev => ({ ...prev, price3: e.target.value }))}
                               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                               placeholder="VIP"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio 4</label>
+                            <input
+                              type="text"
+                              value={priceLabels.price4}
+                              onChange={(e) => setPriceLabels(prev => ({ ...prev, price4: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="Especial"
                             />
                           </div>
                         </div>
@@ -2804,473 +3033,480 @@ export default function Settings() {
         </Card>
       )}
 
-      {/* Tab Content - Series */}
+      {/* Tab Content - Series por Sucursal */}
       {activeTab === 'series' && (
-        <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <FileText className="w-5 h-5 text-primary-600" />
-              <CardTitle>Series de Comprobantes</CardTitle>
+        <div className="space-y-6">
+          {/* Información */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-blue-800 font-medium">Series por Sucursal</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  La <strong>Sucursal Principal</strong> usa las series globales configuradas aquí.
+                  Las sucursales adicionales tienen sus propias series independientes.
+                </p>
+              </div>
             </div>
-            {!editingSeries ? (
-              <Button variant="outline" size="sm" onClick={() => setEditingSeries(true)}>
-                Editar Series
-              </Button>
-            ) : (
-              <div className="flex space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setEditingSeries(false)
-                    loadSettings() // Recargar datos originales
-                  }}
-                  disabled={isSaving}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveSeries}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                      Guardando...
-                    </>
+          </div>
+
+          {/* Loading */}
+          {loadingBranches && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+              <span className="ml-2 text-gray-600">Cargando sucursales...</span>
+            </div>
+          )}
+
+          {/* Sucursal Principal - Series Globales (siempre visible) */}
+          {!loadingBranches && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Store className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Sucursal Principal</CardTitle>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Series globales del negocio
+                      </p>
+                    </div>
+                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                      Por defecto
+                    </span>
+                  </div>
+                  {!editingSeries ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingSeries(true)}
+                    >
+                      <Edit className="w-4 h-4 mr-1" />
+                      Editar Series
+                    </Button>
                   ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-1" />
-                      Guardar
-                    </>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingSeries(false)}
+                        disabled={isSaving}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveSeries}
+                        disabled={isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-1" />
+                            Guardar
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>Nota:</strong> La configuración de series de comprobantes permite
-                controlar la numeración correlativa de tus facturas y boletas según las normas de
-                SUNAT.
-              </p>
-            </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Tabla de series globales */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Documento</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Serie</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Último #</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Siguiente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { key: 'factura', label: 'Factura Electrónica' },
+                        { key: 'boleta', label: 'Boleta de Venta' },
+                        { key: 'nota_venta', label: 'Nota de Venta' },
+                        { key: 'cotizacion', label: 'Cotización' },
+                      ].map(({ key, label }) => (
+                        <tr key={key} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-gray-700 font-medium">{label}</td>
+                          <td className="py-2 px-3">
+                            <Input
+                              value={series[key]?.serie || defaultSeries[key].serie}
+                              onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              value={series[key]?.lastNumber ?? 0}
+                              onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              min="0"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-gray-600">
+                              {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-blue-50">
+                        <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-blue-700">Notas de Crédito</td>
+                      </tr>
+                      {[
+                        { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                        { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                      ].map(({ key, label }) => (
+                        <tr key={key} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-gray-600">{label}</td>
+                          <td className="py-2 px-3">
+                            <Input
+                              value={series[key]?.serie || defaultSeries[key].serie}
+                              onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              value={series[key]?.lastNumber ?? 0}
+                              onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              min="0"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-gray-600">
+                              {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-orange-50">
+                        <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-orange-700">Notas de Débito</td>
+                      </tr>
+                      {[
+                        { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                        { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                      ].map(({ key, label }) => (
+                        <tr key={key} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-gray-600">{label}</td>
+                          <td className="py-2 px-3">
+                            <Input
+                              value={series[key]?.serie || defaultSeries[key].serie}
+                              onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              value={series[key]?.lastNumber ?? 0}
+                              onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              min="0"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-gray-600">
+                              {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-purple-50">
+                        <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-purple-700">Guías de Remisión</td>
+                      </tr>
+                      <tr className="border-b border-gray-100">
+                        <td className="py-2 px-3 text-gray-600">Guía de Remisión</td>
+                        <td className="py-2 px-3">
+                          <Input
+                            value={series['guia_remision']?.serie || defaultSeries['guia_remision'].serie}
+                            onChange={e => handleSeriesChange('guia_remision', 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <Input
+                            type="number"
+                            value={series['guia_remision']?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange('guia_remision', 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-mono text-gray-600">
+                            {getNextNumber(series['guia_remision']?.serie || 'T001', series['guia_remision']?.lastNumber ?? 0)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Facturas */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Facturas Electrónicas</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.factura.serie}
-                    onChange={e => handleSeriesChange('factura', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.factura.lastNumber}
-                    onChange={e => handleSeriesChange('factura', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.factura.serie, series.factura.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
+          {/* Sucursales Adicionales */}
+          {!loadingBranches && branches.length > 0 && (
+            <>
+              <div className="flex items-center gap-2 mt-6">
+                <Store className="w-5 h-5 text-gray-400" />
+                <h3 className="text-lg font-medium text-gray-900">Sucursales Adicionales</h3>
+                <span className="text-sm text-gray-500">({branches.length})</span>
               </div>
-            </div>
 
-            {/* Boletas */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Boletas de Venta</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.boleta.serie}
-                    onChange={e => handleSeriesChange('boleta', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.boleta.lastNumber}
-                    onChange={e => handleSeriesChange('boleta', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.boleta.serie, series.boleta.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-            </div>
+              {branches.map((branch, index) => {
+                const bSeries = branchSeries[branch.id] || {}
+                const isEditing = editingBranchId === branch.id
 
-            {/* Notas de Venta */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Notas de Venta</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_venta.serie}
-                    onChange={e => handleSeriesChange('nota_venta', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_venta.lastNumber}
-                    onChange={e => handleSeriesChange('nota_venta', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_venta.serie, series.nota_venta.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Cotizaciones */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Cotizaciones</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.cotizacion.serie}
-                    onChange={e => handleSeriesChange('cotizacion', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.cotizacion.lastNumber}
-                    onChange={e => handleSeriesChange('cotizacion', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.cotizacion.serie, series.cotizacion.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Notas de Crédito - Facturas */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Notas de Crédito - Facturas (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_credito_factura.serie}
-                    onChange={e => handleSeriesChange('nota_credito_factura', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="FN01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_credito_factura.lastNumber}
-                    onChange={e => handleSeriesChange('nota_credito_factura', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_credito_factura.serie, series.nota_credito_factura.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para anular, corregir o devolver facturas aceptadas por SUNAT
-              </p>
-            </div>
-
-            {/* Notas de Crédito - Boletas */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Notas de Crédito - Boletas (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_credito_boleta.serie}
-                    onChange={e => handleSeriesChange('nota_credito_boleta', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="BN01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_credito_boleta.lastNumber}
-                    onChange={e => handleSeriesChange('nota_credito_boleta', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_credito_boleta.serie, series.nota_credito_boleta.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para anular, corregir o devolver boletas aceptadas por SUNAT
-              </p>
-            </div>
-
-            {/* Notas de Débito - Facturas */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Notas de Débito - Facturas (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_debito_factura.serie}
-                    onChange={e => handleSeriesChange('nota_debito_factura', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="FD01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_debito_factura.lastNumber}
-                    onChange={e => handleSeriesChange('nota_debito_factura', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_debito_factura.serie, series.nota_debito_factura.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para aumentar el valor de facturas aceptadas por SUNAT (intereses, penalidades, etc.)
-              </p>
-            </div>
-
-            {/* Notas de Débito - Boletas */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Notas de Débito - Boletas (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.nota_debito_boleta.serie}
-                    onChange={e => handleSeriesChange('nota_debito_boleta', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="BD01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.nota_debito_boleta.lastNumber}
-                    onChange={e => handleSeriesChange('nota_debito_boleta', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.nota_debito_boleta.serie, series.nota_debito_boleta.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para aumentar el valor de boletas aceptadas por SUNAT (intereses, penalidades, etc.)
-              </p>
-            </div>
-
-            {/* Guías de Remisión */}
-            <div className="pt-4 border-t">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Guías de Remisión Electrónicas (SUNAT)
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie
-                  </label>
-                  <Input
-                    value={series.guia_remision.serie}
-                    onChange={e => handleSeriesChange('guia_remision', 'serie', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    maxLength={4}
-                    placeholder="T001"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Último Número
-                  </label>
-                  <Input
-                    type="number"
-                    value={series.guia_remision.lastNumber}
-                    onChange={e => handleSeriesChange('guia_remision', 'lastNumber', e.target.value)}
-                    disabled={!editingSeries}
-                    className={!editingSeries ? 'bg-gray-100' : ''}
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Siguiente
-                  </label>
-                  <Input
-                    value={getNextNumber(series.guia_remision.serie, series.guia_remision.lastNumber)}
-                    disabled
-                    className="bg-gray-100 font-mono"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Para documentar el traslado de bienes. Obligatorio desde julio 2025 para transporte de mercancías.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-        </Card>
+                return (
+                  <Card key={branch.id}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-cyan-100 rounded-lg">
+                            <Store className="w-5 h-5 text-cyan-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">{branch.name}</CardTitle>
+                            {branch.address && (
+                              <p className="text-sm text-gray-500 flex items-center mt-1">
+                                <MapPin className="w-3 h-3 mr-1" />
+                                {branch.address}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {!isEditing ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => initializeBranchSeries(branch.id, index)}
+                          >
+                            <Edit className="w-4 h-4 mr-1" />
+                            Editar Series
+                          </Button>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingBranchId(null)
+                                loadBranchesAndSeries()
+                              }}
+                              disabled={isSaving}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleSaveBranchSeries(branch.id)}
+                              disabled={isSaving}
+                            >
+                              {isSaving ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                  Guardando...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="w-4 h-4 mr-1" />
+                                  Guardar
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-gray-50">
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Documento</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Serie</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Último #</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Siguiente</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[
+                              { key: 'factura', label: 'Factura Electrónica' },
+                              { key: 'boleta', label: 'Boleta de Venta' },
+                              { key: 'nota_venta', label: 'Nota de Venta' },
+                              { key: 'cotizacion', label: 'Cotización' },
+                            ].map(({ key, label }) => (
+                              <tr key={key} className="border-b border-gray-100">
+                                <td className="py-2 px-3 text-gray-700 font-medium">{label}</td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    maxLength={4}
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    type="number"
+                                    value={bSeries[key]?.lastNumber ?? 0}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    min="0"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-mono text-gray-600">
+                                    {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-blue-50">
+                              <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-blue-700">Notas de Crédito</td>
+                            </tr>
+                            {[
+                              { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                              { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                            ].map(({ key, label }) => (
+                              <tr key={key} className="border-b border-gray-100">
+                                <td className="py-2 px-3 text-gray-600">{label}</td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    maxLength={4}
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    type="number"
+                                    value={bSeries[key]?.lastNumber ?? 0}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    min="0"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-mono text-gray-600">
+                                    {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-orange-50">
+                              <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-orange-700">Notas de Débito</td>
+                            </tr>
+                            {[
+                              { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                              { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                            ].map(({ key, label }) => (
+                              <tr key={key} className="border-b border-gray-100">
+                                <td className="py-2 px-3 text-gray-600">{label}</td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    maxLength={4}
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    type="number"
+                                    value={bSeries[key]?.lastNumber ?? 0}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    min="0"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-mono text-gray-600">
+                                    {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-purple-50">
+                              <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-purple-700">Guías de Remisión</td>
+                            </tr>
+                            <tr className="border-b border-gray-100">
+                              <td className="py-2 px-3 text-gray-600">Guía de Remisión</td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  value={bSeries['guia_remision']?.serie || defaultSeries['guia_remision'].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_remision', 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  type="number"
+                                  value={bSeries['guia_remision']?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_remision', 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="font-mono text-gray-600">
+                                  {getNextNumber(bSeries['guia_remision']?.serie || 'T001', bSeries['guia_remision']?.lastNumber ?? 0)}
+                                </span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      {!isEditing && !bSeries.factura && (
+                        <p className="text-sm text-amber-600 mt-3 flex items-center">
+                          <AlertTriangle className="w-4 h-4 mr-1" />
+                          Series no configuradas. Haz clic en "Editar Series" para configurar.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </>
+          )}
+        </div>
       )}
 
       {/* Tab Content - Impresora */}

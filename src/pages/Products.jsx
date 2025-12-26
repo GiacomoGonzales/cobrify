@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -27,6 +27,7 @@ import {
 import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse } from '@/services/warehouseService'
+import { getActiveBranches } from '@/services/branchService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import { collection, getDocs } from 'firebase/firestore'
@@ -199,6 +200,7 @@ export default function Products() {
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
+  const [branches, setBranches] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [showExpiringOnly, setShowExpiringOnly] = useState(false) // Filtro de vencimiento
@@ -300,6 +302,7 @@ export default function Products() {
       price: '',
       price2: '',
       price3: '',
+      price4: '',
       cost: '',
       unit: 'NIU',
       category: '',
@@ -310,10 +313,11 @@ export default function Products() {
     },
   })
 
-  // Cargar productos y almacenes
+  // Cargar productos, almacenes y sucursales
   useEffect(() => {
     loadProducts()
     loadWarehouses()
+    loadBranches()
     // Cargar laboratorios solo en modo farmacia
     if (businessMode === 'pharmacy') {
       loadLaboratories()
@@ -379,6 +383,24 @@ export default function Products() {
         setWarehouses(result.data || [])
       } else {
         console.error('Error al cargar almacenes:', result.error)
+      }
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  // Cargar sucursales
+  const loadBranches = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    try {
+      const businessId = getBusinessId()
+      const result = await getActiveBranches(businessId)
+
+      if (result.success) {
+        setBranches(result.data || [])
+      } else {
+        console.error('Error al cargar sucursales:', result.error)
       }
     } catch (error) {
       console.error('Error:', error)
@@ -523,6 +545,7 @@ export default function Products() {
       price: productHasVariants ? '' : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
+      price4: product.price4?.toString() || '',
       cost: product.cost?.toString() || '',
       unit: product.unit || 'NIU',
       category: product.category || '',
@@ -671,6 +694,7 @@ export default function Products() {
         // Precios adicionales (solo si están habilitados y tienen valor)
         productData.price2 = data.price2 && data.price2 !== '' ? parseFloat(data.price2) : null
         productData.price3 = data.price3 && data.price3 !== '' ? parseFloat(data.price3) : null
+        productData.price4 = data.price4 && data.price4 !== '' ? parseFloat(data.price4) : null
 
         // Manejar stock e initialStock
         if (noStock) {
@@ -2432,50 +2456,148 @@ export default function Products() {
                         </TableCell>
                       </TableRow>
 
-                      {/* Fila expandible con detalle por almacén */}
+                      {/* Fila expandible con detalle por sucursal y almacén */}
                       {isExpanded && warehouses.length > 0 && !product.hasVariants && (
                         <TableRow className="bg-gray-50">
                           <TableCell colSpan={8} className="py-3">
-                            <div className="pl-8 space-y-2">
+                            <div className="pl-8 space-y-4">
                               <div className="flex items-center space-x-2 text-sm text-gray-600 mb-2">
-                                <Warehouse className="w-4 h-4" />
-                                <span className="font-medium">Stock por Almacén:</span>
+                                <Store className="w-4 h-4" />
+                                <span className="font-medium">Stock por Sucursal y Almacén:</span>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {warehouses.map(warehouse => {
-                                  const warehouseStock = hasWarehouseStocks
-                                    ? product.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
-                                    : null
-                                  const stock = warehouseStock?.stock || 0
 
-                                  return (
-                                    <div
-                                      key={warehouse.id}
-                                      className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
-                                    >
-                                      <div className="flex items-center space-x-2">
-                                        <span className="text-sm font-medium text-gray-700">
-                                          {warehouse.name}
-                                        </span>
-                                        {warehouse.isDefault && (
-                                          <Badge variant="default" className="text-xs">Principal</Badge>
-                                        )}
+                              {/* Agrupar almacenes por sucursal */}
+                              {(() => {
+                                // Almacenes de la sucursal principal (sin branchId)
+                                const mainBranchWarehouses = warehouses.filter(w => !w.branchId)
+                                // Agrupar el resto por branchId
+                                const warehousesByBranch = warehouses
+                                  .filter(w => w.branchId)
+                                  .reduce((acc, warehouse) => {
+                                    const branchId = warehouse.branchId
+                                    if (!acc[branchId]) {
+                                      acc[branchId] = []
+                                    }
+                                    acc[branchId].push(warehouse)
+                                    return acc
+                                  }, {})
+
+                                return (
+                                  <div className="space-y-4">
+                                    {/* Sucursal Principal */}
+                                    {mainBranchWarehouses.length > 0 && (
+                                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        <div className="bg-primary-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-4 h-4 text-primary-600" />
+                                          <span className="font-medium text-primary-700">Sucursal Principal</span>
+                                          <Badge variant="default" className="text-xs ml-2">
+                                            {mainBranchWarehouses.reduce((sum, w) => {
+                                              const ws = product.warehouseStocks?.find(ws => ws.warehouseId === w.id)
+                                              return sum + (ws?.stock || 0)
+                                            }, 0)} total
+                                          </Badge>
+                                        </div>
+                                        <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {mainBranchWarehouses.map(warehouse => {
+                                            const warehouseStock = hasWarehouseStocks
+                                              ? product.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                              : null
+                                            const stock = warehouseStock?.stock || 0
+
+                                            return (
+                                              <div
+                                                key={warehouse.id}
+                                                className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-lg"
+                                              >
+                                                <div className="flex items-center space-x-2">
+                                                  <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                  <span className="text-sm text-gray-700">
+                                                    {warehouse.name}
+                                                  </span>
+                                                  {warehouse.isDefault && (
+                                                    <Badge variant="secondary" className="text-xs">Ppal</Badge>
+                                                  )}
+                                                </div>
+                                                <span
+                                                  className={`font-semibold text-sm ${
+                                                    stock >= 4
+                                                      ? 'text-green-600'
+                                                      : stock > 0
+                                                      ? 'text-yellow-600'
+                                                      : 'text-red-600'
+                                                  }`}
+                                                >
+                                                  {stock}
+                                                </span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
                                       </div>
-                                      <span
-                                        className={`font-semibold ${
-                                          stock >= 4
-                                            ? 'text-green-600'
-                                            : stock > 0
-                                            ? 'text-yellow-600'
-                                            : 'text-red-600'
-                                        }`}
-                                      >
-                                        {stock}
-                                      </span>
-                                    </div>
-                                  )
-                                })}
-                              </div>
+                                    )}
+
+                                    {/* Otras sucursales */}
+                                    {Object.entries(warehousesByBranch).map(([branchId, branchWarehouses]) => {
+                                      const branch = branches.find(b => b.id === branchId)
+                                      const branchTotal = branchWarehouses.reduce((sum, w) => {
+                                        const ws = product.warehouseStocks?.find(ws => ws.warehouseId === w.id)
+                                        return sum + (ws?.stock || 0)
+                                      }, 0)
+
+                                      return (
+                                        <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                          <div className="bg-blue-50 px-4 py-2 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-4 h-4 text-blue-600" />
+                                            <span className="font-medium text-blue-700">
+                                              {branch?.name || 'Sucursal sin nombre'}
+                                            </span>
+                                            <Badge variant="secondary" className="text-xs ml-2">
+                                              {branchTotal} total
+                                            </Badge>
+                                          </div>
+                                          <div className="p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                            {branchWarehouses.map(warehouse => {
+                                              const warehouseStock = hasWarehouseStocks
+                                                ? product.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)
+                                                : null
+                                              const stock = warehouseStock?.stock || 0
+
+                                              return (
+                                                <div
+                                                  key={warehouse.id}
+                                                  className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-lg"
+                                                >
+                                                  <div className="flex items-center space-x-2">
+                                                    <Warehouse className="w-3.5 h-3.5 text-gray-400" />
+                                                    <span className="text-sm text-gray-700">
+                                                      {warehouse.name}
+                                                    </span>
+                                                    {warehouse.isDefault && (
+                                                      <Badge variant="secondary" className="text-xs">Ppal</Badge>
+                                                    )}
+                                                  </div>
+                                                  <span
+                                                    className={`font-semibold text-sm ${
+                                                      stock >= 4
+                                                        ? 'text-green-600'
+                                                        : stock > 0
+                                                        ? 'text-yellow-600'
+                                                        : 'text-red-600'
+                                                    }`}
+                                                  >
+                                                    {stock}
+                                                  </span>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
+
                               {!hasWarehouseStocks && (
                                 <p className="text-xs text-gray-500 mt-2">
                                   Este producto aún no tiene stock distribuido por almacenes.
@@ -2798,6 +2920,14 @@ export default function Products() {
                     placeholder="0.00 (opcional)"
                     error={errors.price3?.message}
                     {...register('price3')}
+                  />
+                  <Input
+                    label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00 (opcional)"
+                    error={errors.price4?.message}
+                    {...register('price4')}
                   />
                 </>
               )}
