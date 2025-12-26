@@ -33,7 +33,7 @@ import {
   deleteWarehouse,
   syncAllProductsStock,
 } from '@/services/warehouseService'
-import { getProducts, getAllBranchSeries } from '@/services/firestoreService'
+import { getProducts, getAllBranchSeriesFS } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { FileText } from 'lucide-react'
 
@@ -140,7 +140,7 @@ export default function Warehouses() {
       }
 
       // Cargar series por sucursal y globales
-      const seriesResult = await getAllBranchSeries(getBusinessId())
+      const seriesResult = await getAllBranchSeriesFS(getBusinessId())
       if (seriesResult.success) {
         setBranchSeries(seriesResult.data || {})
         setGlobalSeries(seriesResult.globalSeries || {})
