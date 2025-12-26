@@ -277,6 +277,10 @@ export default function Products() {
   })
   const [laboratories, setLaboratories] = useState([]) // Lista de laboratorios para el select
 
+  // Presentations state (venta por presentaciones: unidad, pack, caja, etc.)
+  const [presentations, setPresentations] = useState([])
+  const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
+
   // Image upload state
   const [productImage, setProductImage] = useState(null) // File object
   const [productImagePreview, setProductImagePreview] = useState(null) // URL preview
@@ -458,6 +462,8 @@ export default function Products() {
       expirationDate: '',
     })
     setModifiers([]) // Limpiar modificadores
+    setPresentations([]) // Limpiar presentaciones
+    setNewPresentation({ name: '', factor: '', price: '' })
     setTaxAffectation('10') // Default: Gravado
     // Resetear datos de farmacia
     setPharmacyData({
@@ -503,6 +509,10 @@ export default function Products() {
 
     // Load modifiers if product has them (restaurant mode)
     setModifiers(product.modifiers || [])
+
+    // Load presentations if product has them (venta por presentaciones)
+    setPresentations(product.presentations || [])
+    setNewPresentation({ name: '', factor: '', price: '' })
 
     // Load pharmacy data if exists (pharmacy mode)
     setPharmacyData({
@@ -563,6 +573,8 @@ export default function Products() {
     setEditingProduct(null)
     setSelectedWarehouse('')
     setModifiers([]) // Limpiar modificadores
+    setPresentations([]) // Limpiar presentaciones
+    setNewPresentation({ name: '', factor: '', price: '' })
     // Limpiar imagen
     if (productImagePreview) {
       revokeImagePreview(productImagePreview)
@@ -654,6 +666,8 @@ export default function Products() {
         catalogVisible: catalogVisible, // Visible en catálogo público
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
+        // Add presentations if enabled (venta por presentaciones)
+        ...(businessSettings?.presentationsEnabled && presentations.length > 0 ? { presentations } : {}),
         // Add pharmacy data if in pharmacy mode
         ...(businessMode === 'pharmacy' ? {
           genericName: pharmacyData.genericName || null,
@@ -3077,6 +3091,130 @@ export default function Products() {
               )}
             </div>
           </div>
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECCIÓN: PRESENTACIONES DE VENTA (solo si está habilitado)
+          ═══════════════════════════════════════════════════════════════════ */}
+          {businessSettings?.presentationsEnabled && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Presentaciones de Venta
+              </h3>
+
+              <p className="text-xs text-gray-500">
+                Define cómo se puede vender este producto (unidad, pack, caja, etc.). El stock se maneja en la unidad base.
+              </p>
+
+              {/* Lista de presentaciones */}
+              {presentations.length > 0 && (
+                <div className="space-y-2">
+                  {presentations.map((pres, idx) => (
+                    <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                      <div className="flex-1 grid grid-cols-3 gap-2">
+                        <div>
+                          <span className="text-xs text-gray-500">Nombre</span>
+                          <p className="text-sm font-medium">{pres.name}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500">Factor</span>
+                          <p className="text-sm font-medium">×{pres.factor}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-500">Precio</span>
+                          <p className="text-sm font-medium">S/ {parseFloat(pres.price).toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = presentations.filter((_, i) => i !== idx)
+                          setPresentations(updated)
+                        }}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Agregar nueva presentación */}
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Nombre</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Caja x24"
+                    value={newPresentation.name}
+                    onChange={(e) => setNewPresentation(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                <div className="w-20">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Factor</label>
+                  <input
+                    type="number"
+                    placeholder="24"
+                    min="1"
+                    value={newPresentation.factor}
+                    onChange={(e) => setNewPresentation(prev => ({ ...prev, factor: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                <div className="w-24">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Precio</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={newPresentation.price}
+                    onChange={(e) => setNewPresentation(prev => ({ ...prev, price: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newPresentation.name.trim()) {
+                      toast.error('Ingresa un nombre para la presentación')
+                      return
+                    }
+                    if (!newPresentation.factor || parseInt(newPresentation.factor) < 1) {
+                      toast.error('El factor debe ser al menos 1')
+                      return
+                    }
+                    if (!newPresentation.price || parseFloat(newPresentation.price) <= 0) {
+                      toast.error('Ingresa un precio válido')
+                      return
+                    }
+                    setPresentations([...presentations, {
+                      name: newPresentation.name.trim(),
+                      factor: parseInt(newPresentation.factor),
+                      price: parseFloat(newPresentation.price)
+                    }])
+                    setNewPresentation({ name: '', factor: '', price: '' })
+                  }}
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+
+              {presentations.length === 0 && (
+                <div className="text-center py-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <Package className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">
+                    Sin presentaciones definidas.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    El producto se venderá solo por su unidad base.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECCIÓN 3: INVENTARIO

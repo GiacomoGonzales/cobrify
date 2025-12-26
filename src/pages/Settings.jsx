@@ -149,6 +149,9 @@ export default function Settings() {
     price4: 'Especial'
   })
 
+  // Estado para presentaciones de venta
+  const [presentationsEnabled, setPresentationsEnabled] = useState(false)
+
   // Estados para privacidad
   const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
 
@@ -394,6 +397,8 @@ export default function Settings() {
 
         // Cargar configuración de múltiples precios
         setMultiplePricesEnabled(businessData.multiplePricesEnabled || false)
+        // Cargar configuración de presentaciones de venta
+        setPresentationsEnabled(businessData.presentationsEnabled || false)
         if (businessData.priceLabels) {
           setPriceLabels({
             price1: businessData.priceLabels.price1 || 'Público',
@@ -2368,6 +2373,58 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Presentaciones de Venta */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Presentaciones de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Permite vender productos en diferentes presentaciones (Unidad, Pack, Caja, etc.)
+                </p>
+                <div className="space-y-4">
+                  <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <label className="flex items-start space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={presentationsEnabled}
+                        onChange={(e) => setPresentationsEnabled(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                          Habilitar presentaciones de venta por producto
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          {presentationsEnabled
+                            ? '✓ Habilitado: Podrás definir múltiples presentaciones por producto (ej: Unidad, Media Docena, Caja x24). Al vender, elegirás la presentación y el stock se descontará automáticamente.'
+                            : '✗ Deshabilitado: Los productos se venderán con una sola unidad de medida (comportamiento normal).'}
+                        </p>
+                      </div>
+                    </label>
+
+                    {presentationsEnabled && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                          <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="text-xs text-blue-800">
+                            <p className="font-medium mb-1">¿Cómo funciona?</p>
+                            <ul className="list-disc list-inside space-y-1 text-blue-700">
+                              <li>El stock se maneja en la unidad más pequeña (ej: unidades)</li>
+                              <li>Cada presentación tiene un factor de conversión y precio</li>
+                              <li>Al vender, el stock se descuenta según el factor</li>
+                              <li>Ejemplo: Vender 1 "Caja x24" descuenta 24 unidades</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Notas de Venta */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Notas de Venta</h3>
@@ -2448,6 +2505,7 @@ export default function Settings() {
                       allowPartialPayments: allowPartialPayments,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
+                      presentationsEnabled: presentationsEnabled,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success('Configuración de ventas guardada exitosamente.')

@@ -296,6 +296,10 @@ export default function POS() {
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [productForPriceSelection, setProductForPriceSelection] = useState(null)
 
+  // Modal de selección de presentación (para productos con presentaciones)
+  const [showPresentationModal, setShowPresentationModal] = useState(false)
+  const [productForPresentationSelection, setProductForPresentationSelection] = useState(null)
+
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
   const [discountPercentage, setDiscountPercentage] = useState('')
@@ -846,7 +850,7 @@ export default function POS() {
     }
   }
 
-  const addToCart = (product, selectedPrice = null) => {
+  const addToCart = (product, selectedPrice = null, selectedPresentation = null) => {
     // Bloquear si ya se completó una venta
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -860,9 +864,17 @@ export default function POS() {
       return
     }
 
+    // Verificar si tiene presentaciones y no viene con presentación ya seleccionada
+    const hasPresentations = businessSettings?.presentationsEnabled && product.presentations && product.presentations.length > 0
+    if (hasPresentations && selectedPresentation === null) {
+      setProductForPresentationSelection(product)
+      setShowPresentationModal(true)
+      return
+    }
+
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
     const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4)
-    if (hasMultiplePrices && selectedPrice === null) {
+    if (hasMultiplePrices && selectedPrice === null && selectedPresentation === null) {
       // Verificar si el cliente seleccionado tiene un nivel de precio asignado
       if (selectedCustomer?.priceLevel) {
         // Usar el precio automáticamente según el nivel del cliente
@@ -935,6 +947,72 @@ export default function POS() {
     // Cerrar modal
     setShowPriceModal(false)
     setProductForPriceSelection(null)
+  }
+
+  // Manejar selección de presentación desde el modal
+  const handlePresentationSelection = (presentation) => {
+    if (!productForPresentationSelection) return
+
+    const product = productForPresentationSelection
+
+    // Crear un item del carrito con la información de la presentación
+    const cartItem = {
+      ...product,
+      cartId: `${product.id}-pres-${presentation.name}`, // ID único para esta presentación
+      price: presentation.price,
+      presentationName: presentation.name,
+      presentationFactor: presentation.factor,
+      // La cantidad es 1 presentación, pero descuenta factor unidades del stock
+      quantity: 1
+    }
+
+    // Verificar stock considerando el factor
+    const warehouseStock = getCurrentWarehouseStock(product)
+    if (product.stock !== null && warehouseStock < presentation.factor && !companySettings?.allowNegativeStock) {
+      toast.error(`Stock insuficiente. Se requieren ${presentation.factor} unidades, disponible: ${warehouseStock}`)
+      setShowPresentationModal(false)
+      setProductForPresentationSelection(null)
+      return
+    }
+
+    // Buscar si ya existe esta presentación en el carrito
+    const existingItem = cart.find(item => item.cartId === cartItem.cartId)
+
+    if (existingItem) {
+      // Verificar si hay suficiente stock para otra unidad
+      const newTotalUnits = (existingItem.quantity + 1) * presentation.factor
+      if (product.stock !== null && newTotalUnits > warehouseStock && !companySettings?.allowNegativeStock) {
+        toast.error(`Stock insuficiente. Se requieren ${newTotalUnits} unidades, disponible: ${warehouseStock}`)
+        setShowPresentationModal(false)
+        setProductForPresentationSelection(null)
+        return
+      }
+      setCart(
+        cart.map(item =>
+          item.cartId === cartItem.cartId ? { ...item, quantity: item.quantity + 1 } : item
+        )
+      )
+    } else {
+      setCart([...cart, cartItem])
+    }
+
+    // Cerrar modal
+    setShowPresentationModal(false)
+    setProductForPresentationSelection(null)
+  }
+
+  // Manejar venta directa por unidad base (sin presentación específica)
+  const handleSellAsBaseUnit = () => {
+    if (!productForPresentationSelection) return
+
+    const product = productForPresentationSelection
+
+    // Agregar al carrito con precio y factor base (1)
+    addToCart({ ...product, presentationName: null, presentationFactor: 1 }, product.price, { name: 'base', factor: 1, price: product.price })
+
+    // Cerrar modal
+    setShowPresentationModal(false)
+    setProductForPresentationSelection(null)
   }
 
   const addVariantToCart = (product, variant) => {
@@ -1540,12 +1618,13 @@ export default function POS() {
         const items = cart.map(item => ({
           productId: item.id,
           code: item.code || item.id,
-          name: item.name,
+          name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
           quantity: item.quantity,
           unit: item.unit || 'UNIDAD',
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
           taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
+          ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         }))
 
         // Crear datos simulados de factura
@@ -1643,13 +1722,14 @@ export default function POS() {
       const items = cart.map(item => ({
         productId: item.id,
         code: item.sku || item.code || '', // Priorizar SKU, luego código, vacío si no hay
-        name: item.name,
+        name: item.presentationName ? `${item.name} (${item.presentationName})` : item.name,
         quantity: item.quantity,
         unit: item.unit || 'UNIDAD',
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
+        ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
       }))
 
       // 3. Crear factura
@@ -1864,10 +1944,12 @@ export default function POS() {
           if (productData.trackStock === false || productData.stock === null) return
 
           // Actualizar stock usando el helper de almacén
+          // Si tiene presentación, multiplicar por el factor
+          const quantityToDeduct = item.quantity * (item.presentationFactor || 1)
           const updatedProduct = updateWarehouseStock(
             productData,
             selectedWarehouse?.id || '',
-            -item.quantity // Negativo porque es una salida
+            -quantityToDeduct // Negativo porque es una salida
           )
 
           const updates = {
@@ -1951,16 +2033,20 @@ export default function POS() {
 
       for (const item of itemsForMovement) {
         try {
+          // Si tiene presentación, multiplicar por el factor
+          const quantityForMovement = item.quantity * (item.presentationFactor || 1)
           const movementResult = await createStockMovement(businessId, {
             productId: item.id,
             warehouseId: selectedWarehouse?.id || '',
             type: 'sale',
-            quantity: -item.quantity,
+            quantity: -quantityForMovement,
             reason: 'Venta',
             referenceType: 'invoice',
             referenceId: invoiceId || '',
             userId: user?.uid,
-            notes: `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
+            notes: item.presentationName
+              ? `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'} - ${item.quantity} ${item.presentationName}`
+              : `Venta - ${documentType === 'boleta' ? 'Boleta' : documentType === 'factura' ? 'Factura' : 'Nota de Venta'}`
           })
           console.log('📦 [StockMovement] Movimiento creado para:', item.name, movementResult)
         } catch (err) {
@@ -3357,6 +3443,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     ))}
                                   </p>
                                 )}
+                                {item.presentationName && (
+                                  <p className="text-xs text-green-600 mt-1 font-medium">
+                                    {item.presentationName} (×{item.presentationFactor})
+                                  </p>
+                                )}
                               </div>
                               <button
                                 onClick={() => removeFromCart(itemId)}
@@ -4256,6 +4347,76 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 </button>
               )}
             </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de Selección de Presentación */}
+      <Modal
+        isOpen={showPresentationModal}
+        onClose={() => {
+          setShowPresentationModal(false)
+          setProductForPresentationSelection(null)
+        }}
+        title={`Seleccionar presentación - ${productForPresentationSelection?.name || ''}`}
+        size="sm"
+      >
+        {productForPresentationSelection && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Este producto tiene múltiples presentaciones. Selecciona cómo deseas venderlo:
+            </p>
+            <div className="space-y-2">
+              {/* Opción: Unidad base */}
+              <button
+                onClick={handleSellAsBaseUnit}
+                className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">Unidad</p>
+                    <p className="text-xs text-gray-500">Precio base por unidad</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-primary-600">
+                      {formatCurrency(productForPresentationSelection.price)}
+                    </p>
+                    <p className="text-xs text-gray-400">×1</p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Presentaciones definidas */}
+              {productForPresentationSelection.presentations?.map((pres, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handlePresentationSelection(pres)}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-green-500 hover:bg-green-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{pres.name}</p>
+                      <p className="text-xs text-gray-500">Contiene {pres.factor} unidades</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-green-600">
+                        {formatCurrency(pres.price)}
+                      </p>
+                      <p className="text-xs text-gray-400">×{pres.factor}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Info de stock */}
+            {productForPresentationSelection.stock !== null && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-600">
+                  Stock disponible: <span className="font-semibold">{getCurrentWarehouseStock(productForPresentationSelection)} unidades</span>
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Modal>
