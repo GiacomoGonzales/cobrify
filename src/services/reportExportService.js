@@ -346,52 +346,175 @@ export const exportSalesReport = async (data) => {
  * Exportar reporte de productos a Excel
  */
 export const exportProductsReport = async (data) => {
-  const { topProducts, dateRange, customStartDate, customEndDate } = data
+  const { topProducts, salesByCategory, dateRange, customStartDate, customEndDate } = data
 
   const wb = XLSX.utils.book_new()
+  const periodo = getRangeLabel(dateRange, customStartDate, customEndDate)
 
-  // Hoja: Productos
-  const productsData = [
-    ['REPORTE DE PRODUCTOS MÁS VENDIDOS'],
-    ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
+  // ========== HOJA 1: RESUMEN EJECUTIVO ==========
+  const totalProductos = topProducts.length
+  const totalCategorias = salesByCategory?.length || 0
+  const totalUnidades = topProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
+  const totalIngresos = topProducts.reduce((sum, p) => sum + (p.revenue || 0), 0)
+  const totalCostos = topProducts.reduce((sum, p) => sum + (p.cost || 0), 0)
+  const totalUtilidad = totalIngresos - totalCostos
+  const margenPromedio = totalIngresos > 0 ? (totalUtilidad / totalIngresos) * 100 : 0
+
+  const resumenData = [
+    ['REPORTE DE PRODUCTOS Y CATEGORÍAS'],
+    [],
+    ['Período:', periodo],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
-    ['Posición', 'Producto', 'Cantidad Vendida', 'Ingresos Generados', 'Precio Promedio'],
+    ['═══════════════════════════════════════════════════════'],
+    ['RESUMEN EJECUTIVO'],
+    ['═══════════════════════════════════════════════════════'],
+    [],
+    ['INDICADOR', 'VALOR'],
+    ['Total de productos vendidos', totalProductos],
+    ['Total de categorías', totalCategorias],
+    ['Unidades vendidas', Number(totalUnidades.toFixed(0))],
+    ['Ingresos totales', `S/ ${totalIngresos.toFixed(2)}`],
+    ['Costos totales', `S/ ${totalCostos.toFixed(2)}`],
+    ['Utilidad bruta', `S/ ${totalUtilidad.toFixed(2)}`],
+    ['Margen promedio', `${margenPromedio.toFixed(1)}%`],
+    [],
+    ['═══════════════════════════════════════════════════════'],
+    ['TOP 5 PRODUCTOS'],
+    ['═══════════════════════════════════════════════════════'],
+  ]
+
+  topProducts.slice(0, 5).forEach((product, index) => {
+    resumenData.push([`${index + 1}. ${product.name}`, `S/ ${(product.revenue || 0).toFixed(2)}`])
+  })
+
+  resumenData.push([])
+  resumenData.push(['═══════════════════════════════════════════════════════'])
+  resumenData.push(['TOP 5 CATEGORÍAS'])
+  resumenData.push(['═══════════════════════════════════════════════════════'])
+
+  if (salesByCategory && salesByCategory.length > 0) {
+    salesByCategory.slice(0, 5).forEach((cat, index) => {
+      resumenData.push([`${index + 1}. ${cat.name}`, `S/ ${(cat.revenue || 0).toFixed(2)}`])
+    })
+  }
+
+  const wsResumen = XLSX.utils.aoa_to_sheet(resumenData)
+  wsResumen['!cols'] = [{ wch: 45 }, { wch: 25 }]
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen')
+
+  // ========== HOJA 2: DETALLE DE PRODUCTOS ==========
+  const productsData = [
+    ['DETALLE DE PRODUCTOS VENDIDOS'],
+    ['Período:', periodo],
+    [],
+    ['#', 'Producto', 'Unidades', 'Ingresos (S/)', 'Costo (S/)', 'Utilidad (S/)', 'Margen %', 'Precio Prom.'],
   ]
 
   topProducts.forEach((product, index) => {
+    const margen = product.revenue > 0 ? ((product.profit || 0) / product.revenue) * 100 : 0
+    const precioPromedio = product.quantity > 0 ? product.revenue / product.quantity : 0
     productsData.push([
       index + 1,
       product.name,
-      Number((product.quantity || 0).toFixed(2)),
+      Number((product.quantity || 0).toFixed(0)),
       Number((product.revenue || 0).toFixed(2)),
-      product.quantity > 0 ? Number(((product.revenue || 0) / product.quantity).toFixed(2)) : 0
+      Number((product.cost || 0).toFixed(2)),
+      Number((product.profit || 0).toFixed(2)),
+      Number(margen.toFixed(1)),
+      Number(precioPromedio.toFixed(2))
     ])
   })
 
-  // Agregar totales
-  const totalQuantity = topProducts.reduce((sum, p) => sum + (p.quantity || 0), 0)
-  const totalRevenue = topProducts.reduce((sum, p) => sum + (p.revenue || 0), 0)
-
   productsData.push([])
-  productsData.push(['TOTALES', '', Number(totalQuantity.toFixed(2)), Number(totalRevenue.toFixed(2)), ''])
+  productsData.push([
+    'TOTALES',
+    '',
+    Number(totalUnidades.toFixed(0)),
+    Number(totalIngresos.toFixed(2)),
+    Number(totalCostos.toFixed(2)),
+    Number(totalUtilidad.toFixed(2)),
+    Number(margenPromedio.toFixed(1)),
+    ''
+  ])
 
-  const ws = XLSX.utils.aoa_to_sheet(productsData)
-  ws['!cols'] = [
-    { wch: 12 },
+  const wsProducts = XLSX.utils.aoa_to_sheet(productsData)
+  wsProducts['!cols'] = [
+    { wch: 6 },
     { wch: 40 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 20 }
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 14 }
   ]
+  XLSX.utils.book_append_sheet(wb, wsProducts, 'Productos')
 
-  XLSX.utils.book_append_sheet(wb, ws, 'Productos')
+  // ========== HOJA 3: DETALLE DE CATEGORÍAS ==========
+  if (salesByCategory && salesByCategory.length > 0) {
+    const totalCatIngresos = salesByCategory.reduce((sum, c) => sum + (c.revenue || 0), 0)
+    const totalCatCostos = salesByCategory.reduce((sum, c) => sum + (c.cost || 0), 0)
+    const totalCatUtilidad = totalCatIngresos - totalCatCostos
+    const totalCatUnidades = salesByCategory.reduce((sum, c) => sum + (c.quantity || 0), 0)
+
+    const categoriesData = [
+      ['VENTAS POR CATEGORÍA'],
+      ['Período:', periodo],
+      [],
+      ['#', 'Categoría', 'Ventas', 'Unidades', 'Ingresos (S/)', 'Costo (S/)', 'Utilidad (S/)', 'Margen %', '% del Total'],
+    ]
+
+    salesByCategory.forEach((cat, index) => {
+      const margen = cat.revenue > 0 ? ((cat.profit || 0) / cat.revenue) * 100 : 0
+      const porcentaje = totalCatIngresos > 0 ? (cat.revenue / totalCatIngresos) * 100 : 0
+      categoriesData.push([
+        index + 1,
+        cat.name,
+        cat.itemCount || 0,
+        Number((cat.quantity || 0).toFixed(0)),
+        Number((cat.revenue || 0).toFixed(2)),
+        Number((cat.cost || 0).toFixed(2)),
+        Number((cat.profit || 0).toFixed(2)),
+        Number(margen.toFixed(1)),
+        Number(porcentaje.toFixed(1))
+      ])
+    })
+
+    const margenTotalCat = totalCatIngresos > 0 ? (totalCatUtilidad / totalCatIngresos) * 100 : 0
+    categoriesData.push([])
+    categoriesData.push([
+      'TOTALES',
+      '',
+      salesByCategory.reduce((sum, c) => sum + (c.itemCount || 0), 0),
+      Number(totalCatUnidades.toFixed(0)),
+      Number(totalCatIngresos.toFixed(2)),
+      Number(totalCatCostos.toFixed(2)),
+      Number(totalCatUtilidad.toFixed(2)),
+      Number(margenTotalCat.toFixed(1)),
+      '100.0'
+    ])
+
+    const wsCategories = XLSX.utils.aoa_to_sheet(categoriesData)
+    wsCategories['!cols'] = [
+      { wch: 6 },
+      { wch: 25 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 10 },
+      { wch: 12 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsCategories, 'Categorías')
+  }
 
   // Generar archivo con nombre atractivo
   const today = new Date()
   const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`
-  const rangeLabel = getRangeLabel(dateRange, customStartDate, customEndDate).replace(/\s+/g, '_')
-  const fileName = `Reporte_Productos_${rangeLabel}_${dateStr}.xlsx`
+  const rangeLabel = periodo.replace(/\s+/g, '_')
+  const fileName = `Reporte_Productos_Categorias_${rangeLabel}_${dateStr}.xlsx`
   await saveAndShareExcel(wb, fileName)
 }
 
