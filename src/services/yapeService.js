@@ -159,11 +159,11 @@ export const getYapeConfig = async (businessId) => {
       return { success: true, data: snapshot.data() }
     }
 
-    // Configuración por defecto
+    // Configuración por defecto - habilitado por defecto
     return {
       success: true,
       data: {
-        enabled: false,
+        enabled: true,
         notifyUsers: [],
         notifyAllUsers: true,
         autoStartListening: true

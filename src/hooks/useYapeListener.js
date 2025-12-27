@@ -13,7 +13,7 @@ import {
   parseYapeNotification,
   getYapeConfig
 } from '@/services/yapeService'
-import { getFunctions, httpsCallable } from 'firebase/functions'
+// No necesitamos importar functions - el trigger de Firestore maneja las notificaciones
 
 /**
  * Hook para escuchar notificaciones de Yape automáticamente
@@ -98,22 +98,8 @@ export const useYapeListener = () => {
             // Mostrar toast local
             toast.success(`Yape recibido: S/ ${paymentData.amount.toFixed(2)} de ${paymentData.senderName}`)
 
-            // Enviar push a otros usuarios via Cloud Function
-            try {
-              const functions = getFunctions()
-              const sendYapeNotification = httpsCallable(functions, 'onYapePaymentDetected')
-
-              await sendYapeNotification({
-                businessId,
-                paymentId: saveResult.id,
-                amount: paymentData.amount,
-                senderName: paymentData.senderName
-              })
-
-              console.log('📤 Notificación push enviada')
-            } catch (pushError) {
-              console.warn('Error enviando push de Yape:', pushError)
-            }
+            // El trigger de Firestore (onYapePayment) se encarga de enviar push automáticamente
+            console.log('📤 Trigger de Firestore enviará notificaciones push')
           }
         })
 
