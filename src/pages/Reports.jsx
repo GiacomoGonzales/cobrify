@@ -488,6 +488,56 @@ export default function Reports() {
       // Sin límite - mostrar todos los productos
   }, [filteredInvoices, products, recipes])
 
+  // Ventas por categoría
+  const salesByCategory = useMemo(() => {
+    const categoryStats = {}
+
+    filteredInvoices.forEach(invoice => {
+      invoice.items?.forEach(item => {
+        const productId = item.productId || item.id
+        const quantity = item.quantity || 0
+        const itemPrice = item.unitPrice || item.price || 0
+        const itemRevenue = item.subtotal || (quantity * itemPrice)
+
+        // Buscar el producto para obtener su categoría
+        const product = products.find(p => p.id === productId)
+        const categoryName = product?.categoryName || product?.category || 'Sin categoría'
+
+        if (!categoryStats[categoryName]) {
+          categoryStats[categoryName] = {
+            name: categoryName,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+            itemCount: 0
+          }
+        }
+
+        categoryStats[categoryName].quantity += quantity
+        categoryStats[categoryName].revenue = Number((categoryStats[categoryName].revenue + itemRevenue).toFixed(2))
+        categoryStats[categoryName].itemCount += 1
+
+        // Calcular costo
+        let itemCost = 0
+        const recipe = recipes.find(r => r.productId === productId)
+        if (recipe) {
+          itemCost = (recipe.totalCost || 0) * quantity
+        } else if (product) {
+          itemCost = (product.cost || 0) * quantity
+        }
+        categoryStats[categoryName].cost = Number((categoryStats[categoryName].cost + itemCost).toFixed(2))
+      })
+    })
+
+    return Object.values(categoryStats)
+      .map(cat => ({
+        ...cat,
+        profit: Number((cat.revenue - cat.cost).toFixed(2)),
+        profitMargin: cat.revenue > 0 ? ((cat.revenue - cat.cost) / cat.revenue) * 100 : 0
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+  }, [filteredInvoices, products, recipes])
+
   // Top clientes
   const topCustomers = useMemo(() => {
     const customerStats = {}
@@ -1971,6 +2021,67 @@ export default function Reports() {
                                 : 'text-red-600'
                             }`}>
                               {product.profitMargin.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabla de ventas por categoría */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Ventas por Categoría</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Categoría</TableHead>
+                      <TableHead className="text-right">Productos</TableHead>
+                      <TableHead className="text-right">Cantidad</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Costo</TableHead>
+                      <TableHead className="text-right">Utilidad</TableHead>
+                      <TableHead className="text-right">Margen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {salesByCategory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          No hay datos de categorías en este período
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      salesByCategory.map((category, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{category.name}</TableCell>
+                          <TableCell className="text-right">{category.itemCount}</TableCell>
+                          <TableCell className="text-right">{category.quantity.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(category.revenue)}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {formatCurrency(category.cost)}
+                          </TableCell>
+                          <TableCell className={`text-right font-semibold ${category.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(category.profit)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-medium ${
+                              category.profitMargin >= 30
+                                ? 'text-green-600'
+                                : category.profitMargin >= 15
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                            }`}>
+                              {category.profitMargin.toFixed(1)}%
                             </span>
                           </TableCell>
                         </TableRow>
