@@ -352,8 +352,14 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
-      // Subcollection: Dispatch Guides (Guías de Remisión Electrónicas)
+      // Subcollection: Dispatch Guides (Guías de Remisión Electrónicas - Remitente)
       match /dispatchGuides/{guideId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Carrier Dispatch Guides (Guías de Remisión Electrónicas - Transportista)
+      match /carrierDispatchGuides/{guideId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }

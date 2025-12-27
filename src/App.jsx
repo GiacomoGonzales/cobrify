@@ -66,6 +66,7 @@ import RegisterPurchase from './pages/RegisterPurchase'
 import PurchaseHistory from './pages/PurchaseHistory'
 import MobileRedirect from './components/MobileRedirect'
 import DispatchGuides from './pages/DispatchGuides'
+import CarrierDispatchGuides from './pages/CarrierDispatchGuides'
 import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
@@ -147,6 +148,7 @@ function App() {
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
+              <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
@@ -220,6 +222,7 @@ function App() {
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
+              <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />

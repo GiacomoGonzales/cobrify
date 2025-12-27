@@ -1,4 +1,4 @@
-import { generateInvoiceXML, generateCreditNoteXML, generateDebitNoteXML, generateDispatchGuideXML } from '../utils/xmlGenerator.js'
+import { generateInvoiceXML, generateCreditNoteXML, generateDebitNoteXML, generateDispatchGuideXML, generateCarrierDispatchGuideXML } from '../utils/xmlGenerator.js'
 import { signXML } from '../utils/xmlSigner.js'
 import { sendToSunat } from '../utils/sunatClient.js'
 import { sendDispatchGuideToSunat } from '../utils/sunatClientGRE.js'
@@ -977,6 +977,214 @@ async function emitDispatchGuideViaQPse(guideData, businessData) {
 
   } catch (error) {
     console.error('❌ Error en emisión GRE vía QPse:', error)
+
+    return {
+      success: false,
+      method: 'qpse',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+// ==================== GUÍAS DE REMISIÓN TRANSPORTISTA ====================
+
+/**
+ * Emite una Guía de Remisión Electrónica - Transportista (GRE-T) a SUNAT
+ *
+ * Tipo de documento: 31 (Guía de Remisión Transportista)
+ * Serie: V001-Vxxx
+ *
+ * IMPORTANTE: Las GRE Transportista son emitidas por empresas de transporte
+ * que prestan servicio de transporte de carga.
+ *
+ * @param {Object} guideData - Datos de la guía de remisión transportista
+ * @param {Object} businessData - Datos del negocio (transportista)
+ * @returns {Promise<Object>} Resultado del envío
+ */
+export async function emitirGuiaRemisionTransportista(guideData, businessData) {
+  try {
+    console.log('🚛 Iniciando emisión de GUÍA DE REMISIÓN TRANSPORTISTA...')
+    console.log(`📋 Documento: GRE-T ${guideData.series}-${guideData.correlative}`)
+    console.log(`📍 Origen: ${guideData.origin?.address}`)
+    console.log(`📍 Destino: ${guideData.destination?.address}`)
+    console.log(`🚚 Vehículo: ${guideData.vehicle?.plate}`)
+
+    // Determinar qué método usar
+    const emissionMethod = determineEmissionMethod(businessData)
+    console.log(`📡 Método de emisión seleccionado: ${emissionMethod}`)
+
+    let result
+
+    if (emissionMethod === 'qpse') {
+      result = await emitCarrierDispatchGuideViaQPse(guideData, businessData)
+    } else {
+      // Default: SUNAT directo
+      result = await emitCarrierDispatchGuideViaSunatDirect(guideData, businessData)
+    }
+
+    return result
+
+  } catch (error) {
+    console.error('❌ Error en emisión de guía de remisión transportista:', error)
+
+    return {
+      success: false,
+      method: 'error',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Guía de Remisión Transportista vía SUNAT DIRECTO (REST API)
+ */
+async function emitCarrierDispatchGuideViaSunatDirect(guideData, businessData) {
+  console.log('📤 Emitiendo Guía de Remisión Transportista vía SUNAT DIRECTO (REST API)...')
+
+  try {
+    // Validar configuración SUNAT
+    if (!businessData.sunat || !businessData.sunat.enabled) {
+      throw new Error('SUNAT no está habilitado para este negocio')
+    }
+
+    if (!businessData.sunat.solUser || !businessData.sunat.solPassword) {
+      throw new Error('Credenciales SOL no configuradas')
+    }
+
+    if (!businessData.sunat.certificateData || !businessData.sunat.certificatePassword) {
+      throw new Error('Certificado digital no configurado')
+    }
+
+    // Validar credenciales API REST (requeridas para GRE desde 2024)
+    if (!hasAPICredentials(businessData.sunat)) {
+      throw new Error(
+        'Credenciales API no configuradas. Para enviar Guías de Remisión directamente a SUNAT, ' +
+        'debe generar las credenciales API (Client ID y Client Secret) en el portal SOL de SUNAT: ' +
+        'Menú SOL > Empresa > Credenciales API. Alternativamente, puede usar el método QPse.'
+      )
+    }
+
+    // 1. Generar XML usando generateCarrierDispatchGuideXML
+    console.log('🔨 Generando XML UBL 2.1 DespatchAdvice (Transportista)...')
+    const xml = generateCarrierDispatchGuideXML(guideData, businessData)
+
+    console.log('📄 XML generado (primeros 500 chars):', xml.substring(0, 500))
+
+    // 2. Firmar XML
+    console.log('🔏 Firmando XML con certificado digital...')
+    const signedXML = await signXML(xml, {
+      certificate: businessData.sunat.certificateData,
+      certificatePassword: businessData.sunat.certificatePassword
+    })
+
+    // 3. Enviar a SUNAT vía REST API
+    console.log('📡 Enviando Guía de Remisión Transportista a SUNAT vía REST API...')
+    const sunatResponse = await sendDispatchGuideToSunatREST(signedXML, {
+      ruc: businessData.ruc,
+      series: guideData.series,
+      number: guideData.correlative,
+      solUser: businessData.sunat.solUser,
+      solPassword: businessData.sunat.solPassword,
+      clientId: businessData.sunat.clientId,
+      clientSecret: businessData.sunat.clientSecret,
+      environment: businessData.sunat.environment || 'production'
+    })
+
+    return {
+      success: sunatResponse.accepted,
+      method: 'sunat_direct',
+      accepted: sunatResponse.accepted,
+      responseCode: sunatResponse.code,
+      description: sunatResponse.description,
+      notes: sunatResponse.notes,
+      cdrData: sunatResponse.cdrData,
+      xml: signedXML,
+      ticket: sunatResponse.ticket,
+      sunatResponse: sunatResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión GRE-T vía SUNAT directo:', error)
+
+    return {
+      success: false,
+      method: 'sunat_direct',
+      error: error.message,
+      errorDetails: error
+    }
+  }
+}
+
+/**
+ * Emite Guía de Remisión Transportista vía QPse
+ */
+async function emitCarrierDispatchGuideViaQPse(guideData, businessData) {
+  console.log('📤 Emitiendo Guía de Remisión Transportista vía QPSE...')
+
+  try {
+    // Validar configuración QPse
+    const qpseEnabled = businessData.qpse?.enabled
+    const hasCredentials = businessData.qpse?.usuario && businessData.qpse?.password
+    const isEnabled = qpseEnabled === true || qpseEnabled === 'true' || hasCredentials
+
+    if (!businessData.qpse || !isEnabled) {
+      throw new Error('QPse no está habilitado para este negocio')
+    }
+
+    if (!hasCredentials) {
+      throw new Error('Credenciales de QPse no configuradas')
+    }
+
+    console.log('✅ QPse configurado correctamente:', {
+      usuario: businessData.qpse.usuario,
+      environment: businessData.qpse.environment || 'production'
+    })
+
+    // 1. Generar XML
+    console.log('🔨 Generando XML UBL 2.1 DespatchAdvice (Transportista)...')
+    const xml = generateCarrierDispatchGuideXML(guideData, businessData)
+
+    // 2. Tipo de documento: 31 = Guía de Remisión Transportista
+    const tipoDocumento = '31'
+    console.log(`📄 Tipo de documento: GRE-T → Código SUNAT: ${tipoDocumento}`)
+
+    // 3. Enviar a QPse (firma y envía automáticamente)
+    console.log('📡 Enviando Guía de Remisión Transportista a QPse...')
+    const qpseResponse = await sendToQPse(
+      xml,
+      businessData.ruc,
+      tipoDocumento,
+      guideData.series,
+      guideData.correlative,
+      businessData.qpse,
+      businessData
+    )
+
+    const isPendingManual = qpseResponse.responseCode === 'PENDING_MANUAL'
+
+    return {
+      success: true,
+      method: 'qpse',
+      accepted: qpseResponse.accepted,
+      responseCode: qpseResponse.responseCode,
+      description: qpseResponse.description,
+      notes: qpseResponse.notes,
+      cdrUrl: qpseResponse.cdrUrl,
+      cdrData: qpseResponse.cdrData,
+      xmlUrl: qpseResponse.xmlUrl,
+      pdfUrl: qpseResponse.pdfUrl,
+      ticket: qpseResponse.ticket,
+      hash: qpseResponse.hash,
+      nombreArchivo: qpseResponse.nombreArchivo,
+      xmlFirmado: qpseResponse.xmlFirmado,
+      pendingManual: isPendingManual,
+      qpseResponse: qpseResponse.rawResponse
+    }
+
+  } catch (error) {
+    console.error('❌ Error en emisión GRE-T vía QPse:', error)
 
     return {
       success: false,

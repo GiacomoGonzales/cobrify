@@ -5,7 +5,7 @@ import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import JSZip from 'jszip'
-import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision } from './src/services/emissionRouter.js'
+import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemision, emitirGuiaRemisionTransportista } from './src/services/emissionRouter.js'
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
@@ -2868,6 +2868,216 @@ export const sendDispatchGuideToSunatFn = onRequest(
 
     } catch (error) {
       console.error('❌ [GRE] Error en sendDispatchGuideToSunat:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error interno del servidor'
+      })
+    }
+  }
+)
+
+// ========================================
+// GUÍA DE REMISIÓN TRANSPORTISTA (GRE-T)
+// ========================================
+
+/**
+ * Cloud Function para enviar Guía de Remisión Transportista a SUNAT
+ *
+ * Tipo de documento: 31 (Guía de Remisión Transportista)
+ * Serie: V001-Vxxx
+ *
+ * Esta función maneja la emisión de GRE por parte de transportistas
+ * que prestan servicio de transporte de carga.
+ */
+export const sendCarrierDispatchGuideToSunatFn = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async (req, res) => {
+    // Manejar preflight OPTIONS request
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    // Solo aceptar POST
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Obtener y verificar token de autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'Token de autorización requerido' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (tokenError) {
+        console.error('Error verificando token:', tokenError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const userId = decodedToken.uid
+      console.log(`🚛 [GRE-T] Usuario autenticado: ${userId}`)
+
+      // Obtener datos del body
+      const { businessId, guideId } = req.body
+
+      if (!businessId || !guideId) {
+        res.status(400).json({ error: 'businessId y guideId son requeridos' })
+        return
+      }
+
+      console.log(`🚛 [GRE-T] Procesando guía transportista ${guideId} del negocio ${businessId}`)
+
+      // 1. Obtener datos del negocio
+      const businessRef = db.collection('businesses').doc(businessId)
+      const businessDoc = await businessRef.get()
+
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+      console.log(`🏢 [GRE-T] Negocio: ${businessData.businessName} (RUC: ${businessData.ruc})`)
+
+      // Mapear emissionConfig (configurado por super admin) al formato esperado
+      if (businessData.emissionConfig) {
+        console.log('📋 [GRE-T] Usando configuración de emisión del admin')
+        const config = businessData.emissionConfig
+
+        if (config.method === 'qpse') {
+          businessData.qpse = {
+            enabled: config.qpse?.enabled !== false,
+            usuario: config.qpse?.usuario,
+            password: config.qpse?.password,
+            environment: config.qpse?.environment || 'demo',
+            firmasDisponibles: config.qpse?.firmasDisponibles || 0,
+            firmasUsadas: config.qpse?.firmasUsadas || 0
+          }
+          businessData.sunat = { enabled: false }
+          businessData.nubefact = { enabled: false }
+          console.log('✅ [GRE-T] QPse configurado desde emissionConfig:', JSON.stringify(businessData.qpse))
+        } else if (config.method === 'sunat_direct') {
+          businessData.sunat = {
+            enabled: config.sunat?.enabled !== false,
+            environment: config.sunat?.environment || 'beta',
+            solUser: config.sunat?.solUser,
+            solPassword: config.sunat?.solPassword,
+            clientId: config.sunat?.clientId,
+            clientSecret: config.sunat?.clientSecret,
+            certificateName: config.sunat?.certificateName,
+            certificatePassword: config.sunat?.certificatePassword,
+            certificateData: config.sunat?.certificateData,
+            homologated: config.sunat?.homologated || false
+          }
+          businessData.qpse = { enabled: false }
+          businessData.nubefact = { enabled: false }
+          console.log('✅ [GRE-T] SUNAT configurado desde emissionConfig')
+          console.log('🔑 [GRE-T] Client ID presente:', !!config.sunat?.clientId)
+        }
+      }
+
+      // Validar que al menos un método esté habilitado
+      const sunatEnabled = businessData.sunat?.enabled === true
+      const qpseEnabled = businessData.qpse?.enabled === true
+      const nubefactEnabled = businessData.nubefact?.enabled === true
+
+      if (!sunatEnabled && !qpseEnabled && !nubefactEnabled) {
+        console.log('❌ [GRE-T] Ningún método de emisión habilitado')
+        res.status(400).json({
+          error: 'Ningún método de emisión está habilitado. Configura SUNAT directo, QPse o NubeFact en Configuración.'
+        })
+        return
+      }
+
+      // 2. Obtener datos de la guía de remisión transportista
+      const guideRef = db.collection('businesses').doc(businessId)
+        .collection('carrierDispatchGuides').doc(guideId)
+      const guideDoc = await guideRef.get()
+
+      if (!guideDoc.exists) {
+        res.status(404).json({ error: 'Guía de remisión transportista no encontrada' })
+        return
+      }
+
+      const guideData = guideDoc.data()
+      console.log(`📄 [GRE-T] Guía: ${guideData.number}`)
+
+      // Verificar si ya fue enviada y aceptada
+      if (guideData.sunatStatus === 'accepted') {
+        res.status(400).json({
+          error: 'Esta guía ya fue aceptada por SUNAT',
+          sunatStatus: guideData.sunatStatus
+        })
+        return
+      }
+
+      // 3. Preparar datos para emisión
+      const guideForEmission = {
+        ...guideData,
+        series: guideData.series,
+        correlative: guideData.correlative,
+      }
+
+      // 4. Emitir la guía de remisión transportista
+      console.log('🚀 [GRE-T] Iniciando emisión de guía de remisión transportista...')
+      const result = await emitirGuiaRemisionTransportista(guideForEmission, businessData)
+
+      console.log('📋 [GRE-T] Resultado de emisión:', JSON.stringify(result, null, 2))
+
+      // 5. Actualizar el estado de la guía en Firestore
+      const updateData = {
+        sunatStatus: result.accepted ? 'accepted' : (result.error ? 'error' : 'rejected'),
+        sunatResponseCode: result.responseCode || null,
+        sunatDescription: result.description || result.error || null,
+        sunatMethod: result.method || 'sunat_direct',
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      // Agregar datos específicos según el método
+      if (result.method === 'sunat_direct') {
+        if (result.cdrData) {
+          updateData.cdrData = result.cdrData
+        }
+      } else if (result.method === 'qpse') {
+        if (result.cdrUrl) updateData.cdrUrl = result.cdrUrl
+        if (result.xmlUrl) updateData.xmlUrl = result.xmlUrl
+        if (result.pdfUrl) updateData.pdfUrl = result.pdfUrl
+        if (result.hash) updateData.hash = result.hash
+      }
+
+      await guideRef.update(removeUndefined(updateData))
+
+      console.log(`✅ [GRE-T] Guía actualizada con estado: ${updateData.sunatStatus}`)
+
+      // 6. Responder al cliente
+      res.status(200).json({
+        success: result.success,
+        accepted: result.accepted,
+        method: result.method,
+        responseCode: result.responseCode,
+        description: result.description,
+        error: result.error,
+        guideNumber: guideData.number,
+        sunatStatus: updateData.sunatStatus
+      })
+
+    } catch (error) {
+      console.error('❌ [GRE-T] Error en sendCarrierDispatchGuideToSunat:', error)
       res.status(500).json({
         success: false,
         error: error.message || 'Error interno del servidor'

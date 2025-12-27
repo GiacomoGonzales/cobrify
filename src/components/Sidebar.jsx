@@ -108,10 +108,16 @@ function Sidebar() {
     {
       path: '/guias-remision',
       icon: Truck,
-      label: 'Guías de Remisión',
+      label: 'GRE Remitente',
       pageId: 'dispatch-guides',
       menuId: 'dispatch-guides',
-      requiresDispatchGuides: true, // Solo mostrar si está habilitado en preferencias
+    },
+    {
+      path: '/guias-transportista',
+      icon: Truck,
+      label: 'GRE Transportista',
+      pageId: 'dispatch-guides',
+      menuId: 'carrier-dispatch-guides',
     },
     {
       path: '/clientes',
@@ -592,12 +598,6 @@ function Sidebar() {
     // (Solo aplica a usuarios no-demo, y solo a items con menuId definido)
     if (item.menuId && hiddenMenuItems.includes(item.menuId) && !isDemoMode) {
       return false
-    }
-
-    // Si requiere guías de remisión habilitadas, verificar configuración
-    if (item.requiresDispatchGuides) {
-      const dispatchGuidesEnabled = businessSettings?.dispatchGuidesEnabled || false
-      if (!dispatchGuidesEnabled && !isDemoMode) return false
     }
 
     // Si requiere un feature específico, verificar que lo tenga

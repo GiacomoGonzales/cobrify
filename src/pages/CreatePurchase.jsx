@@ -415,6 +415,17 @@ export default function CreatePurchase() {
   // Click fuera para cerrar dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // No cerrar si el evento viene del teclado virtual o de un input activo
+      const activeElement = document.activeElement
+      if (event.target.tagName === 'INPUT' || activeElement?.tagName === 'INPUT') {
+        // Verificar si el input activo está dentro de algún contenedor de producto
+        const isActiveInProductContainer = Object.keys(productInputRefs.current).some(key => {
+          const ref = productInputRefs.current[key]
+          return ref && ref.contains(activeElement)
+        })
+        if (isActiveInProductContainer) return
+      }
+
       if (supplierInputRef.current && !supplierInputRef.current.contains(event.target)) {
         setShowSupplierDropdown(false)
       }
@@ -431,8 +442,13 @@ export default function CreatePurchase() {
       }
     }
 
+    // Agregar ambos eventos para desktop y móvil
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('touchstart', handleClickOutside, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
   }, [])
 
   const calculateAmounts = () => {

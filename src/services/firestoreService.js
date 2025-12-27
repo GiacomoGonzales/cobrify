@@ -1765,6 +1765,210 @@ export const sendDispatchGuideToSunat = async (businessId, guideId) => {
   }
 }
 
+// ==================== GUÍAS DE REMISIÓN TRANSPORTISTA ====================
+
+/**
+ * Crear una nueva guía de remisión transportista
+ */
+export const createCarrierDispatchGuide = async (businessId, guideData) => {
+  try {
+    // Obtener la serie actual y el siguiente número correlativo
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessDoc = await getDoc(businessRef)
+
+    if (!businessDoc.exists()) {
+      throw new Error('Negocio no encontrado')
+    }
+
+    const businessData = businessDoc.data()
+    // Serie V001 para GRE Transportista (diferente de T001 para Remitente)
+    const series = businessData.series?.guia_transportista || { serie: 'V001', lastNumber: 0 }
+
+    // Incrementar el número correlativo
+    const newCorrelative = (series.lastNumber || 0) + 1
+    const guideNumber = `${series.serie}-${String(newCorrelative).padStart(8, '0')}`
+
+    // Crear la guía en la subcolección
+    const guideToSave = {
+      ...guideData,
+      number: guideNumber,
+      series: series.serie,
+      correlative: newCorrelative,
+      documentType: '31', // 31 = GRE Transportista
+      status: 'pending',
+      sunatStatus: 'pending',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      businessId: businessId,
+    }
+
+    const docRef = await addDoc(
+      collection(db, 'businesses', businessId, 'carrierDispatchGuides'),
+      guideToSave
+    )
+
+    // Actualizar el contador de series
+    await updateDoc(businessRef, {
+      'series.guia_transportista.lastNumber': newCorrelative,
+      'series.guia_transportista.serie': series.serie,
+      updatedAt: serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      id: docRef.id,
+      number: guideNumber,
+      guide: { id: docRef.id, ...guideToSave }
+    }
+  } catch (error) {
+    console.error('Error al crear guía de remisión transportista:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener guías de remisión transportista de un negocio
+ */
+export const getCarrierDispatchGuides = async (businessId) => {
+  try {
+    const querySnapshot = await getDocs(
+      collection(db, 'businesses', businessId, 'carrierDispatchGuides')
+    )
+
+    const guides = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+
+    // Ordenar por fecha de creación (más reciente primero)
+    guides.sort((a, b) => {
+      if (!a.createdAt) return 1
+      if (!b.createdAt) return -1
+      return b.createdAt.seconds - a.createdAt.seconds
+    })
+
+    return { success: true, data: guides }
+  } catch (error) {
+    console.error('Error al obtener guías de remisión transportista:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Obtener una guía de remisión transportista por ID
+ */
+export const getCarrierDispatchGuide = async (businessId, guideId) => {
+  try {
+    const docRef = doc(db, 'businesses', businessId, 'carrierDispatchGuides', guideId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Guía no encontrada' }
+    }
+
+    return {
+      success: true,
+      data: { id: docSnap.id, ...docSnap.data() }
+    }
+  } catch (error) {
+    console.error('Error al obtener guía de remisión transportista:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Actualizar una guía de remisión transportista
+ */
+export const updateCarrierDispatchGuide = async (businessId, guideId, updates) => {
+  try {
+    const docRef = doc(db, 'businesses', businessId, 'carrierDispatchGuides', guideId)
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar guía de remisión transportista:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Enviar Guía de Remisión Transportista a SUNAT
+ *
+ * @param {string} businessId - ID del negocio
+ * @param {string} guideId - ID de la guía de remisión transportista
+ * @returns {Promise<Object>} Resultado del envío
+ */
+export const sendCarrierDispatchGuideToSunat = async (businessId, guideId) => {
+  try {
+    console.log(`🚚 Enviando GRE Transportista ${guideId} a SUNAT...`)
+
+    // Obtener token de autenticación del usuario actual
+    const user = auth.currentUser
+    if (!user) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    const idToken = await user.getIdToken()
+
+    // Determinar URL de la Cloud Function (emulador o producción)
+    const useEmulator = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true'
+
+    const functionUrl = useEmulator
+      ? 'http://127.0.0.1:5001/cobrify-395fe/us-central1/sendCarrierDispatchGuideToSunatFn'
+      : 'https://sendcarrierdispatchguidetosunatfn-tb5ph5ddsq-uc.a.run.app'
+
+    console.log(`🌐 [GRE-T] Llamando a: ${functionUrl}`)
+
+    // Llamar a la Cloud Function con fetch
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        businessId,
+        guideId,
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ [GRE-T] Error HTTP Response:', errorText)
+      let errorData
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        errorData = { error: errorText }
+      }
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ [GRE-T] Respuesta de SUNAT:', result)
+
+    return {
+      success: result.success,
+      accepted: result.accepted,
+      method: result.method,
+      responseCode: result.responseCode,
+      description: result.description,
+      error: result.error,
+      guideNumber: result.guideNumber,
+      sunatStatus: result.sunatStatus,
+    }
+  } catch (error) {
+    console.error('❌ [GRE-T] Error al enviar guía transportista a SUNAT:', error)
+
+    return {
+      success: false,
+      error: error.message || 'Error al enviar guía de remisión transportista a SUNAT',
+    }
+  }
+}
+
 // ==================== PRÉSTAMOS ====================
 
 // Obtener todos los préstamos
