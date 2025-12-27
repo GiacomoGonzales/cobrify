@@ -80,10 +80,10 @@ export async function sendPushNotification(userId, title, body, data = {}) {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
             console.error('❌ Failed for token:', tokens[idx].substring(0, 20) + '...', resp.error?.code)
-            // Si el token es inválido, agregarlo a la lista para eliminar
+            // Si el token es inválido permanentemente, agregarlo a la lista para eliminar
+            // NO eliminar por invalid-argument porque puede ser error temporal
             if (resp.error?.code === 'messaging/invalid-registration-token' ||
-                resp.error?.code === 'messaging/registration-token-not-registered' ||
-                resp.error?.code === 'messaging/invalid-argument') {
+                resp.error?.code === 'messaging/registration-token-not-registered') {
               failedTokens.push(tokens[idx])
             }
           }
