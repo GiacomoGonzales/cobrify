@@ -24,14 +24,14 @@ import {
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
-import { getWarehouses } from '@/services/warehouseService'
+import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getPurchases, deletePurchase, updatePurchase } from '@/services/firestoreService'
+import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct } from '@/services/firestoreService'
 
 export default function Purchases() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
@@ -129,11 +129,79 @@ export default function Purchases() {
     }
 
     setIsDeleting(true)
+    const businessId = getBusinessId()
+
     try {
-      const result = await deletePurchase(getBusinessId(), deletingPurchase.id)
+      // 1. Revertir el stock de los productos antes de eliminar
+      if (deletingPurchase.items && deletingPurchase.items.length > 0) {
+        // Obtener productos actuales
+        const productsResult = await getProducts(businessId)
+        const products = productsResult.success ? productsResult.data : []
+
+        // Obtener warehouseId de la compra
+        const warehouseId = deletingPurchase.warehouseId || ''
+
+        for (const item of deletingPurchase.items) {
+          // Solo procesar productos (no ingredientes)
+          if (item.itemType === 'ingredient') continue
+          if (!item.productId) continue
+
+          try {
+            // Buscar el producto actual
+            const productData = products.find(p => p.id === item.productId)
+            if (!productData) {
+              console.warn(`Producto ${item.productId} no encontrado, omitiendo...`)
+              continue
+            }
+
+            // Si el producto no controla stock, omitir
+            if (productData.trackStock === false || productData.stock === null) {
+              console.log(`Producto ${item.productName} no controla stock, omitiendo...`)
+              continue
+            }
+
+            const quantityToDeduct = parseFloat(item.quantity) || 0
+            if (quantityToDeduct <= 0) continue
+
+            // Descontar stock usando el helper de almacén (cantidad negativa = salida)
+            const updatedProduct = updateWarehouseStock(
+              productData,
+              warehouseId,
+              -quantityToDeduct
+            )
+
+            // Guardar en Firestore
+            await updateProduct(businessId, item.productId, {
+              stock: updatedProduct.stock,
+              warehouseStocks: updatedProduct.warehouseStocks
+            })
+
+            // Registrar movimiento de stock
+            await createStockMovement(businessId, {
+              productId: item.productId,
+              warehouseId: warehouseId,
+              type: 'purchase_void',
+              quantity: -quantityToDeduct,
+              reason: 'Anulación de compra',
+              referenceType: 'purchase_void',
+              referenceId: deletingPurchase.id,
+              referenceNumber: deletingPurchase.invoiceNumber || 'S/N',
+              userId: user.uid,
+              notes: `Stock revertido por anulación de compra ${deletingPurchase.invoiceNumber || 'S/N'}`
+            })
+
+            console.log(`✅ Stock revertido para ${item.productName}: -${quantityToDeduct}`)
+          } catch (stockError) {
+            console.warn(`No se pudo revertir stock para producto ${item.productId}:`, stockError)
+          }
+        }
+      }
+
+      // 2. Eliminar la compra
+      const result = await deletePurchase(businessId, deletingPurchase.id)
 
       if (result.success) {
-        toast.success('Compra eliminada exitosamente')
+        toast.success('Compra eliminada y stock revertido exitosamente')
         setDeletingPurchase(null)
         loadPurchases()
       } else {
@@ -943,7 +1011,7 @@ export default function Purchases() {
                 <strong>{deletingPurchase?.invoiceNumber}</strong>?
               </p>
               <p className="text-sm text-gray-600 mt-2">
-                Esta acción no se puede deshacer. Los cambios de stock se mantendrán.
+                Esta acción eliminará la compra y <strong>revertirá el stock</strong> de los productos incluidos.
               </p>
             </div>
           </div>
@@ -964,7 +1032,7 @@ export default function Purchases() {
                   Eliminando...
                 </>
               ) : (
-                <>Eliminar</>
+                <>Eliminar y Revertir Stock</>
               )}
             </Button>
           </div>
