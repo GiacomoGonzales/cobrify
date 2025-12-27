@@ -844,13 +844,24 @@ export default function Reports() {
   // Datos para gráfico de productos top 5
   const top5ProductsData = useMemo(() => {
     return topProducts.slice(0, 5).map((product, index) => ({
-      name: product.name && product.name.length > 15 ? product.name.substring(0, 15) + '...' : (product.name || 'Producto'),
+      name: product.name && product.name.length > 12 ? product.name.substring(0, 12) + '...' : (product.name || 'Producto'),
       fullName: product.name || 'Producto',
       ventas: product.revenue,
       cantidad: product.quantity,
       color: COLORS[index % COLORS.length]
     }))
   }, [topProducts])
+
+  // Datos para gráfico de categorías top 5
+  const top5CategoriesData = useMemo(() => {
+    return salesByCategory.slice(0, 5).map((category, index) => ({
+      name: category.name && category.name.length > 12 ? category.name.substring(0, 12) + '...' : (category.name || 'Sin categoría'),
+      fullName: category.name || 'Sin categoría',
+      ventas: category.revenue,
+      cantidad: category.quantity,
+      color: COLORS[index % COLORS.length]
+    }))
+  }, [salesByCategory])
 
   // ========== CÁLCULOS DE GASTOS ==========
 
@@ -1948,27 +1959,52 @@ export default function Reports() {
             </button>
           </div>
 
-          {/* Gráfico de Top 5 Productos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Top 5 Productos Más Vendidos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={top5ProductsData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="ventas" fill={COLORS[0]} name="Ventas" radius={[0, 8, 8, 0]}>
-                    {top5ProductsData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {/* Gráficos de Top 5 Productos y Categorías */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Gráfico de Top 5 Productos */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Top 5 Productos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={top5ProductsData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="ventas" fill={COLORS[0]} name="Ventas" radius={[8, 8, 0, 0]}>
+                      {top5ProductsData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Gráfico de Top 5 Categorías */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Top 5 Categorías</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={top5CategoriesData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="ventas" fill={COLORS[1]} name="Ventas" radius={[8, 8, 0, 0]}>
+                      {top5CategoriesData.map((entry, index) => (
+                        <Cell key={`cell-cat-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Tabla de productos */}
           <Card>
