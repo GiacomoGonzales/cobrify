@@ -161,6 +161,12 @@ export default function AdminUsers() {
   const [deletingUser, setDeletingUser] = useState(false)
   const [deleteWithData, setDeleteWithData] = useState(false)
 
+  // Estados para editar nombre de contacto
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [userToEditContact, setUserToEditContact] = useState(null)
+  const [contactNameInput, setContactNameInput] = useState('')
+  const [savingContact, setSavingContact] = useState(false)
+
   useEffect(() => {
     loadUsers()
   }, [])
@@ -425,6 +431,31 @@ export default function AdminUsers() {
       toast.error('Error al eliminar usuario')
     } finally {
       setDeletingUser(false)
+    }
+  }
+
+  // Guardar nombre de contacto
+  async function handleSaveContactName() {
+    if (!userToEditContact) return
+
+    setSavingContact(true)
+    try {
+      // Guardar en la colección users
+      const userRef = doc(db, 'users', userToEditContact.id)
+      await setDoc(userRef, {
+        displayName: contactNameInput.trim()
+      }, { merge: true })
+
+      toast.success('Nombre de contacto actualizado')
+      setShowContactModal(false)
+      setUserToEditContact(null)
+      setContactNameInput('')
+      loadUsers() // Recargar lista
+    } catch (error) {
+      console.error('Error guardando nombre:', error)
+      toast.error('Error al guardar el nombre')
+    } finally {
+      setSavingContact(false)
     }
   }
 
@@ -1512,6 +1543,18 @@ export default function AdminUsers() {
                               className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                             >
                               <Eye className="w-3.5 h-3.5" /> Ver detalles
+                            </button>
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                setUserToEditContact(user)
+                                setContactNameInput(user.contactName || '')
+                                setShowContactModal(true)
+                                setActionMenuUser(null)
+                              }}
+                              className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" /> Editar contacto
                             </button>
                             {user.status !== 'suspended' ? (
                               <button
@@ -2820,6 +2863,82 @@ export default function AdminUsers() {
                   <>
                     <Trash2 className="w-4 h-4" />
                     Eliminar Usuario
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de editar nombre de contacto */}
+      {showContactModal && userToEditContact && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Edit2 className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Editar Contacto</h2>
+                  <p className="text-sm text-gray-500">{userToEditContact.businessName}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre de Contacto
+                </label>
+                <input
+                  type="text"
+                  value={contactNameInput}
+                  onChange={(e) => setContactNameInput(e.target.value)}
+                  placeholder="Ej: Juan Pérez"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500">
+                  <span className="font-medium">Email:</span> {userToEditContact.email}
+                </p>
+                {userToEditContact.phone && (
+                  <p className="text-xs text-gray-500">
+                    <span className="font-medium">Teléfono:</span> {userToEditContact.phone}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowContactModal(false)
+                  setUserToEditContact(null)
+                  setContactNameInput('')
+                }}
+                disabled={savingContact}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveContactName}
+                disabled={savingContact || !contactNameInput.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingContact ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Guardar
                   </>
                 )}
               </button>
