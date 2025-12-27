@@ -1278,8 +1278,11 @@ export default function AdminUsers() {
                     Negocio <SortIcon field="businessName" />
                   </div>
                 </th>
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+                  Contacto
+                </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-2 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('plan')}
                 >
                   <div className="flex items-center gap-1">
@@ -1287,7 +1290,7 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  className="px-2 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('status')}
                 >
                   <div className="flex items-center gap-1">
@@ -1337,14 +1340,14 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
+                  <td colSpan={10} className="px-4 py-12 text-center">
                     <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
                     <p className="text-sm text-gray-500">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
+                  <td colSpan={10} className="px-4 py-12 text-center">
                     <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                     <p className="text-sm text-gray-500">No se encontraron usuarios</p>
                   </td>
@@ -1356,38 +1359,48 @@ export default function AdminUsers() {
                     className="hover:bg-indigo-50/50 cursor-pointer transition-colors"
                     onClick={() => setSelectedUser(user)}
                   >
-                    {/* Negocio + Contacto + Email + RUC */}
+                    {/* Negocio + Email + RUC */}
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
-                          <Building2 className={`w-4 h-4 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                          <Building2 className={`w-3.5 h-3.5 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-medium text-gray-900 text-[13px] truncate max-w-[160px]">{user.businessName}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="font-medium text-gray-900 text-[12px] truncate max-w-[140px]">{user.businessName}</p>
                             {user.createdByReseller && (
-                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
+                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
                                 R
                               </span>
                             )}
                           </div>
-                          {user.contactName && (
-                            <p className="text-[11px] text-indigo-600 truncate max-w-[180px]">{user.contactName}</p>
-                          )}
-                          <p className="text-[10px] text-gray-400 truncate max-w-[180px]">{user.email}</p>
-                          {user.ruc && <p className="text-[10px] text-gray-400">RUC: {user.ruc}</p>}
+                          <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{user.email}</p>
+                          {user.ruc && <p className="text-[9px] text-gray-400">RUC: {user.ruc}</p>}
                         </div>
                       </div>
                     </td>
-                    {/* Plan */}
+                    {/* Contacto + Teléfono */}
                     <td className="px-3 py-2">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      <div className="min-w-0">
+                        {user.contactName ? (
+                          <p className="text-[11px] text-gray-700 font-medium truncate max-w-[120px]">{user.contactName}</p>
+                        ) : (
+                          <p className="text-[10px] text-gray-400">—</p>
+                        )}
+                        {user.phone && (
+                          <p className="text-[10px] text-gray-500 truncate max-w-[120px]">{user.phone}</p>
+                        )}
+                      </div>
+                    </td>
+                    {/* Plan */}
+                    <td className="px-2 py-2">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
                         {PLANS[user.plan]?.name || user.plan}
                       </span>
                     </td>
                     {/* Estado */}
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
+                    <td className="px-2 py-2">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         user.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
                         user.status === 'trial' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
                         user.status === 'suspended' ? 'bg-red-50 text-red-700 border border-red-100' :
