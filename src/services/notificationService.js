@@ -43,46 +43,53 @@ export const initializePushNotifications = async (userId) => {
   const isNative = Capacitor.isNativePlatform();
   const platform = Capacitor.getPlatform();
 
+  console.log('🔔 [PUSH] initializePushNotifications called');
+  console.log('🔔 [PUSH] isNative:', isNative, 'platform:', platform, 'userId:', userId);
+
   if (!isNative) {
-    console.log('Push notifications only available on native platforms');
+    console.log('🔔 [PUSH] Not native platform, skipping');
     return { success: false, error: 'Not native platform' };
   }
 
   try {
     // 1. Solicitar permisos
+    console.log('🔔 [PUSH] Requesting permissions...');
     const permissionResult = await PushNotifications.requestPermissions();
-    console.log('📋 Permission result:', permissionResult.receive);
+    console.log('🔔 [PUSH] Permission result:', permissionResult.receive);
 
     if (permissionResult.receive !== 'granted') {
-      console.log('Permission not granted for push notifications');
+      console.log('🔔 [PUSH] Permission not granted');
       return { success: false, error: 'Permission denied' };
     }
 
     // 2. Registrar para recibir notificaciones
+    console.log('🔔 [PUSH] Registering for push notifications...');
     await PushNotifications.register();
+    console.log('🔔 [PUSH] Register complete');
 
     // 3. Obtener el token FCM (funciona en iOS y Android)
     // En iOS, FCM.getToken() convierte el token APNs a FCM
     // En Android, devuelve el token FCM directamente
+    console.log('🔔 [PUSH] Getting FCM token...');
     const fcmToken = await FCM.getToken();
     const token = fcmToken.token;
 
-    console.log('✅ Push registration success!');
-    console.log('📱 FCM Token:', token);
-    console.log('📱 Token length:', token?.length);
-    console.log('📱 Platform:', platform);
-    console.log('👤 User ID:', userId);
+    console.log('🔔 [PUSH] ✅ Push registration success!');
+    console.log('🔔 [PUSH] FCM Token:', token ? token.substring(0, 30) + '...' : 'NULL');
+    console.log('🔔 [PUSH] Token length:', token?.length);
+    console.log('🔔 [PUSH] Platform:', platform);
 
     // Guardar el token en Firestore asociado al usuario
     if (userId && token) {
+      console.log('🔔 [PUSH] Saving token to Firestore for user:', userId);
       const saveResult = await saveFCMToken(userId, token);
       if (saveResult.success) {
-        console.log('✅ Token guardado exitosamente en Firestore');
+        console.log('🔔 [PUSH] ✅ Token saved successfully to Firestore');
       } else {
-        console.error('❌ Error al guardar token:', saveResult.error);
+        console.error('🔔 [PUSH] ❌ Error saving token:', saveResult.error);
       }
     } else {
-      console.error('❌ No userId or token available');
+      console.error('🔔 [PUSH] ❌ No userId or token available - userId:', userId, 'token:', !!token);
     }
 
     // 4. Registrar listeners solo una vez
