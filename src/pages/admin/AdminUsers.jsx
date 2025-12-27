@@ -260,6 +260,12 @@ export default function AdminUsers() {
           ruc: business.ruc || data.ruc || null,
           phone: business.phone || null,
           address: business.address || null,
+          // Ubicación
+          department: business.department || null,
+          province: business.province || null,
+          district: business.district || null,
+          // Contacto
+          contactName: business.contactName || business.ownerName || data.displayName || null,
           emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
           plan: data.plan || 'unknown',
@@ -1301,6 +1307,14 @@ export default function AdminUsers() {
                 </th>
                 <th
                   className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
+                  onClick={() => handleSort('department')}
+                >
+                  <div className="flex items-center gap-1">
+                    Ubicación <SortIcon field="department" />
+                  </div>
+                </th>
+                <th
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('periodEnd')}
                 >
                   <div className="flex items-center gap-1">
@@ -1323,14 +1337,14 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
                     <p className="text-sm text-gray-500">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                     <p className="text-sm text-gray-500">No se encontraron usuarios</p>
                   </td>
@@ -1342,7 +1356,7 @@ export default function AdminUsers() {
                     className="hover:bg-indigo-50/50 cursor-pointer transition-colors"
                     onClick={() => setSelectedUser(user)}
                   >
-                    {/* Negocio + Email + RUC */}
+                    {/* Negocio + Contacto + Email + RUC */}
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2.5">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
@@ -1350,14 +1364,17 @@ export default function AdminUsers() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <p className="font-medium text-gray-900 text-[13px] truncate max-w-[180px]">{user.businessName}</p>
+                            <p className="font-medium text-gray-900 text-[13px] truncate max-w-[160px]">{user.businessName}</p>
                             {user.createdByReseller && (
                               <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
                                 R
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-gray-500 truncate max-w-[200px]">{user.email}</p>
+                          {user.contactName && (
+                            <p className="text-[11px] text-indigo-600 truncate max-w-[180px]">{user.contactName}</p>
+                          )}
+                          <p className="text-[10px] text-gray-400 truncate max-w-[180px]">{user.email}</p>
                           {user.ruc && <p className="text-[10px] text-gray-400">RUC: {user.ruc}</p>}
                         </div>
                       </div>
@@ -1412,6 +1429,19 @@ export default function AdminUsers() {
                            user.emissionMethod === 'sunat_direct' ? 'SUNAT' :
                            user.emissionMethod === 'nubefact' ? 'Nubefact' : user.emissionMethod}
                         </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">—</span>
+                      )}
+                    </td>
+                    {/* Ubicación */}
+                    <td className="px-3 py-2">
+                      {user.department || user.province ? (
+                        <div className="text-[11px]">
+                          <p className="text-gray-700 font-medium truncate max-w-[100px]">{user.department || '—'}</p>
+                          {user.province && user.province !== user.department && (
+                            <p className="text-gray-400 text-[10px] truncate max-w-[100px]">{user.province}</p>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-[10px] text-gray-400">—</span>
                       )}
