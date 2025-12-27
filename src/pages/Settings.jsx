@@ -280,26 +280,54 @@ export default function Settings() {
           setYapeConfig(configResult.data)
         }
 
-        // Cargar usuarios del negocio
+        // Cargar usuarios del negocio desde múltiples fuentes
+        let users = []
+        const userIds = new Set()
+
+        // 1. Buscar usuarios con businessId igual
         const usersSnapshot = await getDocs(
           query(
             collection(db, 'users'),
             where('businessId', '==', businessId)
           )
         )
+        usersSnapshot.docs.forEach(d => {
+          if (!userIds.has(d.id)) {
+            userIds.add(d.id)
+            users.push({ id: d.id, ...d.data() })
+          }
+        })
 
-        const users = usersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
+        // 2. También buscar en businesses/{businessId}/users (colección anidada)
+        try {
+          const nestedUsersSnapshot = await getDocs(
+            collection(db, 'businesses', businessId, 'users')
+          )
+          for (const userDoc of nestedUsersSnapshot.docs) {
+            const userId = userDoc.data().userId || userDoc.id
+            if (!userIds.has(userId)) {
+              userIds.add(userId)
+              // Obtener datos completos del usuario
+              const fullUserDoc = await getDoc(doc(db, 'users', userId))
+              if (fullUserDoc.exists()) {
+                users.push({ id: userId, ...fullUserDoc.data() })
+              } else {
+                users.push({ id: userId, ...userDoc.data() })
+              }
+            }
+          }
+        } catch (e) {
+          console.log('No hay colección anidada de usuarios:', e.message)
+        }
 
-        // Agregar al dueño si no está en la lista
+        // 3. Agregar al dueño del negocio
         const businessDoc = await getDoc(doc(db, 'businesses', businessId))
         if (businessDoc.exists()) {
           const business = businessDoc.data()
           const ownerId = business.ownerId || businessId
 
-          if (!users.find(u => u.id === ownerId)) {
+          if (!userIds.has(ownerId)) {
+            userIds.add(ownerId)
             const ownerDoc = await getDoc(doc(db, 'users', ownerId))
             if (ownerDoc.exists()) {
               users.unshift({
@@ -308,9 +336,24 @@ export default function Settings() {
                 isOwner: true
               })
             }
+          } else {
+            // Marcar al dueño como tal
+            const ownerIndex = users.findIndex(u => u.id === ownerId)
+            if (ownerIndex >= 0) {
+              users[ownerIndex].isOwner = true
+            }
           }
         }
 
+        // 4. Si el usuario actual no está en la lista, agregarlo
+        if (user?.uid && !userIds.has(user.uid)) {
+          const currentUserDoc = await getDoc(doc(db, 'users', user.uid))
+          if (currentUserDoc.exists()) {
+            users.push({ id: user.uid, ...currentUserDoc.data(), isCurrent: true })
+          }
+        }
+
+        console.log('Usuarios encontrados para Yape:', users.length, users.map(u => ({ id: u.id, name: u.displayName || u.name || u.email })))
         setBusinessUsers(users)
       } catch (error) {
         console.error('Error al cargar config Yape:', error)

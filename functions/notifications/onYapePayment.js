@@ -51,9 +51,11 @@ export const onYapePayment = onDocumentCreated(
 
       // Determinar a quién notificar
       let userIdsToNotify = []
+      const ownerId = business.ownerId || businessId
 
       if (config.notifyAllUsers) {
         // Notificar a todos los usuarios del negocio
+        // 1. Buscar usuarios con businessId igual
         const usersSnapshot = await db
           .collection('users')
           .where('businessId', '==', businessId)
@@ -61,8 +63,25 @@ export const onYapePayment = onDocumentCreated(
 
         userIdsToNotify = usersSnapshot.docs.map(doc => doc.id)
 
-        // También agregar al dueño
-        const ownerId = business.ownerId || businessId
+        // 2. Buscar en colección anidada businesses/{businessId}/users
+        try {
+          const nestedUsersSnapshot = await db
+            .collection('businesses')
+            .doc(businessId)
+            .collection('users')
+            .get()
+
+          for (const userDoc of nestedUsersSnapshot.docs) {
+            const userId = userDoc.data().userId || userDoc.id
+            if (!userIdsToNotify.includes(userId)) {
+              userIdsToNotify.push(userId)
+            }
+          }
+        } catch (e) {
+          console.log('No hay colección anidada de usuarios')
+        }
+
+        // 3. Agregar al dueño
         if (!userIdsToNotify.includes(ownerId)) {
           userIdsToNotify.push(ownerId)
         }
@@ -71,19 +90,15 @@ export const onYapePayment = onDocumentCreated(
         userIdsToNotify = config.notifyUsers
       } else {
         // Por defecto, notificar al dueño
-        const ownerId = business.ownerId || businessId
         userIdsToNotify = [ownerId]
       }
 
-      // Excluir al usuario que detectó el pago (ya vio el toast local)
-      if (payment.detectedBy) {
-        userIdsToNotify = userIdsToNotify.filter(id => id !== payment.detectedBy)
-      }
-
+      // NO excluir al detector - siempre enviar push a todos
+      // El detector ya vio el toast, pero también recibirá push para registro
       console.log('📤 Users to notify:', userIdsToNotify)
 
       if (userIdsToNotify.length === 0) {
-        console.log('ℹ️ No users to notify (detector excluded)')
+        console.log('ℹ️ No users to notify')
         return
       }
 
