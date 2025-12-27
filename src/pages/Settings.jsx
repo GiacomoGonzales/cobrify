@@ -1080,21 +1080,29 @@ export default function Settings() {
       return
     }
 
+    const businessId = getBusinessId()
+    if (!businessId) {
+      toast.error('No se encontró el ID del negocio')
+      return
+    }
+
     setIsSavingYape(true)
     try {
-      const businessId = getBusinessId()
-      if (!businessId) return
+      // Guardar directamente en Firestore
+      const configRef = doc(db, 'businesses', businessId, 'settings', 'yapeNotifications')
 
-      const result = await saveYapeConfig(businessId, yapeConfig)
+      await setDoc(configRef, {
+        enabled: yapeConfig.enabled ?? false,
+        notifyUsers: yapeConfig.notifyUsers || [],
+        notifyAllUsers: yapeConfig.notifyAllUsers ?? true,
+        autoStartListening: yapeConfig.autoStartListening ?? true,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
 
-      if (result.success) {
-        toast.success('Configuración de Yape guardada')
-      } else {
-        throw new Error(result.error)
-      }
+      toast.success('Configuración de Yape guardada')
     } catch (error) {
       console.error('Error al guardar config Yape:', error)
-      toast.error('Error al guardar la configuración')
+      toast.error(`Error: ${error.message}`)
     } finally {
       setIsSavingYape(false)
     }
