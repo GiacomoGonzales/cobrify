@@ -123,6 +123,7 @@ export default function Inventory() {
   const [allWarehouses, setAllWarehouses] = useState([]) // Todos los almacenes (para transferencias entre sucursales)
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
+  const [filterWarehouse, setFilterWarehouse] = useState('all')
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferProduct, setTransferProduct] = useState(null)
   const [transferData, setTransferData] = useState({
@@ -174,9 +175,14 @@ export default function Inventory() {
     setCurrentPage(1)
   }, [filterType])
 
-  // Resetear página cuando cambia el filtro de sucursal
+  // Resetear página cuando cambia el filtro de sucursal o almacén
   useEffect(() => {
     setCurrentPage(1)
+  }, [filterBranch, filterWarehouse])
+
+  // Resetear filtro de almacén cuando cambia el filtro de sucursal
+  useEffect(() => {
+    setFilterWarehouse('all')
   }, [filterBranch])
 
   // Obtener almacenes filtrados por sucursal seleccionada
@@ -192,7 +198,7 @@ export default function Inventory() {
 
   const filteredWarehouses = React.useMemo(() => getFilteredWarehouses(), [getFilteredWarehouses])
 
-  // Calcular stock considerando solo los almacenes de la sucursal seleccionada
+  // Calcular stock considerando los filtros de sucursal y almacén
   const getStockForBranch = React.useCallback((item) => {
     // Si no tiene control de stock, retornar null
     if (item.stock === null || item.stock === undefined) {
@@ -202,14 +208,20 @@ export default function Inventory() {
     const warehouseStocks = item.warehouseStocks || []
     if (warehouseStocks.length === 0) {
       // Si no tiene warehouseStocks y estamos viendo todas las sucursales, usar stock general
-      if (filterBranch === 'all') {
+      if (filterBranch === 'all' && filterWarehouse === 'all') {
         return item.stock || 0
       }
-      // Si hay filtro de sucursal pero no hay warehouseStocks, es 0 para esa sucursal
+      // Si hay filtro pero no hay warehouseStocks, es 0
       return 0
     }
 
-    // Obtener IDs de almacenes filtrados
+    // Si hay un almacén específico seleccionado
+    if (filterWarehouse !== 'all') {
+      const ws = warehouseStocks.find(ws => ws.warehouseId === filterWarehouse)
+      return ws ? (ws.stock || 0) : 0
+    }
+
+    // Obtener IDs de almacenes filtrados por sucursal
     const filteredWarehouseIds = filteredWarehouses.map(w => w.id)
 
     // Si estamos viendo todas las sucursales, sumar todo
@@ -223,7 +235,7 @@ export default function Inventory() {
       .reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
     return branchStock
-  }, [filterBranch, filteredWarehouses])
+  }, [filterBranch, filterWarehouse, filteredWarehouses])
 
   const loadProducts = async () => {
     if (!user?.uid) return
@@ -927,7 +939,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategory, filterStatus, filterBranch])
+  }, [searchTerm, filterCategory, filterStatus, filterBranch, filterWarehouse])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -1387,6 +1399,23 @@ export default function Inventory() {
                     <option value="main">Sucursal Principal</option>
                     {branches.map(branch => (
                       <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Warehouse Filter */}
+              {filteredWarehouses.length > 0 && (
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <Warehouse className="w-4 h-4 text-gray-500" />
+                  <select
+                    value={filterWarehouse}
+                    onChange={e => setFilterWarehouse(e.target.value)}
+                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                  >
+                    <option value="all">Todos los almacenes</option>
+                    {filteredWarehouses.map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
                     ))}
                   </select>
                 </div>
