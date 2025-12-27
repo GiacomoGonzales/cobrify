@@ -407,13 +407,64 @@ Gracias por tu preferencia.`
       if (result.success) {
         // Devolver el stock de los productos
         if (voidingInvoice.items && voidingInvoice.items.length > 0) {
-          // Importar función de manejo de stock
-          const { updateProductStock } = await import('@/services/firestoreService')
+          // Importar funciones de manejo de stock
+          const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
+          const { getProducts, updateProduct } = await import('@/services/firestoreService')
+
+          // Obtener productos actuales
+          const productsResult = await getProducts(businessId)
+          const products = productsResult.success ? productsResult.data : []
+
+          // Obtener warehouseId de la factura (si existe)
+          const warehouseId = voidingInvoice.warehouseId || ''
 
           for (const item of voidingInvoice.items) {
             if (item.productId) {
               try {
-                await updateProductStock(businessId, item.productId, item.quantity, 'add')
+                // Buscar el producto actual
+                const productData = products.find(p => p.id === item.productId)
+                if (!productData) {
+                  console.warn(`Producto ${item.productId} no encontrado, omitiendo...`)
+                  continue
+                }
+
+                // Si el producto no controla stock, omitir
+                if (productData.trackStock === false || productData.stock === null) {
+                  console.log(`Producto ${item.name} no controla stock, omitiendo...`)
+                  continue
+                }
+
+                // Calcular cantidad a restaurar (considerando factor de presentación)
+                const quantityToRestore = item.quantity * (item.presentationFactor || 1)
+
+                // Actualizar stock usando el helper de almacén (cantidad positiva = entrada)
+                const updatedProduct = updateWarehouseStock(
+                  productData,
+                  warehouseId,
+                  quantityToRestore
+                )
+
+                // Guardar en Firestore
+                await updateProduct(businessId, item.productId, {
+                  stock: updatedProduct.stock,
+                  warehouseStocks: updatedProduct.warehouseStocks
+                })
+
+                // Registrar movimiento de stock
+                await createStockMovement(businessId, {
+                  productId: item.productId,
+                  warehouseId: warehouseId,
+                  type: 'void_return',
+                  quantity: quantityToRestore,
+                  reason: 'Anulación de nota de venta',
+                  referenceType: 'sale_void',
+                  referenceId: voidingInvoice.id,
+                  referenceNumber: voidingInvoice.number,
+                  userId: user.uid,
+                  notes: `Stock devuelto por anulación de ${voidingInvoice.number}`
+                })
+
+                console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
               } catch (stockError) {
                 console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
               }
@@ -421,7 +472,7 @@ Gracias por tu preferencia.`
           }
         }
 
-        toast.success('Nota de venta anulada exitosamente')
+        toast.success('Nota de venta anulada y stock restaurado exitosamente')
         setVoidingInvoice(null)
         setVoidReason('')
         loadInvoices()
