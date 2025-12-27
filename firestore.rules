@@ -385,6 +385,18 @@ service cloud.firestore {
         // Solo admins pueden crear/modificar sucursales (se configuran desde panel admin)
         // Pero owners también pueden leer para usar en POS
       }
+
+      // Subcollection: Settings (Configuraciones del negocio - Yape, etc.)
+      match /settings/{settingId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Yape Payments (Pagos detectados de Yape)
+      match /yapePayments/{paymentId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
     }
   }
 }
