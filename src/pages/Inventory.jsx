@@ -22,6 +22,8 @@ import {
   ArrowDownCircle,
   ScanBarcode,
   Store,
+  Tag,
+  Activity,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -1355,13 +1357,14 @@ export default function Inventory() {
             </div>
 
             {/* Filters Group */}
-            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 flex-wrap">
               {/* Category Filter */}
-              <div className="w-full sm:w-auto">
-                <Select
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <Tag className="w-4 h-4 text-gray-500" />
+                <select
                   value={filterCategory}
                   onChange={e => setFilterCategory(e.target.value)}
-                  className="w-full lg:w-56"
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                 >
                   <option value="all">Todas las categorías</option>
                   {categories.map(category => (
@@ -1369,21 +1372,22 @@ export default function Inventory() {
                       {category.name}
                     </option>
                   ))}
-                </Select>
+                </select>
               </div>
 
               {/* Status Filter */}
-              <div className="w-full sm:w-auto">
-                <Select
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <Activity className="w-4 h-4 text-gray-500" />
+                <select
                   value={filterStatus}
                   onChange={e => setFilterStatus(e.target.value)}
-                  className="w-full lg:w-56"
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                 >
                   <option value="all">Todos los estados</option>
                   <option value="normal">Stock Normal</option>
                   <option value="low">Stock Bajo</option>
                   <option value="out">Agotados</option>
-                </Select>
+                </select>
               </div>
 
               {/* Branch Filter */}
