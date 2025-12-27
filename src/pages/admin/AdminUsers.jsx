@@ -1261,11 +1261,11 @@ export default function AdminUsers() {
 
         {/* Vista desktop - Tabla */}
         <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50/80 border-b border-gray-200 sticky top-0">
               <tr>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('businessName')}
                 >
                   <div className="flex items-center gap-1">
@@ -1273,15 +1273,7 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('email')}
-                >
-                  <div className="flex items-center gap-1">
-                    Email <SortIcon field="email" />
-                  </div>
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('plan')}
                 >
                   <div className="flex items-center gap-1">
@@ -1289,7 +1281,7 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('status')}
                 >
                   <div className="flex items-center gap-1">
@@ -1297,18 +1289,18 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('usage')}
                 >
                   <div className="flex items-center gap-1">
                     Uso <SortIcon field="usage" />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
                   SUNAT
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('periodEnd')}
                 >
                   <div className="flex items-center gap-1">
@@ -1316,140 +1308,148 @@ export default function AdminUsers() {
                   </div>
                 </th>
                 <th
-                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('createdAt')}
                 >
                   <div className="flex items-center gap-1">
-                    Creado <SortIcon field="createdAt" />
+                    Registro <SortIcon field="createdAt" />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
+                <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 uppercase tracking-wide w-16">
+
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
-                    <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
-                    <p className="text-gray-500">Cargando usuarios...</p>
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center">
-                    <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500">No se encontraron usuarios</p>
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">No se encontraron usuarios</p>
                   </td>
                 </tr>
               ) : (
                 filteredUsers.map((user, index) => (
                   <tr
                     key={user.id}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    className="hover:bg-indigo-50/50 cursor-pointer transition-colors"
                     onClick={() => setSelectedUser(user)}
                   >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
-                          <Building2 className={`w-5 h-5 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
+                    {/* Negocio + Email + RUC */}
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                          <Building2 className={`w-4 h-4 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-gray-900">{user.businessName}</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-medium text-gray-900 text-[13px] truncate max-w-[180px]">{user.businessName}</p>
                             {user.createdByReseller && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
+                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
                                 R
                               </span>
                             )}
                           </div>
-                          {user.ruc && <p className="text-xs text-gray-500">RUC: {user.ruc}</p>}
-                          {user.createdByReseller && (
-                            <p className="text-[10px] text-purple-600">via {user.resellerName}</p>
-                          )}
+                          <p className="text-[11px] text-gray-500 truncate max-w-[200px]">{user.email}</p>
+                          {user.ruc && <p className="text-[10px] text-gray-400">RUC: {user.ruc}</p>}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    {/* Plan */}
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
                         {PLANS[user.plan]?.name || user.plan}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[user.status]}`}>
+                    {/* Estado */}
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
+                        user.status === 'active' ? 'bg-green-50 text-green-700 border border-green-100' :
+                        user.status === 'trial' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                        user.status === 'suspended' ? 'bg-red-50 text-red-700 border border-red-100' :
+                        'bg-yellow-50 text-yellow-700 border border-yellow-100'
+                      }`}>
                         {STATUS_LABELS[user.status]}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
+                    {/* Uso */}
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-14 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full ${
+                            className={`h-full rounded-full transition-all ${
                               user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
                                 ? 'bg-red-500'
                                 : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
                                   ? 'bg-yellow-500'
-                                  : 'bg-green-500'
+                                  : 'bg-emerald-500'
                             }`}
                             style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
                           />
                         </div>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-[11px] text-gray-500 tabular-nums">
                           {user.usage?.invoicesThisMonth || 0}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    {/* SUNAT */}
+                    <td className="px-3 py-2">
                       {user.emissionMethod && user.emissionMethod !== 'none' ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          user.emissionMethod === 'qpse' ? 'bg-green-100 text-green-800' :
-                          user.emissionMethod === 'sunat_direct' ? 'bg-blue-100 text-blue-800' :
-                          user.emissionMethod === 'nubefact' ? 'bg-purple-100 text-purple-800' :
-                          'bg-gray-100 text-gray-800'
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
+                          user.emissionMethod === 'nubefact' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
+                          'bg-gray-50 text-gray-600 border border-gray-200'
                         }`}>
                           {user.emissionMethod === 'qpse' ? 'QPse' :
                            user.emissionMethod === 'sunat_direct' ? 'SUNAT' :
-                           user.emissionMethod === 'nubefact' ? 'NubeFact' : user.emissionMethod}
+                           user.emissionMethod === 'nubefact' ? 'Nubefact' : user.emissionMethod}
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-                          Sin config.
-                        </span>
+                        <span className="text-[10px] text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    {/* Vence */}
+                    <td className="px-3 py-2">
                       {user.periodEnd ? (
-                        <span className={`text-xs font-medium ${
+                        <div className={`text-[11px] font-medium ${
                           user.periodEnd < new Date() ? 'text-red-600' :
-                          user.periodEnd < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-yellow-600' :
+                          user.periodEnd < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-amber-600' :
                           'text-gray-600'
                         }`}>
-                          {user.periodEnd.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {user.periodEnd.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
                           {user.periodEnd < new Date() && (
-                            <span className="block text-[10px] text-red-500">Vencido</span>
+                            <span className="ml-1 text-[9px] text-red-500 font-bold">!</span>
                           )}
-                        </span>
+                        </div>
                       ) : (
-                        <span className="text-xs text-gray-400">-</span>
+                        <span className="text-[11px] text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{formatDate(user.createdAt)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="relative">
+                    {/* Registro */}
+                    <td className="px-3 py-2 text-[11px] text-gray-500">{formatDate(user.createdAt)}</td>
+                    {/* Acciones */}
+                    <td className="px-3 py-2 text-center">
+                      <div className="relative inline-flex">
                         <button
                           onClick={e => {
                             e.stopPropagation()
                             setActionMenuUser(actionMenuUser === user.id ? null : user.id)
                           }}
-                          className="p-1 hover:bg-gray-100 rounded"
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                         >
-                          <MoreVertical className="w-5 h-5 text-gray-400" />
+                          <MoreVertical className="w-4 h-4 text-gray-400" />
                         </button>
 
                         {actionMenuUser === user.id && (
-                          <div className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 ${
+                          <div className={`absolute right-0 w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-20 ${
                             index >= filteredUsers.length - 2 ? 'bottom-full mb-1' : 'mt-1'
                           }`}>
                             <button
@@ -1458,9 +1458,9 @@ export default function AdminUsers() {
                                 setSelectedUser(user)
                                 setActionMenuUser(null)
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                              className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                             >
-                              <Eye className="w-4 h-4" /> Ver detalles
+                              <Eye className="w-3.5 h-3.5" /> Ver detalles
                             </button>
                             {user.status !== 'suspended' ? (
                               <button
@@ -1468,9 +1468,9 @@ export default function AdminUsers() {
                                   e.stopPropagation()
                                   toggleUserAccess(user.id, true)
                                 }}
-                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                className="w-full px-3 py-1.5 text-left text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2"
                               >
-                                <Ban className="w-4 h-4" /> Suspender
+                                <Ban className="w-3.5 h-3.5" /> Suspender
                               </button>
                             ) : (
                               <button
@@ -1478,12 +1478,12 @@ export default function AdminUsers() {
                                   e.stopPropagation()
                                   toggleUserAccess(user.id, false)
                                 }}
-                                className="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50 flex items-center gap-2"
+                                className="w-full px-3 py-1.5 text-left text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"
                               >
-                                <CheckCircle className="w-4 h-4" /> Reactivar
+                                <CheckCircle className="w-3.5 h-3.5" /> Reactivar
                               </button>
                             )}
-                            <div className="border-t border-gray-100 my-1" />
+                            <div className="border-t border-gray-100 my-0.5" />
                             <button
                               onClick={e => {
                                 e.stopPropagation()
@@ -1491,9 +1491,9 @@ export default function AdminUsers() {
                                 setShowDeleteModal(true)
                                 setActionMenuUser(null)
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                              className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
                             >
-                              <Trash2 className="w-4 h-4" /> Eliminar cuenta
+                              <Trash2 className="w-3.5 h-3.5" /> Eliminar
                             </button>
                           </div>
                         )}
