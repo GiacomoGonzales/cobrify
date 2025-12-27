@@ -28,7 +28,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, getCustomersWithStats, getProducts } from '@/services/firestoreService'
+import { getInvoices, getCustomersWithStats, getProducts, getProductCategories } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import {
@@ -132,6 +132,7 @@ export default function Reports() {
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
+  const [productCategories, setProductCategories] = useState([])
   const [recipes, setRecipes] = useState([])
   const [expenses, setExpenses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -177,11 +178,12 @@ export default function Reports() {
         return
       }
 
-      const [invoicesResult, customersResult, productsResult, recipesResult] = await Promise.all([
+      const [invoicesResult, customersResult, productsResult, recipesResult, categoriesResult] = await Promise.all([
         getInvoices(getBusinessId()),
         getCustomersWithStats(getBusinessId()),
         getProducts(getBusinessId()),
         getRecipes(getBusinessId()),
+        getProductCategories(getBusinessId()),
       ])
 
       if (invoicesResult.success) {
@@ -195,6 +197,9 @@ export default function Reports() {
       }
       if (recipesResult.success) {
         setRecipes(recipesResult.data || [])
+      }
+      if (categoriesResult.success) {
+        setProductCategories(categoriesResult.data || [])
       }
 
       // Cargar gastos solo si tiene el feature habilitado
@@ -492,6 +497,13 @@ export default function Reports() {
   const salesByCategory = useMemo(() => {
     const categoryStats = {}
 
+    // Función para obtener nombre de categoría
+    const getCategoryName = (categoryId) => {
+      if (!categoryId) return 'Sin categoría'
+      const category = productCategories.find(c => c.id === categoryId)
+      return category?.name || categoryId
+    }
+
     filteredInvoices.forEach(invoice => {
       invoice.items?.forEach(item => {
         const productId = item.productId || item.id
@@ -501,7 +513,8 @@ export default function Reports() {
 
         // Buscar el producto para obtener su categoría
         const product = products.find(p => p.id === productId)
-        const categoryName = product?.categoryName || product?.category || 'Sin categoría'
+        const categoryId = product?.category
+        const categoryName = getCategoryName(categoryId)
 
         if (!categoryStats[categoryName]) {
           categoryStats[categoryName] = {
@@ -536,7 +549,7 @@ export default function Reports() {
         profitMargin: cat.revenue > 0 ? ((cat.revenue - cat.cost) / cat.revenue) * 100 : 0
       }))
       .sort((a, b) => b.revenue - a.revenue)
-  }, [filteredInvoices, products, recipes])
+  }, [filteredInvoices, products, recipes, productCategories])
 
   // Top clientes
   const topCustomers = useMemo(() => {
