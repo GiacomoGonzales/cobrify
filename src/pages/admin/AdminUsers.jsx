@@ -1309,6 +1309,14 @@ export default function AdminUsers() {
                 </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('periodEnd')}
+                >
+                  <div className="flex items-center gap-1">
+                    Vence <SortIcon field="periodEnd" />
+                  </div>
+                </th>
+                <th
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('createdAt')}
                 >
                   <div className="flex items-center gap-1">
@@ -1323,14 +1331,14 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
                     <p className="text-gray-500">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
+                  <td colSpan={9} className="px-4 py-12 text-center">
                     <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
                     <p className="text-gray-500">No se encontraron usuarios</p>
                   </td>
@@ -1409,6 +1417,22 @@ export default function AdminUsers() {
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
                           Sin config.
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.periodEnd ? (
+                        <span className={`text-xs font-medium ${
+                          user.periodEnd < new Date() ? 'text-red-600' :
+                          user.periodEnd < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-yellow-600' :
+                          'text-gray-600'
+                        }`}>
+                          {user.periodEnd.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {user.periodEnd < new Date() && (
+                            <span className="block text-[10px] text-red-500">Vencido</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{formatDate(user.createdAt)}</td>
