@@ -2056,8 +2056,8 @@ export default function Reports() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Categoría</TableHead>
-                      <TableHead className="text-right">Productos</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
+                      <TableHead className="text-right">Ventas</TableHead>
+                      <TableHead className="text-right">Unidades</TableHead>
                       <TableHead className="text-right">Ingresos</TableHead>
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead className="text-right">Utilidad</TableHead>
@@ -2076,7 +2076,7 @@ export default function Reports() {
                         <TableRow key={index}>
                           <TableCell className="font-medium">{category.name}</TableCell>
                           <TableCell className="text-right">{category.itemCount}</TableCell>
-                          <TableCell className="text-right">{category.quantity.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{category.quantity.toFixed(0)}</TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatCurrency(category.revenue)}
                           </TableCell>
