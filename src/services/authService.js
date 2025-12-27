@@ -47,7 +47,7 @@ export const registerUser = async (email, password, displayName, businessData = 
 
     // Marcar como Business Owner (dueño del negocio) automáticamente
     try {
-      await setAsBusinessOwner(userCredential.user.uid, email)
+      await setAsBusinessOwner(userCredential.user.uid, email, displayName)
       console.log('✅ Usuario marcado como Business Owner automáticamente')
     } catch (ownerError) {
       console.error('Error al marcar como business owner:', ownerError)

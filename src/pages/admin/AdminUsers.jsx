@@ -271,8 +271,9 @@ export default function AdminUsers() {
           department: business.department || null,
           province: business.province || null,
           district: business.district || null,
-          // Contacto - obtener de users collection o business
-          contactName: usersMap[doc.id]?.displayName || business.contactName || business.ownerName || null,
+          // Contacto - obtener de users collection, business, o extraer del email
+          contactName: usersMap[doc.id]?.displayName || business.contactName || business.ownerName ||
+            (data.email ? data.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null),
           emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
           plan: data.plan || 'unknown',

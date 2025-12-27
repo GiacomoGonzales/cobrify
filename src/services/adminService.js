@@ -62,23 +62,27 @@ export const isBusinessAdmin = async (userId) => {
  * Se llama automáticamente cuando un usuario se registra
  * @param {string} userId - UID del usuario
  * @param {string} email - Email del usuario
+ * @param {string} displayName - Nombre del usuario (opcional)
  * @returns {Promise<object>}
  */
-export const setAsBusinessOwner = async (userId, email) => {
+export const setAsBusinessOwner = async (userId, email, displayName = null) => {
   try {
     const userRef = doc(db, 'users', userId);
-    await setDoc(
-      userRef,
-      {
-        uid: userId,
-        email: email,
-        isBusinessOwner: true,
-        createdAt: serverTimestamp(),
-        allowedPages: [], // Business owners tienen acceso total, no necesitan permisos
-        isActive: true,
-      },
-      { merge: true } // Merge para no sobrescribir otros datos
-    );
+    const userData = {
+      uid: userId,
+      email: email,
+      isBusinessOwner: true,
+      createdAt: serverTimestamp(),
+      allowedPages: [], // Business owners tienen acceso total, no necesitan permisos
+      isActive: true,
+    };
+
+    // Agregar displayName si se proporciona
+    if (displayName) {
+      userData.displayName = displayName;
+    }
+
+    await setDoc(userRef, userData, { merge: true });
 
     return { success: true };
   } catch (error) {
