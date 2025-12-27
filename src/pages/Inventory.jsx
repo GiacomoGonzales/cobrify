@@ -1331,20 +1331,20 @@ export default function Inventory() {
             {/* Search */}
             <div className="flex-1 min-w-0">
               <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 flex-1">
+                  <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <input
                     type="text"
                     placeholder="Buscar por código, nombre o categoría..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
                   />
                 </div>
                 <button
                   onClick={handleScanBarcode}
                   disabled={isScanning}
-                  className="px-3 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   title="Escanear código de barras"
                 >
                   {isScanning ? (
