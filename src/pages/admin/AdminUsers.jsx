@@ -1304,6 +1304,9 @@ export default function AdminUsers() {
                     Uso <SortIcon field="usage" />
                   </div>
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  SUNAT
+                </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('createdAt')}
@@ -1320,14 +1323,14 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-4 py-12 text-center">
                     <RefreshCw className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
                     <p className="text-gray-500">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-4 py-12 text-center">
                     <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
                     <p className="text-gray-500">No se encontraron usuarios</p>
                   </td>
@@ -1389,6 +1392,24 @@ export default function AdminUsers() {
                           {user.usage?.invoicesThisMonth || 0}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
                         </span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.emissionMethod && user.emissionMethod !== 'none' ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          user.emissionMethod === 'qpse' ? 'bg-green-100 text-green-800' :
+                          user.emissionMethod === 'sunat_direct' ? 'bg-blue-100 text-blue-800' :
+                          user.emissionMethod === 'nubefact' ? 'bg-purple-100 text-purple-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {user.emissionMethod === 'qpse' ? 'QPse' :
+                           user.emissionMethod === 'sunat_direct' ? 'SUNAT' :
+                           user.emissionMethod === 'nubefact' ? 'NubeFact' : user.emissionMethod}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                          Sin config.
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{formatDate(user.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
