@@ -24,19 +24,27 @@ public class NotificationService extends NotificationListenerService {
     public static final String EXTRA_TEXT = "text";
     public static final String EXTRA_TIMESTAMP = "timestamp";
 
+    // Package name de Yape
+    private static final String YAPE_PACKAGE = "com.bcp.innovacxion.yapeapp";
+
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
-        Log.d(TAG, "Notificación recibida de: " + sbn.getPackageName());
+        String packageName = sbn.getPackageName();
+
+        // Solo procesar notificaciones de Yape
+        if (!YAPE_PACKAGE.equals(packageName)) {
+            return; // Ignorar otras apps
+        }
+
+        Log.d(TAG, "🟢 Notificación de YAPE detectada!");
 
         // Extraer información de la notificación
         Bundle extras = sbn.getNotification().extras;
 
-        String packageName = sbn.getPackageName();
         String title = charSequenceToString(extras.getCharSequence("android.title"));
         String text = charSequenceToString(extras.getCharSequence("android.text"));
         long timestamp = sbn.getPostTime();
 
-        Log.d(TAG, "Package: " + packageName);
         Log.d(TAG, "Title: " + title);
         Log.d(TAG, "Text: " + text);
 

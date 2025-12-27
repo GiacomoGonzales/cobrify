@@ -5218,6 +5218,7 @@ export const voidInvoiceQPse = onRequest(
 // Import and re-export notification functions
 export { onNewSale } from './notifications/onNewSale.js'
 export { onProductStockChange } from './notifications/onStockLow.js'
+export { onYapePayment } from './notifications/onYapePayment.js'
 
 // Import and re-export migration function
 export { migratePurchasesHTTP } from './migratePurchases.js'

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
 import { db, storage, auth } from '@/lib/firebase'
@@ -28,6 +29,7 @@ import {
 import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
+import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -186,6 +188,17 @@ export default function Settings() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
 
+  // Estados para configuración de Yape
+  const [yapeConfig, setYapeConfig] = useState({
+    enabled: false,
+    notifyAllUsers: true,
+    notifyUsers: [],
+    autoStartListening: true
+  })
+  const [businessUsers, setBusinessUsers] = useState([])
+  const [isSavingYape, setIsSavingYape] = useState(false)
+  const [isLoadingYape, setIsLoadingYape] = useState(false)
+
   // Estados para impresora térmica
   const [printerConfig, setPrinterConfig] = useState({
     enabled: false,
@@ -250,6 +263,64 @@ export default function Settings() {
       setCatalogQrDataUrl('')
     }
   }, [catalogSlug, catalogEnabled])
+
+  // Cargar configuración de Yape cuando se activa el tab
+  useEffect(() => {
+    const loadYapeSettings = async () => {
+      if (activeTab !== 'yape' || !user?.uid || isDemoMode) return
+
+      setIsLoadingYape(true)
+      try {
+        const businessId = getBusinessId()
+        if (!businessId) return
+
+        // Cargar configuración de Yape
+        const configResult = await getYapeConfig(businessId)
+        if (configResult.success) {
+          setYapeConfig(configResult.data)
+        }
+
+        // Cargar usuarios del negocio
+        const usersSnapshot = await getDocs(
+          query(
+            collection(db, 'users'),
+            where('businessId', '==', businessId)
+          )
+        )
+
+        const users = usersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+
+        // Agregar al dueño si no está en la lista
+        const businessDoc = await getDoc(doc(db, 'businesses', businessId))
+        if (businessDoc.exists()) {
+          const business = businessDoc.data()
+          const ownerId = business.ownerId || businessId
+
+          if (!users.find(u => u.id === ownerId)) {
+            const ownerDoc = await getDoc(doc(db, 'users', ownerId))
+            if (ownerDoc.exists()) {
+              users.unshift({
+                id: ownerId,
+                ...ownerDoc.data(),
+                isOwner: true
+              })
+            }
+          }
+        }
+
+        setBusinessUsers(users)
+      } catch (error) {
+        console.error('Error al cargar config Yape:', error)
+      } finally {
+        setIsLoadingYape(false)
+      }
+    }
+
+    loadYapeSettings()
+  }, [activeTab, user, isDemoMode, getBusinessId])
 
   const loadSettings = async () => {
     if (!user?.uid) return
@@ -1002,6 +1073,33 @@ export default function Settings() {
     }
   }
 
+  // Función para guardar configuración de Yape
+  const handleSaveYapeConfig = async () => {
+    if (isDemoMode) {
+      toast.error('No se puede modificar en modo demo')
+      return
+    }
+
+    setIsSavingYape(true)
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+
+      const result = await saveYapeConfig(businessId, yapeConfig)
+
+      if (result.success) {
+        toast.success('Configuración de Yape guardada')
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al guardar config Yape:', error)
+      toast.error('Error al guardar la configuración')
+    } finally {
+      setIsSavingYape(false)
+    }
+  }
+
   // Función para cambiar contraseña
   const handleChangePassword = async (e) => {
     e.preventDefault()
@@ -1285,6 +1383,7 @@ export default function Settings() {
     { id: 'avanzado', label: 'Avanzado', icon: Cog },
     { id: 'impresora', label: 'Impresora', icon: Printer },
     { id: 'seguridad', label: 'Seguridad', icon: Shield },
+    { id: 'yape', label: 'Yape', icon: Bell },
   ]
 
   return (
@@ -4146,6 +4245,226 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Yape Tab */}
+      {activeTab === 'yape' && (
+        <div className="space-y-6">
+          {/* Configuración principal */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Bell className="w-5 h-5 text-purple-600" />
+                  <CardTitle>Detector de Pagos Yape</CardTitle>
+                </div>
+                {/* Toggle de activación */}
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={yapeConfig.enabled}
+                    onChange={(e) => setYapeConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  <span className="ml-2 text-sm font-medium text-gray-700">
+                    {yapeConfig.enabled ? 'Activado' : 'Desactivado'}
+                  </span>
+                </label>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Descripción */}
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-sm text-purple-800">
+                    Detecta automáticamente cuando recibes un pago por Yape y envía notificaciones
+                    push a los usuarios que selecciones.
+                  </p>
+                </div>
+
+                {yapeConfig.enabled && (
+                  <>
+                    {/* Auto-iniciar */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Iniciar automáticamente</p>
+                        <p className="text-xs text-gray-600">Comenzar a escuchar notificaciones al abrir la app</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={yapeConfig.autoStartListening}
+                          onChange={(e) => setYapeConfig(prev => ({ ...prev, autoStartListening: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Notificar a todos */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Notificar a todos los usuarios</p>
+                        <p className="text-xs text-gray-600">Enviar notificación push a todos los usuarios del negocio</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={yapeConfig.notifyAllUsers}
+                          onChange={(e) => setYapeConfig(prev => ({ ...prev, notifyAllUsers: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                    </div>
+
+                    {/* Selección de usuarios específicos */}
+                    {!yapeConfig.notifyAllUsers && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900 mb-3">Usuarios a notificar</h4>
+                        {isLoadingYape ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                          </div>
+                        ) : businessUsers.length === 0 ? (
+                          <p className="text-sm text-gray-500 text-center py-4">
+                            No hay usuarios registrados en este negocio
+                          </p>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {businessUsers.map(user => (
+                              <label
+                                key={user.id}
+                                className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={yapeConfig.notifyUsers.includes(user.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setYapeConfig(prev => ({
+                                        ...prev,
+                                        notifyUsers: [...prev.notifyUsers, user.id]
+                                      }))
+                                    } else {
+                                      setYapeConfig(prev => ({
+                                        ...prev,
+                                        notifyUsers: prev.notifyUsers.filter(id => id !== user.id)
+                                      }))
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                                />
+                                <div className="ml-3">
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {user.displayName || user.name || user.email}
+                                    {user.isOwner && (
+                                      <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                                        Dueño
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-gray-500">{user.email}</p>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Botón guardar */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <Button
+                        onClick={handleSaveYapeConfig}
+                        disabled={isSavingYape}
+                        className="w-full sm:w-auto"
+                      >
+                        {isSavingYape ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Guardar Configuración
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Instrucciones */}
+          {yapeConfig.enabled && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Instrucciones de uso</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">1</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Instala el APK en tu celular</p>
+                      <p className="text-xs text-gray-600">El dispositivo donde tengas Yape instalado</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">2</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Otorga el permiso de notificaciones</p>
+                      <p className="text-xs text-gray-600">Configuración → Acceso a notificaciones → Activa Cobrify</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                      <span className="text-purple-600 font-bold text-sm">3</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">¡Listo!</p>
+                      <p className="text-xs text-gray-600">Cuando recibas un Yape, los usuarios seleccionados recibirán una notificación push</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botón de prueba */}
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <Link
+                    to="/test-notifications"
+                    className="inline-flex items-center text-sm text-purple-600 hover:text-purple-700"
+                  >
+                    <Bell className="w-4 h-4 mr-1" />
+                    Abrir página de pruebas
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Nota de privacidad */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-semibold text-blue-900">Privacidad</h4>
+                <p className="text-sm text-blue-800 mt-1">
+                  Solo se detectan notificaciones de Yape. Las notificaciones se procesan
+                  localmente y solo se guarda el monto y nombre del pagador.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

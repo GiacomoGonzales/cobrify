@@ -7,12 +7,16 @@ import { db } from '@/lib/firebase'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
+import { useYapeListener } from '@/hooks/useYapeListener'
 
 export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const location = useLocation()
+
+  // Iniciar listener de Yape automáticamente (solo en APK Android)
+  useYapeListener()
 
   // Forzar reflow cuando el layout se monta para evitar conflictos de estilos después de Login
   useEffect(() => {
