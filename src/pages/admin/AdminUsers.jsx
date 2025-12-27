@@ -189,6 +189,13 @@ export default function AdminUsers() {
         businessesMap[doc.id] = doc.data()
       })
 
+      // Crear mapa de usuarios por ID para obtener displayName
+      const usersMap = {}
+      usersSnapshot.forEach(doc => {
+        const data = doc.data()
+        usersMap[doc.id] = data
+      })
+
       // Contar sub-usuarios por ownerId
       const subUsersCountMap = {}
       const subUsersByOwner = {}
@@ -264,8 +271,8 @@ export default function AdminUsers() {
           department: business.department || null,
           province: business.province || null,
           district: business.district || null,
-          // Contacto
-          contactName: business.contactName || business.ownerName || data.displayName || null,
+          // Contacto - obtener de users collection o business
+          contactName: usersMap[doc.id]?.displayName || business.contactName || business.ownerName || null,
           emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
           plan: data.plan || 'unknown',
