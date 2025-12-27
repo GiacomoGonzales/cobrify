@@ -485,7 +485,7 @@ export default function Reports() {
         profitMargin: product.revenue > 0 ? ((product.revenue - product.cost) / product.revenue) * 100 : 0
       }))
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10)
+      // Sin límite - mostrar todos los productos
   }, [filteredInvoices, products, recipes])
 
   // Top clientes
@@ -518,7 +518,7 @@ export default function Reports() {
 
     return Object.values(customerStats)
       .sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0))
-      .slice(0, 10)
+      // Sin límite - mostrar todos los clientes
   }, [filteredInvoices])
 
   // Estadísticas por vendedor
