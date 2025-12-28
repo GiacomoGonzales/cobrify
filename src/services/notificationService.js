@@ -71,8 +71,45 @@ export const initializePushNotifications = async (userId) => {
     // En iOS, FCM.getToken() convierte el token APNs a FCM
     // En Android, devuelve el token FCM directamente
     console.log('🔔 [PUSH] Getting FCM token...');
-    const fcmToken = await FCM.getToken();
-    const token = fcmToken.token;
+
+    // En iOS, el token APNs puede tardar en estar disponible
+    // Intentar varias veces con delay
+    let token = null;
+    const maxRetries = platform === 'ios' ? 5 : 1;
+
+    // En iOS, esperar un momento inicial para que el token APNs se registre
+    if (platform === 'ios') {
+      console.log('🔔 [PUSH] iOS: Waiting for APNs token to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        // En iOS, esperar más tiempo entre reintentos
+        if (platform === 'ios' && i > 0) {
+          console.log(`🔔 [PUSH] iOS retry ${i + 1}/${maxRetries}, waiting...`);
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+
+        const fcmToken = await FCM.getToken();
+        token = fcmToken.token;
+
+        if (token) {
+          console.log('🔔 [PUSH] Token obtained successfully');
+          break;
+        }
+      } catch (tokenError) {
+        console.log(`🔔 [PUSH] Attempt ${i + 1} failed:`, tokenError.message);
+        if (i === maxRetries - 1) {
+          throw tokenError;
+        }
+      }
+    }
+
+    if (!token) {
+      console.error('🔔 [PUSH] ❌ Failed to get FCM token after retries');
+      return { success: false, error: 'Failed to get FCM token' };
+    }
 
     console.log('🔔 [PUSH] ✅ Push registration success!');
     console.log('🔔 [PUSH] FCM Token:', token ? token.substring(0, 30) + '...' : 'NULL');

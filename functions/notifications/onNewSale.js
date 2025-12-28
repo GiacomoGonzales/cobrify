@@ -40,10 +40,11 @@ export const onNewSale = onDocumentCreated(
 
       // Enviar notificación push al dueño
       const businessName = business.name || business.businessName || 'tu negocio'
+      const paymentMethod = invoice.paymentMethod || 'Efectivo'
       const result = await sendPushNotification(
         ownerId,
-        '💰 Nueva Venta Realizada',
-        `Se registró una venta de S/ ${invoice.total.toFixed(2)} en ${businessName}`,
+        'Nueva Venta Realizada',
+        `Venta de S/ ${invoice.total.toFixed(2)} - ${paymentMethod} en ${businessName}`,
         {
           type: 'new_sale',
           invoiceId: invoiceId,
