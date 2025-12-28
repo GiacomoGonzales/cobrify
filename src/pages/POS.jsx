@@ -3885,28 +3885,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               )}
 
               {/* Checkout Button */}
-              <Button
+              <button
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || isProcessing || saleCompleted}
-                className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg"
+                className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Procesando...
                   </>
                 ) : saleCompleted ? (
                   <>
-                    <CheckCircle className="w-5 h-5 mr-2" />
+                    <CheckCircle className="w-5 h-5" />
                     Venta Completada
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-5 h-5 mr-2" />
+                    <CheckCircle className="w-5 h-5" />
                     Procesar Venta
                   </>
                 )}
-              </Button>
+              </button>
 
               {/* Mensaje de venta completada */}
               {lastInvoiceData && (
