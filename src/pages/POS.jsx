@@ -2470,30 +2470,36 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               {companySettings?.allowCustomProducts && (
-                <Button onClick={() => setShowCustomProductModal(true)} className="w-[70%] sm:w-auto">
-                  <Plus className="w-4 h-4 mr-2" />
+                <button
+                  onClick={() => setShowCustomProductModal(true)}
+                  className="flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 rounded-lg px-3 py-2 text-sm text-white hover:bg-primary-700 shadow-sm transition-colors w-[70%] sm:w-auto"
+                >
+                  <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">Producto Personalizado</span>
                   <span className="sm:hidden">Personalizado</span>
-                </Button>
+                </button>
               )}
-              <Button
-                variant={saleCompleted ? "default" : "outline"}
+              <button
                 onClick={clearCart}
                 disabled={cart.length === 0 && !saleCompleted}
-                className={`w-[30%] sm:w-auto ${saleCompleted ? 'bg-green-600 hover:bg-green-700 animate-pulse' : ''}`}
+                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm shadow-sm transition-colors w-[30%] sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed ${
+                  saleCompleted
+                    ? 'bg-green-600 border border-green-700 text-white hover:bg-green-700 animate-pulse'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
               >
                 {saleCompleted ? (
                   <>
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-4 h-4" />
                     Nueva Venta
                   </>
                 ) : (
                   <>
-                    <Trash2 className="w-4 h-4 mr-2" />
+                    <Trash2 className="w-4 h-4" />
                     Limpiar
                   </>
                 )}
-              </Button>
+              </button>
             </div>
           </div>
 
@@ -2513,7 +2519,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             <button
               onClick={handleScanBarcode}
               disabled={saleCompleted || isScanning}
-              className="px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              className="px-4 py-3 bg-primary-600 border border-primary-700 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center shadow-sm"
               title="Escanear código de barras"
             >
               {isScanning ? (
