@@ -433,15 +433,25 @@ export default function CreatePurchase() {
     try {
       const productData = {
         code: data.code || '',
+        sku: data.sku || '',
         name: data.name,
         price: parseFloat(data.price) || 0,
+        price2: data.price2 ? parseFloat(data.price2) : null,
+        price3: data.price3 ? parseFloat(data.price3) : null,
+        price4: data.price4 ? parseFloat(data.price4) : null,
         cost: data.cost ? parseFloat(data.cost) : 0,
         unit: data.unit || 'NIU',
         category: data.category || '',
         description: data.description || '',
         stock: data.noStock ? null : 0, // Stock actual en 0, se actualizará al guardar la compra
         initialStock: data.noStock ? null : 0, // Productos creados desde compras inician con stock inicial 0
+        noStock: data.noStock || false,
         taxAffectation: data.taxAffectation || '10',
+        allowDecimalQuantity: data.allowDecimalQuantity || false,
+        trackExpiration: data.trackExpiration || false,
+        catalogVisible: data.catalogVisible || false,
+        presentations: data.presentations || [],
+        imageUrl: data.imageUrl || null,
       }
 
       const result = await createProduct(businessId, productData)
