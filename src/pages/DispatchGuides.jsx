@@ -322,8 +322,8 @@ export default function DispatchGuides() {
             Gestiona las guías de remisión para el transporte de mercancías
           </p>
         </div>
-        <Button size="lg" className="w-full sm:w-auto" onClick={handleCreateGuide}>
-          <Plus className="w-5 h-5 mr-2" />
+        <Button className="w-full sm:w-auto" onClick={handleCreateGuide}>
+          <Plus className="w-4 h-4 mr-2" />
           Nueva Guía de Remisión
         </Button>
       </div>
