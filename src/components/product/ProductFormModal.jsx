@@ -127,6 +127,7 @@ export const getSubcategories = (categories, parentId) => {
  * @param {boolean} props.options.showCatalogVisibility - Mostrar opción catálogo
  * @param {string} props.stockLabel - Etiqueta para el campo de stock (default: 'Stock Inicial')
  * @param {string} props.stockHelperText - Texto de ayuda para stock
+ * @param {boolean} props.hideStockField - Ocultar campo de stock (para compras donde el stock viene del item)
  */
 const ProductFormModal = ({
   isOpen,
@@ -141,6 +142,7 @@ const ProductFormModal = ({
   options = {},
   stockLabel = 'Stock Inicial',
   stockHelperText = 'Cantidad inicial',
+  hideStockField = false,
 }) => {
   const { user, businessSettings, hasFeature } = useAppContext()
   const toast = useToast()
@@ -811,8 +813,9 @@ const ProductFormModal = ({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════
-            SECCIÓN 3: INVENTARIO
+            SECCIÓN 3: INVENTARIO (oculta si hideStockField es true)
         ═══════════════════════════════════════════════════════════════════ */}
+        {!hideStockField && (
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
             Inventario
@@ -955,6 +958,7 @@ const ProductFormModal = ({
             </div>
           )}
         </div>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════════════
             BOTONES

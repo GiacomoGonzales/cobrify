@@ -1667,14 +1667,12 @@ export default function CreatePurchase() {
           showSku: true,
           showMultiplePrices: true,
           showIgvAffectation: true,
-          showWarehouseStock: false, // El almacén ya se selecciona al inicio de la compra
           showPresentations: true,
           showExpiration: true,
           showDecimalQuantity: true,
           showCatalogVisibility: true,
         }}
-        stockLabel="Cantidad de Compra"
-        stockHelperText="Cantidad que estás comprando ahora"
+        hideStockField={true} // En compras, el stock se maneja con la cantidad del item, no aquí
       />
     </div>
   )
