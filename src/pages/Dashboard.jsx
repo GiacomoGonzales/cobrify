@@ -324,7 +324,7 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {/* Selector de Sucursal */}
           {branches.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
               <Store className="w-4 h-4 text-gray-500" />
               <select
                 value={filterBranch}
