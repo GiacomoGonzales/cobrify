@@ -1127,20 +1127,22 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setShowInventoryCountModal(true)}
-            className="flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            <ClipboardCheck className="w-4 h-4 text-gray-500" />
+            <ClipboardCheck className="w-4 h-4 mr-2" />
             Recuento
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={handleExportToExcel}
-            className="flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            <FileSpreadsheet className="w-4 h-4 text-gray-500" />
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
             Exportar Excel
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1339,10 +1341,10 @@ export default function Inventory() {
                     className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
                   />
                 </div>
-                <button
+                <Button
                   onClick={handleScanBarcode}
                   disabled={isScanning}
-                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  size="sm"
                   title="Escanear código de barras"
                 >
                   {isScanning ? (
@@ -1350,7 +1352,7 @@ export default function Inventory() {
                   ) : (
                     <ScanBarcode className="w-5 h-5" />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
 
