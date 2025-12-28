@@ -1,19 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
-import Modal from '@/components/ui/Modal'
 import { formatCurrency } from '@/lib/utils'
-import { productSchema } from '@/utils/schemas'
+import ProductFormModal, { getRootCategories, getSubcategories } from '@/components/product/ProductFormModal'
 import {
   getSuppliers,
   getProducts,
@@ -26,78 +22,7 @@ import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/serv
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase } from '@/services/ingredientService'
 
-// Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
-const UNITS = [
-  { value: 'NIU', label: 'Unidad' },
-  { value: 'ZZ', label: 'Servicio' },
-  { value: 'KGM', label: 'Kilogramo' },
-  { value: 'GRM', label: 'Gramo' },
-  { value: 'LTR', label: 'Litro' },
-  { value: 'MTR', label: 'Metro' },
-  { value: 'MTK', label: 'Metro cuadrado' },
-  { value: 'MTQ', label: 'Metro cúbico' },
-  { value: 'BX', label: 'Caja' },
-  { value: 'PK', label: 'Paquete' },
-  { value: 'SET', label: 'Juego' },
-  { value: 'HUR', label: 'Hora' },
-  { value: 'DZN', label: 'Docena' },
-  { value: 'PR', label: 'Par' },
-  { value: 'MIL', label: 'Millar' },
-  { value: 'TNE', label: 'Tonelada' },
-  { value: 'BJ', label: 'Balde' },
-  { value: 'BLL', label: 'Barril' },
-  { value: 'BG', label: 'Bolsa' },
-  { value: 'BO', label: 'Botella' },
-  { value: 'CT', label: 'Cartón' },
-  { value: 'CMK', label: 'Centímetro cuadrado' },
-  { value: 'CMQ', label: 'Centímetro cúbico' },
-  { value: 'CMT', label: 'Centímetro' },
-  { value: 'CEN', label: 'Ciento de unidades' },
-  { value: 'CY', label: 'Cilindro' },
-  { value: 'BE', label: 'Fardo' },
-  { value: 'GLL', label: 'Galón' },
-  { value: 'GLI', label: 'Galón inglés' },
-  { value: 'LEF', label: 'Hoja' },
-  { value: 'KTM', label: 'Kilómetro' },
-  { value: 'KWH', label: 'Kilovatio hora' },
-  { value: 'KT', label: 'Kit' },
-  { value: 'CA', label: 'Lata' },
-  { value: 'LBR', label: 'Libra' },
-  { value: 'MWH', label: 'Megavatio hora' },
-  { value: 'MGM', label: 'Miligramo' },
-  { value: 'MLT', label: 'Mililitro' },
-  { value: 'MMT', label: 'Milímetro' },
-  { value: 'MMK', label: 'Milímetro cuadrado' },
-  { value: 'MMQ', label: 'Milímetro cúbico' },
-  { value: 'UM', label: 'Millón de unidades' },
-  { value: 'ONZ', label: 'Onza' },
-  { value: 'PF', label: 'Paleta' },
-  { value: 'FOT', label: 'Pie' },
-  { value: 'FTK', label: 'Pie cuadrado' },
-  { value: 'FTQ', label: 'Pie cúbico' },
-  { value: 'C62', label: 'Pieza' },
-  { value: 'PG', label: 'Placa' },
-  { value: 'ST', label: 'Pliego' },
-  { value: 'INH', label: 'Pulgada' },
-  { value: 'TU', label: 'Tubo' },
-  { value: 'YRD', label: 'Yarda' },
-  { value: 'QD', label: 'Cuarto de docena' },
-  { value: 'HD', label: 'Media docena' },
-  { value: 'JG', label: 'Jarra' },
-  { value: 'JR', label: 'Frasco' },
-  { value: 'CH', label: 'Envase' },
-  { value: 'AV', label: 'Cápsula' },
-  { value: 'SA', label: 'Saco' },
-  { value: 'BT', label: 'Tornillo' },
-  { value: 'U2', label: 'Tableta/Blister' },
-  { value: 'DZP', label: 'Docena de paquetes' },
-  { value: 'HT', label: 'Media hora' },
-  { value: 'RL', label: 'Carrete' },
-  { value: 'SEC', label: 'Segundo' },
-  { value: 'RD', label: 'Varilla' },
-]
-
-// Helper functions for category hierarchy
+// Helper function for legacy categories (used in ingredient logic)
 const migrateLegacyCategories = (cats) => {
   if (!cats || cats.length === 0) return []
   if (typeof cats[0] === 'object' && cats[0].id) return cats
@@ -108,12 +33,7 @@ const migrateLegacyCategories = (cats) => {
   }))
 }
 
-const getRootCategories = (cats) => {
-  const migratedCats = migrateLegacyCategories(cats)
-  return migratedCats.filter(cat => !cat.parentId)
-}
-
-const getSubcategories = (cats, parentId) => {
+const getSubcategoriesLocal = (cats, parentId) => {
   const migratedCats = migrateLegacyCategories(cats)
   return migratedCats.filter(cat => cat.parentId === parentId)
 }
@@ -174,30 +94,8 @@ export default function CreatePurchase() {
   // Estados para el modal de crear producto
   const [showCreateProductModal, setShowCreateProductModal] = useState(false)
   const [currentItemIndex, setCurrentItemIndex] = useState(null)
-  const [noStock, setNoStock] = useState(false)
   const [isCreatingProduct, setIsCreatingProduct] = useState(false)
-
-  // React Hook Form para el modal de producto
-  const {
-    register: registerProduct,
-    handleSubmit: handleSubmitProduct,
-    formState: { errors: errorsProduct },
-    reset: resetProduct,
-    setValue: setValueProduct,
-    watch: watchProduct,
-  } = useForm({
-    resolver: zodResolver(productSchema),
-    defaultValues: {
-      code: '',
-      name: '',
-      price: '',
-      cost: '',
-      unit: 'UNIDAD',
-      category: '',
-      stock: '',
-      description: '',
-    },
-  })
+  const [newProductName, setNewProductName] = useState('')
 
   useEffect(() => {
     loadData()
@@ -516,17 +414,7 @@ export default function CreatePurchase() {
     setCurrentItemIndex(itemIndex)
     // Pre-llenar el nombre del producto con lo que el usuario estaba buscando
     const searchTerm = productSearches[itemIndex] || ''
-    resetProduct({
-      code: '',
-      name: searchTerm,
-      price: '',
-      cost: '',
-      unit: 'UNIDAD',
-      category: '',
-      stock: '',
-      description: '',
-    })
-    setNoStock(false)
+    setNewProductName(searchTerm)
     setShowCreateProductModal(true)
   }
 
@@ -544,15 +432,16 @@ export default function CreatePurchase() {
 
     try {
       const productData = {
-        code: data.code,
+        code: data.code || '',
         name: data.name,
-        price: parseFloat(data.price),
+        price: parseFloat(data.price) || 0,
         cost: data.cost ? parseFloat(data.cost) : 0,
-        unit: data.unit,
+        unit: data.unit || 'NIU',
         category: data.category || '',
         description: data.description || '',
-        stock: noStock ? null : 0, // Stock actual en 0, se actualizará al guardar la compra
-        initialStock: noStock ? null : 0, // Productos creados desde compras inician con stock inicial 0
+        stock: data.noStock ? null : 0, // Stock actual en 0, se actualizará al guardar la compra
+        initialStock: data.noStock ? null : 0, // Productos creados desde compras inician con stock inicial 0
+        taxAffectation: data.taxAffectation || '10',
       }
 
       const result = await createProduct(businessId, productData)
@@ -598,8 +487,7 @@ export default function CreatePurchase() {
 
   const closeCreateProductModal = () => {
     setShowCreateProductModal(false)
-    resetProduct()
-    setNoStock(false)
+    setNewProductName('')
     setCurrentItemIndex(null)
     setIsCreatingProduct(false)
   }
@@ -1765,170 +1653,29 @@ export default function CreatePurchase() {
       </Card>
 
       {/* Modal para crear producto nuevo */}
-      <Modal
+      <ProductFormModal
         isOpen={showCreateProductModal}
         onClose={closeCreateProductModal}
+        onSubmit={handleCreateProduct}
+        initialData={newProductName ? { name: newProductName } : null}
+        categories={categories}
         title="Nuevo Producto"
-        size="lg"
-      >
-        <form onSubmit={handleSubmitProduct(handleCreateProduct)} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Código"
-              required
-              placeholder="PROD001"
-              error={errorsProduct.code?.message}
-              {...registerProduct('code')}
-            />
-
-            <Select
-              label="Unidad de Medida"
-              required
-              error={errorsProduct.unit?.message}
-              {...registerProduct('unit')}
-            >
-              {UNITS.map(unit => (
-                <option key={unit.value} value={unit.value}>
-                  {unit.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <Input
-            label="Nombre"
-            required
-            placeholder="Nombre del producto o servicio"
-            error={errorsProduct.name?.message}
-            {...registerProduct('name')}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Costo"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              error={errorsProduct.cost?.message}
-              {...registerProduct('cost')}
-            />
-
-            <Input
-              label="Precio de Venta"
-              type="number"
-              step="0.01"
-              required
-              placeholder="0.00"
-              error={errorsProduct.price?.message}
-              {...registerProduct('price')}
-            />
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoría (Opcional)
-              </label>
-              <select
-                {...registerProduct('category')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Sin categoría</option>
-                {/* Render root categories and their subcategories */}
-                {getRootCategories(categories).map(cat => (
-                  <React.Fragment key={cat.id}>
-                    <option value={cat.id}>
-                      {cat.name}
-                    </option>
-                    {getSubcategories(categories, cat.id).map(subcat => (
-                      <option key={subcat.id} value={subcat.id}>
-                        └─ {subcat.name}
-                      </option>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </select>
-              {errorsProduct.category && (
-                <p className="mt-1 text-sm text-red-600">{errorsProduct.category.message}</p>
-              )}
-              {categories.length === 0 && (
-                <p className="mt-1 text-sm text-gray-500">
-                  Crea categorías desde la página de Productos para organizarlos mejor
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Control de Stock
-            </label>
-            <div className="space-y-3">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="noStock"
-                  checked={noStock}
-                  onChange={e => {
-                    const checked = e.target.checked
-                    setNoStock(checked)
-                    if (checked) {
-                      setValueProduct('stock', '')
-                    }
-                  }}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <label htmlFor="noStock" className="ml-2 text-sm text-gray-700">
-                  No manejar stock (servicios o productos sin control)
-                </label>
-              </div>
-
-              {!noStock && (
-                <Input
-                  label="Cantidad de Compra"
-                  type="number"
-                  placeholder="Ej: 40"
-                  error={errorsProduct.stock?.message}
-                  {...registerProduct('stock')}
-                  helperText="Cantidad que estás comprando ahora"
-                />
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción
-            </label>
-            <textarea
-              {...registerProduct('description')}
-              rows={3}
-              placeholder="Descripción del producto o servicio"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            {errorsProduct.description && (
-              <p className="mt-1 text-sm text-red-600">{errorsProduct.description.message}</p>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={closeCreateProductModal} disabled={isCreatingProduct}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isCreatingProduct}>
-              {isCreatingProduct ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creando...
-                </>
-              ) : (
-                <>
-                  <PackagePlus className="w-4 h-4 mr-2" />
-                  Crear Producto
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        submitLabel="Crear Producto"
+        isSubmitting={isCreatingProduct}
+        options={{
+          showImages: true,
+          showSku: true,
+          showMultiplePrices: true,
+          showIgvAffectation: true,
+          showWarehouseStock: false, // El almacén ya se selecciona al inicio de la compra
+          showPresentations: true,
+          showExpiration: true,
+          showDecimalQuantity: true,
+          showCatalogVisibility: true,
+        }}
+        stockLabel="Cantidad de Compra"
+        stockHelperText="Cantidad que estás comprando ahora"
+      />
     </div>
   )
 }
