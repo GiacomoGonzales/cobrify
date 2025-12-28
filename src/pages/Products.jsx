@@ -2042,49 +2042,44 @@ export default function Products() {
         <CardContent className="p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex gap-2 flex-1">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
+                <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
                 <input
                   type="text"
                   placeholder="Buscar por código, nombre, categoría..."
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
                 />
               </div>
               {Capacitor.isNativePlatform() && (
-                <button
-                  type="button"
+                <Button
                   onClick={handleScanSearch}
                   disabled={isScanningSearch}
-                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center"
                   title="Escanear código de barras"
                 >
                   {isScanningSearch ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <ScanBarcode className="w-5 h-5" />
+                    <ScanBarcode className="w-4 h-4" />
                   )}
-                </button>
+                </Button>
               )}
             </div>
 
             {/* Filtro de vencimiento */}
             {expiringProductsCount > 0 && (
-              <button
+              <Button
                 onClick={() => setShowExpiringOnly(!showExpiringOnly)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                  showExpiringOnly
-                    ? 'bg-red-600 text-white hover:bg-red-700'
-                    : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
-                }`}
+                variant={showExpiringOnly ? 'danger' : 'outline'}
+                className={showExpiringOnly ? '' : 'text-red-700 border-red-300 hover:bg-red-50'}
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-4 h-4 mr-2" />
                 <span>Próximos a vencer</span>
                 <Badge variant="danger" className="bg-white text-red-700 ml-1">
                   {expiringProductsCount}
                 </Badge>
-              </button>
+              </Button>
             )}
           </div>
 
@@ -2093,10 +2088,10 @@ export default function Products() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedCategoryFilter('all')}
-                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
                   selectedCategoryFilter === 'all'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-primary-600 text-white border border-primary-700'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                 }`}
               >
                 <Tag className="w-3 h-3 inline mr-1" />
@@ -2109,10 +2104,10 @@ export default function Products() {
                   <React.Fragment key={category.id}>
                     <button
                       onClick={() => setSelectedCategoryFilter(category.id)}
-                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
                         selectedCategoryFilter === category.id
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          ? 'bg-primary-600 text-white border border-primary-700'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                       }`}
                     >
                       <Folder className="w-3 h-3 inline mr-1" />
@@ -2123,10 +2118,10 @@ export default function Products() {
                       <button
                         key={subcat.id}
                         onClick={() => setSelectedCategoryFilter(subcat.id)}
-                        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors shadow-sm ${
                           selectedCategoryFilter === subcat.id
-                            ? 'bg-primary-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            ? 'bg-primary-600 text-white border border-primary-700'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                         }`}
                       >
                         <Folder className="w-3 h-3 inline mr-1" />

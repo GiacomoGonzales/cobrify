@@ -470,14 +470,14 @@ export default function Loans() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+            <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
             <input
               type="text"
               placeholder="Buscar por prestamista, descripción..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
             />
           </div>
 
@@ -493,10 +493,10 @@ export default function Loans() {
                   <button
                     key={opt.value}
                     onClick={() => setTypeFilter(opt.value)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors shadow-sm ${
                       typeFilter === opt.value
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-primary-600 text-white border border-primary-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                     }`}
                   >
                     {opt.label}
@@ -515,10 +515,10 @@ export default function Loans() {
                   <button
                     key={opt.value}
                     onClick={() => setStatusFilter(opt.value)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors shadow-sm ${
                       statusFilter === opt.value
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-green-600 text-white border border-green-700'
+                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                     }`}
                   >
                     {opt.label}
@@ -624,20 +624,24 @@ export default function Loans() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end space-x-1">
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setViewingLoan(loan)}
-                          className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                          className="text-purple-600 hover:bg-purple-50"
                           title="Ver cuotas"
                         >
                           <List className="w-4 h-4" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setDeletingLoan(loan)}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

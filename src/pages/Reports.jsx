@@ -1270,7 +1270,7 @@ export default function Reports() {
         <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
           {/* Selector de Sucursal */}
           {branches.length > 0 && (
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
               <Store className="w-4 h-4 text-gray-500" />
               <select
                 value={filterBranch}
@@ -1299,21 +1299,27 @@ export default function Reports() {
           </Select>
           {dateRange === 'custom' && (
             <>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={e => setCustomStartDate(e.target.value)}
-                className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                title="Desde"
-              />
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={e => setCustomStartDate(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  title="Desde"
+                />
+              </div>
               <span className="hidden sm:inline text-gray-500">-</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={e => setCustomEndDate(e.target.value)}
-                className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                title="Hasta"
-              />
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={e => setCustomEndDate(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  title="Hasta"
+                />
+              </div>
             </>
           )}
         </div>
@@ -1323,10 +1329,10 @@ export default function Reports() {
       <div className="flex gap-2 overflow-x-auto pb-2">
         <button
           onClick={() => setSelectedReport('overview')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
             selectedReport === 'overview'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
           }`}
         >
           <BarChart3 className="w-4 h-4 inline-block mr-2" />
@@ -1334,10 +1340,10 @@ export default function Reports() {
         </button>
         <button
           onClick={() => setSelectedReport('sales')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
             selectedReport === 'sales'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
           }`}
         >
           <TrendingUp className="w-4 h-4 inline-block mr-2" />
@@ -1345,10 +1351,10 @@ export default function Reports() {
         </button>
         <button
           onClick={() => setSelectedReport('products')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
             selectedReport === 'products'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
           }`}
         >
           <Package className="w-4 h-4 inline-block mr-2" />
@@ -1356,10 +1362,10 @@ export default function Reports() {
         </button>
         <button
           onClick={() => setSelectedReport('customers')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
             selectedReport === 'customers'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
           }`}
         >
           <Users className="w-4 h-4 inline-block mr-2" />
@@ -1367,10 +1373,10 @@ export default function Reports() {
         </button>
         <button
           onClick={() => setSelectedReport('sellers')}
-          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
             selectedReport === 'sellers'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary-600 text-white border border-primary-700'
+              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
           }`}
         >
           <Users className="w-4 h-4 inline-block mr-2" />
@@ -1380,10 +1386,10 @@ export default function Reports() {
         {hasFeature && hasFeature('expenseManagement') && (
           <button
             onClick={() => setSelectedReport('expenses')}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
               selectedReport === 'expenses'
-                ? 'bg-red-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-red-600 text-white border border-red-700'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
             }`}
           >
             <Receipt className="w-4 h-4 inline-block mr-2" />
@@ -1394,10 +1400,10 @@ export default function Reports() {
         {hasFeature && hasFeature('expenseManagement') && (
           <button
             onClick={() => setSelectedReport('profitability')}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors shadow-sm ${
               selectedReport === 'profitability'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-emerald-600 text-white border border-emerald-700'
+                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
             }`}
           >
             <TrendingUp className="w-4 h-4 inline-block mr-2" />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import Button from '@/components/ui/Button'
 import {
   getExpenses,
   createExpense,
@@ -462,13 +463,25 @@ export default function Expenses() {
           <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
           <p className="text-gray-500">Registro y control de gastos del negocio</p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Gasto
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={loadExpenses}
+            disabled={loading}
+            title="Recargar"
+            className="flex-1 sm:flex-none"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button variant="success" onClick={exportToExcel} className="flex-1 sm:flex-none">
+            <Download className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Excel</span>
+          </Button>
+          <Button variant="danger" onClick={openCreateModal} className="flex-1 sm:flex-none">
+            <Plus className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Nuevo Gasto</span>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -523,89 +536,85 @@ export default function Expenses() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por descripción, proveedor o referencia..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-            />
-          </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-4">
+        {/* Búsqueda */}
+        <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+          <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
+          <input
+            type="text"
+            placeholder="Buscar por descripción, proveedor o referencia..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+          />
+        </div>
 
-          {/* Date Range */}
-          <div className="flex gap-2 items-center">
-            <Calendar className="w-5 h-5 text-gray-400" />
+        {/* Rango de fechas */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600 font-medium">Período:</span>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <input
               type="date"
               value={dateRange.startDate}
               onChange={e => setDateRange({ ...dateRange, startDate: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+              className="flex-1 sm:flex-none px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
             />
             <span className="text-gray-400">-</span>
             <input
               type="date"
               value={dateRange.endDate}
               onChange={e => setDateRange({ ...dateRange, endDate: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+              className="flex-1 sm:flex-none px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
             />
-          </div>
-
-          {/* Category Filter */}
-          <select
-            value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-          >
-            <option value="all">Todas las categorías</option>
-            {EXPENSE_CATEGORIES.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-
-          {/* Branch Filter */}
-          {branches.length > 0 && (
-            <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
-              <Store className="w-4 h-4 text-gray-400 ml-3" />
-              <select
-                value={branchFilter}
-                onChange={e => setBranchFilter(e.target.value)}
-                className="px-3 py-2 bg-transparent border-none focus:outline-none focus:ring-0"
-              >
-                <option value="all">Todas las sucursales</option>
-                <option value="main">Sucursal Principal</option>
-                {branches.map(branch => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button
-              onClick={loadExpenses}
-              disabled={loading}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              title="Recargar"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              onClick={exportToExcel}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Excel</span>
-            </button>
           </div>
         </div>
 
-        <div className="mt-3 text-sm text-gray-500">
+        {/* Filtros adicionales */}
+        <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600 font-medium">Filtros:</span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 flex-1">
+            {/* Category Filter */}
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm w-full sm:w-auto">
+              <Receipt className="w-4 h-4 text-gray-500 flex-shrink-0" />
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer flex-1"
+              >
+                <option value="all">Todas las categorías</option>
+                {EXPENSE_CATEGORIES.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Branch Filter */}
+            {branches.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm w-full sm:w-auto">
+                <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <select
+                  value={branchFilter}
+                  onChange={e => setBranchFilter(e.target.value)}
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer flex-1"
+                >
+                  <option value="all">Todas las sucursales</option>
+                  <option value="main">Sucursal Principal</option>
+                  {branches.map(branch => (
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-500">
           Mostrando {filteredExpenses.length} de {expenses.length} gastos
         </div>
       </div>
@@ -718,14 +727,14 @@ export default function Expenses() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => openEditModal(expense)}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-200 transition-colors"
                             title="Editar"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setShowDeleteConfirm(expense.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition-colors"
                             title="Eliminar"
                           >
                             <Trash2 className="w-4 h-4" />

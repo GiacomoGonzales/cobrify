@@ -510,14 +510,14 @@ export default function Purchases() {
       <Card>
         <CardContent className="p-4 space-y-4">
           {/* Búsqueda */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+            <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
             <input
               type="text"
               placeholder="Buscar por número de factura, proveedor..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
             />
           </div>
 
@@ -539,10 +539,10 @@ export default function Purchases() {
                 <button
                   key={option.value}
                   onClick={() => setDateFilter(option.value)}
-                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors shadow-sm ${
                     dateFilter === option.value
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-primary-600 text-white border border-primary-700'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                   }`}
                 >
                   {option.label}
@@ -556,21 +556,27 @@ export default function Purchases() {
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t">
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600">Desde:</label>
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                />
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm">
+                  <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600">Hasta:</label>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                />
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm">
+                  <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -591,10 +597,12 @@ export default function Purchases() {
                 <button
                   key={option.value}
                   onClick={() => setPaymentFilter(option.value)}
-                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors shadow-sm ${
                     paymentFilter === option.value
-                      ? option.value === 'pending' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? option.value === 'pending'
+                        ? 'bg-red-600 text-white border border-red-700'
+                        : 'bg-blue-600 text-white border border-blue-700'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
                   }`}
                 >
                   {option.label}
@@ -616,12 +624,12 @@ export default function Purchases() {
                 <span className="text-sm text-gray-600 font-medium">Sucursal:</span>
               </div>
               <div className="flex-1">
-                <div className="flex items-center border border-gray-300 rounded-lg bg-white overflow-hidden">
-                  <Store className="w-4 h-4 text-gray-400 ml-3" />
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                  <Store className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <select
                     value={filterBranch}
                     onChange={(e) => setFilterBranch(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm bg-transparent border-none focus:outline-none focus:ring-0"
+                    className="flex-1 text-sm bg-transparent border-none focus:outline-none focus:ring-0 cursor-pointer"
                   >
                     <option value="all">Todas las sucursales</option>
                     <option value="main">Sucursal Principal</option>
@@ -835,40 +843,47 @@ export default function Purchases() {
                       <div className="flex items-center justify-end space-x-1">
                         {/* Botón ver cuotas (solo para compras en cuotas) */}
                         {purchase.creditType === 'cuotas' && purchase.installments?.length > 0 && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setViewingInstallments(purchase)}
-                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            className="text-purple-600 hover:bg-purple-50"
                             title="Ver cuotas"
                           >
                             <List className="w-4 h-4" />
-                          </button>
+                          </Button>
                         )}
                         {/* Botón marcar como pagado (solo para crédito pendiente con pago único) */}
                         {purchase.paymentType === 'credito' &&
                          purchase.paymentStatus === 'pending' &&
                          purchase.creditType !== 'cuotas' && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setMarkingAsPaid(purchase)}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            className="text-green-600 hover:bg-green-50"
                             title="Marcar como pagado"
                           >
                             <CheckCircle className="w-4 h-4" />
-                          </button>
+                          </Button>
                         )}
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setViewingPurchase(purchase)}
-                          className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Ver detalles"
                         >
                           <Eye className="w-4 h-4" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setDeletingPurchase(purchase)}
-                          className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />
-                        </button>
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
