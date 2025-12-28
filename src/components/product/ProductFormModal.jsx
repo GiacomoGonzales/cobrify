@@ -144,7 +144,7 @@ const ProductFormModal = ({
   stockHelperText = 'Cantidad inicial',
   hideStockField = false,
 }) => {
-  const { user, businessSettings, hasFeature } = useAppContext()
+  const { user, businessSettings, hasFeature, getBusinessId } = useAppContext()
   const toast = useToast()
 
   // Default options
@@ -400,9 +400,13 @@ const ProductFormModal = ({
     if (productImage && canUseProductImages) {
       try {
         setUploadingImage(true)
+        const businessId = getBusinessId()
+        if (!businessId) {
+          throw new Error('No se pudo identificar el negocio')
+        }
         // Use existing product ID or generate a temporary one
         const tempProductId = initialData?.id || `temp_${Date.now()}`
-        const imageUrl = await uploadProductImage(user.businessId, tempProductId, productImage)
+        const imageUrl = await uploadProductImage(businessId, tempProductId, productImage)
         productData.imageUrl = imageUrl
       } catch (error) {
         console.error('Error uploading image:', error)
