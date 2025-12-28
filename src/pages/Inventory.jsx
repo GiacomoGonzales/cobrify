@@ -1129,14 +1129,14 @@ export default function Inventory() {
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <button
             onClick={() => setShowInventoryCountModal(true)}
-            className="flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <ClipboardCheck className="w-4 h-4 text-gray-500" />
             Recuento
           </button>
           <button
             onClick={handleExportToExcel}
-            className="flex items-center justify-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <FileSpreadsheet className="w-4 h-4 text-gray-500" />
             Exportar Excel
@@ -1329,7 +1329,7 @@ export default function Inventory() {
             {/* Search */}
             <div className="flex-1 min-w-0">
               <div className="flex gap-2">
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 flex-1">
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
                   <Search className="w-4 h-4 text-gray-500 flex-shrink-0" />
                   <input
                     type="text"
@@ -1357,7 +1357,7 @@ export default function Inventory() {
             {/* Filters Group */}
             <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 flex-wrap">
               {/* Category Filter */}
-              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
                 <Tag className="w-4 h-4 text-gray-500" />
                 <select
                   value={filterCategory}
@@ -1374,7 +1374,7 @@ export default function Inventory() {
               </div>
 
               {/* Status Filter */}
-              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
                 <Activity className="w-4 h-4 text-gray-500" />
                 <select
                   value={filterStatus}
@@ -1390,7 +1390,7 @@ export default function Inventory() {
 
               {/* Branch Filter */}
               {branches.length > 0 && (
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
                   <Store className="w-4 h-4 text-gray-500" />
                   <select
                     value={filterBranch}
@@ -1408,7 +1408,7 @@ export default function Inventory() {
 
               {/* Warehouse Filter */}
               {filteredWarehouses.length > 0 && (
-                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
                   <Warehouse className="w-4 h-4 text-gray-500" />
                   <select
                     value={filterWarehouse}
