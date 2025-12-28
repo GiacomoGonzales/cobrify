@@ -2505,21 +2505,21 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
           {/* Search */}
           <div className={`flex gap-2 ${saleCompleted ? 'opacity-50' : ''}`}>
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
+              <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <input
                 type="text"
                 placeholder={saleCompleted ? "Presiona 'Nueva Venta' para continuar..." : "Buscar producto por nombre o código..."}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 disabled={saleCompleted}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-base sm:text-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="flex-1 text-base sm:text-lg border-none bg-transparent focus:ring-0 focus:outline-none disabled:cursor-not-allowed"
               />
             </div>
             <button
               onClick={handleScanBarcode}
               disabled={saleCompleted || isScanning}
-              className="px-4 py-3 bg-primary-600 border border-primary-700 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center shadow-sm"
+              className="flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg px-4 py-2 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               title="Escanear código de barras"
             >
               {isScanning ? (
