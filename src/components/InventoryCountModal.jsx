@@ -397,9 +397,29 @@ export default function InventoryCountModal({
                   stock: difference,
                   minStock: 0
                 })
-              } else {
-                // Si hay decremento pero no hay almacén default, distribuir proporcionalmente
-                // o simplemente actualizar stock general (el POS usará getOrphanStock)
+              } else if (difference < 0) {
+                // Si hay decremento pero no hay almacén default, restar de los almacenes existentes
+                let remainingToDeduct = Math.abs(difference)
+
+                // Ordenar por stock descendente para restar primero de los que tienen más
+                const sortedIndices = newWarehouseStocks
+                  .map((ws, idx) => ({ idx, stock: ws.stock || 0 }))
+                  .filter(item => item.stock > 0)
+                  .sort((a, b) => b.stock - a.stock)
+
+                for (const { idx } of sortedIndices) {
+                  if (remainingToDeduct <= 0) break
+
+                  const currentStock = newWarehouseStocks[idx].stock || 0
+                  const toDeduct = Math.min(currentStock, remainingToDeduct)
+
+                  newWarehouseStocks[idx] = {
+                    ...newWarehouseStocks[idx],
+                    stock: currentStock - toDeduct
+                  }
+
+                  remainingToDeduct -= toDeduct
+                }
               }
 
               // Recalcular stock total desde warehouseStocks
