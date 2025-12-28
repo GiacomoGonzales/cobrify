@@ -16,6 +16,8 @@ import {
   Copy,
   Trash2,
   ScanBarcode,
+  Warehouse,
+  ArrowLeft,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -50,6 +52,10 @@ export default function InventoryCountModal({
   const [isApplying, setIsApplying] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
+  // Almacén seleccionado para el recuento
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null)
+  const [showWarehouseSelector, setShowWarehouseSelector] = useState(true)
+
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -70,55 +76,76 @@ export default function InventoryCountModal({
   // Ref para controlar si ya se inicializó
   const [initialized, setInitialized] = useState(false)
 
-  // Calcular el stock real de un producto
-  // Prioridad: suma de warehouseStocks > stock general
-  const getRealStock = (product) => {
+  // Calcular el stock de un producto para el almacén seleccionado
+  const getWarehouseStock = (product, warehouseId) => {
+    if (!warehouseId) return 0
+    const warehouseStocks = product.warehouseStocks || []
+    const ws = warehouseStocks.find(w => w.warehouseId === warehouseId)
+    return ws?.stock || 0
+  }
+
+  // Calcular el stock real de un producto (suma total o por almacén)
+  const getRealStock = (product, warehouseId = null) => {
+    // Si hay un almacén específico, retornar solo ese stock
+    if (warehouseId) {
+      return getWarehouseStock(product, warehouseId)
+    }
+    // Si no, retornar la suma total
     const warehouseStocks = product.warehouseStocks || []
     if (warehouseStocks.length > 0) {
       const warehouseTotal = warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
-      // Si hay datos en warehouseStocks, usar esa suma
       if (warehouseTotal > 0 || product.stock === 0) {
         return warehouseTotal
       }
     }
-    // Si no hay warehouseStocks o suma 0, usar stock general
     return product.stock || 0
   }
 
-  // Inicializar datos de conteo solo cuando el modal se ABRE (no cuando products cambia)
-  useEffect(() => {
-    if (isOpen && !initialized && products.length > 0) {
-      const initialCountData = {}
-      products.forEach(product => {
-        if (product.stock !== null && product.stock !== undefined) {
-          // Usar el stock real (del almacén si existe, o general si no)
-          const realStock = getRealStock(product)
+  // Inicializar datos de conteo cuando se selecciona un almacén
+  const initializeCountData = (warehouseId) => {
+    const initialCountData = {}
+    products.forEach(product => {
+      if (product.stock !== null && product.stock !== undefined) {
+        // Usar el stock del almacén seleccionado
+        const warehouseStock = getWarehouseStock(product, warehouseId)
 
-          initialCountData[product.id] = {
-            productId: product.id,
-            productName: product.name,
-            productCode: product.code || '-',
-            category: product.category,
-            systemStock: realStock,
-            physicalCount: '',
-            price: product.price || 0,
-            isIngredient: product.isIngredient || false,
-            // Guardar warehouseStocks original para actualizar correctamente
-            warehouseStocks: product.warehouseStocks || [],
-          }
+        initialCountData[product.id] = {
+          productId: product.id,
+          productName: product.name,
+          productCode: product.code || '-',
+          category: product.category,
+          systemStock: warehouseStock,
+          physicalCount: '',
+          price: product.price || 0,
+          isIngredient: product.isIngredient || false,
+          // Guardar warehouseStocks original para actualizar correctamente
+          warehouseStocks: product.warehouseStocks || [],
         }
-      })
-      setCountData(initialCountData)
-      setSearchTerm('')
-      setCategoryFilter('all')
-      setDifferenceFilter('all')
-      setInitialized(true)
-    }
-    // Resetear cuando se cierra el modal
-    if (!isOpen && initialized) {
+      }
+    })
+    setCountData(initialCountData)
+    setSearchTerm('')
+    setCategoryFilter('all')
+    setDifferenceFilter('all')
+    setInitialized(true)
+  }
+
+  // Resetear cuando se cierra el modal
+  useEffect(() => {
+    if (!isOpen) {
       setInitialized(false)
+      setSelectedWarehouse(null)
+      setShowWarehouseSelector(true)
+      setCountData({})
     }
-  }, [isOpen, products, initialized])
+  }, [isOpen])
+
+  // Manejar selección de almacén
+  const handleSelectWarehouse = (warehouse) => {
+    setSelectedWarehouse(warehouse)
+    setShowWarehouseSelector(false)
+    initializeCountData(warehouse.id)
+  }
 
   // Calcular estadísticas cuando cambian los datos de conteo
   useEffect(() => {
@@ -368,81 +395,40 @@ export default function InventoryCountModal({
               stock: newStock,
             })
           } else {
-            // Actualizar producto - incluir warehouseStocks si existe almacén por defecto
-            const updateData = { stock: newStock }
+            // Actualizar producto - actualizar el almacén seleccionado
+            const currentWarehouseStocks = item.warehouseStocks || []
+            let newWarehouseStocks = [...currentWarehouseStocks]
 
-            // Si hay almacenes configurados, actualizar también warehouseStocks
-            if (defaultWarehouse && warehouses.length > 0) {
-              // Calcular la diferencia y aplicarla al almacén por defecto
-              // Esto asegura que el stock esté disponible en el POS
-              const currentWarehouseStocks = item.warehouseStocks || []
-              let newWarehouseStocks = [...currentWarehouseStocks]
+            // Buscar si el almacén seleccionado ya existe en warehouseStocks
+            const selectedIdx = newWarehouseStocks.findIndex(
+              ws => ws.warehouseId === selectedWarehouse.id
+            )
 
-              // Buscar si el almacén por defecto ya existe en warehouseStocks
-              const defaultIdx = newWarehouseStocks.findIndex(
-                ws => ws.warehouseId === defaultWarehouse.id
-              )
-
-              if (defaultIdx >= 0) {
-                // Aplicar la diferencia al almacén por defecto
-                const currentWarehouseStock = newWarehouseStocks[defaultIdx].stock || 0
-                newWarehouseStocks[defaultIdx] = {
-                  ...newWarehouseStocks[defaultIdx],
-                  stock: Math.max(0, currentWarehouseStock + difference)
-                }
-              } else if (difference > 0) {
-                // Si hay incremento y no existe el almacén, crear entrada
+            if (selectedIdx >= 0) {
+              // Actualizar el stock del almacén seleccionado con el nuevo valor
+              newWarehouseStocks[selectedIdx] = {
+                ...newWarehouseStocks[selectedIdx],
+                stock: newStock
+              }
+            } else {
+              // Si no existe el almacén, crear entrada (solo si el nuevo stock es > 0)
+              if (newStock > 0) {
                 newWarehouseStocks.push({
-                  warehouseId: defaultWarehouse.id,
-                  stock: difference,
+                  warehouseId: selectedWarehouse.id,
+                  stock: newStock,
                   minStock: 0
                 })
-              } else if (difference < 0) {
-                // Si hay decremento pero no hay almacén default, restar de los almacenes existentes
-                let remainingToDeduct = Math.abs(difference)
-
-                // Ordenar por stock descendente para restar primero de los que tienen más
-                const sortedIndices = newWarehouseStocks
-                  .map((ws, idx) => ({ idx, stock: ws.stock || 0 }))
-                  .filter(item => item.stock > 0)
-                  .sort((a, b) => b.stock - a.stock)
-
-                for (const { idx } of sortedIndices) {
-                  if (remainingToDeduct <= 0) break
-
-                  const currentStock = newWarehouseStocks[idx].stock || 0
-                  const toDeduct = Math.min(currentStock, remainingToDeduct)
-
-                  newWarehouseStocks[idx] = {
-                    ...newWarehouseStocks[idx],
-                    stock: currentStock - toDeduct
-                  }
-
-                  remainingToDeduct -= toDeduct
-                }
               }
+            }
 
-              // Recalcular stock total desde warehouseStocks
-              const totalFromWarehouses = newWarehouseStocks.reduce(
-                (sum, ws) => sum + (ws.stock || 0), 0
-              )
+            // Recalcular stock total desde warehouseStocks
+            const totalFromWarehouses = newWarehouseStocks.reduce(
+              (sum, ws) => sum + (ws.stock || 0), 0
+            )
 
-              // Si hay diferencia, ajustar para que coincida con newStock
-              if (totalFromWarehouses !== newStock && newWarehouseStocks.length > 0) {
-                // Ajustar el almacén por defecto para que el total coincida
-                const adjustmentNeeded = newStock - totalFromWarehouses
-                const defIdx = newWarehouseStocks.findIndex(
-                  ws => ws.warehouseId === defaultWarehouse.id
-                )
-                if (defIdx >= 0) {
-                  newWarehouseStocks[defIdx].stock = Math.max(
-                    0,
-                    (newWarehouseStocks[defIdx].stock || 0) + adjustmentNeeded
-                  )
-                }
-              }
-
-              updateData.warehouseStocks = newWarehouseStocks
+            const updateData = {
+              stock: totalFromWarehouses,
+              warehouseStocks: newWarehouseStocks
             }
 
             result = await updateProduct(businessId, item.productId, updateData)
@@ -459,7 +445,9 @@ export default function InventoryCountModal({
               newStock: newStock,
               userId: userId,
               isIngredient: item.isIngredient,
-              notes: `Recuento físico: ${newStock}, Stock sistema: ${item.systemStock}, Diferencia: ${difference > 0 ? '+' : ''}${difference}`,
+              warehouseId: selectedWarehouse?.id || null,
+              warehouseName: selectedWarehouse?.name || 'General',
+              notes: `Recuento físico: ${newStock}, Stock sistema: ${item.systemStock}, Diferencia: ${difference > 0 ? '+' : ''}${difference} (Almacén: ${selectedWarehouse?.name || 'General'})`,
             })
             successCount++
           } else {
@@ -538,9 +526,69 @@ export default function InventoryCountModal({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title="Recuento de Inventario"
+        title={showWarehouseSelector ? "Seleccionar Almacén" : `Recuento: ${selectedWarehouse?.name || ''}`}
         size="full"
       >
+        {/* Pantalla de selección de almacén */}
+        {showWarehouseSelector ? (
+          <div className="flex flex-col items-center justify-center py-8 px-4">
+            <Warehouse className="w-16 h-16 text-primary-500 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">¿Qué almacén vas a contar?</h3>
+            <p className="text-gray-600 text-center mb-6 max-w-md">
+              Selecciona el almacén donde realizarás el recuento físico.
+              Solo se mostrará y actualizará el stock de ese almacén.
+            </p>
+
+            {warehouses.length === 0 ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center max-w-md">
+                <AlertTriangle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+                <p className="text-yellow-800 font-medium">No hay almacenes configurados</p>
+                <p className="text-yellow-700 text-sm mt-1">
+                  Configura al menos un almacén en la sección de Inventario para poder hacer recuentos.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 w-full max-w-md">
+                {warehouses.map(warehouse => {
+                  // Calcular stock total de este almacén
+                  const warehouseStock = products.reduce((sum, p) => {
+                    const ws = p.warehouseStocks?.find(w => w.warehouseId === warehouse.id)
+                    return sum + (ws?.stock || 0)
+                  }, 0)
+
+                  return (
+                    <button
+                      key={warehouse.id}
+                      onClick={() => handleSelectWarehouse(warehouse)}
+                      className="flex items-center justify-between p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-primary-500 hover:bg-primary-50 transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center group-hover:bg-primary-200">
+                          <Warehouse className="w-5 h-5 text-primary-600" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-semibold text-gray-900">{warehouse.name}</p>
+                          <p className="text-sm text-gray-500">{warehouseStock} unidades en stock</p>
+                        </div>
+                      </div>
+                      <div className="text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <ArrowLeft className="w-5 h-5 rotate-180" />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="mt-6"
+            >
+              Cancelar
+            </Button>
+          </div>
+        ) : (
         <div className="flex flex-col h-[calc(100vh-120px)] md:h-[calc(100vh-160px)]">
           {/* Header con estadísticas - Compacto en móvil */}
           <div className="bg-gray-50 p-2 md:p-4 rounded-lg mb-3 flex-shrink-0">
@@ -864,6 +912,7 @@ export default function InventoryCountModal({
             </div>
           </div>
         </div>
+        )}
       </Modal>
 
       {/* Modal de confirmación */}
