@@ -232,8 +232,8 @@ export default function CarrierDispatchGuides() {
             Emite guías de remisión como empresa transportista
           </p>
         </div>
-        <Button size="lg" className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700" onClick={handleCreateGuide}>
-          <Plus className="w-5 h-5 mr-2" />
+        <Button className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 border-orange-700" onClick={handleCreateGuide}>
+          <Plus className="w-4 h-4 mr-2" />
           Nueva GRE Transportista
         </Button>
       </div>
@@ -317,14 +317,14 @@ export default function CarrierDispatchGuides() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+            <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
             <input
               type="text"
               placeholder="Buscar por número, destino, placa o remitente..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
             />
           </div>
         </CardContent>
