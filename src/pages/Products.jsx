@@ -26,7 +26,7 @@ import {
 } from '@/services/firestoreService'
 import { generateProductsExcel } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
-import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse } from '@/services/warehouseService'
+import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
@@ -797,6 +797,44 @@ export default function Products() {
       } else {
         // Create
         result = await createProduct(getBusinessId(), productData)
+
+        // Si el producto tiene stock inicial, registrar movimiento de entrada
+        if (result.success && productData.trackStock && productData.initialStock > 0) {
+          const businessId = getBusinessId()
+
+          // Si hay stocks por almacén, crear un movimiento por cada almacén
+          if (productData.warehouseStocks && productData.warehouseStocks.length > 0) {
+            for (const ws of productData.warehouseStocks) {
+              if (ws.stock > 0) {
+                await createStockMovement(businessId, {
+                  productId: result.id,
+                  warehouseId: ws.warehouseId,
+                  type: 'entry',
+                  quantity: ws.stock,
+                  reason: 'Stock inicial',
+                  referenceType: 'initial_stock',
+                  referenceId: result.id,
+                  userId: user?.uid,
+                  notes: 'Ingreso de stock inicial al crear producto'
+                }).catch(err => console.error('Error al registrar movimiento de stock inicial:', err))
+              }
+            }
+          } else {
+            // Stock sin almacén específico - usar almacén por defecto
+            const defaultWarehouse = await getDefaultWarehouse(businessId)
+            await createStockMovement(businessId, {
+              productId: result.id,
+              warehouseId: defaultWarehouse?.id || '',
+              type: 'entry',
+              quantity: productData.initialStock,
+              reason: 'Stock inicial',
+              referenceType: 'initial_stock',
+              referenceId: result.id,
+              userId: user?.uid,
+              notes: 'Ingreso de stock inicial al crear producto'
+            }).catch(err => console.error('Error al registrar movimiento de stock inicial:', err))
+          }
+        }
       }
 
       if (result.success) {
