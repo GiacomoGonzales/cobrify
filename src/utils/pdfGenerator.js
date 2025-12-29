@@ -738,7 +738,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const dataLineHeight = 12
 
   // Calcular anchos de etiquetas para cada columna
-  const leftLabels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:']
+  const leftLabels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:', 'VENDEDOR:']
   const rightLabels = ['EMISIÓN:', 'MONEDA:', 'FORMA DE PAGO:', 'VENCIMIENTO:', 'OPERACIÓN:']
 
   doc.setFont('helvetica', 'bold')
@@ -826,6 +826,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text(addrLines[1], leftValueX, leftY)
   }
   leftY += dataLineHeight
+
+  // Vendedor (si existe)
+  if (invoice.sellerName) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('VENDEDOR:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(invoice.sellerName, leftValueX, leftY)
+    leftY += dataLineHeight
+  }
 
   // ===== COLUMNA DERECHA (Datos de la factura) =====
   let rightY = startY
