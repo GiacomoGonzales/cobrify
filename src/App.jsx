@@ -158,6 +158,7 @@ function App() {
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="compras/editar/:purchaseId" element={<CreatePurchase />} />
               <Route path="compras/migrar" element={<MigratePurchases />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
@@ -232,6 +233,7 @@ function App() {
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="compras/editar/:purchaseId" element={<CreatePurchase />} />
               <Route path="compras/migrar" element={<MigratePurchases />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />

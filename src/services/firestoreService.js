@@ -1082,6 +1082,28 @@ export const createPurchase = async (userId, purchaseData) => {
 }
 
 /**
+ * Obtener una compra por ID
+ */
+export const getPurchase = async (userId, purchaseId) => {
+  try {
+    const docRef = doc(db, 'businesses', userId, 'purchases', purchaseId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Compra no encontrada' }
+    }
+
+    return {
+      success: true,
+      data: { id: docSnap.id, ...docSnap.data() }
+    }
+  } catch (error) {
+    console.error('Error al obtener compra:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener compras de un usuario
  */
 export const getPurchases = async userId => {

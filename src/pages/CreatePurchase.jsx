@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -14,6 +14,8 @@ import {
   getSuppliers,
   getProducts,
   createPurchase,
+  updatePurchase,
+  getPurchase,
   updateProduct,
   createProduct,
   getProductCategories,
@@ -42,7 +44,13 @@ export default function CreatePurchase() {
   const { user } = useAuth()
   const { getBusinessId, businessMode } = useAppContext()
   const navigate = useNavigate()
+  const { purchaseId } = useParams() // Para modo edición
   const toast = useToast()
+
+  // Modo edición
+  const isEditMode = !!purchaseId
+  const [originalPurchase, setOriginalPurchase] = useState(null) // Datos originales para revertir stock
+
   const [suppliers, setSuppliers] = useState([])
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
@@ -99,7 +107,7 @@ export default function CreatePurchase() {
 
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, purchaseId])
 
   const loadData = async () => {
     const businessId = getBusinessId()
@@ -128,15 +136,18 @@ export default function CreatePurchase() {
         setCategories(categoriesResult.data || [])
       }
 
+      let activeWarehouses = []
       if (warehousesResult.success) {
         // Solo almacenes activos
-        const activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
+        activeWarehouses = (warehousesResult.data || []).filter(w => w.isActive !== false)
         setWarehouses(activeWarehouses)
 
-        // Seleccionar almacén por defecto de la sucursal principal
-        const mainBranchWarehouses = activeWarehouses.filter(w => !w.branchId)
-        const defaultWarehouse = mainBranchWarehouses.find(w => w.isDefault) || mainBranchWarehouses[0] || activeWarehouses[0] || null
-        setSelectedWarehouse(defaultWarehouse)
+        // Solo seleccionar almacén por defecto si NO estamos en modo edición
+        if (!isEditMode) {
+          const mainBranchWarehouses = activeWarehouses.filter(w => !w.branchId)
+          const defaultWarehouse = mainBranchWarehouses.find(w => w.isDefault) || mainBranchWarehouses[0] || activeWarehouses[0] || null
+          setSelectedWarehouse(defaultWarehouse)
+        }
       }
 
       if (ingredientsResult.success) {
@@ -145,6 +156,89 @@ export default function CreatePurchase() {
 
       if (branchesResult.success) {
         setBranches(branchesResult.data || [])
+      }
+
+      // Si estamos en modo edición, cargar los datos de la compra
+      if (isEditMode && purchaseId) {
+        const purchaseResult = await getPurchase(businessId, purchaseId)
+        if (purchaseResult.success && purchaseResult.data) {
+          const purchase = purchaseResult.data
+          setOriginalPurchase(purchase) // Guardar para revertir stock
+
+          // Cargar datos del proveedor
+          if (purchase.supplier) {
+            setSelectedSupplier(purchase.supplier)
+            setSupplierSearch(purchase.supplier.businessName || '')
+          }
+
+          // Cargar datos básicos
+          setInvoiceNumber(purchase.invoiceNumber || '')
+          if (purchase.invoiceDate) {
+            const invoiceDateObj = purchase.invoiceDate.toDate ? purchase.invoiceDate.toDate() : new Date(purchase.invoiceDate)
+            setInvoiceDate(getLocalDateString(invoiceDateObj))
+          }
+          setNotes(purchase.notes || '')
+
+          // Cargar tipo de pago
+          setPaymentType(purchase.paymentType || 'contado')
+          if (purchase.paymentType === 'credito') {
+            setCreditType(purchase.creditType || 'unico')
+            if (purchase.dueDate) {
+              const dueDateObj = purchase.dueDate.toDate ? purchase.dueDate.toDate() : new Date(purchase.dueDate)
+              setDueDate(getLocalDateString(dueDateObj))
+            }
+            if (purchase.installments) {
+              setInstallments(purchase.installments.map(inst => ({
+                ...inst,
+                dueDate: inst.dueDate?.toDate ? getLocalDateString(inst.dueDate.toDate()) : inst.dueDate
+              })))
+              setNumInstallments(purchase.installments.length)
+              if (purchase.installments[0]?.dueDate) {
+                const firstDate = purchase.installments[0].dueDate.toDate
+                  ? purchase.installments[0].dueDate.toDate()
+                  : new Date(purchase.installments[0].dueDate)
+                setFirstDueDate(getLocalDateString(firstDate))
+              }
+            }
+          }
+
+          // Cargar almacén
+          if (purchase.warehouseId && activeWarehouses.length > 0) {
+            const warehouse = activeWarehouses.find(w => w.id === purchase.warehouseId)
+            if (warehouse) {
+              setSelectedWarehouse(warehouse)
+            }
+          }
+
+          // Cargar items
+          if (purchase.items && purchase.items.length > 0) {
+            const loadedItems = purchase.items.map(item => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              cost: item.unitPrice, // El costo es el precio unitario de compra
+              costWithoutIGV: item.unitPrice > 0 ? Math.round((item.unitPrice / 1.18) * 100) / 100 : 0,
+              batchNumber: item.batchNumber || '',
+              expirationDate: item.expirationDate
+                ? (item.expirationDate.toDate ? getLocalDateString(item.expirationDate.toDate()) : getLocalDateString(new Date(item.expirationDate)))
+                : '',
+              itemType: item.itemType || 'product',
+              unit: item.unit || 'NIU'
+            }))
+            setPurchaseItems(loadedItems)
+
+            // También cargar las búsquedas de productos
+            const searches = {}
+            loadedItems.forEach((item, idx) => {
+              searches[idx] = item.productName
+            })
+            setProductSearches(searches)
+          }
+        } else {
+          toast.error('No se pudo cargar la compra')
+          navigate('/app/compras')
+        }
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -646,23 +740,88 @@ export default function CreatePurchase() {
         }),
       }
 
-      // 2. Guardar la compra
-      const result = await createPurchase(businessId, purchaseData)
-      if (!result.success) {
-        throw new Error(result.error || 'Error al crear la compra')
-      }
-
       // Separar items por tipo
       const productItems = purchaseItems.filter(item => item.itemType !== 'ingredient')
       const ingredientItems = purchaseItems.filter(item => item.itemType === 'ingredient')
+
+      let resultId = purchaseId // Para modo edición
+
+      // En modo edición, primero revertir el stock de los items originales
+      if (isEditMode && originalPurchase && originalPurchase.items) {
+        const originalProductItems = originalPurchase.items.filter(item => item.itemType !== 'ingredient')
+        const originalWarehouseId = originalPurchase.warehouseId || ''
+
+        // Revertir stock de productos originales (restar lo que se había sumado)
+        for (const origItem of originalProductItems) {
+          const product = products.find(p => p.id === origItem.productId)
+          if (product && product.trackStock !== false) {
+            const quantityToRevert = parseFloat(origItem.quantity)
+
+            // Restar stock usando el helper de almacén (cantidad negativa)
+            const updatedProduct = updateWarehouseStock(
+              product,
+              originalWarehouseId,
+              -quantityToRevert // Negativo porque estamos revirtiendo
+            )
+
+            await updateProduct(businessId, origItem.productId, {
+              stock: updatedProduct.stock,
+              warehouseStocks: updatedProduct.warehouseStocks
+            })
+
+            // Actualizar el producto en memoria para cálculos posteriores
+            const idx = products.findIndex(p => p.id === origItem.productId)
+            if (idx >= 0) {
+              products[idx] = { ...products[idx], ...updatedProduct }
+            }
+          }
+        }
+
+        // Registrar movimientos de reversión
+        for (const origItem of originalProductItems) {
+          const product = products.find(p => p.id === origItem.productId)
+          if (product && product.trackStock !== false) {
+            await createStockMovement(businessId, {
+              productId: origItem.productId,
+              warehouseId: originalWarehouseId,
+              type: 'exit',
+              quantity: parseFloat(origItem.quantity),
+              reason: 'Edición de compra (reversión)',
+              referenceType: 'purchase_edit',
+              referenceId: purchaseId,
+              userId: user?.uid,
+              notes: `Reversión por edición de compra`
+            }).catch(err => console.error('Error movimiento reversión:', err))
+          }
+        }
+      }
+
+      // 2. Guardar o actualizar la compra
+      let result
+      if (isEditMode) {
+        // En modo edición, mantener los campos de pago si ya fueron pagados
+        if (originalPurchase?.paymentStatus === 'paid') {
+          purchaseData.paymentStatus = 'paid'
+          purchaseData.paidAmount = originalPurchase.paidAmount
+        }
+        result = await updatePurchase(businessId, purchaseId, purchaseData)
+        if (!result.success) {
+          throw new Error(result.error || 'Error al actualizar la compra')
+        }
+        resultId = purchaseId
+      } else {
+        result = await createPurchase(businessId, purchaseData)
+        if (!result.success) {
+          throw new Error(result.error || 'Error al crear la compra')
+        }
+        resultId = result.id
+      }
 
       // 3. Actualizar stock y costo promedio de PRODUCTOS
       const productUpdates = productItems.map(async item => {
         const product = products.find(p => p.id === item.productId)
         if (product) {
           // Solo actualizar si el producto maneja stock (trackStock !== false)
-          // Si trackStock es undefined o true, sí actualizar
-          // Si trackStock es false, NO actualizar
           if (product.trackStock === false) return
 
           const newQuantity = parseFloat(item.quantity)
@@ -682,14 +841,13 @@ export default function CreatePurchase() {
 
           let averageCost = newCost
           if (currentStock > 0 && currentCost > 0) {
-            // Costo promedio ponderado = (Stock actual * Costo actual + Compra nueva * Costo nuevo) / Stock total
             averageCost = ((currentStock * currentCost) + (newQuantity * newCost)) / totalStock
           }
 
           const updates = {
             stock: updatedProduct.stock,
             warehouseStocks: updatedProduct.warehouseStocks,
-            cost: averageCost, // Actualizar con costo promedio ponderado
+            cost: averageCost,
             ...(selectedSupplier && {
               lastSupplier: {
                 id: selectedSupplier.id,
@@ -700,37 +858,31 @@ export default function CreatePurchase() {
           }
 
           // Sistema de múltiples lotes para farmacia
-          // Si hay lote y/o fecha de vencimiento, agregar al array de batches
           if (item.batchNumber || item.expirationDate) {
             const currentBatches = product.batches || []
 
-            // Crear nuevo lote
             const newBatch = {
               id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               batchNumber: item.batchNumber || '',
               quantity: newQuantity,
               expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
-              purchaseId: result.id || null,
+              purchaseId: resultId || null,
               purchaseDate: new Date(invoiceDate),
               costPrice: newCost,
               createdAt: new Date()
             }
 
-            // Agregar al array de lotes
             const updatedBatches = [...currentBatches, newBatch]
             updates.batches = updatedBatches
             updates.trackExpiration = true
 
-            // Calcular el vencimiento más próximo de todos los lotes con stock > 0
             const activeBatches = updatedBatches.filter(b => b.quantity > 0 && b.expirationDate)
             if (activeBatches.length > 0) {
-              // Ordenar por fecha de vencimiento ascendente
               activeBatches.sort((a, b) => {
                 const dateA = a.expirationDate.toDate ? a.expirationDate.toDate() : new Date(a.expirationDate)
                 const dateB = b.expirationDate.toDate ? b.expirationDate.toDate() : new Date(b.expirationDate)
                 return dateA - dateB
               })
-              // El primer lote es el que vence primero
               const nearestBatch = activeBatches[0]
               updates.expirationDate = nearestBatch.expirationDate
               updates.batchNumber = nearestBatch.batchNumber
@@ -753,46 +905,47 @@ export default function CreatePurchase() {
           productId: item.productId,
           warehouseId: selectedWarehouse?.id || '',
           type: 'entry',
-          quantity: parseFloat(item.quantity), // Positivo porque es entrada
-          reason: 'Compra',
+          quantity: parseFloat(item.quantity),
+          reason: isEditMode ? 'Compra (editada)' : 'Compra',
           referenceType: 'purchase',
-          referenceId: result.id || '',
+          referenceId: resultId || '',
           userId: user?.uid,
-          notes: `Compra - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}`
+          notes: `${isEditMode ? 'Compra editada' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}`
         })
       })
 
-      // Ejecutar creación de movimientos (no bloquear si falla)
       Promise.all(stockMovementPromises).catch(err => {
         console.error('Error al registrar movimientos de stock:', err)
       })
 
-      // 4. Actualizar stock de INGREDIENTES usando el servicio de ingredientes
-      const ingredientUpdates = ingredientItems.map(async item => {
-        return registerIngredientPurchase(businessId, {
-          ingredientId: item.productId,
-          ingredientName: item.productName,
-          quantity: parseFloat(item.quantity),
-          unit: item.unit || 'NIU',
-          unitPrice: parseFloat(item.cost),
-          totalCost: parseFloat(item.quantity) * parseFloat(item.cost),
-          supplier: selectedSupplier?.businessName || '',
-          invoiceNumber: invoiceNumber.trim() || ''
+      // 4. Actualizar stock de INGREDIENTES (solo en creación, no en edición por complejidad)
+      if (!isEditMode) {
+        const ingredientUpdates = ingredientItems.map(async item => {
+          return registerIngredientPurchase(businessId, {
+            ingredientId: item.productId,
+            ingredientName: item.productName,
+            quantity: parseFloat(item.quantity),
+            unit: item.unit || 'NIU',
+            unitPrice: parseFloat(item.cost),
+            totalCost: parseFloat(item.quantity) * parseFloat(item.cost),
+            supplier: selectedSupplier?.businessName || '',
+            invoiceNumber: invoiceNumber.trim() || ''
+          })
         })
-      })
 
-      await Promise.all(ingredientUpdates)
+        await Promise.all(ingredientUpdates)
+      }
 
-      // 4. Mostrar éxito y redirigir
-      toast.success('Compra registrada exitosamente. Stock y costos actualizados')
+      // 5. Mostrar éxito y redirigir
+      toast.success(isEditMode ? 'Compra actualizada exitosamente' : 'Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
         navigate('/app/compras')
       }, 1500)
     } catch (error) {
-      console.error('Error al crear compra:', error)
+      console.error('Error al guardar compra:', error)
       setMessage({
         type: 'error',
-        text: error.message || 'Error al crear la compra. Inténtalo nuevamente.',
+        text: error.message || (isEditMode ? 'Error al actualizar la compra.' : 'Error al crear la compra. Inténtalo nuevamente.'),
       })
     } finally {
       setIsSaving(false)
@@ -823,9 +976,13 @@ export default function CreatePurchase() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Volver
           </Button>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Nueva Compra</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            {isEditMode ? 'Editar Compra' : 'Nueva Compra'}
+          </h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Registra la factura del proveedor y actualiza el inventario
+            {isEditMode
+              ? 'Modifica los datos de la compra y el stock se actualizará automáticamente'
+              : 'Registra la factura del proveedor y actualiza el inventario'}
           </p>
         </div>
       </div>
@@ -1648,12 +1805,12 @@ export default function CreatePurchase() {
                 {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Guardando...
+                    {isEditMode ? 'Actualizando...' : 'Guardando...'}
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Guardar Compra
+                    {isEditMode ? 'Actualizar Compra' : 'Guardar Compra'}
                   </>
                 )}
               </Button>

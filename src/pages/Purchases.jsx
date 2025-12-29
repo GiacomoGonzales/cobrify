@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus,
   Search,
   Eye,
+  Edit2,
   Trash2,
   Loader2,
   ShoppingBag,
@@ -36,6 +37,7 @@ import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduc
 export default function Purchases() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
+  const navigate = useNavigate()
   const [purchases, setPurchases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -874,6 +876,15 @@ export default function Purchases() {
                           title="Ver detalles"
                         >
                           <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/app/compras/editar/${purchase.id}`)}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          title="Editar"
+                        >
+                          <Edit2 className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
