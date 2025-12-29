@@ -261,7 +261,62 @@ export default function CreateCreditNote() {
           pendingCreditNoteTotal: total
         })
 
-        setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente' })
+        // Devolver stock si es una devolución o anulación (códigos 01, 06, 07)
+        const stockReturnCodes = ['01', '06', '07']
+        if (stockReturnCodes.includes(formData.discrepancyCode)) {
+          try {
+            const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
+            const { getProducts, updateProduct } = await import('@/services/firestoreService')
+
+            const productsResult = await getProducts(user.uid)
+            const products = productsResult.success ? productsResult.data : []
+            const warehouseId = selectedInvoice.warehouseId || ''
+
+            // Solo devolver los items seleccionados en la nota de crédito
+            const itemsToReturn = formData.items.filter(item => item.selected)
+
+            for (const item of itemsToReturn) {
+              if (item.productId) {
+                const productData = products.find(p => p.id === item.productId)
+                if (!productData) continue
+                if (productData.trackStock === false || productData.stock === null) continue
+
+                const quantityToRestore = item.quantity * (item.presentationFactor || 1)
+
+                const updatedProduct = updateWarehouseStock(
+                  productData,
+                  warehouseId,
+                  quantityToRestore
+                )
+
+                await updateProduct(user.uid, item.productId, {
+                  stock: updatedProduct.stock,
+                  warehouseStocks: updatedProduct.warehouseStocks
+                })
+
+                await createStockMovement(user.uid, {
+                  productId: item.productId,
+                  warehouseId: warehouseId,
+                  type: 'entry',
+                  quantity: quantityToRestore,
+                  reason: 'Nota de crédito',
+                  referenceType: 'credit_note',
+                  referenceId: result.id,
+                  referenceNumber: creditNoteNumber,
+                  userId: user.uid,
+                  notes: `Stock devuelto por NC ${creditNoteNumber} - ${formData.discrepancyReason}`
+                })
+
+                console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
+              }
+            }
+          } catch (stockError) {
+            console.warn('Error al devolver stock:', stockError)
+            // No fallar la operación si hay error de stock
+          }
+        }
+
+        setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente. Stock restaurado.' })
         setTimeout(() => navigate('/app/facturas'), 2000)
       } else {
         throw new Error(result.error)
