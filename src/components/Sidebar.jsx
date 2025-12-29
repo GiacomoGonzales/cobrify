@@ -144,7 +144,7 @@ function Sidebar() {
       path: '/inventario',
       icon: ClipboardList,
       label: 'Inventario',
-      pageId: 'products', // Mismo permiso que productos
+      pageId: 'inventory', // Permiso propio de inventario
       menuId: 'inventory',
     },
     {
@@ -286,7 +286,7 @@ function Sidebar() {
       path: '/inventario',
       icon: ClipboardList,
       label: 'Inventario',
-      pageId: 'products',
+      pageId: 'inventory', // Permiso propio de inventario
       menuId: 'inventory',
     },
     {
@@ -300,7 +300,7 @@ function Sidebar() {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
-      pageId: 'suppliers',
+      pageId: 'purchases', // Relacionado con compras
       menuId: 'suppliers',
     },
     {
