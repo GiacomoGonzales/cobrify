@@ -528,7 +528,57 @@ Gracias por tu preferencia.`
       )
 
       if (result.success || result.status === 'voided') {
-        toast.success(`${docTypeName} anulada exitosamente en SUNAT`)
+        // Devolver el stock de los productos (igual que notas de venta)
+        if (voidingSunatInvoice.items && voidingSunatInvoice.items.length > 0) {
+          const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
+          const { getProducts, updateProduct } = await import('@/services/firestoreService')
+
+          const productsResult = await getProducts(businessId)
+          const products = productsResult.success ? productsResult.data : []
+          const warehouseId = voidingSunatInvoice.warehouseId || ''
+
+          for (const item of voidingSunatInvoice.items) {
+            if (item.productId) {
+              try {
+                const productData = products.find(p => p.id === item.productId)
+                if (!productData) continue
+                if (productData.trackStock === false || productData.stock === null) continue
+
+                const quantityToRestore = item.quantity * (item.presentationFactor || 1)
+
+                const updatedProduct = updateWarehouseStock(
+                  productData,
+                  warehouseId,
+                  quantityToRestore
+                )
+
+                await updateProduct(businessId, item.productId, {
+                  stock: updatedProduct.stock,
+                  warehouseStocks: updatedProduct.warehouseStocks
+                })
+
+                await createStockMovement(businessId, {
+                  productId: item.productId,
+                  warehouseId: warehouseId,
+                  type: 'entry',
+                  quantity: quantityToRestore,
+                  reason: `Anulación de ${docTypeName.toLowerCase()}`,
+                  referenceType: 'sunat_void',
+                  referenceId: voidingSunatInvoice.id,
+                  referenceNumber: voidingSunatInvoice.number,
+                  userId: user.uid,
+                  notes: `Stock devuelto por anulación SUNAT de ${voidingSunatInvoice.number}`
+                })
+
+                console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
+              } catch (stockError) {
+                console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
+              }
+            }
+          }
+        }
+
+        toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
         loadInvoices()
