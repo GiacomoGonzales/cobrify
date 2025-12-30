@@ -1115,7 +1115,7 @@ export default function Products() {
     }
   }
 
-  const handleImportProducts = async (productsToImport, targetBranchId = null) => {
+  const handleImportProducts = async (productsToImport, targetWarehouseId = null) => {
     if (!user?.uid) return { success: 0, errors: ['Usuario no autenticado'] }
 
     const errors = []
@@ -1124,96 +1124,40 @@ export default function Products() {
     try {
       // Obtener almacenes existentes
       const warehousesResult = await getWarehouses(getBusinessId())
-      let existingWarehouses = warehousesResult.success ? warehousesResult.data : []
+      const existingWarehouses = warehousesResult.success ? warehousesResult.data : []
 
-      // Filtrar almacenes por sucursal seleccionada
-      const branchWarehouses = existingWarehouses.filter(wh => {
-        const whBranchId = wh.branchId || null
-        return whBranchId === targetBranchId
-      })
+      // Obtener el almacén destino
+      let targetWarehouse = null
 
-      // Crear un mapa de almacenes por nombre para búsqueda rápida (solo de la sucursal seleccionada)
-      const warehouseMap = new Map()
-      branchWarehouses.forEach(wh => {
-        warehouseMap.set(wh.name.toLowerCase().trim(), wh)
-      })
-
-      // Identificar almacenes únicos que necesitan ser creados
-      const uniqueWarehouseNames = new Set()
-      for (const product of productsToImport) {
-        if (product.warehouse && product.warehouse.trim() !== '') {
-          const warehouseName = product.warehouse.trim()
-          const warehouseKey = warehouseName.toLowerCase()
-
-          // Si no existe en el mapa, agregarlo al set de nuevos
-          if (!warehouseMap.has(warehouseKey)) {
-            uniqueWarehouseNames.add(warehouseName)
-          }
-        }
+      if (targetWarehouseId) {
+        // Usar el almacén seleccionado en el modal
+        targetWarehouse = existingWarehouses.find(wh => wh.id === targetWarehouseId)
       }
 
-      // Crear almacenes nuevos (asociados a la sucursal seleccionada)
-      if (uniqueWarehouseNames.size > 0) {
-        for (const warehouseName of uniqueWarehouseNames) {
-          const newWarehouse = {
-            name: warehouseName,
-            location: warehouseName,
-            description: `Almacén creado automáticamente durante importación de productos`,
-            isDefault: branchWarehouses.length === 0, // Solo el primero es default si no hay almacenes en la sucursal
-            isActive: true,
-            branchId: targetBranchId // Asociar a la sucursal seleccionada
-          }
-
-          const createResult = await createWarehouse(getBusinessId(), newWarehouse)
-
-          if (createResult.success) {
-            const createdWarehouse = createResult.data
-            existingWarehouses.push(createdWarehouse)
-            branchWarehouses.push(createdWarehouse)
-            warehouseMap.set(warehouseName.toLowerCase().trim(), createdWarehouse)
-            console.log('✅ Almacén creado:', createdWarehouse)
-          } else {
-            console.error('❌ Error al crear almacén:', createResult.error)
-          }
-        }
-
-        if (uniqueWarehouseNames.size > 0) {
-          toast.info(`${uniqueWarehouseNames.size} almacén(es) creado(s) automáticamente`)
-        }
+      // Si no se encontró, usar el almacén por defecto
+      if (!targetWarehouse) {
+        targetWarehouse = existingWarehouses.find(wh => wh.isDefault) || existingWarehouses[0]
       }
 
-      // Obtener almacén predeterminado como fallback (de la sucursal seleccionada)
-      let defaultWarehouse = null
-
-      // Buscar almacén default de la sucursal seleccionada
-      defaultWarehouse = branchWarehouses.find(wh => wh.isDefault) || branchWarehouses[0]
-
-      if (!defaultWarehouse && branchWarehouses.length === 0) {
-        // NO HAY ALMACENES en esta sucursal - Crear uno automáticamente como fallback
-        console.log('No se encontró ningún almacén en la sucursal, creando almacén...')
-
-        const branchName = targetBranchId
-          ? (await getActiveBranches(getBusinessId())).data?.find(b => b.id === targetBranchId)?.name || 'Sucursal'
-          : 'Principal'
+      // Si aún no hay almacén, crear uno automáticamente
+      if (!targetWarehouse && existingWarehouses.length === 0) {
+        console.log('No se encontró ningún almacén, creando almacén principal...')
 
         const newWarehouse = {
-          name: `Almacén ${branchName}`,
-          location: branchName,
+          name: 'Almacén Principal',
+          location: 'Principal',
           description: 'Almacén creado automáticamente durante importación de productos',
           isDefault: true,
           isActive: true,
-          branchId: targetBranchId // Asociar a la sucursal seleccionada
+          branchId: null
         }
 
         const createResult = await createWarehouse(getBusinessId(), newWarehouse)
 
         if (createResult.success) {
-          defaultWarehouse = createResult.data
-          existingWarehouses.push(defaultWarehouse)
-          branchWarehouses.push(defaultWarehouse)
-          warehouseMap.set(newWarehouse.name.toLowerCase(), defaultWarehouse)
-          toast.info(`Almacén "${newWarehouse.name}" creado automáticamente`)
-          console.log('✅ Almacén creado:', defaultWarehouse)
+          targetWarehouse = createResult.data
+          toast.info(`Almacén "Almacén Principal" creado automáticamente`)
+          console.log('✅ Almacén creado:', targetWarehouse)
         } else {
           console.error('❌ Error al crear almacén:', createResult.error)
           toast.warning('No se pudo crear almacén automático. Los productos se importarán sin stock asignado.')
@@ -1283,15 +1227,7 @@ export default function Products() {
             }
           }
 
-          // Determinar el almacén destino
-          let targetWarehouse = null
-          if (product.warehouse && product.warehouse.trim() !== '') {
-            const warehouseKey = product.warehouse.trim().toLowerCase()
-            targetWarehouse = warehouseMap.get(warehouseKey)
-          }
-          if (!targetWarehouse && defaultWarehouse) {
-            targetWarehouse = defaultWarehouse
-          }
+          // El almacén destino ya está definido al inicio (targetWarehouse)
 
           // Buscar si el producto ya existe (por SKU o código de barras)
           let existingProduct = null

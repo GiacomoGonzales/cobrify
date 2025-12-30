@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
-import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Store } from 'lucide-react'
+import { Upload, Download, X, AlertCircle, CheckCircle, Loader2, Warehouse } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
-import { getActiveBranches } from '@/services/branchService'
+import { getWarehouses } from '@/services/warehouseService'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport }) {
   const { businessMode, getBusinessId } = useAppContext()
@@ -16,27 +16,33 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
   const [previewData, setPreviewData] = useState([])
   const [errors, setErrors] = useState([])
   const [success, setSuccess] = useState(0)
-  const [branches, setBranches] = useState([])
-  const [selectedBranchId, setSelectedBranchId] = useState('') // '' = Sucursal Principal
+  const [warehouses, setWarehouses] = useState([])
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
 
-  // Cargar sucursales al abrir el modal
+  // Cargar almacenes al abrir el modal
   useEffect(() => {
     if (isOpen) {
-      loadBranches()
+      loadWarehouses()
     }
   }, [isOpen])
 
-  const loadBranches = async () => {
+  const loadWarehouses = async () => {
     try {
       const businessId = getBusinessId()
       if (!businessId) return
 
-      const result = await getActiveBranches(businessId)
+      const result = await getWarehouses(businessId)
       if (result.success) {
-        setBranches(result.data || [])
+        const activeWarehouses = (result.data || []).filter(w => w.isActive !== false)
+        setWarehouses(activeWarehouses)
+        // Seleccionar almacén por defecto automáticamente
+        const defaultWarehouse = activeWarehouses.find(w => w.isDefault) || activeWarehouses[0]
+        if (defaultWarehouse) {
+          setSelectedWarehouseId(defaultWarehouse.id)
+        }
       }
     } catch (error) {
-      console.error('Error al cargar sucursales:', error)
+      console.error('Error al cargar almacenes:', error)
     }
   }
 
@@ -150,7 +156,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
-        warehouse: String(row.almacen || row.Almacen || row.ALMACEN || row.warehouse || row.Warehouse || row.WAREHOUSE || row.bodega || row.Bodega || row.BODEGA || '').trim(),
         trackStock: trackStock,
         hasVariants: false,
         variantAttributes: [],
@@ -242,9 +247,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     setSuccess(0)
 
     try {
-      // Pasar branchId seleccionado (null para Sucursal Principal)
-      const branchId = selectedBranchId || null
-      const result = await onImport(previewData, branchId)
+      // Pasar warehouseId seleccionado
+      const warehouseId = selectedWarehouseId || null
+      const result = await onImport(previewData, warehouseId)
       setSuccess(result.success || previewData.length)
 
       if (result.errors && result.errors.length > 0) {
@@ -271,7 +276,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
     setPreviewData([])
     setErrors([])
     setSuccess(0)
-    setSelectedBranchId('')
+    setSelectedWarehouseId('')
   }
 
   const handleClose = () => {
@@ -309,7 +314,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Analgésicos',
-          almacen: 'Almacén Principal',
           afectacion_igv: 'GRAVADO'
         },
         {
@@ -335,7 +339,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Antibióticos',
-          almacen: 'Almacén Principal',
           afectacion_igv: 'GRAVADO'
         },
         {
@@ -361,7 +364,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Psicotrópicos',
-          almacen: 'Almacén Principal',
           afectacion_igv: 'EXONERADO'
         }
       ]
@@ -382,7 +384,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Categoría Ejemplo',
-          almacen: 'Almacén Principal',
           afectacion_igv: 'GRAVADO'
         },
         {
@@ -399,7 +400,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'NO',
           unidad: 'SERVICIO',
           categoria: 'Servicios',
-          almacen: '',
           afectacion_igv: 'EXONERADO'
         },
         {
@@ -416,7 +416,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: '',
-          almacen: 'Almacén Sucursal 2',
           afectacion_igv: 'INAFECTO'
         }
       ]
@@ -469,7 +468,6 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 12 }, // trackStock
         { wch: 12 }, // unidad
         { wch: 20 }, // categoria
-        { wch: 25 }, // almacen
         { wch: 15 }  // afectacion_igv
       ]
     }
@@ -520,27 +518,26 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           </button>
         </div>
 
-        {/* Selector de Sucursal */}
-        {branches.length > 0 && (
+        {/* Selector de Almacén */}
+        {warehouses.length > 0 && (
           <div className="mb-6 p-4 bg-cyan-50 border border-cyan-200 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
-              <Store className="w-5 h-5 text-cyan-600" />
+              <Warehouse className="w-5 h-5 text-cyan-600" />
               <label className="text-sm font-medium text-gray-900">
-                Sucursal destino para los productos
+                Almacén destino para los productos
               </label>
             </div>
             <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
+              value={selectedWarehouseId}
+              onChange={(e) => setSelectedWarehouseId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm"
             >
-              <option value="">Sucursal Principal</option>
-              {branches.map(branch => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              {warehouses.map(warehouse => (
+                <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-2">
-              Los almacenes se crearán/asociarán a esta sucursal. Si el producto ya existe, se actualizará el stock en el almacén de esta sucursal.
+              El stock de los productos importados se asignará a este almacén.
             </p>
           </div>
         )}
@@ -555,7 +552,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             Descargar plantilla de ejemplo
           </button>
           <p className="text-xs text-gray-500 mt-1">
-            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2, precio3, precio4, stock, trackStock (SI/NO), unidad, categoria, almacen, afectacion_igv
+            Columnas: sku, codigo_barras, nombre, descripcion, costo, precio, precio2, precio3, precio4, stock, trackStock (SI/NO), unidad, categoria, afectacion_igv
           </p>
         </div>
 
