@@ -22,7 +22,9 @@ export const useYapeListener = () => {
   const [hasPermission, setHasPermission] = useState(false)
   const [yapeConfig, setYapeConfig] = useState(null)
   const listenerHandleRef = useRef(null)
-  const isNative = Capacitor.isNativePlatform()
+  // Solo Android puede detectar notificaciones de otras apps
+  // iOS no permite esto por seguridad
+  const isAndroid = Capacitor.getPlatform() === 'android'
 
   // Cargar configuración de Yape
   useEffect(() => {
@@ -50,7 +52,7 @@ export const useYapeListener = () => {
     }
 
     const initYapeListener = async () => {
-      if (!isNative || !user?.uid || !yapeConfig) return
+      if (!isAndroid || !user?.uid || !yapeConfig) return
 
       // Solo iniciar si está habilitado en la configuración
       if (!yapeConfig.enabled || !yapeConfig.autoStartListening) {
@@ -97,13 +99,13 @@ export const useYapeListener = () => {
         setIsListening(false)
       }
     }
-  }, [isNative, user?.uid, yapeConfig?.enabled, yapeConfig?.autoStartListening])
+  }, [isAndroid, user?.uid, yapeConfig?.enabled, yapeConfig?.autoStartListening])
 
   return {
     isListening,
     hasPermission,
     yapeConfig,
-    isNative
+    isAndroid
   }
 }
 
