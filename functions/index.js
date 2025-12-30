@@ -5429,6 +5429,7 @@ export const voidInvoiceQPse = onRequest(
 export { onNewSale } from './notifications/onNewSale.js'
 export { onProductStockChange } from './notifications/onStockLow.js'
 export { onYapePayment } from './notifications/onYapePayment.js'
+export { saveYapePaymentNative } from './notifications/saveYapePaymentNative.js'
 
 // Import and re-export migration function
 export { migratePurchasesHTTP } from './migratePurchases.js'

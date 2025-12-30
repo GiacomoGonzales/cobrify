@@ -6,9 +6,13 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ComponentName;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -26,39 +30,82 @@ public class NotificationListenerPlugin extends Plugin {
     private static final String TAG = "NotificationListener";
     private NotificationReceiver receiver;
     private boolean isListening = false;
+    private Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    @Override
+    public void load() {
+        super.load();
+        Log.d(TAG, "🔌 NotificationListenerPlugin CARGADO");
+    }
 
     /**
      * Inicia la escucha de notificaciones
      */
     @PluginMethod
     public void startListening(PluginCall call) {
+        Log.d(TAG, "📢 startListening llamado, isListening=" + isListening);
+
         if (isListening) {
-            call.resolve();
+            JSObject result = new JSObject();
+            result.put("success", true);
+            result.put("alreadyListening", true);
+            call.resolve(result);
             return;
         }
 
         try {
+            // Método 1: Registrar callback directo con NotificationService
+            NotificationService.setCallback(new NotificationService.NotificationCallback() {
+                @Override
+                public void onYapeNotification(String packageName, String title, String text, long timestamp) {
+                    Log.d(TAG, "🎯 Callback recibido! Paquete: " + packageName);
+                    // Ejecutar en el hilo principal
+                    mainHandler.post(() -> {
+                        sendNotificationToJS(packageName, title, text, timestamp);
+                    });
+                }
+            });
+            Log.d(TAG, "✅ Callback directo registrado");
+
+            // Método 2: LocalBroadcastManager (backup)
             receiver = new NotificationReceiver();
             IntentFilter filter = new IntentFilter();
             filter.addAction(NotificationService.ACTION_NOTIFICATION_POSTED);
             filter.addAction(NotificationService.ACTION_NOTIFICATION_REMOVED);
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                getContext().registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
-            } else {
-                getContext().registerReceiver(receiver, filter);
-            }
+            LocalBroadcastManager.getInstance(getContext()).registerReceiver(receiver, filter);
+            Log.d(TAG, "✅ LocalBroadcastManager registrado");
 
             isListening = true;
-            Log.d(TAG, "Escucha de notificaciones iniciada");
+            Log.d(TAG, "🎧 Escucha de notificaciones INICIADA");
 
             JSObject result = new JSObject();
             result.put("success", true);
             call.resolve(result);
         } catch (Exception e) {
-            Log.e(TAG, "Error al iniciar escucha: " + e.getMessage());
+            Log.e(TAG, "❌ Error al iniciar escucha: " + e.getMessage(), e);
             call.reject("Error al iniciar escucha de notificaciones", e);
         }
+    }
+
+    /**
+     * Envía la notificación a JavaScript
+     */
+    private void sendNotificationToJS(String packageName, String title, String text, long timestamp) {
+        JSObject notification = new JSObject();
+        notification.put("packageName", packageName);
+        notification.put("title", title);
+        notification.put("text", text);
+        notification.put("timestamp", timestamp);
+
+        // Detectar si es una notificación de Yape
+        boolean isYape = packageName != null && packageName.contains("yape");
+        notification.put("isYape", isYape);
+
+        Log.d(TAG, "📨 Enviando a JS: " + packageName + " - " + title);
+
+        // Enviar evento a JavaScript
+        notifyListeners("notificationReceived", notification);
     }
 
     /**
@@ -66,22 +113,33 @@ public class NotificationListenerPlugin extends Plugin {
      */
     @PluginMethod
     public void stopListening(PluginCall call) {
-        if (!isListening || receiver == null) {
-            call.resolve();
+        Log.d(TAG, "🛑 stopListening llamado");
+
+        if (!isListening) {
+            JSObject result = new JSObject();
+            result.put("success", true);
+            call.resolve(result);
             return;
         }
 
         try {
-            getContext().unregisterReceiver(receiver);
-            receiver = null;
+            // Remover callback
+            NotificationService.setCallback(null);
+
+            // Remover receiver
+            if (receiver != null) {
+                LocalBroadcastManager.getInstance(getContext()).unregisterReceiver(receiver);
+                receiver = null;
+            }
+
             isListening = false;
-            Log.d(TAG, "Escucha de notificaciones detenida");
+            Log.d(TAG, "🛑 Escucha de notificaciones DETENIDA");
 
             JSObject result = new JSObject();
             result.put("success", true);
             call.resolve(result);
         } catch (Exception e) {
-            Log.e(TAG, "Error al detener escucha: " + e.getMessage());
+            Log.e(TAG, "❌ Error al detener escucha: " + e.getMessage(), e);
             call.reject("Error al detener escucha de notificaciones", e);
         }
     }
@@ -141,7 +199,7 @@ public class NotificationListenerPlugin extends Plugin {
     }
 
     /**
-     * Receiver interno para recibir los broadcasts del NotificationService
+     * Receiver interno para recibir los broadcasts del NotificationService (backup)
      */
     private class NotificationReceiver extends BroadcastReceiver {
         @Override
@@ -149,7 +207,7 @@ public class NotificationListenerPlugin extends Plugin {
             String action = intent.getAction();
             if (action == null) return;
 
-            Log.d(TAG, "Broadcast recibido: " + action);
+            Log.d(TAG, "📻 Broadcast recibido via LocalBroadcastManager: " + action);
 
             if (NotificationService.ACTION_NOTIFICATION_POSTED.equals(action)) {
                 String packageName = intent.getStringExtra(NotificationService.EXTRA_PACKAGE);
@@ -157,30 +215,23 @@ public class NotificationListenerPlugin extends Plugin {
                 String text = intent.getStringExtra(NotificationService.EXTRA_TEXT);
                 long timestamp = intent.getLongExtra(NotificationService.EXTRA_TIMESTAMP, 0);
 
-                JSObject notification = new JSObject();
-                notification.put("packageName", packageName);
-                notification.put("title", title);
-                notification.put("text", text);
-                notification.put("timestamp", timestamp);
+                Log.d(TAG, "📻 Notificación via broadcast: " + packageName + " - " + title);
 
-                // Detectar si es una notificación de Yape
-                boolean isYape = packageName != null && packageName.contains("yape");
-                notification.put("isYape", isYape);
-
-                Log.d(TAG, "Notificación: " + packageName + " - " + title + " - " + text);
-
-                // Enviar evento a JavaScript
-                notifyListeners("notificationReceived", notification);
+                sendNotificationToJS(packageName, title, text, timestamp);
             }
         }
     }
 
     @Override
     protected void handleOnDestroy() {
-        if (isListening && receiver != null) {
-            try {
-                getContext().unregisterReceiver(receiver);
-            } catch (Exception ignored) {}
+        Log.d(TAG, "💀 Plugin siendo destruido");
+        if (isListening) {
+            NotificationService.setCallback(null);
+            if (receiver != null) {
+                try {
+                    LocalBroadcastManager.getInstance(getContext()).unregisterReceiver(receiver);
+                } catch (Exception ignored) {}
+            }
         }
         super.handleOnDestroy();
     }

@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
-import { ArrowLeft, Bell, CheckCircle, XCircle, Settings, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Bell, CheckCircle, XCircle, Settings, RefreshCw, Play, Square, Zap } from 'lucide-react'
 import {
   isPermissionGranted,
-  requestPermission
+  requestPermission,
+  startListening,
+  stopListening,
+  addNotificationListener,
+  parseYapeNotification
 } from '@/plugins/notificationListener'
 import { useAppContext } from '@/hooks/useAppContext'
 import { getYapeConfig, getPendingYapePayments } from '@/services/yapeService'
@@ -12,6 +16,7 @@ import { getYapeConfig, getPendingYapePayments } from '@/services/yapeService'
 /**
  * Página de estado del detector de Yape
  * Muestra si está configurado correctamente y los pagos recientes
+ * Incluye listener en tiempo real para debugging
  */
 export default function NotificationTest() {
   const navigate = useNavigate()
@@ -21,6 +26,11 @@ export default function NotificationTest() {
   const [recentPayments, setRecentPayments] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Estado para debugging en tiempo real
+  const [isListeningNow, setIsListeningNow] = useState(false)
+  const [liveNotifications, setLiveNotifications] = useState([])
+  const listenerHandleRef = useRef(null)
 
   const isNative = Capacitor.isNativePlatform()
 
@@ -67,6 +77,61 @@ export default function NotificationTest() {
       setError('Error al solicitar permiso: ' + err.message)
     }
   }
+
+  // Iniciar listener de debugging en tiempo real
+  const handleStartListening = async () => {
+    if (!isNative) {
+      setError('Solo funciona en Android (APK)')
+      return
+    }
+
+    try {
+      console.log('🎧 Iniciando listener de debugging...')
+      await startListening()
+
+      const handle = await addNotificationListener((notification) => {
+        console.log('📬 Notificación recibida:', notification)
+
+        // Agregar a la lista de notificaciones en tiempo real
+        setLiveNotifications(prev => [{
+          ...notification,
+          receivedAt: new Date().toLocaleTimeString(),
+          parsed: parseYapeNotification(notification)
+        }, ...prev].slice(0, 20)) // Mantener últimas 20
+      })
+
+      listenerHandleRef.current = handle
+      setIsListeningNow(true)
+      console.log('✅ Listener de debugging iniciado')
+    } catch (err) {
+      console.error('❌ Error al iniciar listener:', err)
+      setError('Error al iniciar listener: ' + err.message)
+    }
+  }
+
+  // Detener listener de debugging
+  const handleStopListening = async () => {
+    try {
+      if (listenerHandleRef.current) {
+        await listenerHandleRef.current.remove()
+        listenerHandleRef.current = null
+      }
+      await stopListening()
+      setIsListeningNow(false)
+      console.log('🛑 Listener de debugging detenido')
+    } catch (err) {
+      console.error('Error al detener listener:', err)
+    }
+  }
+
+  // Cleanup al desmontar
+  useEffect(() => {
+    return () => {
+      if (listenerHandleRef.current) {
+        handleStopListening()
+      }
+    }
+  }, [])
 
   const formatDate = (timestamp) => {
     if (!timestamp) return ''
@@ -237,6 +302,82 @@ export default function NotificationTest() {
             <p className="text-green-700 text-sm mt-2">
               El detector de Yape está activo. Cuando recibas un pago, se notificará automáticamente.
             </p>
+          </div>
+        )}
+
+        {/* Sección de debugging en tiempo real */}
+        {isNative && hasPermission && (
+          <div className="bg-white rounded-lg shadow p-4">
+            <h2 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-500" />
+              Modo Debugging (Tiempo Real)
+            </h2>
+
+            <p className="text-gray-600 text-sm mb-3">
+              Inicia el listener para ver las notificaciones de Yape en tiempo real mientras pruebas.
+            </p>
+
+            {/* Botones de control */}
+            <div className="flex gap-2 mb-4">
+              {!isListeningNow ? (
+                <button
+                  onClick={handleStartListening}
+                  className="flex-1 flex items-center justify-center gap-2 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700"
+                >
+                  <Play className="w-5 h-5" />
+                  Iniciar Listener
+                </button>
+              ) : (
+                <button
+                  onClick={handleStopListening}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700"
+                >
+                  <Square className="w-5 h-5" />
+                  Detener Listener
+                </button>
+              )}
+            </div>
+
+            {/* Estado del listener */}
+            <div className={`text-center py-2 rounded-lg text-sm ${isListeningNow ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+              {isListeningNow ? '🎧 Escuchando notificaciones...' : 'Listener detenido'}
+            </div>
+
+            {/* Lista de notificaciones en tiempo real */}
+            {liveNotifications.length > 0 && (
+              <div className="mt-4">
+                <h3 className="font-medium text-gray-700 mb-2">Notificaciones recibidas:</h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {liveNotifications.map((notif, index) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-lg text-sm ${notif.isYape ? 'bg-purple-100 border border-purple-300' : 'bg-gray-100'}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className={`font-medium ${notif.isYape ? 'text-purple-800' : 'text-gray-700'}`}>
+                          {notif.isYape ? '💜 YAPE' : notif.packageName}
+                        </span>
+                        <span className="text-xs text-gray-500">{notif.receivedAt}</span>
+                      </div>
+                      <p className="text-gray-800 mt-1"><strong>Título:</strong> {notif.title}</p>
+                      <p className="text-gray-800"><strong>Texto:</strong> {notif.text}</p>
+                      {notif.parsed && (
+                        <div className="mt-2 p-2 bg-white rounded border border-purple-200">
+                          <p className="text-purple-800 font-bold">Monto: S/ {notif.parsed.monto?.toFixed(2)}</p>
+                          <p className="text-purple-700">Remitente: {notif.parsed.remitente}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setLiveNotifications([])}
+                  className="mt-2 w-full text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Limpiar lista
+                </button>
+              </div>
+            )}
           </div>
         )}
 

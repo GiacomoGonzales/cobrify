@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { useAppContext } from '@/hooks/useAppContext'
-import { useToast } from '@/contexts/ToastContext'
 import {
   startListening,
   stopListening,
   isPermissionGranted,
   addNotificationListener
 } from '@/plugins/notificationListener'
-import {
-  saveYapePayment,
-  parseYapeNotification,
-  getYapeConfig
-} from '@/services/yapeService'
-// No necesitamos importar functions - el trigger de Firestore maneja las notificaciones
+import { getYapeConfig } from '@/services/yapeService'
+// NOTA: No guardamos en Firestore desde JS porque el servicio nativo (NotificationService.java)
+// ya envía directamente a la Cloud Function saveYapePaymentNative.
+// Esto evita duplicados y funciona incluso cuando la app está en background.
 
 /**
  * Hook para escuchar notificaciones de Yape automáticamente
@@ -21,7 +18,6 @@ import {
  */
 export const useYapeListener = () => {
   const { user, getBusinessId } = useAppContext()
-  const toast = useToast()
   const [isListening, setIsListening] = useState(false)
   const [hasPermission, setHasPermission] = useState(false)
   const [yapeConfig, setYapeConfig] = useState(null)
@@ -69,38 +65,11 @@ export const useYapeListener = () => {
         // Iniciar escucha
         await startListening()
 
-        // Agregar listener
+        // Agregar listener solo para logging (el nativo maneja todo)
         const handle = await addNotificationListener(async (notification) => {
-          console.log('🟢 Notificación Yape recibida:', notification)
-
-          // Parsear notificación
-          const paymentData = parseYapeNotification(notification)
-
-          if (!paymentData) {
-            console.log('No se pudo parsear la notificación de Yape')
-            return
-          }
-
-          console.log('💰 Pago detectado:', paymentData)
-
-          const businessId = getBusinessId()
-          if (!businessId) return
-
-          // Guardar en Firestore
-          const saveResult = await saveYapePayment(businessId, {
-            ...paymentData,
-            detectedBy: user.uid
-          })
-
-          if (saveResult.success) {
-            console.log('✅ Pago guardado:', saveResult.id)
-
-            // Mostrar toast local
-            toast.success(`Yape recibido: S/ ${paymentData.amount.toFixed(2)} de ${paymentData.senderName}`)
-
-            // El trigger de Firestore (onYapePayment) se encarga de enviar push automáticamente
-            console.log('📤 Trigger de Firestore enviará notificaciones push')
-          }
+          console.log('🟢 Notificación Yape recibida en JS:', notification)
+          // No hacemos nada aquí - el servicio nativo (NotificationService.java)
+          // ya envió a Firebase y el trigger enviará el push
         })
 
         listenerHandleRef.current = handle
@@ -121,7 +90,7 @@ export const useYapeListener = () => {
         setIsListening(false)
       }
     }
-  }, [isNative, user, yapeConfig, getBusinessId, toast])
+  }, [isNative, user, yapeConfig, getBusinessId])
 
   return {
     isListening,

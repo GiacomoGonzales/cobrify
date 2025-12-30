@@ -7,6 +7,7 @@ import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adm
 import { getSubscription, hasActiveAccess, createSubscription } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
+import { setBusinessInfo, clearBusinessInfo } from '@/plugins/businessStorage'
 import SubscriptionBlockedModal from '@/components/SubscriptionBlockedModal'
 
 const AuthContext = createContext(null)
@@ -267,6 +268,18 @@ export const AuthProvider = ({ children }) => {
               setBusinessSettings(businessData) // Guardar toda la configuración
 
               console.log('✅ businessMode establecido a:', mode)
+
+              // Guardar businessId en almacenamiento nativo para NotificationService
+              try {
+                await setBusinessInfo(
+                  businessId,
+                  firebaseUser.uid,
+                  businessData.name || businessData.businessName || ''
+                )
+                console.log('📱 BusinessInfo guardado en almacenamiento nativo')
+              } catch (storageError) {
+                console.warn('⚠️ Error guardando BusinessInfo en nativo:', storageError)
+              }
             } else {
               console.warn('⚠️ No se encontró documento del negocio en businesses/', businessId)
               console.warn('⚠️ Verificar que existe el documento en Firestore')
@@ -389,6 +402,14 @@ export const AuthProvider = ({ children }) => {
     try {
       // Limpiar listeners de notificaciones push antes de cerrar sesión
       await cleanupPushNotifications()
+
+      // Limpiar businessInfo del almacenamiento nativo
+      try {
+        await clearBusinessInfo()
+        console.log('📱 BusinessInfo limpiado del almacenamiento nativo')
+      } catch (storageError) {
+        console.warn('⚠️ Error limpiando BusinessInfo:', storageError)
+      }
 
       await logoutService()
       setUser(null)

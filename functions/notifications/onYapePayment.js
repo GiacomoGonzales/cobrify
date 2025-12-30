@@ -4,7 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 
 /**
  * Trigger cuando se detecta un nuevo pago de Yape
- * Envía notificación push a los usuarios configurados
+ * Envía notificación push al dueño del negocio (igual que onNewSale)
  */
 export const onYapePayment = onDocumentCreated(
   'businesses/{businessId}/yapePayments/{paymentId}',
@@ -25,17 +25,7 @@ export const onYapePayment = onDocumentCreated(
     try {
       const db = getFirestore()
 
-      // Obtener configuración de notificaciones Yape
-      const configDoc = await db
-        .collection('businesses')
-        .doc(businessId)
-        .collection('settings')
-        .doc('yapeNotifications')
-        .get()
-
-      const config = configDoc.exists ? configDoc.data() : { notifyAllUsers: true }
-
-      // Obtener información del negocio
+      // Obtener información del negocio (igual que onNewSale)
       const businessDoc = await db
         .collection('businesses')
         .doc(businessId)
@@ -47,94 +37,41 @@ export const onYapePayment = onDocumentCreated(
       }
 
       const business = businessDoc.data()
+      const ownerId = business.ownerId || businessId
       const businessName = business.name || business.businessName || 'tu negocio'
 
-      // Determinar a quién notificar
-      let userIdsToNotify = []
-      const ownerId = business.ownerId || businessId
-
-      if (config.notifyAllUsers) {
-        // Notificar a todos los usuarios del negocio
-        // 1. Buscar usuarios con businessId igual
-        const usersSnapshot = await db
-          .collection('users')
-          .where('businessId', '==', businessId)
-          .get()
-
-        userIdsToNotify = usersSnapshot.docs.map(doc => doc.id)
-
-        // 2. Buscar en colección anidada businesses/{businessId}/users
-        try {
-          const nestedUsersSnapshot = await db
-            .collection('businesses')
-            .doc(businessId)
-            .collection('users')
-            .get()
-
-          for (const userDoc of nestedUsersSnapshot.docs) {
-            const userId = userDoc.data().userId || userDoc.id
-            if (!userIdsToNotify.includes(userId)) {
-              userIdsToNotify.push(userId)
-            }
-          }
-        } catch (e) {
-          console.log('No hay colección anidada de usuarios')
-        }
-
-        // 3. Agregar al dueño
-        if (!userIdsToNotify.includes(ownerId)) {
-          userIdsToNotify.push(ownerId)
-        }
-      } else if (config.notifyUsers && config.notifyUsers.length > 0) {
-        // Notificar solo a usuarios seleccionados
-        userIdsToNotify = config.notifyUsers
-      } else {
-        // Por defecto, notificar al dueño
-        userIdsToNotify = [ownerId]
-      }
-
-      // NO excluir al detector - siempre enviar push a todos
-      // El detector ya vio el toast, pero también recibirá push para registro
-      console.log('📤 Users to notify:', userIdsToNotify)
-
-      if (userIdsToNotify.length === 0) {
-        console.log('ℹ️ No users to notify')
-        return
-      }
+      console.log('👤 Owner ID:', ownerId)
+      console.log('🏢 Business:', businessName)
 
       // Preparar mensaje
       const title = '💜 Yape Recibido'
-      const body = `S/ ${payment.amount.toFixed(2)} de ${payment.senderName}`
+      const body = `S/ ${payment.amount?.toFixed(2) || '0.00'} de ${payment.senderName || 'Desconocido'} en ${businessName}`
 
-      // Enviar notificación a cada usuario
-      const results = await Promise.all(
-        userIdsToNotify.map(userId =>
-          sendPushNotification(
-            userId,
-            title,
-            body,
-            {
-              type: 'yape_payment',
-              paymentId: paymentId,
-              businessId,
-              amount: payment.amount.toString(),
-              senderName: payment.senderName
-            }
-          )
-        )
+      // Enviar notificación al dueño (igual que onNewSale)
+      const result = await sendPushNotification(
+        ownerId,
+        title,
+        body,
+        {
+          type: 'yape_payment',
+          paymentId: paymentId,
+          businessId,
+          amount: (payment.amount || 0).toString(),
+          senderName: payment.senderName || 'Desconocido'
+        }
       )
 
-      const successCount = results.filter(r => r.success).length
-      console.log(`✅ Yape notifications sent: ${successCount}/${userIdsToNotify.length}`)
+      console.log('📤 Push notification result:', result)
+      console.log(`✅ Yape notification sent for payment: ${paymentId}`)
 
-      // Actualizar el documento con los usuarios notificados
+      // Actualizar el documento
       await db
         .collection('businesses')
         .doc(businessId)
         .collection('yapePayments')
         .doc(paymentId)
         .update({
-          notifiedUsers: userIdsToNotify,
+          notifiedUsers: [ownerId],
           notifiedAt: new Date()
         })
 
