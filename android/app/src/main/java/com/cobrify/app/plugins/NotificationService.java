@@ -6,8 +6,6 @@ import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
 import org.json.JSONObject;
 
 import java.io.OutputStream;
@@ -112,24 +110,14 @@ public class NotificationService extends NotificationListenerService {
         // Esto funciona incluso cuando la app está en background
         sendToFirebaseDirectly(title, text, timestamp);
 
-        // ==================== TAMBIÉN NOTIFICAR A JS (SI ESTÁ ACTIVO) ====================
-        // Método 1: Callback directo (más confiable cuando la app está activa)
+        // ==================== NOTIFICAR A JS (SI ESTÁ ACTIVO) ====================
+        // Solo usamos callback directo - LocalBroadcastManager fue removido porque causaba duplicados
         if (callback != null) {
             Log.d(TAG, "📤 Enviando via callback directo");
             callback.onYapeNotification(packageName, title, text, timestamp);
         } else {
-            Log.w(TAG, "⚠️ No hay callback registrado (app probablemente en background)");
+            Log.d(TAG, "ℹ️ No hay callback registrado (app en background, Firebase ya fue notificado)");
         }
-
-        // Método 2: LocalBroadcastManager (backup)
-        Intent intent = new Intent(ACTION_NOTIFICATION_POSTED);
-        intent.putExtra(EXTRA_PACKAGE, packageName);
-        intent.putExtra(EXTRA_TITLE, title);
-        intent.putExtra(EXTRA_TEXT, text);
-        intent.putExtra(EXTRA_TIMESTAMP, timestamp);
-
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
-        Log.d(TAG, "📤 Broadcast local enviado");
     }
 
     /**

@@ -1,18 +1,12 @@
 package com.cobrify.app.plugins;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ComponentName;
-import android.os.Build;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
-
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -28,7 +22,6 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class NotificationListenerPlugin extends Plugin {
 
     private static final String TAG = "NotificationListener";
-    private NotificationReceiver receiver;
     private boolean isListening = false;
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -54,7 +47,8 @@ public class NotificationListenerPlugin extends Plugin {
         }
 
         try {
-            // Método 1: Registrar callback directo con NotificationService
+            // Registrar callback directo con NotificationService
+            // NOTA: Ya no usamos LocalBroadcastManager porque causaba duplicados
             NotificationService.setCallback(new NotificationService.NotificationCallback() {
                 @Override
                 public void onYapeNotification(String packageName, String title, String text, long timestamp) {
@@ -66,15 +60,6 @@ public class NotificationListenerPlugin extends Plugin {
                 }
             });
             Log.d(TAG, "✅ Callback directo registrado");
-
-            // Método 2: LocalBroadcastManager (backup)
-            receiver = new NotificationReceiver();
-            IntentFilter filter = new IntentFilter();
-            filter.addAction(NotificationService.ACTION_NOTIFICATION_POSTED);
-            filter.addAction(NotificationService.ACTION_NOTIFICATION_REMOVED);
-
-            LocalBroadcastManager.getInstance(getContext()).registerReceiver(receiver, filter);
-            Log.d(TAG, "✅ LocalBroadcastManager registrado");
 
             isListening = true;
             Log.d(TAG, "🎧 Escucha de notificaciones INICIADA");
@@ -125,12 +110,6 @@ public class NotificationListenerPlugin extends Plugin {
         try {
             // Remover callback
             NotificationService.setCallback(null);
-
-            // Remover receiver
-            if (receiver != null) {
-                LocalBroadcastManager.getInstance(getContext()).unregisterReceiver(receiver);
-                receiver = null;
-            }
 
             isListening = false;
             Log.d(TAG, "🛑 Escucha de notificaciones DETENIDA");
@@ -198,40 +177,11 @@ public class NotificationListenerPlugin extends Plugin {
         return false;
     }
 
-    /**
-     * Receiver interno para recibir los broadcasts del NotificationService (backup)
-     */
-    private class NotificationReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (action == null) return;
-
-            Log.d(TAG, "📻 Broadcast recibido via LocalBroadcastManager: " + action);
-
-            if (NotificationService.ACTION_NOTIFICATION_POSTED.equals(action)) {
-                String packageName = intent.getStringExtra(NotificationService.EXTRA_PACKAGE);
-                String title = intent.getStringExtra(NotificationService.EXTRA_TITLE);
-                String text = intent.getStringExtra(NotificationService.EXTRA_TEXT);
-                long timestamp = intent.getLongExtra(NotificationService.EXTRA_TIMESTAMP, 0);
-
-                Log.d(TAG, "📻 Notificación via broadcast: " + packageName + " - " + title);
-
-                sendNotificationToJS(packageName, title, text, timestamp);
-            }
-        }
-    }
-
     @Override
     protected void handleOnDestroy() {
         Log.d(TAG, "💀 Plugin siendo destruido");
         if (isListening) {
             NotificationService.setCallback(null);
-            if (receiver != null) {
-                try {
-                    LocalBroadcastManager.getInstance(getContext()).unregisterReceiver(receiver);
-                } catch (Exception ignored) {}
-            }
         }
         super.handleOnDestroy();
     }

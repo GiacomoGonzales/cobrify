@@ -43,6 +43,12 @@ export const useYapeListener = () => {
 
   // Verificar permiso e iniciar escucha automática
   useEffect(() => {
+    // Evitar múltiples inicializaciones
+    if (listenerHandleRef.current) {
+      console.log('🎧 Yape listener ya está inicializado, ignorando')
+      return
+    }
+
     const initYapeListener = async () => {
       if (!isNative || !user?.uid || !yapeConfig) return
 
@@ -83,14 +89,15 @@ export const useYapeListener = () => {
 
     initYapeListener()
 
-    // Cleanup al desmontar
+    // Cleanup solo al desmontar el componente
     return () => {
       if (listenerHandleRef.current) {
+        listenerHandleRef.current = null
         stopListening().catch(console.error)
         setIsListening(false)
       }
     }
-  }, [isNative, user, yapeConfig, getBusinessId])
+  }, [isNative, user?.uid, yapeConfig?.enabled, yapeConfig?.autoStartListening])
 
   return {
     isListening,
