@@ -518,8 +518,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           </button>
         </div>
 
-        {/* Selector de Almacén */}
-        {warehouses.length > 0 && (
+        {/* Selector de Almacén o mensaje informativo */}
+        {warehouses.length > 1 ? (
           <div className="mb-6 p-4 bg-cyan-50 border border-cyan-200 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
               <Warehouse className="w-5 h-5 text-cyan-600" />
@@ -539,6 +539,24 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
             <p className="text-xs text-gray-500 mt-2">
               El stock de los productos importados se asignará a este almacén.
             </p>
+          </div>
+        ) : warehouses.length === 1 ? (
+          <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Warehouse className="w-5 h-5 text-gray-500" />
+              <p className="text-sm text-gray-600">
+                El stock se asignará a: <span className="font-medium">{warehouses[0]?.name}</span>
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Warehouse className="w-5 h-5 text-blue-500" />
+              <p className="text-sm text-blue-700">
+                Se creará automáticamente un <span className="font-medium">Almacén Principal</span> para tus productos.
+              </p>
+            </div>
           </div>
         )}
 
