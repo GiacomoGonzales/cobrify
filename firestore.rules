@@ -76,6 +76,14 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Settings collection (configuración global como tiers de resellers)
+    match /settings/{settingId} {
+      // Usuarios autenticados pueden leer configuración de tiers (necesario para resellers)
+      allow read: if isAuthenticated();
+      // Solo admins pueden escribir
+      allow write: if isAdmin();
+    }
+
     // Resellers collection
     match /resellers/{resellerId} {
       // Admins pueden leer/escribir cualquier reseller
@@ -177,6 +185,11 @@ service cloud.firestore {
       // Owners y sub-usuarios pueden acceder a su propio negocio si tienen acceso activo
       allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+      // Resellers pueden crear negocios para sus clientes
+      allow create: if isAuthenticated() &&
+                       request.resource.data.createdByReseller == true &&
+                       request.resource.data.resellerId != null;
 
       // Lectura pública para catálogo - permite buscar negocios por catalogSlug
       // Para que funcione en usuarios no autenticados, permitimos lectura pública

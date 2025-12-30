@@ -43,13 +43,14 @@ export async function getTiersConfig() {
       return tiersCache
     }
 
-    // Si no existe, crear con valores por defecto
-    await setDoc(docRef, { tiers: DEFAULT_TIERS })
+    // Si no existe, usar valores por defecto (no intentar crear - requiere permisos de admin)
     tiersCache = DEFAULT_TIERS
     tiersCacheTime = Date.now()
     return DEFAULT_TIERS
   } catch (error) {
-    console.error('Error getting tiers config:', error)
+    // Si hay error de permisos, usar defaults silenciosamente
+    tiersCache = DEFAULT_TIERS
+    tiersCacheTime = Date.now()
     return DEFAULT_TIERS
   }
 }

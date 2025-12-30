@@ -109,4 +109,18 @@ try {
   console.error('❌ Error al inicializar Firebase:', error)
 }
 
-export { app, auth, db, storage, functions }
+// Segunda instancia de Firebase para crear usuarios sin afectar la sesión actual
+// Esto es necesario porque createUserWithEmailAndPassword automáticamente hace login
+let secondaryApp
+let secondaryAuth
+
+try {
+  secondaryApp = initializeApp(firebaseConfig, 'secondary')
+  secondaryAuth = getAuth(secondaryApp)
+  console.log('🔐 Secondary Auth inicializado para crear usuarios')
+} catch (error) {
+  // Si ya existe, obtenerla
+  console.log('⚠️ Secondary app ya existe o error:', error.message)
+}
+
+export { app, auth, db, storage, functions, secondaryAuth }

@@ -10,8 +10,8 @@ import {
   where,
   serverTimestamp
 } from 'firebase/firestore'
-import { db, auth } from '@/lib/firebase'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { db, secondaryAuth } from '@/lib/firebase'
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 
 /**
  * Servicio de gestión de usuarios con permisos personalizados
@@ -104,9 +104,12 @@ export const createManagedUser = async (ownerId, userData) => {
   try {
     const { email, password, displayName, allowedPages, allowedWarehouses } = userData
 
-    // 1. Crear usuario en Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+    // 1. Crear usuario en Firebase Auth usando secondaryAuth para no desloguear al owner
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
     const newUserId = userCredential.user.uid
+
+    // Cerrar sesión en el auth secundario inmediatamente
+    await signOut(secondaryAuth)
 
     // 2. Crear documento en Firestore con permisos
     const userDocRef = doc(db, 'users', newUserId)

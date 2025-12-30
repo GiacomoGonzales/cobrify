@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { doc, setDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { db, auth } from '@/lib/firebase'
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
+import { db, secondaryAuth } from '@/lib/firebase'
 import { PLANS } from '@/services/subscriptionService'
 import { getResellerTierInfo, calculatePrice, BASE_PRICES } from '@/services/resellerTierService'
 import {
@@ -96,13 +96,16 @@ export default function CreateResellerClient() {
     setLoading(true)
 
     try {
-      // 1. Create user in Firebase Auth
+      // 1. Create user in Firebase Auth usando secondaryAuth para no desloguear al reseller
       const userCredential = await createUserWithEmailAndPassword(
-        auth,
+        secondaryAuth,
         formData.email,
         formData.password
       )
       const newUserId = userCredential.user.uid
+
+      // Cerrar sesión en el auth secundario inmediatamente
+      await signOut(secondaryAuth)
 
       // 2. Calculate period end date
       const now = new Date()
