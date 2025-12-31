@@ -719,8 +719,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .clearFormatting();
 
       if (invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
-        // Para boletas y notas de venta - DNI, Nombre y Dirección (si existe)
+        // Para boletas y notas de venta - DNI, Nombre, Dirección y Teléfono (si existe)
         const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
+        const customerPhone = invoice.customer?.phone || invoice.customerPhone || '';
 
         printer = printer
           .text(convertSpanishText(`DNI: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerDni || '-'}\n`))
@@ -730,13 +731,19 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (customerAddress) {
           printer = printer.text(convertSpanishText(`Direccion: ${customerAddress}\n`));
         }
+
+        // Teléfono del cliente (si existe)
+        if (customerPhone) {
+          printer = printer.text(convertSpanishText(`Telefono: ${customerPhone}\n`));
+        }
       }
 
       if (isInvoice) {
-        // Para facturas - RUC, Razón Social, Nombre Comercial (opcional), Dirección (opcional)
+        // Para facturas - RUC, Razón Social, Nombre Comercial (opcional), Dirección y Teléfono (opcional)
         const customerName = invoice.customer?.name || invoice.customerName || '';
         const customerBusinessName = invoice.customer?.businessName || invoice.customerBusinessName || '-';
         const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
+        const customerPhone = invoice.customer?.phone || invoice.customerPhone || '';
 
         printer = printer
           .text(convertSpanishText(`RUC: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || '-'}\n`))
@@ -751,6 +758,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (customerAddress) {
           printer = printer.text(convertSpanishText(`Direccion: ${customerAddress}\n`));
         }
+
+        // Teléfono del cliente (si existe)
+        if (customerPhone) {
+          printer = printer.text(convertSpanishText(`Telefono: ${customerPhone}\n`));
+        }
+      }
+
+      // Vendedor (si existe)
+      if (invoice.sellerName) {
+        printer = printer.text(convertSpanishText(`Vendedor: ${invoice.sellerName}\n`));
       }
 
       printer = addSeparator(printer, format.separator, paperWidth, 'left');
@@ -1257,6 +1274,7 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       customerDocument: invoice.customerDocument || invoice.customerDni || invoice.customerRuc,
       customerAddress: invoice.customerAddress,
       customerBusinessName: invoice.customerBusinessName,
+      customerPhone: invoice.customer?.phone || invoice.customerPhone || '',
 
       // Items (con todos los campos necesarios)
       items: (invoice.items || []).map(item => ({
@@ -1287,6 +1305,9 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       notes: invoice.notes || '',
       sunatHash: invoice.sunatHash || '',
       qrCode: invoice.qrCode || '',
+
+      // Vendedor
+      sellerName: invoice.sellerName || '',
     };
 
     // Usar la función printBLEReceipt del servicio BLE
@@ -1707,12 +1728,23 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       if (invoice.customer?.address) {
         builder.text(`Direccion: ${invoice.customer.address}`).newLine();
       }
+      if (invoice.customer?.phone) {
+        builder.text(`Telefono: ${invoice.customer.phone}`).newLine();
+      }
     } else {
       builder.text(`DNI: ${invoice.customer?.documentNumber || '-'}`).newLine()
         .text(`Nombre: ${invoice.customer?.name || 'Cliente'}`).newLine();
       if (invoice.customer?.address || invoice.customerAddress) {
         builder.text(`Direccion: ${invoice.customer?.address || invoice.customerAddress}`).newLine();
       }
+      if (invoice.customer?.phone || invoice.customerPhone) {
+        builder.text(`Telefono: ${invoice.customer?.phone || invoice.customerPhone}`).newLine();
+      }
+    }
+
+    // Vendedor (si existe)
+    if (invoice.sellerName) {
+      builder.text(`Vendedor: ${invoice.sellerName}`).newLine();
     }
 
     builder.text(format.separator).newLine()

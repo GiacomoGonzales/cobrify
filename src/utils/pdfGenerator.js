@@ -827,6 +827,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
   leftY += dataLineHeight
 
+  // Teléfono del cliente (si existe)
+  if (invoice.customer?.phone) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('TELÉFONO:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(invoice.customer.phone, leftValueX, leftY)
+    leftY += dataLineHeight
+  }
+
   // Vendedor (si existe)
   if (invoice.sellerName) {
     doc.setFont('helvetica', 'bold')
