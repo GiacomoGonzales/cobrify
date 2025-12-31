@@ -385,6 +385,15 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                           <span>N.Débito: {stats.invoices.byType.nota_debito || 0}</span>
                         </div>
                       </div>
+                      <div className="mt-2 pt-2 border-t border-blue-200">
+                        <p className="text-xs text-blue-600">Estado SUNAT:</p>
+                        <div className="grid grid-cols-2 gap-1 mt-1 text-xs">
+                          <span className="text-green-700">✓ Aceptados: {stats.invoices.bySunatStatus?.accepted || 0}</span>
+                          <span className="text-red-700">✗ Rechazados: {stats.invoices.bySunatStatus?.rejected || 0}</span>
+                          <span className="text-yellow-700">⏳ Pendientes: {stats.invoices.bySunatStatus?.pending || 0}</span>
+                          <span className="text-gray-500">— Sin enviar: {stats.invoices.bySunatStatus?.not_sent || 0}</span>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Facturación */}

@@ -18,6 +18,12 @@ export const getUserStats = async (userId) => {
           nota_credito: 0,
           nota_debito: 0
         },
+        bySunatStatus: {
+          accepted: 0,
+          rejected: 0,
+          pending: 0,
+          not_sent: 0
+        },
         totalAmount: 0,
         totalAmountThisMonth: 0
       },
@@ -54,6 +60,18 @@ export const getUserStats = async (userId) => {
       if (invoice.documentType) {
         stats.invoices.byType[invoice.documentType] =
           (stats.invoices.byType[invoice.documentType] || 0) + 1;
+      }
+
+      // Contar por estado SUNAT
+      const sunatStatus = invoice.sunatStatus || 'not_sent';
+      if (sunatStatus === 'accepted') {
+        stats.invoices.bySunatStatus.accepted++;
+      } else if (sunatStatus === 'rejected') {
+        stats.invoices.bySunatStatus.rejected++;
+      } else if (sunatStatus === 'pending') {
+        stats.invoices.bySunatStatus.pending++;
+      } else {
+        stats.invoices.bySunatStatus.not_sent++;
       }
 
       // Sumar montos
