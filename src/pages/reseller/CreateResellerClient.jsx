@@ -20,14 +20,17 @@ import {
   Loader2,
   Wallet,
   Tag,
-  Award
+  Award,
+  Search
 } from 'lucide-react'
+import { consultarRUC } from '@/services/documentLookupService'
 
 export default function CreateResellerClient() {
   const { user, resellerData, refreshResellerData } = useAuth()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [loadingTier, setLoadingTier] = useState(true)
+  const [searchingRuc, setSearchingRuc] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
   const [tierInfo, setTierInfo] = useState(null)
@@ -71,6 +74,36 @@ export default function CreateResellerClient() {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
     setError(null)
+  }
+
+  // Buscar datos del RUC en SUNAT
+  async function handleSearchRuc() {
+    if (!formData.ruc || formData.ruc.length !== 11) {
+      setError('Ingresa un RUC válido de 11 dígitos')
+      return
+    }
+
+    setSearchingRuc(true)
+    setError(null)
+
+    try {
+      const result = await consultarRUC(formData.ruc)
+      if (result.success && result.data) {
+        const data = result.data
+        setFormData(prev => ({
+          ...prev,
+          businessName: data.razonSocial || data.nombre_o_razon_social || prev.businessName,
+          address: data.direccion || data.direccion_completa || prev.address
+        }))
+      } else {
+        setError(result.error || 'No se encontraron datos para este RUC')
+      }
+    } catch (err) {
+      console.error('Error buscando RUC:', err)
+      setError('Error al buscar datos del RUC')
+    } finally {
+      setSearchingRuc(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -340,17 +373,32 @@ export default function CreateResellerClient() {
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       RUC (opcional)
                     </label>
-                    <div className="relative">
-                      <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="text"
-                        name="ruc"
-                        value={formData.ruc}
-                        onChange={handleChange}
-                        placeholder="20123456789"
-                        maxLength={11}
-                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                      />
+                    <div className="relative flex gap-1">
+                      <div className="relative flex-1">
+                        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="ruc"
+                          value={formData.ruc}
+                          onChange={handleChange}
+                          placeholder="20123456789"
+                          maxLength={11}
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSearchRuc}
+                        disabled={searchingRuc || !formData.ruc || formData.ruc.length !== 11}
+                        className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        title="Buscar datos en SUNAT"
+                      >
+                        {searchingRuc ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                   <div>
