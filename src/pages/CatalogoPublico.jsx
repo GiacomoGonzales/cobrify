@@ -372,13 +372,8 @@ export default function CatalogoPublico({ isDemo = false }) {
         }))
         setProducts(productsData)
 
-        // Cargar categorías
-        const categoriesRef = collection(db, 'businesses', businessDoc.id, 'categories')
-        const categoriesSnap = await getDocs(categoriesRef)
-        const categoriesData = categoriesSnap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
+        // Cargar categorías desde el campo productCategories del negocio
+        const categoriesData = businessData.productCategories || []
         setCategories(categoriesData)
 
       } catch (err) {
