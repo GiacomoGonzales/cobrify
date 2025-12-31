@@ -650,6 +650,20 @@ export default function Quotations() {
                                   <span>Ver detalles</span>
                                 </button>
 
+                                {/* Editar cotización */}
+                                {quotation.status !== 'converted' && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      navigate(`/app/cotizaciones/editar/${quotation.id}`)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                  >
+                                    <Edit className="w-4 h-4 text-amber-600" />
+                                    <span>Editar</span>
+                                  </button>
+                                )}
+
                                 {/* Vista previa PDF */}
                                 <button
                                   onClick={() => {

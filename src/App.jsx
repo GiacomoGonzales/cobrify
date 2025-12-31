@@ -147,6 +147,7 @@ function App() {
               <Route path="nota-debito" element={<CreateDebitNote />} />
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
@@ -222,6 +223,7 @@ function App() {
               <Route path="nota-debito" element={<CreateDebitNote />} />
               <Route path="cotizaciones" element={<Quotations />} />
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />

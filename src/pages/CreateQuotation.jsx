@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -11,7 +11,7 @@ import Modal from '@/components/ui/Modal'
 import { calculateInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
 import { formatCurrency } from '@/lib/utils'
 import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
-import { createQuotation, getNextQuotationNumber } from '@/services/quotationService'
+import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
@@ -88,11 +88,14 @@ const UNITS = [
 export default function CreateQuotation() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { id: quotationId } = useParams() // Si hay ID, es modo edición
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingQuotationNumber, setEditingQuotationNumber] = useState('')
 
   // Cliente
   const [customerMode, setCustomerMode] = useState('select') // 'select' o 'manual'
@@ -125,7 +128,7 @@ export default function CreateQuotation() {
 
   useEffect(() => {
     loadData()
-  }, [user])
+  }, [user, quotationId])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -143,6 +146,60 @@ export default function CreateQuotation() {
 
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+
+      // Si hay quotationId, cargar la cotización para edición
+      if (quotationId) {
+        const quotationResult = await getQuotation(user.uid, quotationId)
+        if (quotationResult.success) {
+          const q = quotationResult.data
+          setIsEditing(true)
+          setEditingQuotationNumber(q.number)
+
+          // Cargar datos del cliente
+          if (q.customer) {
+            // Verificar si el cliente existe en la lista
+            const existingCustomer = customersResult.data?.find(c => c.id === q.customer.id)
+            if (existingCustomer) {
+              setCustomerMode('select')
+              setSelectedCustomer(existingCustomer)
+            } else {
+              setCustomerMode('manual')
+              setManualCustomer({
+                documentType: q.customer.documentType || 'DNI',
+                documentNumber: q.customer.documentNumber || '',
+                name: q.customer.name || '',
+                email: q.customer.email || '',
+                phone: q.customer.phone || '',
+                address: q.customer.address || '',
+              })
+            }
+          }
+
+          // Cargar items
+          if (q.items && q.items.length > 0) {
+            setQuotationItems(q.items.map(item => ({
+              productId: item.productId || '',
+              name: item.name || '',
+              description: item.description || '',
+              quantity: item.quantity || 1,
+              unitPrice: item.unitPrice || 0,
+              unit: item.unit || 'NIU',
+              searchTerm: item.name || '',
+            })))
+          }
+
+          // Cargar configuración
+          setValidityDays(q.validityDays || 30)
+          setDiscount(q.discount || 0)
+          setDiscountType(q.discountType || 'fixed')
+          setTerms(q.terms || '')
+          setNotes(q.notes || '')
+          setHideIgv(q.hideIgv || false)
+        } else {
+          toast.error('No se encontró la cotización')
+          navigate('/app/cotizaciones')
+        }
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -424,13 +481,7 @@ export default function CreateQuotation() {
     setIsSaving(true)
 
     try {
-      // 1. Obtener siguiente número de cotización
-      const numberResult = await getNextQuotationNumber(user.uid)
-      if (!numberResult.success) {
-        throw new Error('Error al generar número de cotización')
-      }
-
-      // 2. Preparar items de la cotización
+      // Preparar items de la cotización
       const items = quotationItems.map(item => ({
         productId: item.productId || '',
         code: products.find(p => p.id === item.productId)?.code || '',
@@ -442,47 +493,77 @@ export default function CreateQuotation() {
         subtotal: calculateItemTotal(item),
       }))
 
-      // 3. Calcular fecha de expiración
+      // Calcular fecha de expiración
       const expiryDate = new Date()
       expiryDate.setDate(expiryDate.getDate() + parseInt(validityDays))
 
-      // 4. Obtener datos del cliente
+      // Obtener datos del cliente
       const customerData = getCustomerData()
 
-      // 5. Crear cotización
-      const quotationData = {
-        number: numberResult.number,
-        customer: customerData,
-        items: items,
-        subtotal: baseAmounts.subtotal,
-        discount: parseFloat(discount) || 0,
-        discountType: discountType,
-        discountedSubtotal: discountedSubtotal,
-        igv: finalIgv,
-        total: finalTotal,
-        hideIgv: hideIgv, // Agregar opción de ocultar IGV
-        validityDays: parseInt(validityDays),
-        expiryDate: expiryDate,
-        status: 'draft',
-        terms: terms,
-        notes: notes,
-        sentVia: [],
-      }
+      if (isEditing) {
+        // MODO EDICIÓN: Actualizar cotización existente
+        const quotationData = {
+          customer: customerData,
+          items: items,
+          subtotal: baseAmounts.subtotal,
+          discount: parseFloat(discount) || 0,
+          discountType: discountType,
+          discountedSubtotal: discountedSubtotal,
+          igv: finalIgv,
+          total: finalTotal,
+          hideIgv: hideIgv,
+          validityDays: parseInt(validityDays),
+          expiryDate: expiryDate,
+          terms: terms,
+          notes: notes,
+        }
 
-      const result = await createQuotation(user.uid, quotationData)
-      if (!result.success) {
-        throw new Error(result.error || 'Error al crear la cotización')
-      }
+        const result = await updateQuotation(user.uid, quotationId, quotationData)
+        if (!result.success) {
+          throw new Error(result.error || 'Error al actualizar la cotización')
+        }
 
-      // 6. Mostrar éxito y redirigir
-      toast.success(`Cotización ${numberResult.number} creada exitosamente`)
+        toast.success(`Cotización ${editingQuotationNumber} actualizada exitosamente`)
+      } else {
+        // MODO CREACIÓN: Crear nueva cotización
+        const numberResult = await getNextQuotationNumber(user.uid)
+        if (!numberResult.success) {
+          throw new Error('Error al generar número de cotización')
+        }
+
+        const quotationData = {
+          number: numberResult.number,
+          customer: customerData,
+          items: items,
+          subtotal: baseAmounts.subtotal,
+          discount: parseFloat(discount) || 0,
+          discountType: discountType,
+          discountedSubtotal: discountedSubtotal,
+          igv: finalIgv,
+          total: finalTotal,
+          hideIgv: hideIgv,
+          validityDays: parseInt(validityDays),
+          expiryDate: expiryDate,
+          status: 'draft',
+          terms: terms,
+          notes: notes,
+          sentVia: [],
+        }
+
+        const result = await createQuotation(user.uid, quotationData)
+        if (!result.success) {
+          throw new Error(result.error || 'Error al crear la cotización')
+        }
+
+        toast.success(`Cotización ${numberResult.number} creada exitosamente`)
+      }
 
       setTimeout(() => {
         navigate('/app/cotizaciones')
       }, 1500)
     } catch (error) {
-      console.error('Error al crear cotización:', error)
-      toast.error(error.message || 'Error al crear la cotización. Inténtalo nuevamente.')
+      console.error('Error al guardar cotización:', error)
+      toast.error(error.message || 'Error al guardar la cotización. Inténtalo nuevamente.')
     } finally {
       setIsSaving(false)
     }
@@ -511,10 +592,12 @@ export default function CreateQuotation() {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Nueva Cotización</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              {isEditing ? `Editar Cotización ${editingQuotationNumber}` : 'Nueva Cotización'}
+            </h1>
           </div>
           <p className="text-sm sm:text-base text-gray-600">
-            Crea una nueva cotización para enviar a tus clientes
+            {isEditing ? 'Modifica los datos de la cotización' : 'Crea una nueva cotización para enviar a tus clientes'}
           </p>
         </div>
       </div>
@@ -1028,12 +1111,12 @@ export default function CreateQuotation() {
                     {isSaving ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Guardando...
+                        {isEditing ? 'Actualizando...' : 'Guardando...'}
                       </>
                     ) : (
                       <>
                         <Save className="w-4 h-4 mr-2" />
-                        Crear Cotización
+                        {isEditing ? 'Guardar Cambios' : 'Crear Cotización'}
                       </>
                     )}
                   </Button>
