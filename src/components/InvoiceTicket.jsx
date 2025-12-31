@@ -51,7 +51,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         documentNumber: invoice.customer.documentNumber || invoice.customerDocumentNumber || '-',
         name: invoice.customer.name || invoice.customerName || 'VARIOS',
         businessName: invoice.customer.businessName || invoice.customerBusinessName || '-',
-        address: invoice.customer.address || invoice.customerAddress || ''
+        address: invoice.customer.address || invoice.customerAddress || '',
+        phone: invoice.customer.phone || invoice.customerPhone || ''
       }
     }
     // Si no, usar la estructura plana
@@ -59,7 +60,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       documentNumber: invoice.customerDocumentNumber || '-',
       name: invoice.customerName || 'VARIOS',
       businessName: invoice.customerBusinessName || '-',
-      address: invoice.customerAddress || ''
+      address: invoice.customerAddress || '',
+      phone: invoice.customerPhone || ''
     }
   }
 
@@ -575,11 +577,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       </div>
 
       {/* Datos del Cliente */}
-      {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') && (
+      {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
         <div className="ticket-section">
           <div className="section-title">DATOS DEL CLIENTE</div>
 
-          {invoice.documentType === 'boleta' && (
+          {(invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
             <>
               <div className="info-row">
                 <span className="info-label">DNI:</span>
@@ -593,6 +595,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 <div className="info-row">
                   <span className="info-label">Dirección:</span>
                   <span>{customerData.address}</span>
+                </div>
+              )}
+              {customerData.phone && (
+                <div className="info-row">
+                  <span className="info-label">Teléfono:</span>
+                  <span>{customerData.phone}</span>
                 </div>
               )}
             </>
@@ -620,7 +628,21 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                   <span>{customerData.address}</span>
                 </div>
               )}
+              {customerData.phone && (
+                <div className="info-row">
+                  <span className="info-label">Teléfono:</span>
+                  <span>{customerData.phone}</span>
+                </div>
+              )}
             </>
+          )}
+
+          {/* Vendedor (si existe) */}
+          {invoice.sellerName && (
+            <div className="info-row">
+              <span className="info-label">Vendedor:</span>
+              <span>{invoice.sellerName}</span>
+            </div>
           )}
         </div>
       )}
