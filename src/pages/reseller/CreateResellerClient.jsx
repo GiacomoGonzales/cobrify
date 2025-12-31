@@ -41,7 +41,8 @@ export default function CreateResellerClient() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    businessName: '',
+    businessName: '',  // Razón Social
+    tradeName: '',     // Nombre Comercial
     ruc: '',
     phone: '',
     address: '',
@@ -93,6 +94,7 @@ export default function CreateResellerClient() {
         setFormData(prev => ({
           ...prev,
           businessName: data.razonSocial || data.nombre_o_razon_social || prev.businessName,
+          tradeName: data.nombreComercial || data.nombre_comercial || prev.tradeName,
           address: data.direccion || data.direccion_completa || prev.address
         }))
       } else {
@@ -185,6 +187,7 @@ export default function CreateResellerClient() {
       // 4. Create business document
       await setDoc(doc(db, 'businesses', newUserId), {
         razonSocial: formData.businessName,
+        tradeName: formData.tradeName || formData.businessName,  // Nombre comercial o razón social por defecto
         ruc: formData.ruc || '',
         phone: formData.phone || '',
         address: formData.address || '',
@@ -351,21 +354,39 @@ export default function CreateResellerClient() {
                 Datos del Negocio
               </h3>
               <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Nombre del Negocio <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      name="businessName"
-                      value={formData.businessName}
-                      onChange={handleChange}
-                      placeholder="Ej: Bodega María"
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                      required
-                    />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Razón Social <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        name="businessName"
+                        value={formData.businessName}
+                        onChange={handleChange}
+                        placeholder="Ej: INVERSIONES SAC"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Nombre Comercial
+                    </label>
+                    <div className="relative">
+                      <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        name="tradeName"
+                        value={formData.tradeName}
+                        onChange={handleChange}
+                        placeholder="Ej: Bodega María"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
