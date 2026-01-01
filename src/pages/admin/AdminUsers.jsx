@@ -73,6 +73,8 @@ export default function AdminUsers() {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [sunatStats, setSunatStats] = useState({}) // { odWp: { accepted: 10, rejected: 2, pending: 1 } }
+  const [loadingSunatStats, setLoadingSunatStats] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
@@ -316,6 +318,58 @@ export default function AdminUsers() {
       setLoading(false)
     }
   }
+
+  // Cargar estadísticas de SUNAT para los usuarios mostrados
+  const loadSunatStats = async (userIds) => {
+    if (!userIds || userIds.length === 0) return
+
+    setLoadingSunatStats(true)
+    const stats = {}
+
+    try {
+      // Cargar en lotes de 10 para no sobrecargar
+      const batchSize = 10
+      for (let i = 0; i < userIds.length; i += batchSize) {
+        const batch = userIds.slice(i, i + batchSize)
+
+        await Promise.all(batch.map(async (userId) => {
+          try {
+            const invoicesRef = collection(db, 'businesses', userId, 'invoices')
+            const invoicesSnap = await getDocs(invoicesRef)
+
+            const userStats = { accepted: 0, rejected: 0, pending: 0 }
+            invoicesSnap.forEach((doc) => {
+              const invoice = doc.data()
+              const status = invoice.sunatStatus || 'pending'
+              if (status === 'accepted') userStats.accepted++
+              else if (status === 'rejected') userStats.rejected++
+              else userStats.pending++
+            })
+
+            stats[userId] = userStats
+          } catch (err) {
+            console.error(`Error loading stats for user ${userId}:`, err)
+            stats[userId] = { accepted: 0, rejected: 0, pending: 0 }
+          }
+        }))
+      }
+
+      setSunatStats(prev => ({ ...prev, ...stats }))
+    } catch (error) {
+      console.error('Error loading SUNAT stats:', error)
+    } finally {
+      setLoadingSunatStats(false)
+    }
+  }
+
+  // Cargar stats de SUNAT cuando cambian los usuarios filtrados
+  useEffect(() => {
+    if (users.length > 0 && !loading) {
+      // Solo cargar para los primeros 50 usuarios para no sobrecargar
+      const userIds = users.slice(0, 50).map(u => u.userId)
+      loadSunatStats(userIds)
+    }
+  }, [users, loading])
 
   // Filtrar y ordenar usuarios
   const filteredUsers = useMemo(() => {
@@ -1470,20 +1524,36 @@ export default function AdminUsers() {
                     </td>
                     {/* SUNAT */}
                     <td className="px-3 py-2">
-                      {user.emissionMethod && user.emissionMethod !== 'none' ? (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                          user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
-                          user.emissionMethod === 'nubefact' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
-                          'bg-gray-50 text-gray-600 border border-gray-200'
-                        }`}>
-                          {user.emissionMethod === 'qpse' ? 'QPse' :
-                           user.emissionMethod === 'sunat_direct' ? 'SUNAT' :
-                           user.emissionMethod === 'nubefact' ? 'Nubefact' : user.emissionMethod}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-gray-400">—</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {user.emissionMethod && user.emissionMethod !== 'none' ? (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
+                            user.emissionMethod === 'nubefact' ? 'bg-violet-50 text-violet-700 border border-violet-200' :
+                            'bg-gray-50 text-gray-600 border border-gray-200'
+                          }`}>
+                            {user.emissionMethod === 'qpse' ? 'QPse' :
+                             user.emissionMethod === 'sunat_direct' ? 'SUNAT' :
+                             user.emissionMethod === 'nubefact' ? 'Nubefact' : user.emissionMethod}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-gray-400">—</span>
+                        )}
+                        {/* Estados de documentos SUNAT */}
+                        {sunatStats[user.userId] ? (
+                          <div className="flex gap-1 text-[9px]">
+                            <span className="text-green-600" title="Aceptados">✓{sunatStats[user.userId].accepted}</span>
+                            {sunatStats[user.userId].rejected > 0 && (
+                              <span className="text-red-600 font-bold" title="Rechazados">✗{sunatStats[user.userId].rejected}</span>
+                            )}
+                            {sunatStats[user.userId].pending > 0 && (
+                              <span className="text-yellow-600" title="Pendientes">⏳{sunatStats[user.userId].pending}</span>
+                            )}
+                          </div>
+                        ) : loadingSunatStats ? (
+                          <span className="text-[9px] text-gray-400">...</span>
+                        ) : null}
+                      </div>
                     </td>
                     {/* Ubicación */}
                     <td className="px-3 py-2">
