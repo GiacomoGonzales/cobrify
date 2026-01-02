@@ -642,6 +642,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   if (companySettings?.bankAccountsList && Array.isArray(companySettings.bankAccountsList) && companySettings.bankAccountsList.length > 0) {
     bankAccountsArray = companySettings.bankAccountsList.map(acc => ({
       bank: acc.bank || '',
+      accountType: acc.accountType || 'corriente',
       currency: acc.currency === 'USD' ? 'DÓLARES' : 'SOLES',
       accountNumber: acc.accountNumber || '',
       cci: acc.cci || ''
@@ -908,11 +909,26 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   if (bankAccountsArray.length > 0) {
     const bankTableX = MARGIN_LEFT
-    const COL_BANCO = 60
-    const COL_MONEDA = 45
-    const COL_CUENTA = 90
-    const COL_CCI = bankSectionWidth - COL_BANCO - COL_MONEDA - COL_CUENTA
     const bankTableWidth = bankSectionWidth
+
+    // Función helper para truncar texto que exceda el ancho de columna
+    const truncateText = (text, maxWidth, fontSize) => {
+      doc.setFontSize(fontSize)
+      let truncated = String(text || '')
+      while (doc.getTextWidth(truncated) > maxWidth - 6 && truncated.length > 0) {
+        truncated = truncated.slice(0, -1)
+      }
+      if (truncated.length < String(text || '').length && truncated.length > 0) {
+        truncated = truncated.slice(0, -2) + '..'
+      }
+      return truncated
+    }
+
+    // Anchos de columna proporcionales al contenido
+    const COL_BANCO = Math.floor(bankTableWidth * 0.28)  // ~28% para banco + tipo
+    const COL_MONEDA = Math.floor(bankTableWidth * 0.15) // ~15% para moneda
+    const COL_CUENTA = Math.floor(bankTableWidth * 0.30) // ~30% para número de cuenta
+    const COL_CCI = bankTableWidth - COL_BANCO - COL_MONEDA - COL_CUENTA // resto para CCI
 
     const colStart = {
       banco: bankTableX,
@@ -938,13 +954,13 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.line(colStart.cuenta, bankY, colStart.cuenta, bankY + bankTotalHeight)
     doc.line(colStart.cci, bankY, colStart.cci, bankY + bankTotalHeight)
 
-    doc.setFontSize(8)
+    doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(255, 255, 255)
-    doc.text('BANCO', colStart.banco + 3, bankY + 9)
-    doc.text('MONEDA', colStart.moneda + 3, bankY + 9)
-    doc.text('CTA. CTE.', colStart.cuenta + 3, bankY + 9)
-    doc.text('CCI', colStart.cci + 3, bankY + 9)
+    doc.text('BANCO', colStart.banco + 2, bankY + 9)
+    doc.text('MONEDA', colStart.moneda + 2, bankY + 9)
+    doc.text('Nº CUENTA', colStart.cuenta + 2, bankY + 9)
+    doc.text('CCI', colStart.cci + 2, bankY + 9)
     bankY += bankHeaderHeight
 
     doc.setTextColor(...BLACK)
@@ -957,11 +973,17 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         doc.line(bankTableX, bankY, bankTableX + bankTableWidth, bankY)
       }
 
-      doc.setFontSize(8)
-      doc.text(String(account.bank || ''), colStart.banco + 3, bankY + 8)
-      doc.text(String(account.currency || ''), colStart.moneda + 3, bankY + 8)
-      doc.text(String(account.accountNumber || ''), colStart.cuenta + 3, bankY + 8)
-      doc.text(String(account.cci || '-'), colStart.cci + 3, bankY + 8)
+      // Mostrar banco con tipo de cuenta
+      const accountTypeLabel = account.accountType === 'detracciones' ? ' (Detr.)'
+        : account.accountType === 'ahorros' ? ' (Ah.)'
+        : ''
+      const bankLabel = `${account.bank || ''}${accountTypeLabel}`
+
+      doc.setFontSize(7)
+      doc.text(truncateText(bankLabel, COL_BANCO, 7), colStart.banco + 2, bankY + 8)
+      doc.text(truncateText(account.currency || '', COL_MONEDA, 7), colStart.moneda + 2, bankY + 8)
+      doc.text(truncateText(account.accountNumber || '', COL_CUENTA, 7), colStart.cuenta + 2, bankY + 8)
+      doc.text(truncateText(account.cci || '-', COL_CCI, 7), colStart.cci + 2, bankY + 8)
       bankY += bankRowHeight
     })
   }

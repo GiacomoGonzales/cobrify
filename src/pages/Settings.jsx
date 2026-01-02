@@ -77,6 +77,7 @@ export default function Settings() {
     nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
     nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
     guia_remision: { serie: 'T001', lastNumber: 0 },
+    guia_transportista: { serie: 'V001', lastNumber: 0 },
   }
 
   // Estados para SUNAT
@@ -432,6 +433,7 @@ export default function Settings() {
             nota_debito_factura: businessData.series.nota_debito_factura || { serie: 'FD01', lastNumber: 0 },
             nota_debito_boleta: businessData.series.nota_debito_boleta || { serie: 'BD01', lastNumber: 0 },
             guia_remision: businessData.series.guia_remision || { serie: 'T001', lastNumber: 0 },
+            guia_transportista: businessData.series.guia_transportista || { serie: 'V001', lastNumber: 0 },
           })
         }
 
@@ -639,6 +641,7 @@ export default function Settings() {
         nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
         nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
         guia_remision: { serie: `T0${suffix}`, lastNumber: 0 },
+        guia_transportista: { serie: `V0${suffix}`, lastNumber: 0 },
       }
       setWarehouseSeries(prev => ({
         ...prev,
@@ -734,6 +737,7 @@ export default function Settings() {
         nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
         nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
         guia_remision: { serie: `T${suffix}`, lastNumber: 0 },
+        guia_transportista: { serie: `V${suffix}`, lastNumber: 0 },
       }
       setBranchSeries(prev => ({
         ...prev,
@@ -1742,8 +1746,9 @@ export default function Settings() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">Banco</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Tipo</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">Moneda</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-600">Cta. Corriente</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Nº Cuenta</th>
                           <th className="px-3 py-2 text-left font-medium text-gray-600">CCI</th>
                           <th className="px-3 py-2 w-10"></th>
                         </tr>
@@ -1752,6 +1757,15 @@ export default function Settings() {
                         {bankAccounts.map((account, index) => (
                           <tr key={index} className="hover:bg-gray-50">
                             <td className="px-3 py-2">{account.bank}</td>
+                            <td className="px-3 py-2 text-xs">
+                              {account.accountType === 'detracciones' ? (
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Detracciones</span>
+                              ) : account.accountType === 'ahorros' ? (
+                                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Ahorros</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">Corriente</span>
+                              )}
+                            </td>
                             <td className="px-3 py-2">{account.currency === 'PEN' ? 'Soles' : 'Dólares'}</td>
                             <td className="px-3 py-2 font-mono text-xs">{account.accountNumber}</td>
                             <td className="px-3 py-2 font-mono text-xs">{account.cci || '-'}</td>
@@ -1772,7 +1786,7 @@ export default function Settings() {
                 )}
 
                 {/* Formulario para agregar nueva cuenta */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 p-3 bg-gray-50 rounded-lg">
                   <select
                     id="newBankName"
                     className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
@@ -1787,6 +1801,15 @@ export default function Settings() {
                     <option value="Pichincha">Pichincha</option>
                     <option value="Banco de la Nación">Banco de la Nación</option>
                     <option value="Otro">Otro</option>
+                  </select>
+                  <select
+                    id="newAccountType"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue="corriente"
+                  >
+                    <option value="corriente">Cta. Corriente</option>
+                    <option value="ahorros">Cta. Ahorros</option>
+                    <option value="detracciones">Detracciones</option>
                   </select>
                   <select
                     id="newBankCurrency"
@@ -1812,6 +1835,7 @@ export default function Settings() {
                     type="button"
                     onClick={() => {
                       const bank = document.getElementById('newBankName').value
+                      const accountType = document.getElementById('newAccountType').value
                       const currency = document.getElementById('newBankCurrency').value
                       const accountNumber = document.getElementById('newBankAccount').value
                       const cci = document.getElementById('newBankCci').value
@@ -1821,10 +1845,11 @@ export default function Settings() {
                         return
                       }
 
-                      setBankAccounts([...bankAccounts, { bank, currency, accountNumber, cci }])
+                      setBankAccounts([...bankAccounts, { bank, accountType, currency, accountNumber, cci }])
 
                       // Limpiar campos
                       document.getElementById('newBankName').value = ''
+                      document.getElementById('newAccountType').value = 'corriente'
                       document.getElementById('newBankCurrency').value = 'PEN'
                       document.getElementById('newBankAccount').value = ''
                       document.getElementById('newBankCci').value = ''
@@ -3396,7 +3421,7 @@ export default function Settings() {
                         <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-purple-700">Guías de Remisión</td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="py-2 px-3 text-gray-600">Guía de Remisión</td>
+                        <td className="py-2 px-3 text-gray-600">Guía de Remisión (Remitente)</td>
                         <td className="py-2 px-3">
                           <Input
                             value={series['guia_remision']?.serie || defaultSeries['guia_remision'].serie}
@@ -3419,6 +3444,33 @@ export default function Settings() {
                         <td className="py-2 px-3">
                           <span className="font-mono text-gray-600">
                             {getNextNumber(series['guia_remision']?.serie || 'T001', series['guia_remision']?.lastNumber ?? 0)}
+                          </span>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-gray-100">
+                        <td className="py-2 px-3 text-gray-600">Guía de Remisión (Transportista)</td>
+                        <td className="py-2 px-3">
+                          <Input
+                            value={series['guia_transportista']?.serie || defaultSeries['guia_transportista'].serie}
+                            onChange={e => handleSeriesChange('guia_transportista', 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <Input
+                            type="number"
+                            value={series['guia_transportista']?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange('guia_transportista', 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-mono text-gray-600">
+                            {getNextNumber(series['guia_transportista']?.serie || 'V001', series['guia_transportista']?.lastNumber ?? 0)}
                           </span>
                         </td>
                       </tr>
@@ -3623,7 +3675,7 @@ export default function Settings() {
                               <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-purple-700">Guías de Remisión</td>
                             </tr>
                             <tr className="border-b border-gray-100">
-                              <td className="py-2 px-3 text-gray-600">Guía de Remisión</td>
+                              <td className="py-2 px-3 text-gray-600">Guía de Remisión (Remitente)</td>
                               <td className="py-2 px-3">
                                 <Input
                                   value={bSeries['guia_remision']?.serie || defaultSeries['guia_remision'].serie}
@@ -3646,6 +3698,33 @@ export default function Settings() {
                               <td className="py-2 px-3">
                                 <span className="font-mono text-gray-600">
                                   {getNextNumber(bSeries['guia_remision']?.serie || 'T001', bSeries['guia_remision']?.lastNumber ?? 0)}
+                                </span>
+                              </td>
+                            </tr>
+                            <tr className="border-b border-gray-100">
+                              <td className="py-2 px-3 text-gray-600">Guía de Remisión (Transportista)</td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  value={bSeries['guia_transportista']?.serie || defaultSeries['guia_transportista'].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_transportista', 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  type="number"
+                                  value={bSeries['guia_transportista']?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_transportista', 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="font-mono text-gray-600">
+                                  {getNextNumber(bSeries['guia_transportista']?.serie || 'V001', bSeries['guia_transportista']?.lastNumber ?? 0)}
                                 </span>
                               </td>
                             </tr>
