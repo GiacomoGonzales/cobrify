@@ -472,18 +472,33 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
         let logoWidth, logoHeight
 
-        if (aspectRatio >= 2) {
-          // Logo muy horizontal (2:1 o más): permitir más ancho pero con límite
-          const maxHorizontalWidth = logoColumnWidth + infoColumnWidth - 20
-          logoHeight = maxLogoHeight * 0.7
+        if (aspectRatio >= 2.5) {
+          // Logo MUY horizontal (2.5:1 o más): limitar estrictamente al ancho de columna
+          // Para no invadir el espacio de datos de empresa
+          const maxLogoWidth = logoColumnWidth
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
+          // Si queda muy pequeño en altura, reducir un poco el ancho para dar más altura
+          if (logoHeight < 25) {
+            logoHeight = 25
+            logoWidth = logoHeight * aspectRatio
+            if (logoWidth > maxLogoWidth) {
+              logoWidth = maxLogoWidth
+              logoHeight = logoWidth / aspectRatio
+            }
+          }
+        } else if (aspectRatio >= 2) {
+          // Logo muy horizontal (2:1 a 2.5:1): permitir un poco más de ancho
+          const maxHorizontalWidth = logoColumnWidth + 20 // Solo 20pt extra, no toda la columna info
+          logoHeight = maxLogoHeight * 0.6
           logoWidth = logoHeight * aspectRatio
           if (logoWidth > maxHorizontalWidth) {
             logoWidth = maxHorizontalWidth
             logoHeight = logoWidth / aspectRatio
           }
         } else if (aspectRatio >= 1.3) {
-          // Logo horizontal moderado (1.3:1 a 2:1): permitir más ancho
-          const maxLogoWidth = logoColumnWidth + 30
+          // Logo horizontal moderado (1.3:1 a 2:1): permitir un poco más ancho
+          const maxLogoWidth = logoColumnWidth + 15 // Reducido de +30 a +15
           logoWidth = maxLogoWidth
           logoHeight = logoWidth / aspectRatio
           if (logoHeight > maxLogoHeight) {
