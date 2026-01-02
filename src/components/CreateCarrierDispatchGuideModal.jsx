@@ -241,12 +241,12 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       return
     }
 
-    if (!originAddress || !originUbigeo) {
+    if (!originAddress) {
       toast.error('Debe completar la dirección de origen')
       return
     }
 
-    if (!destinationAddress || !destinationUbigeo) {
+    if (!destinationAddress) {
       toast.error('Debe completar la dirección de destino')
       return
     }
@@ -667,11 +667,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             <Input
               label="Ubigeo de Origen"
               placeholder="150101"
-              required
               value={originUbigeo}
               onChange={(e) => setOriginUbigeo(e.target.value)}
               maxLength={6}
-              helperText="6 dígitos"
+              helperText="6 dígitos (opcional)"
             />
           </div>
 
@@ -697,11 +696,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             <Input
               label="Ubigeo de Destino"
               placeholder="070101"
-              required
               value={destinationUbigeo}
               onChange={(e) => setDestinationUbigeo(e.target.value)}
               maxLength={6}
-              helperText="6 dígitos"
+              helperText="6 dígitos (opcional)"
             />
           </div>
 
