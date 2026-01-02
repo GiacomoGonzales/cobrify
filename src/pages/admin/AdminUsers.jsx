@@ -73,7 +73,7 @@ export default function AdminUsers() {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [sunatStats, setSunatStats] = useState({}) // { odWp: { accepted: 10, rejected: 2, pending: 1 } }
+  const [sunatStats, setSunatStats] = useState({}) // { odWp: { accepted: 10, rejected: 2, pending: 1, salesNotes: 5 } }
   const [loadingSunatStats, setLoadingSunatStats] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -337,9 +337,18 @@ export default function AdminUsers() {
             const invoicesRef = collection(db, 'businesses', userId, 'invoices')
             const invoicesSnap = await getDocs(invoicesRef)
 
-            const userStats = { accepted: 0, rejected: 0, pending: 0 }
+            const userStats = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
             invoicesSnap.forEach((doc) => {
               const invoice = doc.data()
+              const docType = invoice.documentType || invoice.type || ''
+
+              // Notas de venta no van a SUNAT, se cuentan aparte
+              if (docType === 'nota_venta' || docType === 'sales_note') {
+                userStats.salesNotes++
+                return
+              }
+
+              // Solo contar documentos electrónicos (facturas, boletas, notas de crédito/débito)
               const status = invoice.sunatStatus || 'pending'
               if (status === 'accepted') userStats.accepted++
               else if (status === 'rejected') userStats.rejected++
@@ -349,7 +358,7 @@ export default function AdminUsers() {
             stats[userId] = userStats
           } catch (err) {
             console.error(`Error loading stats for user ${userId}:`, err)
-            stats[userId] = { accepted: 0, rejected: 0, pending: 0 }
+            stats[userId] = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
           }
         }))
       }
@@ -1541,13 +1550,16 @@ export default function AdminUsers() {
                         )}
                         {/* Estados de documentos SUNAT */}
                         {sunatStats[user.userId] ? (
-                          <div className="flex gap-1 text-[9px]">
-                            <span className="text-green-600" title="Aceptados">✓{sunatStats[user.userId].accepted}</span>
+                          <div className="flex gap-1 text-[9px] flex-wrap">
+                            <span className="text-green-600" title="Aceptados SUNAT">✓{sunatStats[user.userId].accepted}</span>
                             {sunatStats[user.userId].rejected > 0 && (
-                              <span className="text-red-600 font-bold" title="Rechazados">✗{sunatStats[user.userId].rejected}</span>
+                              <span className="text-red-600 font-bold" title="Rechazados SUNAT">✗{sunatStats[user.userId].rejected}</span>
                             )}
                             {sunatStats[user.userId].pending > 0 && (
-                              <span className="text-yellow-600" title="Pendientes">⏳{sunatStats[user.userId].pending}</span>
+                              <span className="text-yellow-600" title="Pendientes envío SUNAT">⏳{sunatStats[user.userId].pending}</span>
+                            )}
+                            {sunatStats[user.userId].salesNotes > 0 && (
+                              <span className="text-gray-500" title="Notas de Venta (no SUNAT)">📝{sunatStats[user.userId].salesNotes}</span>
                             )}
                           </div>
                         ) : loadingSunatStats ? (
