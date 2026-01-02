@@ -592,8 +592,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)]">
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)] overflow-y-auto">
+        <div className="flex-1 px-6 py-4 space-y-6">
 
           {/* Datos del Transportista (Emisor) */}
           <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
@@ -1444,63 +1444,63 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             </p>
           </div>
 
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <div className="flex flex-col sm:flex-row justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isSaving || isSavingDraft}
-              className="w-full sm:w-auto"
-            >
-              Cancelar
-            </Button>
-            <div className="flex flex-col sm:flex-row gap-3">
+          {/* Footer - Dentro del scroll */}
+          <div className="border-t border-gray-200 py-4 mt-6 bg-gray-50 -mx-6 px-6">
+            <div className="flex flex-col sm:flex-row justify-between gap-3">
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleSaveDraft}
+                onClick={onClose}
                 disabled={isSaving || isSavingDraft}
                 className="w-full sm:w-auto"
               >
-                {isSavingDraft ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Guardar
-                  </>
-                )}
+                Cancelar
               </Button>
-              <Button
-                type="submit"
-                disabled={isSaving || isSavingDraft}
-                className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
-                size="lg"
-              >
-                {isSaving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Generando GRE...
-                  </>
-                ) : (
-                  <>
-                    <Truck className="w-5 h-5 mr-2" />
-                    Emitir Guía
-                  </>
-                )}
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSaveDraft}
+                  disabled={isSaving || isSavingDraft}
+                  className="w-full sm:w-auto"
+                >
+                  {isSavingDraft ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSaving || isSavingDraft}
+                  className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
+                  size="lg"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Generando GRE...
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-5 h-5 mr-2" />
+                      Emitir Guía
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
+            <p className="text-xs text-gray-500 text-right mt-2">
+              Campos obligatorios (*)
+            </p>
           </div>
-          <p className="text-xs text-gray-500 text-right mt-2">
-            Campos obligatorios (*)
-          </p>
+
         </div>
       </form>
     </Modal>
