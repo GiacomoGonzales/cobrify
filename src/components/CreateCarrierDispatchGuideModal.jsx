@@ -59,11 +59,23 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   // Datos del remitente (quien envía la mercancía)
   const [shipperRuc, setShipperRuc] = useState('')
   const [shipperName, setShipperName] = useState('')
+  const [shipperAddress, setShipperAddress] = useState('')
+  const [shipperCity, setShipperCity] = useState('')
 
   // Datos del destinatario
   const [recipientDocType, setRecipientDocType] = useState('6')
   const [recipientDocNumber, setRecipientDocNumber] = useState('')
   const [recipientName, setRecipientName] = useState('')
+  const [recipientAddress, setRecipientAddress] = useState('')
+  const [recipientCity, setRecipientCity] = useState('')
+
+  // Pagador del flete
+  const [freightPayer, setFreightPayer] = useState('remitente') // remitente, destinatario, tercero
+  const [thirdPartyPayer, setThirdPartyPayer] = useState({
+    documentType: '6',
+    documentNumber: '',
+    name: ''
+  })
 
   // Datos básicos del traslado
   const [transferReason, setTransferReason] = useState('01')
@@ -92,7 +104,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const [vehicles, setVehicles] = useState([{
     plate: '',
     mtcAuthorization: '',
-    mtcEntity: ''
+    mtcEntity: '',
+    tuce: '' // Tarjeta Única de Circulación Electrónica
   }])
 
   // Conductores (soporte para múltiples)
@@ -105,7 +118,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   }])
 
   // Items
-  const [items, setItems] = useState([{ description: '', quantity: 1, unit: 'NIU', code: '' }])
+  const [items, setItems] = useState([{
+    description: '',
+    quantity: 1,
+    unit: 'NIU',
+    code: '', // Código interno
+    sunatCode: '', // Código de producto SUNAT
+    gtin: '' // Código de barras GTIN/EAN
+  }])
 
   const [isSaving, setIsSaving] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
@@ -146,6 +166,13 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       const result = await consultarRUC(shipperRuc)
       if (result.success) {
         setShipperName(result.data.razonSocial || '')
+        setShipperAddress(result.data.direccion || '')
+        // Construir ciudad desde departamento/provincia/distrito si existe
+        const cityParts = []
+        if (result.data.distrito) cityParts.push(result.data.distrito)
+        if (result.data.provincia) cityParts.push(result.data.provincia)
+        if (result.data.departamento) cityParts.push(result.data.departamento)
+        setShipperCity(cityParts.join(', ') || '')
         toast.success('Datos del remitente obtenidos correctamente')
       } else {
         toast.error(result.error || 'No se encontraron datos para este RUC')
@@ -178,6 +205,13 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
         result = await consultarRUC(recipientDocNumber)
         if (result.success) {
           setRecipientName(result.data.razonSocial || '')
+          setRecipientAddress(result.data.direccion || '')
+          // Construir ciudad desde departamento/provincia/distrito
+          const cityParts = []
+          if (result.data.distrito) cityParts.push(result.data.distrito)
+          if (result.data.provincia) cityParts.push(result.data.provincia)
+          if (result.data.departamento) cityParts.push(result.data.departamento)
+          setRecipientCity(cityParts.join(', ') || '')
           toast.success('Datos del destinatario obtenidos correctamente')
         }
       } else if (recipientDocType === '1') {
@@ -227,7 +261,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
   // Funciones para vehículos
   const addVehicle = () => {
-    setVehicles([...vehicles, { plate: '', mtcAuthorization: '', mtcEntity: '' }])
+    setVehicles([...vehicles, { plate: '', mtcAuthorization: '', mtcEntity: '', tuce: '' }])
   }
 
   const removeVehicle = (index) => {
@@ -261,7 +295,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
   // Funciones para items
   const addItem = () => {
-    setItems([...items, { description: '', quantity: 1, unit: 'NIU', code: '' }])
+    setItems([...items, { description: '', quantity: 1, unit: 'NIU', code: '', sunatCode: '', gtin: '' }])
   }
 
   const removeItem = (index) => {
@@ -358,12 +392,18 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
         shipper: {
           ruc: shipperRuc,
           businessName: shipperName,
+          address: shipperAddress,
+          city: shipperCity,
         },
         recipient: {
           documentType: recipientDocType,
           documentNumber: recipientDocNumber,
           name: recipientName,
+          address: recipientAddress,
+          city: recipientCity,
         },
+        freightPayer,
+        thirdPartyPayer: freightPayer === 'tercero' ? thirdPartyPayer : null,
         transferReason,
         transferDate,
         transferDescription,
@@ -383,22 +423,30 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           provincia: destinationProvincia,
           distrito: destinationDistrito,
         },
-        vehicles: validVehicles.map(v => ({
+        vehicles: validVehicles.map((v, idx) => ({
           plate: v.plate.toUpperCase(),
           mtcAuthorization: v.mtcAuthorization,
           mtcEntity: v.mtcEntity,
+          tuce: v.tuce,
+          isPrincipal: idx === 0, // El primero es principal
         })),
         // Para compatibilidad, también guardamos el primer vehículo como "vehicle"
         vehicle: {
           plate: validVehicles[0]?.plate.toUpperCase() || '',
           mtcAuthorization: validVehicles[0]?.mtcAuthorization || '',
+          tuce: validVehicles[0]?.tuce || '',
         },
-        drivers: validDrivers,
+        drivers: validDrivers.map((d, idx) => ({
+          ...d,
+          isPrincipal: idx === 0, // El primero es principal
+        })),
         // Para compatibilidad, también guardamos el primer conductor como "driver"
         driver: validDrivers[0] || {},
         items: validItems.map(item => ({
           ...item,
           quantity: parseFloat(item.quantity) || 1,
+          sunatCode: item.sunatCode || '',
+          gtin: item.gtin || '',
         })),
       }
 
@@ -447,12 +495,18 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
         shipper: {
           ruc: shipperRuc,
           businessName: shipperName,
+          address: shipperAddress,
+          city: shipperCity,
         },
         recipient: {
           documentType: recipientDocType,
           documentNumber: recipientDocNumber,
           name: recipientName,
+          address: recipientAddress,
+          city: recipientCity,
         },
+        freightPayer,
+        thirdPartyPayer: freightPayer === 'tercero' ? thirdPartyPayer : null,
         transferReason,
         transferDate,
         transferDescription,
@@ -472,18 +526,28 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           provincia: destinationProvincia,
           distrito: destinationDistrito,
         },
-        vehicles: validVehicles.map(v => ({
+        vehicles: validVehicles.map((v, idx) => ({
           plate: v.plate?.toUpperCase() || '',
           mtcAuthorization: v.mtcAuthorization || '',
           mtcEntity: v.mtcEntity || '',
+          tuce: v.tuce || '',
+          isPrincipal: idx === 0,
         })),
         vehicle: {
           plate: validVehicles[0]?.plate?.toUpperCase() || '',
           mtcAuthorization: validVehicles[0]?.mtcAuthorization || '',
+          tuce: validVehicles[0]?.tuce || '',
         },
-        drivers: validDrivers,
+        drivers: validDrivers.map((d, idx) => ({
+          ...d,
+          isPrincipal: idx === 0,
+        })),
         driver: validDrivers[0] || {},
-        items: validItems,
+        items: validItems.map(item => ({
+          ...item,
+          sunatCode: item.sunatCode || '',
+          gtin: item.gtin || '',
+        })),
       }
 
       const result = await saveCarrierDispatchGuideDraft(businessId, carrierDispatchGuide)
@@ -670,6 +734,20 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
               onChange={(e) => setShipperName(e.target.value)}
             />
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Dirección del Remitente"
+              placeholder="Av. Principal 123, Urb. Centro"
+              value={shipperAddress}
+              onChange={(e) => setShipperAddress(e.target.value)}
+            />
+            <Input
+              label="Ciudad del Remitente"
+              placeholder="Lima, Lima, Lima"
+              value={shipperCity}
+              onChange={(e) => setShipperCity(e.target.value)}
+            />
+          </div>
 
           {/* Datos del Destinatario */}
           <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg">
@@ -691,6 +769,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                 setRecipientDocType(e.target.value)
                 setRecipientDocNumber('')
                 setRecipientName('')
+                setRecipientAddress('')
+                setRecipientCity('')
               }}
             >
               <option value="6">RUC</option>
@@ -739,6 +819,95 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
               value={recipientName}
               onChange={(e) => setRecipientName(e.target.value)}
             />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Dirección del Destinatario"
+              placeholder="Jr. Comercio 456, Centro"
+              value={recipientAddress}
+              onChange={(e) => setRecipientAddress(e.target.value)}
+            />
+            <Input
+              label="Ciudad del Destinatario"
+              placeholder="Arequipa, Arequipa, Arequipa"
+              value={recipientCity}
+              onChange={(e) => setRecipientCity(e.target.value)}
+            />
+          </div>
+
+          {/* Pagador del Flete */}
+          <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
+            <div className="flex items-start gap-2">
+              <Building2 className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-yellow-900 text-sm">Pagador del Flete</h3>
+                <p className="text-xs text-yellow-800 mt-1">¿Quién paga el servicio de transporte?</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFreightPayer('remitente')}
+                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
+                  freightPayer === 'remitente'
+                    ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                Remitente
+              </button>
+              <button
+                type="button"
+                onClick={() => setFreightPayer('destinatario')}
+                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
+                  freightPayer === 'destinatario'
+                    ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                Destinatario
+              </button>
+              <button
+                type="button"
+                onClick={() => setFreightPayer('tercero')}
+                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
+                  freightPayer === 'tercero'
+                    ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                Tercero
+              </button>
+            </div>
+
+            {freightPayer === 'tercero' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-yellow-50 rounded-lg">
+                <Select
+                  label="Tipo de Documento"
+                  value={thirdPartyPayer.documentType}
+                  onChange={(e) => setThirdPartyPayer({ ...thirdPartyPayer, documentType: e.target.value })}
+                >
+                  <option value="6">RUC</option>
+                  <option value="1">DNI</option>
+                </Select>
+                <Input
+                  label="N° Documento"
+                  placeholder={thirdPartyPayer.documentType === '6' ? '20123456789' : '12345678'}
+                  value={thirdPartyPayer.documentNumber}
+                  onChange={(e) => setThirdPartyPayer({ ...thirdPartyPayer, documentNumber: e.target.value.replace(/\D/g, '') })}
+                  maxLength={thirdPartyPayer.documentType === '6' ? 11 : 8}
+                />
+                <Input
+                  label="Nombre / Razón Social"
+                  placeholder="Nombre del pagador"
+                  value={thirdPartyPayer.name}
+                  onChange={(e) => setThirdPartyPayer({ ...thirdPartyPayer, name: e.target.value })}
+                />
+              </div>
+            )}
           </div>
 
           {/* Datos de Envío */}
@@ -857,30 +1026,16 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           </div>
 
           {vehicles.map((vehicle, index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <Input
-                label={index === 0 ? "Placa Principal *" : ""}
-                placeholder="ABC-123"
-                required={index === 0}
-                value={vehicle.plate}
-                onChange={(e) => updateVehicle(index, 'plate', e.target.value.toUpperCase())}
-              />
-              <Select
-                label={index === 0 ? "Entidad emisora MTC (opcional)" : ""}
-                value={vehicle.mtcEntity}
-                onChange={(e) => updateVehicle(index, 'mtcEntity', e.target.value)}
-              >
-                <option value="">Seleccione</option>
-                <option value="MTC">MTC</option>
-                <option value="SUTRAN">SUTRAN</option>
-              </Select>
-              <Input
-                label={index === 0 ? "N° autorización (opcional)" : ""}
-                placeholder="Certificado de Habilitación"
-                value={vehicle.mtcAuthorization}
-                onChange={(e) => updateVehicle(index, 'mtcAuthorization', e.target.value)}
-              />
-              <div className="flex gap-2">
+            <div key={index} className="space-y-3 p-4 bg-purple-50/50 rounded-lg">
+              {/* Etiqueta Principal/Secundario */}
+              <div className="flex justify-between items-center">
+                <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                  index === 0
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-400 text-white'
+                }`}>
+                  {index === 0 ? 'PRINCIPAL' : 'SECUNDARIO'}
+                </span>
                 {vehicles.length > 1 && (
                   <Button
                     type="button"
@@ -892,18 +1047,51 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 )}
-                {index === vehicles.length - 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addVehicle}
-                    className="text-purple-600 hover:bg-purple-50"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Agregar vehículo
-                  </Button>
-                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <Input
+                  label="Placa *"
+                  placeholder="ABC-123"
+                  required={index === 0}
+                  value={vehicle.plate}
+                  onChange={(e) => updateVehicle(index, 'plate', e.target.value.toUpperCase())}
+                />
+                <Input
+                  label="TUCE"
+                  placeholder="Código TUCE"
+                  value={vehicle.tuce}
+                  onChange={(e) => updateVehicle(index, 'tuce', e.target.value)}
+                  helperText="Tarjeta Única de Circulación"
+                />
+                <Select
+                  label="Entidad MTC"
+                  value={vehicle.mtcEntity}
+                  onChange={(e) => updateVehicle(index, 'mtcEntity', e.target.value)}
+                >
+                  <option value="">Seleccione</option>
+                  <option value="MTC">MTC</option>
+                  <option value="SUTRAN">SUTRAN</option>
+                </Select>
+                <Input
+                  label="N° Autorización"
+                  placeholder="Certificado"
+                  value={vehicle.mtcAuthorization}
+                  onChange={(e) => updateVehicle(index, 'mtcAuthorization', e.target.value)}
+                />
+                <div className="flex items-end">
+                  {index === vehicles.length - 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addVehicle}
+                      className="text-purple-600 hover:bg-purple-50 w-full"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Agregar
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -920,10 +1108,17 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           </div>
 
           {drivers.map((driver, index) => (
-            <div key={index} className="space-y-4 p-4 bg-gray-50 rounded-lg">
-              {index > 0 && (
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-600">Conductor {index + 1}</span>
+            <div key={index} className="space-y-4 p-4 bg-rose-50/50 rounded-lg">
+              {/* Etiqueta Principal/Secundario */}
+              <div className="flex justify-between items-center">
+                <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                  index === 0
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-gray-400 text-white'
+                }`}>
+                  {index === 0 ? 'PRINCIPAL' : 'SECUNDARIO'}
+                </span>
+                {drivers.length > 1 && (
                   <Button
                     type="button"
                     variant="outline"
@@ -933,11 +1128,11 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Select
-                  label={index === 0 ? "Tipo de documento *" : "Tipo documento"}
+                  label="Tipo de documento *"
                   required={index === 0}
                   value={driver.documentType}
                   onChange={(e) => updateDriver(index, 'documentType', e.target.value)}
@@ -947,14 +1142,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                   ))}
                 </Select>
                 <Input
-                  label={index === 0 ? "N° Doc. de identidad *" : "N° Doc. identidad"}
+                  label="N° Doc. de identidad *"
                   placeholder="12345678"
                   required={index === 0}
                   value={driver.documentNumber}
                   onChange={(e) => updateDriver(index, 'documentNumber', e.target.value)}
                 />
                 <Input
-                  label={index === 0 ? "N° de licencia o brevete *" : "N° licencia"}
+                  label="N° de licencia *"
                   placeholder="Q12345678"
                   required={index === 0}
                   value={driver.license}
@@ -963,14 +1158,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label={index === 0 ? "Nombre del conductor *" : "Nombre"}
+                  label="Nombre del conductor *"
                   placeholder="Juan Carlos"
                   required={index === 0}
                   value={driver.name}
                   onChange={(e) => updateDriver(index, 'name', e.target.value)}
                 />
                 <Input
-                  label={index === 0 ? "Apellido del conductor *" : "Apellido"}
+                  label="Apellido del conductor *"
                   placeholder="Pérez García"
                   required={index === 0}
                   value={driver.lastName}
@@ -1134,6 +1329,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                   <th className="text-left py-2 px-2 text-gray-600 font-medium">Cantidad *</th>
                   <th className="text-left py-2 px-2 text-gray-600 font-medium">Unidad *</th>
                   <th className="text-left py-2 px-2 text-gray-600 font-medium">Código</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">Cód. SUNAT</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">GTIN</th>
                   <th className="text-left py-2 px-2 text-gray-600 font-medium">Descripción *</th>
                   <th className="text-left py-2 px-2 text-gray-600 font-medium w-20"></th>
                 </tr>
@@ -1156,7 +1353,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                       <select
                         value={item.unit}
                         onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        className="w-28 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       >
                         {UNIT_TYPES.map(unit => (
                           <option key={unit.value} value={unit.value}>{unit.label}</option>
@@ -1166,10 +1363,30 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                     <td className="py-2 px-2">
                       <input
                         type="text"
-                        placeholder="Código"
+                        placeholder="Interno"
                         value={item.code}
                         onChange={(e) => updateItem(index, 'code', e.target.value)}
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="text"
+                        placeholder="SUNAT"
+                        value={item.sunatCode}
+                        onChange={(e) => updateItem(index, 'sunatCode', e.target.value)}
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        title="Código de producto SUNAT"
+                      />
+                    </td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="text"
+                        placeholder="EAN/GTIN"
+                        value={item.gtin}
+                        onChange={(e) => updateItem(index, 'gtin', e.target.value)}
                         className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        title="Código de barras GTIN/EAN"
                       />
                     </td>
                     <td className="py-2 px-2">
@@ -1178,7 +1395,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                         placeholder="Descripción del producto"
                         value={item.description}
                         onChange={(e) => updateItem(index, 'description', e.target.value)}
-                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        className="w-full min-w-40 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
                         required
                       />
                     </td>
