@@ -197,7 +197,7 @@ const formatDate = (dateValue) => {
  */
 export const generateCarrierDispatchGuidePDF = async (guide, companySettings, download = true) => {
   const doc = new jsPDF({
-    orientation: 'portrait',
+    orientation: 'landscape', // Formato horizontal según SUNAT
     unit: 'pt',
     format: 'a4'
   })
