@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search } from 'lucide-react'
+import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -87,6 +88,7 @@ const UNITS = [
 
 export default function CreateQuotation() {
   const { user } = useAuth()
+  const { businessSettings } = useAppContext()
   const navigate = useNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
   const toast = useToast()
@@ -96,6 +98,12 @@ export default function CreateQuotation() {
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editingQuotationNumber, setEditingQuotationNumber] = useState('')
+
+  // Estados para selección de precio múltiple y presentaciones
+  const [showPriceModal, setShowPriceModal] = useState(false)
+  const [showPresentationModal, setShowPresentationModal] = useState(false)
+  const [pendingProductSelection, setPendingProductSelection] = useState(null) // { index, product }
+  const [selectedPriceLevel, setSelectedPriceLevel] = useState(null)
 
   // Cliente
   const [customerMode, setCustomerMode] = useState('select') // 'select' o 'manual'
@@ -228,16 +236,101 @@ export default function CreateQuotation() {
     setQuotationItems(newItems)
   }
 
-  const selectProduct = (index, product) => {
+  const selectProduct = (index, product, selectedPrice = null, selectedPresentation = null) => {
+    // Verificar si tiene presentaciones habilitadas
+    const hasPresentations = businessSettings?.presentationsEnabled &&
+                             product.presentations &&
+                             product.presentations.length > 0
+
+    // Verificar si tiene múltiples precios habilitados
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
+                              (product.price2 || product.price3 || product.price4)
+
+    // Si tiene presentaciones y no se ha seleccionado una, mostrar modal
+    if (hasPresentations && !selectedPresentation) {
+      setPendingProductSelection({ index, product })
+      setShowPresentationModal(true)
+      setShowProductSearch(null)
+      return
+    }
+
+    // Si tiene múltiples precios y no se ha seleccionado uno, mostrar modal
+    if (hasMultiplePrices && !selectedPrice && !selectedPresentation) {
+      // Verificar si el cliente tiene nivel de precio asignado
+      const customer = selectedCustomer || (customerMode === 'manual' ? manualCustomer : null)
+      if (customer?.priceLevel) {
+        // Auto-seleccionar precio según nivel del cliente
+        const priceKey = customer.priceLevel
+        selectedPrice = priceKey === 'price1' ? product.price : (product[priceKey] || product.price)
+      } else {
+        // Mostrar modal para seleccionar precio
+        setPendingProductSelection({ index, product })
+        setShowPriceModal(true)
+        setShowProductSearch(null)
+        return
+      }
+    }
+
+    // Determinar el precio final
+    let finalPrice = selectedPrice || product.price
+    let finalName = product.name
+    let finalUnit = product.unit || 'UNIDAD'
+    let presentationInfo = ''
+
+    // Si se seleccionó una presentación
+    if (selectedPresentation) {
+      finalPrice = selectedPresentation.price
+      finalName = `${product.name} (${selectedPresentation.name})`
+      presentationInfo = selectedPresentation.name
+    }
+
     const newItems = [...quotationItems]
     newItems[index].productId = product.id
-    newItems[index].name = product.name
+    newItems[index].name = finalName
     newItems[index].description = product.description || ''
-    newItems[index].unitPrice = product.price
-    newItems[index].unit = product.unit || 'UNIDAD'
-    newItems[index].searchTerm = product.name
+    newItems[index].unitPrice = finalPrice
+    newItems[index].unit = finalUnit
+    newItems[index].searchTerm = finalName
+    newItems[index].presentationName = presentationInfo
+    newItems[index].presentationFactor = selectedPresentation?.factor || 1
     setQuotationItems(newItems)
     setShowProductSearch(null)
+    setPendingProductSelection(null)
+  }
+
+  // Manejar selección de precio desde el modal
+  const handlePriceSelection = (priceLevel) => {
+    if (!pendingProductSelection) return
+
+    const { index, product } = pendingProductSelection
+    let selectedPrice = product.price
+
+    if (priceLevel === 'price2' && product.price2) {
+      selectedPrice = product.price2
+    } else if (priceLevel === 'price3' && product.price3) {
+      selectedPrice = product.price3
+    } else if (priceLevel === 'price4' && product.price4) {
+      selectedPrice = product.price4
+    }
+
+    setShowPriceModal(false)
+    selectProduct(index, product, selectedPrice, null)
+  }
+
+  // Manejar selección de presentación desde el modal
+  const handlePresentationSelection = (presentation) => {
+    if (!pendingProductSelection) return
+
+    const { index, product } = pendingProductSelection
+    setShowPresentationModal(false)
+    selectProduct(index, product, null, presentation)
+  }
+
+  // Cancelar selección pendiente
+  const cancelPendingSelection = () => {
+    setShowPriceModal(false)
+    setShowPresentationModal(false)
+    setPendingProductSelection(null)
   }
 
   const clearProductSelection = (index) => {
@@ -867,24 +960,48 @@ export default function CreateQuotation() {
                             />
                             <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                               {getFilteredProducts(item.searchTerm).length > 0 ? (
-                                getFilteredProducts(item.searchTerm).map(product => (
-                                  <button
-                                    key={product.id}
-                                    type="button"
-                                    onClick={() => selectProduct(index, product)}
-                                    className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
-                                  >
-                                    <div>
-                                      <p className="font-medium text-sm">{product.name}</p>
-                                      {product.code && (
-                                        <p className="text-xs text-gray-500">Código: {product.code}</p>
-                                      )}
-                                    </div>
-                                    <span className="text-sm font-semibold text-primary-600">
-                                      {formatCurrency(product.price)}
-                                    </span>
-                                  </button>
-                                ))
+                                getFilteredProducts(item.searchTerm).map(product => {
+                                  const hasPresentations = businessSettings?.presentationsEnabled &&
+                                                           product.presentations?.length > 0
+                                  const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
+                                                            (product.price2 || product.price3 || product.price4)
+
+                                  return (
+                                    <button
+                                      key={product.id}
+                                      type="button"
+                                      onClick={() => selectProduct(index, product)}
+                                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                                    >
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-medium text-sm">{product.name}</p>
+                                          {hasMultiplePrices && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                                              <Tag className="w-3 h-3 mr-0.5" />
+                                              Precios
+                                            </span>
+                                          )}
+                                          {hasPresentations && (
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                              <Package className="w-3 h-3 mr-0.5" />
+                                              Presentaciones
+                                            </span>
+                                          )}
+                                        </div>
+                                        {product.code && (
+                                          <p className="text-xs text-gray-500">Código: {product.code}</p>
+                                        )}
+                                      </div>
+                                      <span className="text-sm font-semibold text-primary-600 ml-2">
+                                        {formatCurrency(product.price)}
+                                        {(hasMultiplePrices || hasPresentations) && (
+                                          <span className="text-xs text-gray-400 block">base</span>
+                                        )}
+                                      </span>
+                                    </button>
+                                  )
+                                })
                               ) : (
                                 <div className="px-4 py-3 text-sm text-gray-500 text-center">
                                   No se encontraron productos
@@ -1219,6 +1336,176 @@ export default function CreateQuotation() {
                   Crear y Usar
                 </>
               )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Selección de Precio */}
+      <Modal
+        isOpen={showPriceModal}
+        onClose={cancelPendingSelection}
+        title="Seleccionar Precio"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Este producto tiene múltiples precios. Seleccione el precio que desea usar para la cotización:
+          </p>
+          <p className="font-medium text-gray-900">
+            {pendingProductSelection?.product?.name}
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Precio 1 */}
+            <button
+              type="button"
+              onClick={() => handlePriceSelection('price1')}
+              className="p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Tag className="w-4 h-4 text-primary-600" />
+                <span className="text-sm font-medium text-gray-700">
+                  {businessSettings?.priceLabels?.price1 || 'Precio 1'}
+                </span>
+              </div>
+              <p className="text-lg font-bold text-primary-600">
+                {formatCurrency(pendingProductSelection?.product?.price || 0)}
+              </p>
+            </button>
+
+            {/* Precio 2 */}
+            {pendingProductSelection?.product?.price2 && (
+              <button
+                type="button"
+                onClick={() => handlePriceSelection('price2')}
+                className="p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Tag className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-gray-700">
+                    {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                  </span>
+                </div>
+                <p className="text-lg font-bold text-green-600">
+                  {formatCurrency(pendingProductSelection?.product?.price2)}
+                </p>
+              </button>
+            )}
+
+            {/* Precio 3 */}
+            {pendingProductSelection?.product?.price3 && (
+              <button
+                type="button"
+                onClick={() => handlePriceSelection('price3')}
+                className="p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Tag className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-medium text-gray-700">
+                    {businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                  </span>
+                </div>
+                <p className="text-lg font-bold text-blue-600">
+                  {formatCurrency(pendingProductSelection?.product?.price3)}
+                </p>
+              </button>
+            )}
+
+            {/* Precio 4 */}
+            {pendingProductSelection?.product?.price4 && (
+              <button
+                type="button"
+                onClick={() => handlePriceSelection('price4')}
+                className="p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Tag className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm font-medium text-gray-700">
+                    {businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                  </span>
+                </div>
+                <p className="text-lg font-bold text-purple-600">
+                  {formatCurrency(pendingProductSelection?.product?.price4)}
+                </p>
+              </button>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={cancelPendingSelection}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Selección de Presentación */}
+      <Modal
+        isOpen={showPresentationModal}
+        onClose={cancelPendingSelection}
+        title="Seleccionar Presentación"
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Este producto tiene diferentes presentaciones. Seleccione la presentación que desea cotizar:
+          </p>
+          <p className="font-medium text-gray-900">
+            {pendingProductSelection?.product?.name}
+          </p>
+
+          <div className="space-y-2">
+            {/* Unidad base */}
+            <button
+              type="button"
+              onClick={() => selectProduct(
+                pendingProductSelection?.index,
+                pendingProductSelection?.product,
+                pendingProductSelection?.product?.price,
+                null
+              )}
+              className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <Package className="w-5 h-5 text-gray-500" />
+                <div>
+                  <p className="font-medium">Unidad</p>
+                  <p className="text-xs text-gray-500">Presentación base</p>
+                </div>
+              </div>
+              <p className="text-lg font-bold text-primary-600">
+                {formatCurrency(pendingProductSelection?.product?.price || 0)}
+              </p>
+            </button>
+
+            {/* Presentaciones disponibles */}
+            {pendingProductSelection?.product?.presentations?.map((presentation, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handlePresentationSelection(presentation)}
+                className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <Package className="w-5 h-5 text-primary-500" />
+                  <div>
+                    <p className="font-medium">{presentation.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {presentation.factor} unidades
+                    </p>
+                  </div>
+                </div>
+                <p className="text-lg font-bold text-primary-600">
+                  {formatCurrency(presentation.price)}
+                </p>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={cancelPendingSelection}>
+              Cancelar
             </Button>
           </div>
         </div>
