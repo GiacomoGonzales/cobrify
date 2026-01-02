@@ -348,11 +348,26 @@ export default function AdminUsers() {
                 return
               }
 
-              // Solo contar documentos electrónicos (facturas, boletas, notas de crédito/débito)
-              const status = invoice.sunatStatus || 'pending'
-              if (status === 'accepted') userStats.accepted++
-              else if (status === 'rejected') userStats.rejected++
-              else userStats.pending++
+              // Contar documentos electrónicos según su estado SUNAT
+              const status = invoice.sunatStatus || ''
+              const isVoided = invoice.voided === true || invoice.anulado === true
+
+              // Documentos enviados a SUNAT (aceptados o anulados después de aceptar)
+              if (status === 'accepted' || status === 'voided' || status === 'anulado' || isVoided) {
+                userStats.accepted++
+              }
+              // Documentos rechazados por SUNAT
+              else if (status === 'rejected') {
+                userStats.rejected++
+              }
+              // Documentos pendientes de envío (nunca se enviaron a SUNAT)
+              else if (!status || status === 'pending') {
+                userStats.pending++
+              }
+              // Cualquier otro estado cuenta como aceptado (fue procesado)
+              else {
+                userStats.accepted++
+              }
             })
 
             stats[userId] = userStats
