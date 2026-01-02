@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, CreditCard, Plus, Trash2, Search, Loader2 } from 'lucide-react'
+import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, CreditCard, Plus, Trash2, Search, Loader2, Save } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createCarrierDispatchGuide, getCompanySettings } from '@/services/firestoreService'
+import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, getCompanySettings } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
@@ -81,6 +81,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const [items, setItems] = useState([{ description: '', quantity: 1, unit: 'NIU' }])
 
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isLookingUpShipper, setIsLookingUpShipper] = useState(false)
   const [isLookingUpRecipient, setIsLookingUpRecipient] = useState(false)
 
@@ -347,6 +348,74 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       toast.error(error.message || 'Error al crear la guía de remisión transportista')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Guardar borrador sin validaciones estrictas
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true)
+    try {
+      const businessId = getBusinessId()
+
+      // Preparar items (sin validación estricta)
+      const validItems = items
+        .filter(item => item.description?.trim())
+        .map(item => ({
+          description: item.description.trim(),
+          quantity: parseFloat(item.quantity) || 1,
+          unit: item.unit || 'NIU',
+        }))
+
+      const carrierDispatchGuide = {
+        documentType: '31',
+        relatedGuides: relatedGuides.filter(g => g.number.trim()),
+        shipper: {
+          ruc: shipperRuc,
+          businessName: shipperName,
+        },
+        recipient: {
+          documentType: recipientDocType,
+          documentNumber: recipientDocNumber,
+          name: recipientName,
+        },
+        transferReason,
+        transferDate,
+        totalWeight: parseFloat(totalWeight) || 0,
+        origin: {
+          address: originAddress,
+          ubigeo: originUbigeo,
+        },
+        destination: {
+          address: destinationAddress,
+          ubigeo: destinationUbigeo,
+        },
+        vehicle: {
+          plate: vehiclePlate.toUpperCase(),
+          mtcAuthorization: vehicleMtcAuth,
+        },
+        driver: {
+          documentType: driverDocType,
+          documentNumber: driverDocNumber,
+          name: driverName,
+          lastName: driverLastName,
+          license: driverLicense,
+        },
+        items: validItems,
+      }
+
+      const result = await saveCarrierDispatchGuideDraft(businessId, carrierDispatchGuide)
+
+      if (result.success) {
+        toast.success('Borrador guardado exitosamente')
+        onClose()
+      } else {
+        throw new Error(result.error || 'Error al guardar el borrador')
+      }
+    } catch (error) {
+      console.error('Error al guardar borrador:', error)
+      toast.error(error.message || 'Error al guardar el borrador')
+    } finally {
+      setIsSavingDraft(false)
     }
   }
 
@@ -863,34 +932,55 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
         {/* Footer */}
         <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <div className="flex flex-col sm:flex-row justify-end gap-3">
+          <div className="flex flex-col sm:flex-row justify-between gap-3">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={isSaving}
+              disabled={isSaving || isSavingDraft}
               className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              disabled={isSaving}
-              className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
-              size="lg"
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Generando GRE...
-                </>
-              ) : (
-                <>
-                  <Truck className="w-5 h-5 mr-2" />
-                  Generar GRE Transportista
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSaveDraft}
+                disabled={isSaving || isSavingDraft}
+                className="w-full sm:w-auto"
+              >
+                {isSavingDraft ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Borrador
+                  </>
+                )}
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSaving || isSavingDraft}
+                className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
+                size="lg"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Generando GRE...
+                  </>
+                ) : (
+                  <>
+                    <Truck className="w-5 h-5 mr-2" />
+                    Generar GRE Transportista
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </form>

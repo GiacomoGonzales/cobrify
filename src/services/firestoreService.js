@@ -1849,6 +1849,48 @@ export const createCarrierDispatchGuide = async (businessId, guideData) => {
 }
 
 /**
+ * Guardar borrador de guía de remisión transportista
+ */
+export const saveCarrierDispatchGuideDraft = async (businessId, guideData, draftId = null) => {
+  try {
+    const guideToSave = {
+      ...guideData,
+      documentType: '31', // 31 = GRE Transportista
+      status: 'draft',
+      sunatStatus: null,
+      updatedAt: serverTimestamp(),
+      businessId: businessId,
+    }
+
+    if (draftId) {
+      // Actualizar borrador existente
+      const docRef = doc(db, 'businesses', businessId, 'carrierDispatchGuides', draftId)
+      await updateDoc(docRef, guideToSave)
+      return {
+        success: true,
+        id: draftId,
+        guide: { id: draftId, ...guideToSave }
+      }
+    } else {
+      // Crear nuevo borrador
+      guideToSave.createdAt = serverTimestamp()
+      const docRef = await addDoc(
+        collection(db, 'businesses', businessId, 'carrierDispatchGuides'),
+        guideToSave
+      )
+      return {
+        success: true,
+        id: docRef.id,
+        guide: { id: docRef.id, ...guideToSave }
+      }
+    }
+  } catch (error) {
+    console.error('Error al guardar borrador de guía transportista:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener guías de remisión transportista de un negocio
  */
 export const getCarrierDispatchGuides = async (businessId) => {
