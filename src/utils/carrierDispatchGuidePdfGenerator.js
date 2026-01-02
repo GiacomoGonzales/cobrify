@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -11,6 +12,37 @@ const TRANSFER_REASONS = {
   '08': 'Importación',
   '09': 'Exportación',
   '13': 'Otros',
+}
+
+const TRANSPORT_TYPES = {
+  '01': 'Público',
+  '02': 'Privado',
+}
+
+/**
+ * Obtiene el nombre de ubicación desde códigos de ubigeo
+ */
+const getLocationName = (departamento, provincia, distrito) => {
+  const parts = []
+
+  if (distrito && departamento && provincia) {
+    const distList = DISTRITOS[`${departamento}${provincia}`] || []
+    const dist = distList.find(d => d.code === distrito)
+    if (dist) parts.push(dist.name)
+  }
+
+  if (provincia && departamento) {
+    const provList = PROVINCIAS[departamento] || []
+    const prov = provList.find(p => p.code === provincia)
+    if (prov) parts.push(prov.name)
+  }
+
+  if (departamento) {
+    const dept = DEPARTAMENTOS.find(d => d.code === departamento)
+    if (dept) parts.push(dept.name)
+  }
+
+  return parts.join(', ')
 }
 
 /**
@@ -196,6 +228,12 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   const origin = guide.origin || {}
   const destination = guide.destination || {}
   const items = guide.items || []
+  const drivers = guide.drivers || [driver]
+  const vehicles = guide.vehicles || [vehicle]
+  const transportType = guide.transportType || '02'
+  const transferDescription = guide.transferDescription || ''
+  const observations = guide.observations || ''
+  const isM1OrLVehicle = guide.isM1OrLVehicle || false
 
   // ========== 1. ENCABEZADO ==========
   const headerHeight = 85
@@ -335,41 +373,65 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 12
 
-  // Fila 1: Fechas y MTC
+  // Fila 1: Tipo transporte, Fechas y MTC
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
 
-  doc.text('Fecha de inicio de traslado:', MARGIN_LEFT, currentY)
+  doc.text('Tipo de transporte:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatDate(guide.transferDate), MARGIN_LEFT + 115, currentY)
+  doc.text(TRANSPORT_TYPES[transportType] || 'Privado', MARGIN_LEFT + 85, currentY)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('Fecha de emisión:', MARGIN_LEFT + 220, currentY)
+  doc.text('Fecha traslado:', MARGIN_LEFT + 150, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatDate(guide.createdAt || guide.transferDate), MARGIN_LEFT + 305, currentY)
+  doc.text(formatDate(guide.transferDate), MARGIN_LEFT + 225, currentY)
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('Fecha emisión:', MARGIN_LEFT + 310, currentY)
+  doc.setFont('helvetica', 'normal')
+  doc.text(formatDate(guide.createdAt || guide.transferDate), MARGIN_LEFT + 380, currentY)
 
   if (companySettings?.mtcRegistration) {
     doc.setFont('helvetica', 'bold')
-    doc.text('MTC:', MARGIN_LEFT + 400, currentY)
+    doc.text('MTC:', MARGIN_LEFT + 460, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(companySettings.mtcRegistration, MARGIN_LEFT + 430, currentY)
+    doc.text(companySettings.mtcRegistration, MARGIN_LEFT + 485, currentY)
   }
 
   currentY += 14
 
-  // Fila 2: Peso y Motivo
+  // Fila 2: Peso, Motivo y M1/L
   doc.setFont('helvetica', 'bold')
   doc.text('Peso bruto total:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
   doc.text(`${(guide.totalWeight || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })} KGM`, MARGIN_LEFT + 75, currentY)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('Motivo de traslado:', MARGIN_LEFT + 220, currentY)
+  doc.text('Motivo de traslado:', MARGIN_LEFT + 180, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-', MARGIN_LEFT + 310, currentY)
+  doc.text(TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-', MARGIN_LEFT + 270, currentY)
 
-  currentY += 18
+  if (isM1OrLVehicle) {
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text('(Vehículo M1/L)', MARGIN_LEFT + 400, currentY)
+    doc.setTextColor(...BLACK)
+  }
+
+  currentY += 14
+
+  // Fila 3: Descripción del traslado (si existe)
+  if (transferDescription) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('Descripción:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    const descLines = doc.splitTextToSize(transferDescription, CONTENT_WIDTH - 60)
+    doc.text(descLines[0], MARGIN_LEFT + 55, currentY)
+    currentY += 14
+  }
+
+  currentY += 4
 
   // ========== 3. REMITENTE Y DESTINATARIO ==========
   doc.setLineWidth(0.5)
@@ -442,12 +504,19 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   currentY += Math.max(originAddr.slice(0, 2).length, destAddr.slice(0, 2).length) * 10 + 5
 
-  // Ubigeos
-  if (origin.ubigeo || destination.ubigeo) {
+  // Ubicación (Departamento/Provincia/Distrito o Ubigeo)
+  const originLocation = origin.departamento
+    ? getLocationName(origin.departamento, origin.provincia, origin.distrito)
+    : (origin.ubigeo ? `Ubigeo: ${origin.ubigeo}` : '')
+  const destLocation = destination.departamento
+    ? getLocationName(destination.departamento, destination.provincia, destination.distrito)
+    : (destination.ubigeo ? `Ubigeo: ${destination.ubigeo}` : '')
+
+  if (originLocation || destLocation) {
     doc.setFontSize(7)
     doc.setTextColor(...MEDIUM_GRAY)
-    if (origin.ubigeo) doc.text(`Ubigeo: ${origin.ubigeo}`, MARGIN_LEFT, currentY)
-    if (destination.ubigeo) doc.text(`Ubigeo: ${destination.ubigeo}`, colMidX, currentY)
+    if (originLocation) doc.text(originLocation, MARGIN_LEFT, currentY)
+    if (destLocation) doc.text(destLocation, colMidX, currentY)
     currentY += 12
   }
 
@@ -544,7 +613,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   currentY += 15
 
-  // ========== 6. DATOS DEL VEHÍCULO ==========
+  // ========== 6. DATOS DEL VEHÍCULO(S) ==========
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
@@ -553,50 +622,71 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text('DATOS DEL VEHÍCULO', MARGIN_LEFT, currentY)
+  doc.text(`DATOS DEL VEHÍCULO${vehicles.length > 1 ? 'S' : ''}`, MARGIN_LEFT, currentY)
   currentY += 12
 
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Placa:', MARGIN_LEFT, currentY)
-  doc.setFont('helvetica', 'normal')
-  doc.text(vehicle.plate || '-', MARGIN_LEFT + 35, currentY)
+  // Mostrar todos los vehículos
+  const validVehicles = vehicles.filter(v => v && v.plate)
+  validVehicles.forEach((v, idx) => {
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`Placa${validVehicles.length > 1 ? ` ${idx + 1}` : ''}:`, MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(v.plate || '-', MARGIN_LEFT + 50, currentY)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('N° Autorización MTC:', MARGIN_LEFT + 150, currentY)
-  doc.setFont('helvetica', 'normal')
-  doc.text(vehicle.mtcAuthorization || '-', MARGIN_LEFT + 255, currentY)
+    if (v.mtcAuthorization) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('N° Autorización MTC:', MARGIN_LEFT + 150, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(v.mtcAuthorization, MARGIN_LEFT + 255, currentY)
+    }
 
-  currentY += 18
+    if (v.mtcEntity) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('Entidad:', MARGIN_LEFT + 380, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(v.mtcEntity, MARGIN_LEFT + 420, currentY)
+    }
 
-  // ========== 7. DATOS DEL CONDUCTOR ==========
+    currentY += 12
+  })
+
+  currentY += 6
+
+  // ========== 7. DATOS DEL CONDUCTOR(ES) ==========
   doc.setLineWidth(0.5)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 12
 
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.text('DATOS DEL CONDUCTOR', MARGIN_LEFT, currentY)
+  doc.text(`DATOS DEL CONDUCTOR${drivers.length > 1 ? 'ES' : ''}`, MARGIN_LEFT, currentY)
   currentY += 12
 
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Documento:', MARGIN_LEFT, currentY)
-  doc.setFont('helvetica', 'normal')
-  doc.text(driver.documentNumber || '-', MARGIN_LEFT + 55, currentY)
+  // Mostrar todos los conductores
+  const validDrivers = drivers.filter(d => d && (d.documentNumber || d.name))
+  validDrivers.forEach((d, idx) => {
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`Documento${validDrivers.length > 1 ? ` ${idx + 1}` : ''}:`, MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(d.documentNumber || '-', MARGIN_LEFT + 60, currentY)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('Licencia:', MARGIN_LEFT + 150, currentY)
-  doc.setFont('helvetica', 'normal')
-  doc.text(driver.license || '-', MARGIN_LEFT + 195, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Licencia:', MARGIN_LEFT + 150, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(d.license || '-', MARGIN_LEFT + 195, currentY)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('Nombre:', MARGIN_LEFT + 300, currentY)
-  doc.setFont('helvetica', 'normal')
-  const driverFullName = `${driver.name || ''} ${driver.lastName || ''}`.trim() || '-'
-  doc.text(driverFullName.substring(0, 30), MARGIN_LEFT + 345, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Nombre:', MARGIN_LEFT + 290, currentY)
+    doc.setFont('helvetica', 'normal')
+    const fullName = `${d.name || ''} ${d.lastName || ''}`.trim() || '-'
+    doc.text(fullName.substring(0, 30), MARGIN_LEFT + 335, currentY)
 
-  currentY += 18
+    currentY += 12
+  })
+
+  currentY += 6
 
   // ========== 8. GRE REMITENTE RELACIONADAS ==========
   if (guide.relatedGuides && guide.relatedGuides.length > 0 && guide.relatedGuides.some(g => g.number)) {
@@ -606,7 +696,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
-    doc.text('GRE REMITENTE RELACIONADAS', MARGIN_LEFT, currentY)
+    doc.text('DOCUMENTOS RELACIONADOS', MARGIN_LEFT, currentY)
     currentY += 12
 
     doc.setFontSize(8)
@@ -619,7 +709,28 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     currentY += 15
   }
 
-  // ========== 9. FOOTER CON QR ==========
+  // ========== 9. OBSERVACIONES ==========
+  if (observations) {
+    doc.setLineWidth(0.5)
+    doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+    currentY += 12
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    doc.text('OBSERVACIONES', MARGIN_LEFT, currentY)
+    currentY += 12
+
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    const obsLines = doc.splitTextToSize(observations, CONTENT_WIDTH)
+    obsLines.slice(0, 3).forEach((line, i) => {
+      doc.text(line, MARGIN_LEFT, currentY + (i * 10))
+    })
+    currentY += Math.min(obsLines.length, 3) * 10 + 5
+  }
+
+  // ========== 10. FOOTER CON QR ==========
   const footerY = PAGE_HEIGHT - 90
   const qrSize = 55
 

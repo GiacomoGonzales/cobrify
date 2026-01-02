@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, CreditCard, Plus, Trash2, Search, Loader2, Save } from 'lucide-react'
+import { X, Truck, MapPin, User, Package, Calendar, FileText, Building2, Car, Plus, Trash2, Search, Loader2, Save, Info } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -8,6 +8,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, getCompanySettings } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
+import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = [
   { value: '01', label: '01 - Venta' },
@@ -22,6 +23,17 @@ const DOCUMENT_TYPES = [
   { value: '1', label: 'DNI' },
   { value: '4', label: 'Carnet de Extranjería' },
   { value: '7', label: 'Pasaporte' },
+]
+
+const UNIT_TYPES = [
+  { value: 'NIU', label: 'Unidad (NIU)' },
+  { value: 'KGM', label: 'Kilogramo (KGM)' },
+  { value: 'LTR', label: 'Litro (LTR)' },
+  { value: 'MTR', label: 'Metro (MTR)' },
+  { value: 'BX', label: 'Caja (BX)' },
+  { value: 'PK', label: 'Paquete (PK)' },
+  { value: 'BG', label: 'Bolsa (BG)' },
+  { value: 'TNE', label: 'Tonelada (TNE)' },
 ]
 
 // Obtener fecha local en formato YYYY-MM-DD
@@ -57,28 +69,43 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const [transferReason, setTransferReason] = useState('01')
   const [transferDate, setTransferDate] = useState('')
   const [totalWeight, setTotalWeight] = useState('')
+  const [transferDescription, setTransferDescription] = useState('')
+  const [observations, setObservations] = useState('')
 
-  // Origen
+  // Tipo de transporte
+  const [transportType, setTransportType] = useState('02') // 02 = Privado, 01 = Público
+  const [isM1OrLVehicle, setIsM1OrLVehicle] = useState(false) // Vehículos categoría M1 o L
+
+  // Origen - Ubigeo con dropdowns
   const [originAddress, setOriginAddress] = useState('')
-  const [originUbigeo, setOriginUbigeo] = useState('')
+  const [originDepartamento, setOriginDepartamento] = useState('')
+  const [originProvincia, setOriginProvincia] = useState('')
+  const [originDistrito, setOriginDistrito] = useState('')
 
-  // Destino
+  // Destino - Ubigeo con dropdowns
   const [destinationAddress, setDestinationAddress] = useState('')
-  const [destinationUbigeo, setDestinationUbigeo] = useState('')
+  const [destinationDepartamento, setDestinationDepartamento] = useState('')
+  const [destinationProvincia, setDestinationProvincia] = useState('')
+  const [destinationDistrito, setDestinationDistrito] = useState('')
 
-  // Vehículo
-  const [vehiclePlate, setVehiclePlate] = useState('')
-  const [vehicleMtcAuth, setVehicleMtcAuth] = useState('')
+  // Vehículos (soporte para múltiples)
+  const [vehicles, setVehicles] = useState([{
+    plate: '',
+    mtcAuthorization: '',
+    mtcEntity: ''
+  }])
 
-  // Conductor
-  const [driverDocType, setDriverDocType] = useState('1')
-  const [driverDocNumber, setDriverDocNumber] = useState('')
-  const [driverName, setDriverName] = useState('')
-  const [driverLastName, setDriverLastName] = useState('')
-  const [driverLicense, setDriverLicense] = useState('')
+  // Conductores (soporte para múltiples)
+  const [drivers, setDrivers] = useState([{
+    documentType: '1',
+    documentNumber: '',
+    name: '',
+    lastName: '',
+    license: ''
+  }])
 
   // Items
-  const [items, setItems] = useState([{ description: '', quantity: 1, unit: 'NIU' }])
+  const [items, setItems] = useState([{ description: '', quantity: 1, unit: 'NIU', code: '' }])
 
   const [isSaving, setIsSaving] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
@@ -102,10 +129,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
     }
     if (isOpen) {
       loadCarrierData()
-      // Establecer fecha de traslado por defecto (mañana)
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      setTransferDate(getLocalDateString(tomorrow))
+      // Establecer fecha de traslado por defecto (hoy)
+      setTransferDate(getLocalDateString())
     }
   }, [isOpen, getBusinessId])
 
@@ -145,7 +170,6 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       let result
 
       if (recipientDocType === '6') {
-        // RUC
         if (recipientDocNumber.length !== 11) {
           toast.error('El RUC debe tener 11 dígitos')
           setIsLookingUpRecipient(false)
@@ -157,7 +181,6 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           toast.success('Datos del destinatario obtenidos correctamente')
         }
       } else if (recipientDocType === '1') {
-        // DNI
         if (recipientDocNumber.length !== 8) {
           toast.error('El DNI debe tener 8 dígitos')
           setIsLookingUpRecipient(false)
@@ -190,37 +213,82 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
     setRelatedGuides([...relatedGuides, { number: '', ruc: '' }])
   }
 
-  // Eliminar GRE Remitente relacionada
   const removeRelatedGuide = (index) => {
     if (relatedGuides.length > 1) {
       setRelatedGuides(relatedGuides.filter((_, i) => i !== index))
     }
   }
 
-  // Actualizar GRE Remitente relacionada
   const updateRelatedGuide = (index, field, value) => {
     const updated = [...relatedGuides]
     updated[index][field] = value
     setRelatedGuides(updated)
   }
 
-  // Agregar item
-  const addItem = () => {
-    setItems([...items, { description: '', quantity: 1, unit: 'NIU' }])
+  // Funciones para vehículos
+  const addVehicle = () => {
+    setVehicles([...vehicles, { plate: '', mtcAuthorization: '', mtcEntity: '' }])
   }
 
-  // Eliminar item
+  const removeVehicle = (index) => {
+    if (vehicles.length > 1) {
+      setVehicles(vehicles.filter((_, i) => i !== index))
+    }
+  }
+
+  const updateVehicle = (index, field, value) => {
+    const updated = [...vehicles]
+    updated[index][field] = value
+    setVehicles(updated)
+  }
+
+  // Funciones para conductores
+  const addDriver = () => {
+    setDrivers([...drivers, { documentType: '1', documentNumber: '', name: '', lastName: '', license: '' }])
+  }
+
+  const removeDriver = (index) => {
+    if (drivers.length > 1) {
+      setDrivers(drivers.filter((_, i) => i !== index))
+    }
+  }
+
+  const updateDriver = (index, field, value) => {
+    const updated = [...drivers]
+    updated[index][field] = value
+    setDrivers(updated)
+  }
+
+  // Funciones para items
+  const addItem = () => {
+    setItems([...items, { description: '', quantity: 1, unit: 'NIU', code: '' }])
+  }
+
   const removeItem = (index) => {
     if (items.length > 1) {
       setItems(items.filter((_, i) => i !== index))
     }
   }
 
-  // Actualizar item
   const updateItem = (index, field, value) => {
     const updated = [...items]
     updated[index][field] = value
     setItems(updated)
+  }
+
+  // Construir ubigeos
+  const getOriginUbigeo = () => {
+    if (originDepartamento && originProvincia && originDistrito) {
+      return buildUbigeo(originDepartamento, originProvincia, originDistrito)
+    }
+    return ''
+  }
+
+  const getDestinationUbigeo = () => {
+    if (destinationDepartamento && destinationProvincia && destinationDistrito) {
+      return buildUbigeo(destinationDepartamento, destinationProvincia, destinationDistrito)
+    }
+    return ''
   }
 
   const handleSubmit = async (e) => {
@@ -257,13 +325,17 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       return
     }
 
-    if (!vehiclePlate) {
-      toast.error('Debe ingresar la placa del vehículo')
+    // Validar al menos un vehículo con placa
+    const validVehicles = vehicles.filter(v => v.plate.trim())
+    if (validVehicles.length === 0) {
+      toast.error('Debe ingresar al menos un vehículo con placa')
       return
     }
 
-    if (!driverDocNumber || !driverName || !driverLastName || !driverLicense) {
-      toast.error('Debe completar todos los datos del conductor')
+    // Validar al menos un conductor completo
+    const validDrivers = drivers.filter(d => d.documentNumber && d.name && d.lastName && d.license)
+    if (validDrivers.length === 0) {
+      toast.error('Debe completar los datos de al menos un conductor')
       return
     }
 
@@ -279,57 +351,55 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       const businessId = getBusinessId()
 
       const carrierDispatchGuide = {
-        // Tipo de documento: 31 = GRE Transportista
         documentType: '31',
-
-        // GRE Remitente relacionadas
+        transportType,
+        isM1OrLVehicle,
         relatedGuides: relatedGuides.filter(g => g.number.trim()),
-
-        // Datos del remitente
         shipper: {
           ruc: shipperRuc,
           businessName: shipperName,
         },
-
-        // Datos del destinatario
         recipient: {
           documentType: recipientDocType,
           documentNumber: recipientDocNumber,
           name: recipientName,
         },
-
-        // Datos básicos
         transferReason,
         transferDate,
+        transferDescription,
         totalWeight: parseFloat(totalWeight),
-
-        // Origen y destino
+        observations,
         origin: {
           address: originAddress,
-          ubigeo: originUbigeo,
+          ubigeo: getOriginUbigeo(),
+          departamento: originDepartamento,
+          provincia: originProvincia,
+          distrito: originDistrito,
         },
         destination: {
           address: destinationAddress,
-          ubigeo: destinationUbigeo,
+          ubigeo: getDestinationUbigeo(),
+          departamento: destinationDepartamento,
+          provincia: destinationProvincia,
+          distrito: destinationDistrito,
         },
-
-        // Vehículo
+        vehicles: validVehicles.map(v => ({
+          plate: v.plate.toUpperCase(),
+          mtcAuthorization: v.mtcAuthorization,
+          mtcEntity: v.mtcEntity,
+        })),
+        // Para compatibilidad, también guardamos el primer vehículo como "vehicle"
         vehicle: {
-          plate: vehiclePlate.toUpperCase(),
-          mtcAuthorization: vehicleMtcAuth,
+          plate: validVehicles[0]?.plate.toUpperCase() || '',
+          mtcAuthorization: validVehicles[0]?.mtcAuthorization || '',
         },
-
-        // Conductor
-        driver: {
-          documentType: driverDocType,
-          documentNumber: driverDocNumber,
-          name: driverName,
-          lastName: driverLastName,
-          license: driverLicense,
-        },
-
-        // Items
-        items: validItems,
+        drivers: validDrivers,
+        // Para compatibilidad, también guardamos el primer conductor como "driver"
+        driver: validDrivers[0] || {},
+        items: validItems.map(item => ({
+          ...item,
+          quantity: parseFloat(item.quantity) || 1,
+        })),
       }
 
       console.log('🚚 Creando guía de remisión transportista:', carrierDispatchGuide)
@@ -357,17 +427,22 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
     try {
       const businessId = getBusinessId()
 
-      // Preparar items (sin validación estricta)
       const validItems = items
         .filter(item => item.description?.trim())
         .map(item => ({
           description: item.description.trim(),
           quantity: parseFloat(item.quantity) || 1,
           unit: item.unit || 'NIU',
+          code: item.code || '',
         }))
+
+      const validVehicles = vehicles.filter(v => v.plate?.trim())
+      const validDrivers = drivers.filter(d => d.documentNumber || d.name)
 
       const carrierDispatchGuide = {
         documentType: '31',
+        transportType,
+        isM1OrLVehicle,
         relatedGuides: relatedGuides.filter(g => g.number.trim()),
         shipper: {
           ruc: shipperRuc,
@@ -380,26 +455,34 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
         },
         transferReason,
         transferDate,
+        transferDescription,
         totalWeight: parseFloat(totalWeight) || 0,
+        observations,
         origin: {
           address: originAddress,
-          ubigeo: originUbigeo,
+          ubigeo: getOriginUbigeo(),
+          departamento: originDepartamento,
+          provincia: originProvincia,
+          distrito: originDistrito,
         },
         destination: {
           address: destinationAddress,
-          ubigeo: destinationUbigeo,
+          ubigeo: getDestinationUbigeo(),
+          departamento: destinationDepartamento,
+          provincia: destinationProvincia,
+          distrito: destinationDistrito,
         },
+        vehicles: validVehicles.map(v => ({
+          plate: v.plate?.toUpperCase() || '',
+          mtcAuthorization: v.mtcAuthorization || '',
+          mtcEntity: v.mtcEntity || '',
+        })),
         vehicle: {
-          plate: vehiclePlate.toUpperCase(),
-          mtcAuthorization: vehicleMtcAuth,
+          plate: validVehicles[0]?.plate?.toUpperCase() || '',
+          mtcAuthorization: validVehicles[0]?.mtcAuthorization || '',
         },
-        driver: {
-          documentType: driverDocType,
-          documentNumber: driverDocNumber,
-          name: driverName,
-          lastName: driverLastName,
-          license: driverLicense,
-        },
+        drivers: validDrivers,
+        driver: validDrivers[0] || {},
         items: validItems,
       }
 
@@ -448,20 +531,6 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)]">
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 
-          {/* Info Banner */}
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <Truck className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-orange-800">
-                <p className="font-medium">Guía de Remisión Transportista (Código 31)</p>
-                <p className="mt-1">
-                  Emitida por la empresa de transporte para sustentar el servicio de traslado de bienes.
-                  Requiere datos del vehículo, conductor y referencia a la GRE del remitente.
-                </p>
-              </div>
-            </div>
-          </div>
-
           {/* Datos del Transportista (Emisor) */}
           <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r-lg">
             <div className="flex items-start gap-2">
@@ -501,7 +570,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             <div className="flex items-start gap-2">
               <FileText className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-blue-900 text-sm">GRE Remitente Relacionada (Opcional)</h3>
+                <h3 className="font-semibold text-blue-900 text-sm">Documentos Relacionados (Opcional)</h3>
                 <p className="text-xs text-blue-800 mt-1">
                   Referencia a la(s) guía(s) de remisión del remitente
                 </p>
@@ -672,18 +741,84 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             />
           </div>
 
-          {/* Datos Básicos del Traslado */}
+          {/* Datos de Envío */}
           <div className="bg-gray-50 border-l-4 border-gray-500 p-4 rounded-r-lg">
             <div className="flex items-start gap-2">
               <Calendar className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-gray-900 text-sm">Datos del Traslado</h3>
-                <p className="text-xs text-gray-700 mt-1">Información básica del transporte</p>
+                <h3 className="font-semibold text-gray-900 text-sm">Datos de Envío</h3>
+                <p className="text-xs text-gray-700 mt-1">Información del traslado</p>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Tipo de Transporte */}
+          <div className="flex flex-col gap-3">
+            <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+              Tipo de Transporte
+              <Info className="w-3.5 h-3.5 text-gray-400" />
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setTransportType('02')}
+                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
+                  transportType === '02'
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                Privado
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransportType('01')}
+                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
+                  transportType === '01'
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                Público
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Input
+              type="date"
+              label="Fecha de inicio de traslado"
+              required
+              value={transferDate}
+              onChange={(e) => setTransferDate(e.target.value)}
+              min={getLocalDateString()}
+            />
+            <Input
+              label="Descripción del traslado"
+              placeholder="Ej: Mercadería variada"
+              value={transferDescription}
+              onChange={(e) => setTransferDescription(e.target.value)}
+            />
+            <Select
+              label="Unid. del peso bruto"
+              value="KGM"
+              disabled
+            >
+              <option value="KGM">KGM</option>
+            </Select>
+            <Input
+              type="number"
+              label="Peso bruto total"
+              placeholder="Ej: 500"
+              required
+              value={totalWeight}
+              onChange={(e) => setTotalWeight(e.target.value)}
+              step="0.01"
+              min="0.01"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Motivo de Traslado"
               required
@@ -694,27 +829,169 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                 <option key={reason.value} value={reason.value}>{reason.label}</option>
               ))}
             </Select>
-            <Input
-              type="date"
-              label="Fecha de Inicio del Traslado"
-              required
-              value={transferDate}
-              onChange={(e) => setTransferDate(e.target.value)}
-              min={getLocalDateString()}
-            />
-            <Input
-              type="number"
-              label="Peso Total (kg)"
-              placeholder="Ej: 500"
-              required
-              value={totalWeight}
-              onChange={(e) => setTotalWeight(e.target.value)}
-              step="0.01"
-              min="0.01"
-            />
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 cursor-pointer p-3 border border-gray-200 rounded-lg hover:bg-gray-50 w-full">
+                <input
+                  type="checkbox"
+                  checked={isM1OrLVehicle}
+                  onChange={(e) => setIsM1OrLVehicle(e.target.checked)}
+                  className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                />
+                <span className="text-sm text-gray-700">
+                  Traslado en vehículos de categoría M1 o L
+                </span>
+                <Info className="w-3.5 h-3.5 text-gray-400 ml-auto" />
+              </label>
+            </div>
           </div>
 
-          {/* Origen */}
+          {/* Vehículos */}
+          <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded-r-lg">
+            <div className="flex items-start gap-2">
+              <Car className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-purple-900 text-sm">Datos del Vehículo</h3>
+                <p className="text-xs text-purple-800 mt-1">Unidad(es) de transporte asignada(s)</p>
+              </div>
+            </div>
+          </div>
+
+          {vehicles.map((vehicle, index) => (
+            <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <Input
+                label={index === 0 ? "Placa Principal *" : ""}
+                placeholder="ABC-123"
+                required={index === 0}
+                value={vehicle.plate}
+                onChange={(e) => updateVehicle(index, 'plate', e.target.value.toUpperCase())}
+              />
+              <Select
+                label={index === 0 ? "Entidad emisora MTC (opcional)" : ""}
+                value={vehicle.mtcEntity}
+                onChange={(e) => updateVehicle(index, 'mtcEntity', e.target.value)}
+              >
+                <option value="">Seleccione</option>
+                <option value="MTC">MTC</option>
+                <option value="SUTRAN">SUTRAN</option>
+              </Select>
+              <Input
+                label={index === 0 ? "N° autorización (opcional)" : ""}
+                placeholder="Certificado de Habilitación"
+                value={vehicle.mtcAuthorization}
+                onChange={(e) => updateVehicle(index, 'mtcAuthorization', e.target.value)}
+              />
+              <div className="flex gap-2">
+                {vehicles.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeVehicle(index)}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+                {index === vehicles.length - 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addVehicle}
+                    className="text-purple-600 hover:bg-purple-50"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Agregar vehículo
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Conductores */}
+          <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-lg">
+            <div className="flex items-start gap-2">
+              <User className="w-5 h-5 text-rose-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-rose-900 text-sm">Datos del Conductor</h3>
+                <p className="text-xs text-rose-800 mt-1">Conductor(es) del vehículo</p>
+              </div>
+            </div>
+          </div>
+
+          {drivers.map((driver, index) => (
+            <div key={index} className="space-y-4 p-4 bg-gray-50 rounded-lg">
+              {index > 0 && (
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-600">Conductor {index + 1}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeDriver(index)}
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Select
+                  label={index === 0 ? "Tipo de documento *" : "Tipo documento"}
+                  required={index === 0}
+                  value={driver.documentType}
+                  onChange={(e) => updateDriver(index, 'documentType', e.target.value)}
+                >
+                  {DOCUMENT_TYPES.map(type => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </Select>
+                <Input
+                  label={index === 0 ? "N° Doc. de identidad *" : "N° Doc. identidad"}
+                  placeholder="12345678"
+                  required={index === 0}
+                  value={driver.documentNumber}
+                  onChange={(e) => updateDriver(index, 'documentNumber', e.target.value)}
+                />
+                <Input
+                  label={index === 0 ? "N° de licencia o brevete *" : "N° licencia"}
+                  placeholder="Q12345678"
+                  required={index === 0}
+                  value={driver.license}
+                  onChange={(e) => updateDriver(index, 'license', e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label={index === 0 ? "Nombre del conductor *" : "Nombre"}
+                  placeholder="Juan Carlos"
+                  required={index === 0}
+                  value={driver.name}
+                  onChange={(e) => updateDriver(index, 'name', e.target.value)}
+                />
+                <Input
+                  label={index === 0 ? "Apellido del conductor *" : "Apellido"}
+                  placeholder="Pérez García"
+                  required={index === 0}
+                  value={driver.lastName}
+                  onChange={(e) => updateDriver(index, 'lastName', e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addDriver}
+            className="text-rose-600 hover:bg-rose-50"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Agregar conductor
+          </Button>
+
+          {/* Punto de Partida */}
           <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg">
             <div className="flex items-start gap-2">
               <MapPin className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -725,25 +1002,58 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <Input
-              label="Dirección de Origen"
-              placeholder="Av. Principal 123, Lima"
+              label="Dirección *"
+              placeholder="Av. Principal 123"
               required
               value={originAddress}
               onChange={(e) => setOriginAddress(e.target.value)}
             />
-            <Input
-              label="Ubigeo de Origen"
-              placeholder="150101"
-              value={originUbigeo}
-              onChange={(e) => setOriginUbigeo(e.target.value)}
-              maxLength={6}
-              helperText="6 dígitos (opcional)"
-            />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Select
+                label="Departamento"
+                value={originDepartamento}
+                onChange={(e) => {
+                  setOriginDepartamento(e.target.value)
+                  setOriginProvincia('')
+                  setOriginDistrito('')
+                }}
+              >
+                <option value="">Seleccione</option>
+                {DEPARTAMENTOS.map(dept => (
+                  <option key={dept.code} value={dept.code}>{dept.name}</option>
+                ))}
+              </Select>
+              <Select
+                label="Provincia"
+                value={originProvincia}
+                onChange={(e) => {
+                  setOriginProvincia(e.target.value)
+                  setOriginDistrito('')
+                }}
+                disabled={!originDepartamento}
+              >
+                <option value="">Seleccione</option>
+                {getProvincias(originDepartamento).map(prov => (
+                  <option key={prov.code} value={prov.code}>{prov.name}</option>
+                ))}
+              </Select>
+              <Select
+                label="Distrito"
+                value={originDistrito}
+                onChange={(e) => setOriginDistrito(e.target.value)}
+                disabled={!originProvincia}
+              >
+                <option value="">Seleccione</option>
+                {getDistritos(originDepartamento, originProvincia).map(dist => (
+                  <option key={dist.code} value={dist.code}>{dist.name}</option>
+                ))}
+              </Select>
+            </div>
           </div>
 
-          {/* Destino */}
+          {/* Punto de Llegada */}
           <div className="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg">
             <div className="flex items-start gap-2">
               <MapPin className="w-5 h-5 text-teal-600 mt-0.5 flex-shrink-0" />
@@ -754,105 +1064,55 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <Input
-              label="Dirección de Destino"
-              placeholder="Jr. Comercio 456, Callao"
+              label="Dirección *"
+              placeholder="Jr. Comercio 456"
               required
               value={destinationAddress}
               onChange={(e) => setDestinationAddress(e.target.value)}
             />
-            <Input
-              label="Ubigeo de Destino"
-              placeholder="070101"
-              value={destinationUbigeo}
-              onChange={(e) => setDestinationUbigeo(e.target.value)}
-              maxLength={6}
-              helperText="6 dígitos (opcional)"
-            />
-          </div>
-
-          {/* Vehículo */}
-          <div className="bg-purple-50 border-l-4 border-purple-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <Car className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-purple-900 text-sm">Datos del Vehículo</h3>
-                <p className="text-xs text-purple-800 mt-1">Unidad de transporte asignada</p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Select
+                label="Departamento"
+                value={destinationDepartamento}
+                onChange={(e) => {
+                  setDestinationDepartamento(e.target.value)
+                  setDestinationProvincia('')
+                  setDestinationDistrito('')
+                }}
+              >
+                <option value="">Seleccione</option>
+                {DEPARTAMENTOS.map(dept => (
+                  <option key={dept.code} value={dept.code}>{dept.name}</option>
+                ))}
+              </Select>
+              <Select
+                label="Provincia"
+                value={destinationProvincia}
+                onChange={(e) => {
+                  setDestinationProvincia(e.target.value)
+                  setDestinationDistrito('')
+                }}
+                disabled={!destinationDepartamento}
+              >
+                <option value="">Seleccione</option>
+                {getProvincias(destinationDepartamento).map(prov => (
+                  <option key={prov.code} value={prov.code}>{prov.name}</option>
+                ))}
+              </Select>
+              <Select
+                label="Distrito"
+                value={destinationDistrito}
+                onChange={(e) => setDestinationDistrito(e.target.value)}
+                disabled={!destinationProvincia}
+              >
+                <option value="">Seleccione</option>
+                {getDistritos(destinationDepartamento, destinationProvincia).map(dist => (
+                  <option key={dist.code} value={dist.code}>{dist.name}</option>
+                ))}
+              </Select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Placa del Vehículo"
-              placeholder="ABC-123"
-              required
-              value={vehiclePlate}
-              onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
-            />
-            <Input
-              label="N° Autorización MTC"
-              placeholder="Certificado de Habilitación"
-              value={vehicleMtcAuth}
-              onChange={(e) => setVehicleMtcAuth(e.target.value)}
-              helperText="Tarjeta de Circulación o Habilitación"
-            />
-          </div>
-
-          {/* Conductor */}
-          <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-r-lg">
-            <div className="flex items-start gap-2">
-              <User className="w-5 h-5 text-rose-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-rose-900 text-sm">Datos del Conductor</h3>
-                <p className="text-xs text-rose-800 mt-1">Conductor principal del vehículo</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Select
-              label="Tipo de Documento"
-              required
-              value={driverDocType}
-              onChange={(e) => setDriverDocType(e.target.value)}
-            >
-              {DOCUMENT_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </Select>
-            <Input
-              label="Número de Documento"
-              placeholder="12345678"
-              required
-              value={driverDocNumber}
-              onChange={(e) => setDriverDocNumber(e.target.value)}
-            />
-            <Input
-              label="Licencia de Conducir"
-              placeholder="Q12345678"
-              required
-              value={driverLicense}
-              onChange={(e) => setDriverLicense(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Nombres del Conductor"
-              placeholder="Juan Carlos"
-              required
-              value={driverName}
-              onChange={(e) => setDriverName(e.target.value)}
-            />
-            <Input
-              label="Apellidos del Conductor"
-              placeholder="Pérez García"
-              required
-              value={driverLastName}
-              onChange={(e) => setDriverLastName(e.target.value)}
-            />
           </div>
 
           {/* Bienes */}
@@ -860,73 +1120,112 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             <div className="flex items-start gap-2">
               <Package className="w-5 h-5 text-cyan-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-cyan-900 text-sm">Bienes a Transportar</h3>
+                <h3 className="font-semibold text-cyan-900 text-sm">Agregar bienes o productos a transportar</h3>
                 <p className="text-xs text-cyan-800 mt-1">Detalle de los productos que se transportan</p>
               </div>
             </div>
           </div>
 
-          {items.map((item, index) => (
-            <div key={index} className="grid grid-cols-12 gap-3 items-end">
-              <div className="col-span-6 md:col-span-7">
-                <Input
-                  label={index === 0 ? "Descripción" : ""}
-                  placeholder="Descripción del producto"
-                  required
-                  value={item.description}
-                  onChange={(e) => updateItem(index, 'description', e.target.value)}
-                />
-              </div>
-              <div className="col-span-2">
-                <Input
-                  type="number"
-                  label={index === 0 ? "Cantidad" : ""}
-                  placeholder="1"
-                  required
-                  value={item.quantity}
-                  onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                  min="0.01"
-                  step="0.01"
-                />
-              </div>
-              <div className="col-span-2">
-                <Select
-                  label={index === 0 ? "Unidad" : ""}
-                  value={item.unit}
-                  onChange={(e) => updateItem(index, 'unit', e.target.value)}
-                >
-                  <option value="NIU">Unidad</option>
-                  <option value="KGM">Kilogramo</option>
-                  <option value="LTR">Litro</option>
-                  <option value="MTR">Metro</option>
-                  <option value="BX">Caja</option>
-                </Select>
-              </div>
-              <div className="col-span-2 md:col-span-1 flex gap-1">
-                {items.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => removeItem(index)}
-                    className="text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-                {index === items.length - 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addItem}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">Item</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">Cantidad *</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">Unidad *</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">Código</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium">Descripción *</th>
+                  <th className="text-left py-2 px-2 text-gray-600 font-medium w-20"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={index} className="border-b border-gray-100">
+                    <td className="py-2 px-2 text-gray-500">{index + 1}</td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        min="0.01"
+                        step="0.01"
+                      />
+                    </td>
+                    <td className="py-2 px-2">
+                      <select
+                        value={item.unit}
+                        onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      >
+                        {UNIT_TYPES.map(unit => (
+                          <option key={unit.value} value={unit.value}>{unit.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="text"
+                        placeholder="Código"
+                        value={item.code}
+                        onChange={(e) => updateItem(index, 'code', e.target.value)}
+                        className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="text"
+                        placeholder="Descripción del producto"
+                        value={item.description}
+                        onChange={(e) => updateItem(index, 'description', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        required
+                      />
+                    </td>
+                    <td className="py-2 px-2">
+                      <div className="flex gap-1">
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {index === items.length - 1 && (
+                          <button
+                            type="button"
+                            onClick={addItem}
+                            className="p-1.5 text-cyan-600 hover:bg-cyan-50 rounded"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Más Información */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Más Información (Observaciones)
+            </label>
+            <textarea
+              placeholder="Información adicional sobre el traslado..."
+              value={observations}
+              onChange={(e) => setObservations(e.target.value.slice(0, 250))}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm resize-none"
+            />
+            <p className="text-xs text-gray-500 text-right">
+              {observations.length}/250 caracteres
+            </p>
+          </div>
 
         </div>
 
@@ -958,7 +1257,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                 ) : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    Guardar Borrador
+                    Guardar
                   </>
                 )}
               </Button>
@@ -976,12 +1275,15 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                 ) : (
                   <>
                     <Truck className="w-5 h-5 mr-2" />
-                    Generar GRE Transportista
+                    Emitir Guía
                   </>
                 )}
               </Button>
             </div>
           </div>
+          <p className="text-xs text-gray-500 text-right mt-2">
+            Campos obligatorios (*)
+          </p>
         </div>
       </form>
     </Modal>
