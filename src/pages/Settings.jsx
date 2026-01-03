@@ -2057,6 +2057,8 @@ export default function Settings() {
                       type="color"
                       value={pdfAccentColor}
                       onChange={(e) => setPdfAccentColor(e.target.value)}
+                      onInput={(e) => setPdfAccentColor(e.target.value)}
+                      onBlur={(e) => setPdfAccentColor(e.target.value)}
                       className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
                       title="Elegir color personalizado"
                     />
@@ -2929,6 +2931,8 @@ export default function Settings() {
                               type="color"
                               value={catalogColor}
                               onChange={(e) => setCatalogColor(e.target.value)}
+                              onInput={(e) => setCatalogColor(e.target.value)}
+                              onBlur={(e) => setCatalogColor(e.target.value)}
                               className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
                             />
                             <span className="text-xs text-gray-600">Otro</span>
