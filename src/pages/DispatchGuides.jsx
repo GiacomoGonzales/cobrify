@@ -911,11 +911,11 @@ export default function DispatchGuides() {
               </Button>
 
               {/* Descargar XML - Solo si tiene XML guardado */}
-              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl) && (
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl) && (
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const xmlUrl = selectedGuide.sunatResponse.xmlStorageUrl || selectedGuide.sunatResponse.xmlUrl
+                    const xmlUrl = selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl
                     window.open(xmlUrl, '_blank')
                   }}
                 >
@@ -925,16 +925,19 @@ export default function DispatchGuides() {
               )}
 
               {/* Descargar CDR - Solo si fue aceptada y tiene CDR */}
-              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.sunatResponse?.cdrStorageUrl || selectedGuide.sunatResponse?.cdrUrl || selectedGuide.sunatResponse?.cdrData) && (
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.cdrUrl || selectedGuide.sunatResponse?.cdrStorageUrl || selectedGuide.sunatResponse?.cdrUrl || selectedGuide.cdrData || selectedGuide.sunatResponse?.cdrData) && (
                 <Button
                   variant="outline"
                   onClick={() => {
-                    if (selectedGuide.sunatResponse.cdrStorageUrl) {
+                    if (selectedGuide.cdrUrl) {
+                      window.open(selectedGuide.cdrUrl, '_blank')
+                    } else if (selectedGuide.sunatResponse?.cdrStorageUrl) {
                       window.open(selectedGuide.sunatResponse.cdrStorageUrl, '_blank')
-                    } else if (selectedGuide.sunatResponse.cdrUrl) {
+                    } else if (selectedGuide.sunatResponse?.cdrUrl) {
                       window.open(selectedGuide.sunatResponse.cdrUrl, '_blank')
-                    } else if (selectedGuide.sunatResponse.cdrData) {
-                      const blob = new Blob([selectedGuide.sunatResponse.cdrData], { type: 'application/xml' })
+                    } else if (selectedGuide.cdrData || selectedGuide.sunatResponse?.cdrData) {
+                      const cdrData = selectedGuide.cdrData || selectedGuide.sunatResponse.cdrData
+                      const blob = new Blob([cdrData], { type: 'application/xml' })
                       const url = URL.createObjectURL(blob)
                       const a = document.createElement('a')
                       a.href = url
