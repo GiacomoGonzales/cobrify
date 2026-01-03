@@ -410,19 +410,28 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docBoxWidth
   const docBoxY = currentY
 
+  // Altura de la sección del RUC (parte superior con fondo de color)
+  const rucSectionHeight = 26
+
+  // Fondo de color para la sección del RUC
+  doc.setFillColor(...ACCENT_COLOR)
+  doc.rect(docBoxX, docBoxY, docBoxWidth, rucSectionHeight, 'F')
+
+  // Recuadro completo con borde
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(1.5)
   doc.rect(docBoxX, docBoxY, docBoxWidth, headerHeight)
 
-  // RUC
+  // Línea separadora después del RUC
+  doc.setLineWidth(0.5)
+  doc.line(docBoxX, docBoxY + rucSectionHeight, docBoxX + docBoxWidth, docBoxY + rucSectionHeight)
+
+  // RUC (texto blanco sobre fondo de color)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
-  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docBoxWidth/2, docBoxY + 18, { align: 'center' })
-
-  // Línea divisoria
-  doc.setLineWidth(0.5)
-  doc.line(docBoxX, docBoxY + 25, docBoxX + docBoxWidth, docBoxY + 25)
+  doc.setTextColor(255, 255, 255)
+  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docBoxWidth/2, docBoxY + 17, { align: 'center' })
+  doc.setTextColor(...BLACK) // Restaurar color negro
 
   // Título
   doc.setFontSize(8)
