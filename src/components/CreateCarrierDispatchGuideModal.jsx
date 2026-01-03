@@ -44,6 +44,13 @@ const getLocalDateString = (date = new Date()) => {
   return `${year}-${month}-${day}`
 }
 
+// Obtener fecha de ayer en formato YYYY-MM-DD
+const getYesterdayDateString = () => {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  return getLocalDateString(yesterday)
+}
+
 export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const toast = useToast()
   const { getBusinessId } = useAppContext()
@@ -79,6 +86,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
   // Datos básicos del traslado
   const [transferReason, setTransferReason] = useState('01')
+  const [issueDate, setIssueDate] = useState('') // Fecha de emisión del documento
   const [transferDate, setTransferDate] = useState('')
   const [totalWeight, setTotalWeight] = useState('')
   const [transferDescription, setTransferDescription] = useState('')
@@ -149,7 +157,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
     }
     if (isOpen) {
       loadCarrierData()
-      // Establecer fecha de traslado por defecto (hoy)
+      // Establecer fechas por defecto (hoy)
+      setIssueDate(getLocalDateString())
       setTransferDate(getLocalDateString())
     }
   }, [isOpen, getBusinessId])
@@ -386,6 +395,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
       const carrierDispatchGuide = {
         documentType: '31',
+        issueDate, // Fecha de emisión seleccionada por el usuario
         transportType,
         isM1OrLVehicle,
         relatedGuides: relatedGuides.filter(g => g.number.trim()),
@@ -489,6 +499,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
       const carrierDispatchGuide = {
         documentType: '31',
+        issueDate, // Fecha de emisión seleccionada
         transportType,
         isM1OrLVehicle,
         relatedGuides: relatedGuides.filter(g => g.number.trim()),
@@ -953,14 +964,30 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <Input
               type="date"
-              label="Fecha de inicio de traslado"
+              label="Fecha de emisión"
+              required
+              value={issueDate}
+              onChange={(e) => {
+                setIssueDate(e.target.value)
+                // Si la fecha de traslado es anterior a la nueva fecha de emisión, ajustarla
+                if (transferDate && e.target.value > transferDate) {
+                  setTransferDate(e.target.value)
+                }
+              }}
+              min={getYesterdayDateString()}
+              max={getLocalDateString()}
+              helperText="Permite ayer"
+            />
+            <Input
+              type="date"
+              label="Fecha de traslado"
               required
               value={transferDate}
               onChange={(e) => setTransferDate(e.target.value)}
-              min={getLocalDateString()}
+              min={issueDate || getYesterdayDateString()}
             />
             <Input
               label="Descripción del traslado"

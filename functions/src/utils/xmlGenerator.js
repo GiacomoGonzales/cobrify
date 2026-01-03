@@ -1730,12 +1730,21 @@ export function generateDispatchGuideXML(guideData, businessData) {
     return `${hours}:${minutes}:${seconds}`
   }
 
-  // Obtener fecha y hora actual en zona horaria de Perú
+  // Obtener fecha y hora en zona horaria de Perú
   const peruNow = getPeruDateTime()
-  const issueDate = formatDatePeru(peruNow)
-  const issueTime = formatTimePeru(peruNow)
 
-  console.log(`📅 [GRE-R] Fecha/hora de emisión (Perú): ${issueDate} ${issueTime}`)
+  // Si se proporciona una fecha de emisión específica, usarla; sino, usar la fecha actual de Perú
+  let issueDate
+  if (guideData.issueDate && typeof guideData.issueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(guideData.issueDate)) {
+    issueDate = guideData.issueDate
+    console.log(`📅 [GRE-R] Usando fecha de emisión proporcionada: ${issueDate}`)
+  } else {
+    issueDate = formatDatePeru(peruNow)
+    console.log(`📅 [GRE-R] Usando fecha de emisión actual (Perú): ${issueDate}`)
+  }
+
+  const issueTime = formatTimePeru(peruNow)
+  console.log(`🕐 [GRE-R] Hora de emisión (Perú): ${issueTime}`)
 
   // Formatear fecha de inicio del traslado
   let transferDate
@@ -2034,12 +2043,21 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     return `${hours}:${minutes}:${seconds}`
   }
 
-  // Obtener fecha y hora actual en zona horaria de Perú
+  // Obtener fecha y hora en zona horaria de Perú
   const peruNow = getPeruDateTime()
-  const issueDate = formatDatePeru(peruNow)
-  const issueTime = formatTimePeru(peruNow)
 
-  console.log(`📅 [GRE-T] Fecha/hora de emisión (Perú): ${issueDate} ${issueTime}`)
+  // Si se proporciona una fecha de emisión específica, usarla; sino, usar la fecha actual de Perú
+  let issueDate
+  if (guideData.issueDate && typeof guideData.issueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(guideData.issueDate)) {
+    issueDate = guideData.issueDate
+    console.log(`📅 [GRE-T] Usando fecha de emisión proporcionada: ${issueDate}`)
+  } else {
+    issueDate = formatDatePeru(peruNow)
+    console.log(`📅 [GRE-T] Usando fecha de emisión actual (Perú): ${issueDate}`)
+  }
+
+  const issueTime = formatTimePeru(peruNow)
+  console.log(`🕐 [GRE-T] Hora de emisión (Perú): ${issueTime}`)
 
   // Formatear fecha de inicio del traslado
   let transferDate

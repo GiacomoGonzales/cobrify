@@ -36,6 +36,13 @@ const getLocalDateString = (date = new Date()) => {
   return `${year}-${month}-${day}`
 }
 
+// Obtener fecha de ayer en formato YYYY-MM-DD
+const getYesterdayDateString = () => {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  return getLocalDateString(yesterday)
+}
+
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null }) {
   const toast = useToast()
   const { getBusinessId } = useAppContext()
@@ -43,6 +50,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Datos básicos de la guía
   const [transferReason, setTransferReason] = useState('01')
   const [transportMode, setTransportMode] = useState('02')
+  const [issueDate, setIssueDate] = useState('') // Fecha de emisión del documento
   const [transferDate, setTransferDate] = useState('')
   const [totalWeight, setTotalWeight] = useState('')
 
@@ -94,7 +102,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const estimatedWeight = invoiceItems.reduce((sum, item) => sum + (item.quantity * 1), 0)
       setTotalWeight(estimatedWeight.toString())
 
-      // Pre-llenar fecha de traslado (mañana por defecto)
+      // Pre-llenar fecha de emisión (hoy) y fecha de traslado (mañana por defecto)
+      setIssueDate(getLocalDateString())
       const tomorrow = new Date()
       tomorrow.setDate(tomorrow.getDate() + 1)
       setTransferDate(getLocalDateString(tomorrow))
@@ -240,6 +249,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         },
 
         // Datos básicos
+        issueDate, // Fecha de emisión seleccionada por el usuario
         transferReason,
         transportMode,
         transferDate,
@@ -390,7 +400,24 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             ))}
           </Select>
 
-          <div>
+          <div className="space-y-3">
+            <Input
+              type="date"
+              label="Fecha de Emisión"
+              icon={Calendar}
+              required
+              value={issueDate}
+              onChange={(e) => {
+                setIssueDate(e.target.value)
+                // Si la fecha de traslado es anterior a la nueva fecha de emisión, ajustarla
+                if (transferDate && e.target.value > transferDate) {
+                  setTransferDate(e.target.value)
+                }
+              }}
+              min={getYesterdayDateString()}
+              max={getLocalDateString()}
+              helperText="Permite seleccionar ayer"
+            />
             <Input
               type="date"
               label="Fecha de Inicio del Traslado"
@@ -398,10 +425,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               required
               value={transferDate}
               onChange={(e) => setTransferDate(e.target.value)}
-              min={getLocalDateString()}
-              helperText="Debe ser hoy o fecha futura"
+              min={issueDate || getYesterdayDateString()}
+              helperText="Debe ser igual o posterior a la fecha de emisión"
             />
-            <p className="text-xs text-blue-600 mt-1">
+            <p className="text-xs text-blue-600">
               ℹ️ La guía se puede emitir hasta 5 días antes del traslado
             </p>
             <Input
