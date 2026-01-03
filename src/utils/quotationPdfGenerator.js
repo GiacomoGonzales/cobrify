@@ -477,8 +477,12 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...DARK_GRAY)
-    doc.text(businessName, infoCenterX, infoY, { align: 'center' })
-    infoY += 10
+    const businessNameLines = doc.splitTextToSize(businessName, infoColumnWidth - 10)
+    const businessLinesToShow = businessNameLines.slice(0, 2)
+    businessLinesToShow.forEach((line, index) => {
+      doc.text(line, infoCenterX, infoY + (index * 9), { align: 'center' })
+    })
+    infoY += businessLinesToShow.length * 9 + 1
   }
 
   if (fullAddress) {
@@ -616,9 +620,20 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.text('RAZÓN SOCIAL:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
   const customerName = quotation.customer?.name || 'CLIENTE GENERAL'
-  const customerNameLines = doc.splitTextToSize(customerName, colWidth - maxLeftLabel - 10)
-  doc.text(customerNameLines[0], leftValueX, leftY)
-  leftY += dataLineHeight
+  const customerNameMaxWidth = colWidth - maxLeftLabel - 10
+  const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
+
+  if (customerNameLines.length === 1) {
+    doc.text(customerNameLines[0], leftValueX, leftY)
+    leftY += dataLineHeight
+  } else {
+    doc.text(customerNameLines[0], leftValueX, leftY)
+    leftY += 10
+    if (customerNameLines[1]) {
+      doc.text(customerNameLines[1], leftValueX, leftY)
+      leftY += dataLineHeight - 2
+    }
+  }
 
   doc.setFont('helvetica', 'bold')
   doc.text(`${docType}:`, colLeftX, leftY)

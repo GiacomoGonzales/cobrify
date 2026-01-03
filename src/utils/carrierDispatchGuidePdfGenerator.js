@@ -558,7 +558,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.text(recipient.documentNumber || '-', destinatarioValueX, currentY)
   currentY += 11
 
-  // Razón social
+  // Razón social (permitir 2 líneas si es muy larga)
   doc.setFont('helvetica', 'bold')
   doc.text('Razón Social:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
@@ -570,7 +570,22 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFont('helvetica', 'normal')
   const recipientNameText = doc.splitTextToSize(recipient.name || '-', valueMaxWidth)
   doc.text(recipientNameText[0], destinatarioValueX, currentY)
-  currentY += 11
+  currentY += 10
+
+  // Segunda línea de nombres si es necesario
+  const hasShipperLine2 = shipperNameText.length > 1 && shipperNameText[1]
+  const hasRecipientLine2 = recipientNameText.length > 1 && recipientNameText[1]
+  if (hasShipperLine2 || hasRecipientLine2) {
+    if (hasShipperLine2) {
+      doc.text(shipperNameText[1], remitenteValueX, currentY)
+    }
+    if (hasRecipientLine2) {
+      doc.text(recipientNameText[1], destinatarioValueX, currentY)
+    }
+    currentY += 10
+  } else {
+    currentY += 1
+  }
 
   // Dirección
   if (shipper.address || recipient.address) {

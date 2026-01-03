@@ -476,7 +476,13 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   // Nombre destinatario | Dirección partida
   const recipientName = recipient.name || recipient.businessName || '-'
   doc.setFont('helvetica', 'normal')
-  doc.text(recipientName.substring(0, 45), MARGIN_LEFT, currentY)
+  const recipientNameMaxWidth = CONTENT_WIDTH * 0.48
+  const recipientNameLines = doc.splitTextToSize(recipientName, recipientNameMaxWidth)
+  doc.text(recipientNameLines[0], MARGIN_LEFT, currentY)
+  if (recipientNameLines.length > 1 && recipientNameLines[1]) {
+    currentY += 9
+    doc.text(recipientNameLines[1], MARGIN_LEFT, currentY)
+  }
 
   const originAddress = guide.origin?.address || companySettings?.address || '-'
   const originLines = doc.splitTextToSize(originAddress, CONTENT_WIDTH * 0.5)
