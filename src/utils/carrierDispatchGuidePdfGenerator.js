@@ -207,9 +207,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   const DARK_GRAY = [60, 60, 60]
   const MEDIUM_GRAY = [100, 100, 100]
   const LIGHT_GRAY = [200, 200, 200]
-  const ACCENT_COLOR = companySettings?.pdfAccentColor
-    ? hexToRgb(companySettings.pdfAccentColor)
-    : [230, 126, 34] // Naranja por defecto
+  const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
   // Márgenes y dimensiones
   const MARGIN_LEFT = 30
