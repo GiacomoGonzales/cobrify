@@ -309,7 +309,7 @@ export const companySettingsSchema = z.object({
   ubigeo: z.string().length(6, 'Ubigeo debe tener 6 dígitos').regex(/^\d{6}$/, 'Ubigeo debe ser numérico').optional(),
   phone: z.string().optional(),
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
-  website: z.string().url('URL inválida').optional().or(z.literal('')),
+  website: z.string().optional(),
   socialMedia: z.string().optional(), // Redes sociales (Facebook, Instagram, etc.)
   bankAccounts: z.string().optional(), // Cuentas bancarias (BCP, BBVA, Interbank, etc.)
   logo: z.string().optional(),
