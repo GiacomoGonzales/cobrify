@@ -2190,22 +2190,29 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   customerLegalEntity.ele('cbc:RegistrationName').txt(recipientData.name || 'DESTINATARIO')
 
   // === REMITENTE (SellerSupplierParty) ===
-  // En GRE Transportista, el remitente es quien envía la mercancía
-  if (guideData.shipper) {
-    const sellerSupplierParty = root.ele('cac:SellerSupplierParty')
-    const shipperParty = sellerSupplierParty.ele('cac:Party')
+  // En GRE Transportista, el remitente es quien envía la mercancía - OBLIGATORIO
+  // Buscar datos del shipper en diferentes ubicaciones posibles
+  const shipperData = guideData.shipper || guideData.sender || guideData.remitente || {}
+  const shipperRuc = shipperData.ruc || shipperData.documentNumber || guideData.shipperRuc || ''
+  const shipperBusinessName = shipperData.businessName || shipperData.name || shipperData.razonSocial || guideData.shipperName || ''
 
-    const shipperPartyId = shipperParty.ele('cac:PartyIdentification')
-    shipperPartyId.ele('cbc:ID', {
-      'schemeID': '6',
-      'schemeName': 'Documento de Identidad',
-      'schemeAgencyName': 'PE:SUNAT',
-      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
-    }).txt(guideData.shipper.ruc || '')
+  console.log('📦 [GRE-T XML] Datos del remitente (shipper):', JSON.stringify(shipperData))
+  console.log('📦 [GRE-T XML] RUC del remitente:', shipperRuc)
+  console.log('📦 [GRE-T XML] Razón social del remitente:', shipperBusinessName)
 
-    const shipperLegalEntity = shipperParty.ele('cac:PartyLegalEntity')
-    shipperLegalEntity.ele('cbc:RegistrationName').txt(guideData.shipper.businessName || '')
-  }
+  const sellerSupplierParty = root.ele('cac:SellerSupplierParty')
+  const shipperParty = sellerSupplierParty.ele('cac:Party')
+
+  const shipperPartyId = shipperParty.ele('cac:PartyIdentification')
+  shipperPartyId.ele('cbc:ID', {
+    'schemeID': '6',
+    'schemeName': 'Documento de Identidad',
+    'schemeAgencyName': 'PE:SUNAT',
+    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+  }).txt(shipperRuc || '00000000000')
+
+  const shipperLegalEntity = shipperParty.ele('cac:PartyLegalEntity')
+  shipperLegalEntity.ele('cbc:RegistrationName').txt(shipperBusinessName || 'REMITENTE NO ESPECIFICADO')
 
   // === ENVÍO (Shipment) ===
   const shipment = root.ele('cac:Shipment')
