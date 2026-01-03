@@ -197,7 +197,7 @@ const formatDate = (dateValue) => {
  */
 export const generateCarrierDispatchGuidePDF = async (guide, companySettings, download = true) => {
   const doc = new jsPDF({
-    orientation: 'landscape', // Formato horizontal según SUNAT
+    orientation: 'portrait', // Formato vertical
     unit: 'pt',
     format: 'a4'
   })
@@ -237,9 +237,9 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   // ========== 1. ENCABEZADO ==========
   const headerHeight = 85
-  const logoWidth = 70
-  const docBoxWidth = 150
-  const centerWidth = CONTENT_WIDTH - logoWidth - docBoxWidth - 20
+  const logoWidth = 60
+  const docBoxWidth = 140
+  const centerWidth = CONTENT_WIDTH - logoWidth - docBoxWidth - 15
 
   // Logo
   const logoX = MARGIN_LEFT
@@ -387,7 +387,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 12
 
-  // Fila 1: Tipo transporte, Fechas y MTC
+  // Fila 1: Tipo transporte y Fechas
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
@@ -406,16 +406,9 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFont('helvetica', 'normal')
   doc.text(formatDate(guide.createdAt || guide.transferDate), MARGIN_LEFT + 380, currentY)
 
-  if (companySettings?.mtcRegistration) {
-    doc.setFont('helvetica', 'bold')
-    doc.text('MTC:', MARGIN_LEFT + 460, currentY)
-    doc.setFont('helvetica', 'normal')
-    doc.text(companySettings.mtcRegistration, MARGIN_LEFT + 485, currentY)
-  }
-
   currentY += 14
 
-  // Fila 2: Peso, Motivo y M1/L
+  // Fila 2: Peso, Motivo y MTC
   doc.setFont('helvetica', 'bold')
   doc.text('Peso bruto total:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
@@ -426,14 +419,23 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFont('helvetica', 'normal')
   doc.text(TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-', MARGIN_LEFT + 270, currentY)
 
-  if (isM1OrLVehicle) {
-    doc.setFont('helvetica', 'italic')
-    doc.setTextColor(...MEDIUM_GRAY)
-    doc.text('(Vehículo M1/L)', MARGIN_LEFT + 400, currentY)
-    doc.setTextColor(...BLACK)
+  if (companySettings?.mtcRegistration) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('MTC:', MARGIN_LEFT + 400, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(companySettings.mtcRegistration, MARGIN_LEFT + 425, currentY)
   }
 
   currentY += 14
+
+  // Fila 3: M1/L si aplica
+  if (isM1OrLVehicle) {
+    doc.setFont('helvetica', 'italic')
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text('(Vehículo categoría M1 o L)', MARGIN_LEFT, currentY)
+    doc.setTextColor(...BLACK)
+    currentY += 14
+  }
 
   // Fila 3: Descripción del traslado (si existe)
   if (transferDescription) {
@@ -614,17 +616,17 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.text('BIENES A TRANSPORTAR', MARGIN_LEFT, currentY)
   currentY += 12
 
-  // Encabezado de tabla con columnas adicionales
+  // Encabezado de tabla con columnas ajustadas para formato vertical
   const tableX = MARGIN_LEFT
   const tableWidth = CONTENT_WIDTH
   const colWidths = {
-    num: 25,
-    code: 55,
-    sunatCode: 60,
-    gtin: 70,
-    desc: tableWidth - 25 - 55 - 60 - 70 - 55 - 50,
-    qty: 55,
-    unit: 50
+    num: 20,
+    code: 50,
+    sunatCode: 55,
+    gtin: 60,
+    desc: tableWidth - 20 - 50 - 55 - 60 - 45 - 40,
+    qty: 45,
+    unit: 40
   }
 
   // Fondo del encabezado con color accent
@@ -738,7 +740,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   // Mostrar todos los vehículos con etiquetas Principal/Secundario
   const validVehicles = vehicles.filter(v => v && v.plate)
   validVehicles.forEach((v, idx) => {
-    doc.setFontSize(8)
+    doc.setFontSize(7)
 
     // Etiqueta Principal/Secundario
     const vehicleLabel = idx === 0 ? 'PRINCIPAL' : 'SECUNDARIO'
@@ -753,36 +755,36 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     doc.setFontSize(6)
     doc.text(vehicleLabel, MARGIN_LEFT + 27.5, currentY - 1, { align: 'center' })
     doc.setTextColor(...BLACK)
-    doc.setFontSize(8)
+    doc.setFontSize(7)
 
+    // Primera línea: Placa y TUCE
     doc.setFont('helvetica', 'bold')
     doc.text('Placa:', MARGIN_LEFT + 60, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(v.plate || '-', MARGIN_LEFT + 90, currentY)
+    doc.text(v.plate || '-', MARGIN_LEFT + 85, currentY)
 
-    // TUCE
     if (v.tuce) {
       doc.setFont('helvetica', 'bold')
       doc.text('TUCE:', MARGIN_LEFT + 150, currentY)
       doc.setFont('helvetica', 'normal')
-      doc.text(v.tuce, MARGIN_LEFT + 180, currentY)
+      doc.text(v.tuce, MARGIN_LEFT + 175, currentY)
     }
 
     if (v.mtcAuthorization) {
       doc.setFont('helvetica', 'bold')
-      doc.text('N° Autorización:', MARGIN_LEFT + 280, currentY)
+      doc.text('N° Aut.:', MARGIN_LEFT + 280, currentY)
       doc.setFont('helvetica', 'normal')
-      doc.text(v.mtcAuthorization, MARGIN_LEFT + 355, currentY)
+      doc.text(v.mtcAuthorization, MARGIN_LEFT + 315, currentY)
     }
 
     if (v.mtcEntity) {
       doc.setFont('helvetica', 'bold')
-      doc.text('Entidad:', MARGIN_LEFT + 470, currentY)
+      doc.text('Entidad:', MARGIN_LEFT + 400, currentY)
       doc.setFont('helvetica', 'normal')
-      doc.text(v.mtcEntity, MARGIN_LEFT + 505, currentY)
+      doc.text((v.mtcEntity || '').substring(0, 15), MARGIN_LEFT + 435, currentY)
     }
 
-    currentY += 15
+    currentY += 14
   })
 
   currentY += 6
@@ -800,7 +802,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   // Mostrar todos los conductores con etiquetas Principal/Secundario
   const validDrivers = drivers.filter(d => d && (d.documentNumber || d.name))
   validDrivers.forEach((d, idx) => {
-    doc.setFontSize(8)
+    doc.setFontSize(7)
 
     // Etiqueta Principal/Secundario
     const driverLabel = idx === 0 ? 'PRINCIPAL' : 'SECUNDARIO'
@@ -815,25 +817,25 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     doc.setFontSize(6)
     doc.text(driverLabel, MARGIN_LEFT + 27.5, currentY - 1, { align: 'center' })
     doc.setTextColor(...BLACK)
-    doc.setFontSize(8)
+    doc.setFontSize(7)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Documento:', MARGIN_LEFT + 60, currentY)
+    doc.text('Doc:', MARGIN_LEFT + 60, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(d.documentNumber || '-', MARGIN_LEFT + 115, currentY)
+    doc.text(d.documentNumber || '-', MARGIN_LEFT + 80, currentY)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Licencia:', MARGIN_LEFT + 200, currentY)
+    doc.text('Licencia:', MARGIN_LEFT + 160, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(d.license || '-', MARGIN_LEFT + 245, currentY)
+    doc.text(d.license || '-', MARGIN_LEFT + 200, currentY)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Nombre:', MARGIN_LEFT + 350, currentY)
+    doc.text('Nombre:', MARGIN_LEFT + 290, currentY)
     doc.setFont('helvetica', 'normal')
     const fullName = `${d.name || ''} ${d.lastName || ''}`.trim() || '-'
-    doc.text(fullName.substring(0, 35), MARGIN_LEFT + 395, currentY)
+    doc.text(fullName.substring(0, 30), MARGIN_LEFT + 330, currentY)
 
-    currentY += 15
+    currentY += 14
   })
 
   currentY += 6
@@ -926,9 +928,9 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   }
 
   // ===== SELLO DE VERIFICACIÓN SUNAT =====
-  const sealX = PAGE_WIDTH - MARGIN_RIGHT - 130
+  const sealX = PAGE_WIDTH - MARGIN_RIGHT - 110
   const sealY = footerY + 5
-  const sealWidth = 120
+  const sealWidth = 100
   const sealHeight = 50
 
   // Borde del sello
