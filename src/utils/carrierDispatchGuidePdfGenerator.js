@@ -539,32 +539,37 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.text('DESTINATARIO', colMidX, currentY)
   currentY += 12
 
+  // Posiciones X consistentes para alineación vertical de valores
+  const remitenteValueX = MARGIN_LEFT + 65 // Offset para valores del remitente
+  const destinatarioValueX = colMidX + 50 // Offset para valores del destinatario
+  const valueMaxWidth = CONTENT_WIDTH * 0.45 - 55 // Ancho máximo para valores
+
   // Datos Remitente - RUC
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   doc.text('RUC:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(shipper.ruc || '-', MARGIN_LEFT + 30, currentY)
+  doc.text(shipper.ruc || '-', remitenteValueX, currentY)
 
   // Datos Destinatario - RUC/DNI
   doc.setFont('helvetica', 'bold')
   doc.text('RUC/DNI:', colMidX, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(recipient.documentNumber || '-', colMidX + 45, currentY)
+  doc.text(recipient.documentNumber || '-', destinatarioValueX, currentY)
   currentY += 11
 
   // Razón social
   doc.setFont('helvetica', 'bold')
   doc.text('Razón Social:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
-  const shipperNameText = doc.splitTextToSize(shipper.businessName || '-', CONTENT_WIDTH * 0.45 - 60)
-  doc.text(shipperNameText[0], MARGIN_LEFT + 60, currentY)
+  const shipperNameText = doc.splitTextToSize(shipper.businessName || '-', valueMaxWidth)
+  doc.text(shipperNameText[0], remitenteValueX, currentY)
 
   doc.setFont('helvetica', 'bold')
   doc.text('Nombre:', colMidX, currentY)
   doc.setFont('helvetica', 'normal')
-  const recipientNameText = doc.splitTextToSize(recipient.name || '-', CONTENT_WIDTH * 0.45 - 45)
-  doc.text(recipientNameText[0], colMidX + 40, currentY)
+  const recipientNameText = doc.splitTextToSize(recipient.name || '-', valueMaxWidth)
+  doc.text(recipientNameText[0], destinatarioValueX, currentY)
   currentY += 11
 
   // Dirección
@@ -572,14 +577,14 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     doc.setFont('helvetica', 'bold')
     doc.text('Dirección:', MARGIN_LEFT, currentY)
     doc.setFont('helvetica', 'normal')
-    const shipperAddr = doc.splitTextToSize(shipper.address || '-', CONTENT_WIDTH * 0.45 - 50)
-    doc.text(shipperAddr[0], MARGIN_LEFT + 50, currentY)
+    const shipperAddr = doc.splitTextToSize(shipper.address || '-', valueMaxWidth)
+    doc.text(shipperAddr[0], remitenteValueX, currentY)
 
     doc.setFont('helvetica', 'bold')
     doc.text('Dirección:', colMidX, currentY)
     doc.setFont('helvetica', 'normal')
-    const recipientAddr = doc.splitTextToSize(recipient.address || '-', CONTENT_WIDTH * 0.45 - 50)
-    doc.text(recipientAddr[0], colMidX + 50, currentY)
+    const recipientAddr = doc.splitTextToSize(recipient.address || '-', valueMaxWidth)
+    doc.text(recipientAddr[0], destinatarioValueX, currentY)
     currentY += 11
   }
 
@@ -588,12 +593,12 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     doc.setFont('helvetica', 'bold')
     doc.text('Ciudad:', MARGIN_LEFT, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(shipper.city || '-', MARGIN_LEFT + 40, currentY)
+    doc.text(shipper.city || '-', remitenteValueX, currentY)
 
     doc.setFont('helvetica', 'bold')
     doc.text('Ciudad:', colMidX, currentY)
     doc.setFont('helvetica', 'normal')
-    doc.text(recipient.city || '-', colMidX + 40, currentY)
+    doc.text(recipient.city || '-', destinatarioValueX, currentY)
     currentY += 11
   }
 
