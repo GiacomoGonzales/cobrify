@@ -264,12 +264,70 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
       })
 
       const aspectRatio = img.width / img.height
-      let finalLogoWidth = logoWidth
-      let finalLogoHeight = logoWidth / aspectRatio
+      const maxLogoHeight = headerHeight - 10
+      const logoColumnWidth = logoWidth // 60pt designado para logo
+      let finalLogoWidth, finalLogoHeight
 
-      if (finalLogoHeight > headerHeight - 10) {
-        finalLogoHeight = headerHeight - 10
+      if (aspectRatio >= 3) {
+        // Logo EXTREMADAMENTE horizontal (3:1 o más)
+        const maxWidth = logoColumnWidth + 35
+        finalLogoHeight = 35
         finalLogoWidth = finalLogoHeight * aspectRatio
+        if (finalLogoWidth > maxWidth) {
+          finalLogoWidth = maxWidth
+          finalLogoHeight = finalLogoWidth / aspectRatio
+          if (finalLogoHeight < 30) {
+            finalLogoHeight = 30
+            finalLogoWidth = finalLogoHeight * aspectRatio
+          }
+        }
+      } else if (aspectRatio >= 2.5) {
+        // Logo MUY horizontal (2.5:1 a 3:1)
+        const maxWidth = logoColumnWidth + 30
+        finalLogoHeight = 38
+        finalLogoWidth = finalLogoHeight * aspectRatio
+        if (finalLogoWidth > maxWidth) {
+          finalLogoWidth = maxWidth
+          finalLogoHeight = finalLogoWidth / aspectRatio
+        }
+        if (finalLogoHeight < 30) {
+          finalLogoHeight = 30
+          finalLogoWidth = finalLogoHeight * aspectRatio
+        }
+      } else if (aspectRatio >= 2) {
+        // Logo muy horizontal (2:1 a 2.5:1)
+        const maxWidth = logoColumnWidth + 25
+        finalLogoHeight = maxLogoHeight * 0.6
+        finalLogoWidth = finalLogoHeight * aspectRatio
+        if (finalLogoWidth > maxWidth) {
+          finalLogoWidth = maxWidth
+          finalLogoHeight = finalLogoWidth / aspectRatio
+        }
+      } else if (aspectRatio >= 1.3) {
+        // Logo horizontal moderado (1.3:1 a 2:1)
+        const maxWidth = logoColumnWidth + 20
+        finalLogoWidth = maxWidth
+        finalLogoHeight = finalLogoWidth / aspectRatio
+        if (finalLogoHeight > maxLogoHeight) {
+          finalLogoHeight = maxLogoHeight
+          finalLogoWidth = finalLogoHeight * aspectRatio
+        }
+      } else if (aspectRatio >= 1) {
+        // Logo cuadrado o casi cuadrado
+        finalLogoHeight = maxLogoHeight * 0.8
+        finalLogoWidth = finalLogoHeight * aspectRatio
+        if (finalLogoWidth > logoColumnWidth) {
+          finalLogoWidth = logoColumnWidth
+          finalLogoHeight = finalLogoWidth / aspectRatio
+        }
+      } else {
+        // Logo vertical
+        finalLogoHeight = maxLogoHeight
+        finalLogoWidth = finalLogoHeight * aspectRatio
+        if (finalLogoWidth > logoColumnWidth) {
+          finalLogoWidth = logoColumnWidth
+          finalLogoHeight = finalLogoWidth / aspectRatio
+        }
       }
 
       doc.addImage(imgData, format, logoX, logoY + (headerHeight - finalLogoHeight) / 2, finalLogoWidth, finalLogoHeight, undefined, 'FAST')

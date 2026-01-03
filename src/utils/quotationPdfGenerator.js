@@ -337,33 +337,45 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
       let logoWidth, logoHeight
 
-      if (aspectRatio >= 2.5) {
-        // Logo MUY horizontal (2.5:1 o más): limitar estrictamente al ancho de columna
-        // Para no invadir el espacio de datos de empresa
-        const maxLogoWidth = logoColumnWidth
-        logoWidth = maxLogoWidth
-        logoHeight = logoWidth / aspectRatio
-        // Si queda muy pequeño en altura, reducir un poco el ancho para dar más altura
-        if (logoHeight < 25) {
-          logoHeight = 25
-          logoWidth = logoHeight * aspectRatio
-          if (logoWidth > maxLogoWidth) {
-            logoWidth = maxLogoWidth
-            logoHeight = logoWidth / aspectRatio
+      if (aspectRatio >= 3) {
+        // Logo EXTREMADAMENTE horizontal (3:1 o más):
+        // Permitir ancho generoso pero con altura mínima de 35pt
+        const maxLogoWidth = logoColumnWidth + 40
+        logoHeight = 40
+        logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxLogoWidth) {
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
+          if (logoHeight < 35) {
+            logoHeight = 35
+            logoWidth = logoHeight * aspectRatio
           }
         }
+      } else if (aspectRatio >= 2.5) {
+        // Logo MUY horizontal (2.5:1 a 3:1): balance entre tamaño y espacio
+        const maxLogoWidth = logoColumnWidth + 35
+        logoHeight = 45
+        logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxLogoWidth) {
+          logoWidth = maxLogoWidth
+          logoHeight = logoWidth / aspectRatio
+        }
+        if (logoHeight < 35) {
+          logoHeight = 35
+          logoWidth = logoHeight * aspectRatio
+        }
       } else if (aspectRatio >= 2) {
-        // Logo muy horizontal (2:1 a 2.5:1): permitir un poco más de ancho
-        const maxHorizontalWidth = logoColumnWidth + 20 // Solo 20pt extra
-        logoHeight = maxLogoHeight * 0.6
+        // Logo muy horizontal (2:1 a 2.5:1): permitir más ancho
+        const maxHorizontalWidth = logoColumnWidth + 30
+        logoHeight = maxLogoHeight * 0.65
         logoWidth = logoHeight * aspectRatio
         if (logoWidth > maxHorizontalWidth) {
           logoWidth = maxHorizontalWidth
           logoHeight = logoWidth / aspectRatio
         }
       } else if (aspectRatio >= 1.3) {
-        // Logo horizontal moderado (1.3:1 a 2:1): permitir un poco más ancho
-        const maxLogoWidth = logoColumnWidth + 15 // Reducido de +30 a +15
+        // Logo horizontal moderado (1.3:1 a 2:1): buen tamaño
+        const maxLogoWidth = logoColumnWidth + 25
         logoWidth = maxLogoWidth
         logoHeight = logoWidth / aspectRatio
         if (logoHeight > maxLogoHeight) {
@@ -371,9 +383,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
           logoWidth = logoHeight * aspectRatio
         }
       } else if (aspectRatio >= 1) {
-        // Logo cuadrado o casi cuadrado: limitar tamaño para no superponerse
-        const maxLogoWidth = logoColumnWidth - 5
-        logoHeight = maxLogoHeight * 0.75
+        // Logo cuadrado o casi cuadrado
+        const maxLogoWidth = logoColumnWidth
+        logoHeight = maxLogoHeight * 0.8
         logoWidth = logoHeight * aspectRatio
         if (logoWidth > maxLogoWidth) {
           logoWidth = maxLogoWidth
@@ -381,7 +393,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         }
       } else {
         // Logo vertical: priorizar altura máxima
-        const maxLogoWidth = logoColumnWidth - 5
+        const maxLogoWidth = logoColumnWidth
         logoHeight = maxLogoHeight
         logoWidth = logoHeight * aspectRatio
         if (logoWidth > maxLogoWidth) {
