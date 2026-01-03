@@ -235,13 +235,13 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   // ========== 1. ENCABEZADO ==========
   const headerHeight = 85
-  const logoWidth = 60
+  const defaultLogoWidth = 60
   const docBoxWidth = 140
-  const centerWidth = CONTENT_WIDTH - logoWidth - docBoxWidth - 15
 
   // Logo
   const logoX = MARGIN_LEFT
   const logoY = currentY
+  let actualLogoWidth = defaultLogoWidth // Ancho real del logo (se actualiza dinámicamente)
 
   if (companySettings?.logoUrl) {
     try {
@@ -265,99 +265,98 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
       const aspectRatio = img.width / img.height
       const maxLogoHeight = headerHeight - 10
-      const logoColumnWidth = logoWidth // 60pt designado para logo
+      // Ancho máximo: hasta donde empieza el recuadro del documento menos margen
+      const maxAllowedWidth = CONTENT_WIDTH - docBoxWidth - 30
       let finalLogoWidth, finalLogoHeight
 
       if (aspectRatio >= 3) {
-        // Logo EXTREMADAMENTE horizontal (3:1 o más)
-        const maxWidth = logoColumnWidth + 35
-        finalLogoHeight = 35
+        // Logo EXTREMADAMENTE horizontal (3:1 o más): permitir más ancho
+        finalLogoHeight = 45
         finalLogoWidth = finalLogoHeight * aspectRatio
-        if (finalLogoWidth > maxWidth) {
-          finalLogoWidth = maxWidth
+        if (finalLogoWidth > maxAllowedWidth) {
+          finalLogoWidth = maxAllowedWidth
           finalLogoHeight = finalLogoWidth / aspectRatio
-          if (finalLogoHeight < 30) {
-            finalLogoHeight = 30
-            finalLogoWidth = finalLogoHeight * aspectRatio
-          }
+        }
+        if (finalLogoHeight < 35) {
+          finalLogoHeight = 35
+          finalLogoWidth = finalLogoHeight * aspectRatio
         }
       } else if (aspectRatio >= 2.5) {
         // Logo MUY horizontal (2.5:1 a 3:1)
-        const maxWidth = logoColumnWidth + 30
-        finalLogoHeight = 38
+        finalLogoHeight = 50
         finalLogoWidth = finalLogoHeight * aspectRatio
-        if (finalLogoWidth > maxWidth) {
-          finalLogoWidth = maxWidth
+        if (finalLogoWidth > maxAllowedWidth) {
+          finalLogoWidth = maxAllowedWidth
           finalLogoHeight = finalLogoWidth / aspectRatio
         }
-        if (finalLogoHeight < 30) {
-          finalLogoHeight = 30
+        if (finalLogoHeight < 38) {
+          finalLogoHeight = 38
           finalLogoWidth = finalLogoHeight * aspectRatio
         }
       } else if (aspectRatio >= 2) {
         // Logo muy horizontal (2:1 a 2.5:1)
-        const maxWidth = logoColumnWidth + 25
-        finalLogoHeight = maxLogoHeight * 0.6
+        finalLogoHeight = maxLogoHeight * 0.7
         finalLogoWidth = finalLogoHeight * aspectRatio
-        if (finalLogoWidth > maxWidth) {
-          finalLogoWidth = maxWidth
+        if (finalLogoWidth > maxAllowedWidth * 0.6) {
+          finalLogoWidth = maxAllowedWidth * 0.6
           finalLogoHeight = finalLogoWidth / aspectRatio
         }
       } else if (aspectRatio >= 1.3) {
         // Logo horizontal moderado (1.3:1 a 2:1)
-        const maxWidth = logoColumnWidth + 20
-        finalLogoWidth = maxWidth
-        finalLogoHeight = finalLogoWidth / aspectRatio
-        if (finalLogoHeight > maxLogoHeight) {
-          finalLogoHeight = maxLogoHeight
-          finalLogoWidth = finalLogoHeight * aspectRatio
+        finalLogoHeight = maxLogoHeight * 0.85
+        finalLogoWidth = finalLogoHeight * aspectRatio
+        if (finalLogoWidth > maxAllowedWidth * 0.5) {
+          finalLogoWidth = maxAllowedWidth * 0.5
+          finalLogoHeight = finalLogoWidth / aspectRatio
         }
       } else if (aspectRatio >= 1) {
         // Logo cuadrado o casi cuadrado
-        finalLogoHeight = maxLogoHeight * 0.8
+        finalLogoHeight = maxLogoHeight * 0.85
         finalLogoWidth = finalLogoHeight * aspectRatio
-        if (finalLogoWidth > logoColumnWidth) {
-          finalLogoWidth = logoColumnWidth
+        if (finalLogoWidth > defaultLogoWidth + 10) {
+          finalLogoWidth = defaultLogoWidth + 10
           finalLogoHeight = finalLogoWidth / aspectRatio
         }
       } else {
         // Logo vertical
         finalLogoHeight = maxLogoHeight
         finalLogoWidth = finalLogoHeight * aspectRatio
-        if (finalLogoWidth > logoColumnWidth) {
-          finalLogoWidth = logoColumnWidth
+        if (finalLogoWidth > defaultLogoWidth) {
+          finalLogoWidth = defaultLogoWidth
           finalLogoHeight = finalLogoWidth / aspectRatio
         }
       }
 
+      actualLogoWidth = finalLogoWidth // Guardar el ancho real para posicionar el texto
       doc.addImage(imgData, format, logoX, logoY + (headerHeight - finalLogoHeight) / 2, finalLogoWidth, finalLogoHeight, undefined, 'FAST')
     } catch (error) {
       // Placeholder de logo con color accent
       doc.setDrawColor(...ACCENT_COLOR)
       doc.setLineWidth(2)
-      doc.roundedRect(logoX, logoY + 10, logoWidth, 60, 3, 3, 'S')
+      doc.roundedRect(logoX, logoY + 10, defaultLogoWidth, 60, 3, 3, 'S')
       doc.setFontSize(9)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...ACCENT_COLOR)
-      doc.text('TU', logoX + logoWidth/2, logoY + 32, { align: 'center' })
-      doc.text('LOGO', logoX + logoWidth/2, logoY + 44, { align: 'center' })
-      doc.text('AQUÍ', logoX + logoWidth/2, logoY + 56, { align: 'center' })
+      doc.text('TU', logoX + defaultLogoWidth/2, logoY + 32, { align: 'center' })
+      doc.text('LOGO', logoX + defaultLogoWidth/2, logoY + 44, { align: 'center' })
+      doc.text('AQUÍ', logoX + defaultLogoWidth/2, logoY + 56, { align: 'center' })
     }
   } else {
     // Placeholder de logo
     doc.setDrawColor(...ACCENT_COLOR)
     doc.setLineWidth(2)
-    doc.roundedRect(logoX, logoY + 10, logoWidth, 60, 3, 3, 'S')
+    doc.roundedRect(logoX, logoY + 10, defaultLogoWidth, 60, 3, 3, 'S')
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...ACCENT_COLOR)
-    doc.text('TU', logoX + logoWidth/2, logoY + 32, { align: 'center' })
-    doc.text('LOGO', logoX + logoWidth/2, logoY + 44, { align: 'center' })
-    doc.text('AQUÍ', logoX + logoWidth/2, logoY + 56, { align: 'center' })
+    doc.text('TU', logoX + defaultLogoWidth/2, logoY + 32, { align: 'center' })
+    doc.text('LOGO', logoX + defaultLogoWidth/2, logoY + 44, { align: 'center' })
+    doc.text('AQUÍ', logoX + defaultLogoWidth/2, logoY + 56, { align: 'center' })
   }
 
-  // Datos de la empresa (centro) - mismo formato que facturas
-  const centerX = logoX + logoWidth + 10
+  // Datos de la empresa (centro) - posición dinámica basada en el logo
+  const centerX = logoX + actualLogoWidth + 10
+  const centerWidth = CONTENT_WIDTH - actualLogoWidth - docBoxWidth - 20
   const commercialName = (companySettings?.name || 'EMPRESA SAC').toUpperCase()
   const legalName = (companySettings?.businessName || '').toUpperCase()
   const phone = companySettings?.phone || ''
