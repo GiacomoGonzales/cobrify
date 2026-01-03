@@ -1032,7 +1032,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   const tableY = currentY
   const headerRowHeight = 18
-  const productRowHeight = 15
+  const minProductRowHeight = 15
+  const lineHeight = 9 // Altura por línea de texto
 
   // Definir columnas: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
   const colWidths = {
@@ -1054,10 +1055,25 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Solo mostrar las filas que tienen productos (sin filas vacías)
   const items = invoice.items || []
-  const totalRows = items.length
 
-  // Altura total de la tabla (solo filas con productos)
-  const tableHeight = headerRowHeight + (totalRows * productRowHeight)
+  // Función para calcular altura dinámica de cada item
+  const calculateItemHeight = (item) => {
+    const itemName = item.name || item.description || ''
+    const rawCode = item.code || item.productCode || ''
+    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
+    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    doc.setFontSize(8)
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    const calculatedHeight = Math.max(minProductRowHeight, descLines.length * lineHeight + 6)
+    return { height: calculatedHeight, descLines }
+  }
+
+  // Calcular alturas de todos los items
+  const itemHeights = items.map(item => calculateItemHeight(item))
+  const totalItemsHeight = itemHeights.reduce((sum, ih) => sum + ih.height, 0)
+
+  // Altura total de la tabla (dinámica según contenido)
+  const tableHeight = headerRowHeight + totalItemsHeight
 
   // Encabezado de tabla con fondo de color
   doc.setFillColor(...ACCENT_COLOR)
@@ -1087,46 +1103,46 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   for (let i = 0; i < items.length; i++) {
+    const { height: rowHeight, descLines } = itemHeights[i]
+
     // Fondo alternado: filas pares gris, filas impares blanco
     if (i % 2 === 0) {
       doc.setFillColor(248, 248, 248) // Gris muy suave
-      doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, productRowHeight, 'F')
+      doc.rect(MARGIN_LEFT, dataRowY, CONTENT_WIDTH, rowHeight, 'F')
     }
 
     const item = items[i]
     const precioConIGV = item.unitPrice || item.price || 0
     const importeConIGV = item.quantity * precioConIGV
-    const textY = dataRowY + 10
+    const centerY = dataRowY + rowHeight / 2 + 3 // Centro vertical de la fila
 
     doc.setTextColor(...BLACK)
 
-    // Cantidad (solo número)
+    // Cantidad (solo número) - centrado verticalmente
+    doc.setFontSize(7)
     const quantityText = Number.isInteger(item.quantity) ? item.quantity.toString() : item.quantity.toFixed(2)
-    doc.text(quantityText, cols.cant + colWidths.cant / 2, textY, { align: 'center' })
+    doc.text(quantityText, cols.cant + colWidths.cant / 2, centerY, { align: 'center' })
 
-    // Unidad de medida
+    // Unidad de medida - centrada verticalmente
     const unitCode = item.unit || 'UNIDAD'
     const unitText = unitLabels[unitCode] || unitCode
-    doc.text(unitText, cols.um + colWidths.um / 2, textY, { align: 'center' })
+    doc.text(unitText, cols.um + colWidths.um / 2, centerY, { align: 'center' })
 
-    // Descripción con código de producto
-    // Solo mostrar código si es un código "real" (no vacío, no CUSTOM, no placeholder)
-    const itemName = item.name || item.description || ''
-    const rawCode = item.code || item.productCode || ''
-    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
-    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    // Descripción - múltiples líneas desde arriba
     doc.setFontSize(8)
-    doc.text(descLines[0], cols.desc + 4, textY)
+    const descStartY = dataRowY + 10
+    descLines.forEach((line, lineIdx) => {
+      doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
+    })
 
-    // Precio unitario
+    // Precio unitario - centrado verticalmente
     doc.setFontSize(8)
-    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
+    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, centerY, { align: 'right' })
 
-    // Importe
-    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
+    // Importe - centrado verticalmente
+    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, centerY, { align: 'right' })
 
-    dataRowY += productRowHeight
+    dataRowY += rowHeight
   }
 
   // ========== 4. PIE DE PÁGINA FIJO ==========

@@ -610,58 +610,80 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   currentY += 18
 
-  // Filas de datos
+  // Filas de datos con altura dinámica
   const items = guide.items || []
-  const rowHeight = 20
-  const tableBodyHeight = Math.max(items.length * rowHeight, 100) // Mínimo 100pt de altura
+  const minRowHeight = 20
+  const lineHeight = 9 // Altura por línea de texto
 
-  // Dibujar el cuerpo de la tabla vacío
+  // Función para calcular altura dinámica de cada item
+  const calculateItemHeight = (item) => {
+    const itemDesc = item.description || item.name || '-'
+    doc.setFontSize(8)
+    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    const calculatedHeight = Math.max(minRowHeight, descLines.length * lineHeight + 8)
+    return { height: calculatedHeight, descLines }
+  }
+
+  // Calcular alturas de todos los items
+  const itemHeights = items.map(item => calculateItemHeight(item))
+  const totalItemsHeight = itemHeights.reduce((sum, ih) => sum + ih.height, 0)
+  const tableBodyHeight = Math.max(totalItemsHeight, 100) // Mínimo 100pt de altura
+
+  // Dibujar el cuerpo de la tabla
   doc.rect(tableX, currentY, tableWidth, tableBodyHeight)
 
-  // Líneas verticales
-  colX = tableX + colWidths.num
-  doc.line(colX, currentY, colX, currentY + tableBodyHeight)
-  colX += colWidths.code
-  doc.line(colX, currentY, colX, currentY + tableBodyHeight)
-  colX += colWidths.desc
-  doc.line(colX, currentY, colX, currentY + tableBodyHeight)
-  colX += colWidths.qty
-  doc.line(colX, currentY, colX, currentY + tableBodyHeight)
-
-  // Datos de items
+  // Datos de items con alturas dinámicas
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
 
+  let itemY = currentY
   items.forEach((item, index) => {
-    const rowY = currentY + (index * rowHeight) + 14
+    const { height: rowHeight, descLines } = itemHeights[index]
+    const centerY = itemY + rowHeight / 2 + 3 // Centro vertical de la fila
 
     colX = tableX
-    doc.text((index + 1).toString(), colX + colWidths.num/2, rowY, { align: 'center' })
+    doc.text((index + 1).toString(), colX + colWidths.num/2, centerY, { align: 'center' })
+
+    // Línea vertical N°
+    doc.line(colX + colWidths.num, itemY, colX + colWidths.num, itemY + rowHeight)
     colX += colWidths.num
 
     // Solo mostrar código si es "real" (no vacío, no CUSTOM)
     const rawCode = item.code || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     const itemCode = isValidCode ? rawCode : '-'
-    doc.text(itemCode.substring(0, 12), colX + 5, rowY)
+    doc.text(itemCode.substring(0, 12), colX + 5, centerY)
+
+    // Línea vertical Código
+    doc.line(colX + colWidths.code, itemY, colX + colWidths.code, itemY + rowHeight)
     colX += colWidths.code
 
-    const itemDesc = item.description || item.name || '-'
-    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-    doc.text(descLines[0], colX + 5, rowY)
+    // Descripción - múltiples líneas
+    const descStartY = itemY + 10
+    descLines.forEach((line, lineIdx) => {
+      doc.text(line, colX + 5, descStartY + (lineIdx * lineHeight))
+    })
+
+    // Línea vertical Descripción
+    doc.line(colX + colWidths.desc, itemY, colX + colWidths.desc, itemY + rowHeight)
     colX += colWidths.desc
 
-    doc.text((item.quantity || 1).toString(), colX + colWidths.qty/2, rowY, { align: 'center' })
+    doc.text((item.quantity || 1).toString(), colX + colWidths.qty/2, centerY, { align: 'center' })
+
+    // Línea vertical Cantidad
+    doc.line(colX + colWidths.qty, itemY, colX + colWidths.qty, itemY + rowHeight)
     colX += colWidths.qty
 
-    doc.text(item.unit || 'UNIDAD', colX + colWidths.unit/2, rowY, { align: 'center' })
+    doc.text(item.unit || 'UNIDAD', colX + colWidths.unit/2, centerY, { align: 'center' })
 
     // Línea horizontal entre filas
     if (index < items.length - 1) {
       doc.setDrawColor(...LIGHT_GRAY)
-      doc.line(tableX, currentY + ((index + 1) * rowHeight), tableX + tableWidth, currentY + ((index + 1) * rowHeight))
+      doc.line(tableX, itemY + rowHeight, tableX + tableWidth, itemY + rowHeight)
       doc.setDrawColor(...BLACK)
     }
+
+    itemY += rowHeight
   })
 
   currentY += tableBodyHeight + 15
