@@ -1704,8 +1704,17 @@ function getCustomerDocTypeCode(documentType) {
  * - Especificaciones SUNAT GRE: https://cpe.sunat.gob.pe/
  */
 export function generateDispatchGuideXML(guideData, businessData) {
-  // Helper para formatear fecha en zona horaria de Perú (UTC-5)
-  // Evita problemas con toISOString() que convierte a UTC
+  // Helper para obtener fecha/hora en zona horaria de Perú (UTC-5)
+  const getPeruDateTime = () => {
+    const now = new Date()
+    // Perú está en UTC-5 (sin horario de verano)
+    const peruOffset = -5 * 60 // -5 horas en minutos
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000)
+    const peruTime = new Date(utcTime + (peruOffset * 60000))
+    return peruTime
+  }
+
+  // Helper para formatear fecha YYYY-MM-DD
   const formatDatePeru = (date) => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -1713,8 +1722,20 @@ export function generateDispatchGuideXML(guideData, businessData) {
     return `${year}-${month}-${day}`
   }
 
-  // Formatear fecha de emisión (hoy en hora local del servidor/Perú)
-  const issueDate = formatDatePeru(new Date())
+  // Helper para formatear hora HH:MM:SS
+  const formatTimePeru = (date) => {
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${hours}:${minutes}:${seconds}`
+  }
+
+  // Obtener fecha y hora actual en zona horaria de Perú
+  const peruNow = getPeruDateTime()
+  const issueDate = formatDatePeru(peruNow)
+  const issueTime = formatTimePeru(peruNow)
+
+  console.log(`📅 [GRE-R] Fecha/hora de emisión (Perú): ${issueDate} ${issueTime}`)
 
   // Formatear fecha de inicio del traslado
   let transferDate
@@ -1762,11 +1783,10 @@ export function generateDispatchGuideXML(guideData, businessData) {
   // ID de la guía (Serie-Correlativo)
   root.ele('cbc:ID').txt(guideData.number || `${guideData.series}-${String(guideData.correlative).padStart(8, '0')}`)
 
-  // Fecha de emisión
+  // Fecha de emisión (ya calculada en hora de Perú)
   root.ele('cbc:IssueDate').txt(issueDate)
 
-  // Hora de emisión (opcional pero recomendado)
-  const issueTime = new Date().toTimeString().split(' ')[0] // HH:MM:SS
+  // Hora de emisión (ya calculada en hora de Perú)
   root.ele('cbc:IssueTime').txt(issueTime)
 
   // Tipo de documento: 09 = Guía de Remisión Remitente
@@ -1988,7 +2008,17 @@ export function generateDispatchGuideXML(guideData, businessData) {
  * @returns {string} XML en formato string
  */
 export function generateCarrierDispatchGuideXML(guideData, businessData) {
-  // Helper para formatear fecha en zona horaria de Perú (UTC-5)
+  // Helper para obtener fecha/hora en zona horaria de Perú (UTC-5)
+  const getPeruDateTime = () => {
+    const now = new Date()
+    // Perú está en UTC-5 (sin horario de verano)
+    const peruOffset = -5 * 60 // -5 horas en minutos
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000)
+    const peruTime = new Date(utcTime + (peruOffset * 60000))
+    return peruTime
+  }
+
+  // Helper para formatear fecha YYYY-MM-DD
   const formatDatePeru = (date) => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -1996,8 +2026,20 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     return `${year}-${month}-${day}`
   }
 
-  // Formatear fecha de emisión (hoy en hora local del servidor/Perú)
-  const issueDate = formatDatePeru(new Date())
+  // Helper para formatear hora HH:MM:SS
+  const formatTimePeru = (date) => {
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${hours}:${minutes}:${seconds}`
+  }
+
+  // Obtener fecha y hora actual en zona horaria de Perú
+  const peruNow = getPeruDateTime()
+  const issueDate = formatDatePeru(peruNow)
+  const issueTime = formatTimePeru(peruNow)
+
+  console.log(`📅 [GRE-T] Fecha/hora de emisión (Perú): ${issueDate} ${issueTime}`)
 
   // Formatear fecha de inicio del traslado
   let transferDate
@@ -2043,11 +2085,10 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // ID de la guía (Serie-Correlativo)
   root.ele('cbc:ID').txt(guideData.number || `${guideData.series}-${String(guideData.correlative).padStart(8, '0')}`)
 
-  // Fecha de emisión
+  // Fecha de emisión (ya calculada en hora de Perú)
   root.ele('cbc:IssueDate').txt(issueDate)
 
-  // Hora de emisión
-  const issueTime = new Date().toTimeString().split(' ')[0]
+  // Hora de emisión (ya calculada en hora de Perú)
   root.ele('cbc:IssueTime').txt(issueTime)
 
   // Tipo de documento: 31 = Guía de Remisión TRANSPORTISTA
