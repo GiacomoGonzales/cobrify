@@ -2236,23 +2236,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'unitCode': 'KGM'
   }).txt((guideData.totalWeight || 0).toFixed(2))
 
-  // === PUNTO DE PARTIDA (Origen) ===
-  const deliveryAddress = shipment.ele('cac:Delivery').ele('cac:DeliveryAddress')
-  deliveryAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.origin?.ubigeo || '150101')
-  deliveryAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
-
-  // === PUNTO DE LLEGADA (Destino) ===
-  const originAddress = shipment.ele('cac:OriginAddress')
-  originAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.destination?.ubigeo || '150101')
-  originAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
-
-  // === DATOS DE TRANSPORTE ===
+  // === DATOS DE TRANSPORTE (ShipmentStage DEBE ir ANTES de Delivery y OriginAddress según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
   shipmentStage.ele('cbc:ID').txt('1')
 
@@ -2303,6 +2287,23 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
       }).txt(guideData.vehicle.mtcAuthorization)
     }
   }
+
+  // === PUNTO DE LLEGADA (Destino) - cac:Delivery contiene el punto de entrega ===
+  const delivery = shipment.ele('cac:Delivery')
+  const deliveryAddress = delivery.ele('cac:DeliveryAddress')
+  deliveryAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.destination?.ubigeo || '150101')
+  deliveryAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
+
+  // === PUNTO DE PARTIDA (Origen) ===
+  const originAddress = shipment.ele('cac:OriginAddress')
+  originAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.origin?.ubigeo || '150101')
+  originAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
   if (guideData.items && guideData.items.length > 0) {
