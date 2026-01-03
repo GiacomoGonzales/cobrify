@@ -650,13 +650,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     infoY += 12
   })
 
-  // Razón social si es diferente
+  // Razón social si es diferente (permitir múltiples líneas si es muy larga)
   if (showBusinessName) {
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...DARK_GRAY)
-    doc.text(businessName, infoCenterX, infoY, { align: 'center' })
-    infoY += 10
+    const businessNameLines = doc.splitTextToSize(businessName, infoColumnWidth - 10)
+    const businessLinesToShow = businessNameLines.slice(0, 2) // Máximo 2 líneas
+    businessLinesToShow.forEach((line, index) => {
+      doc.text(line, infoCenterX, infoY + (index * 9), { align: 'center' })
+    })
+    infoY += businessLinesToShow.length * 9 + 1
   }
 
   // Mostrar sucursales/direcciones
@@ -823,14 +827,28 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // ===== COLUMNA IZQUIERDA (Datos del cliente) =====
   let leftY = startY
 
-  // Razón Social
+  // Razón Social (permitir hasta 2 líneas si es muy larga)
   doc.setFont('helvetica', 'bold')
   doc.text('RAZÓN SOCIAL:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
   const customerName = invoice.customer?.name || 'CLIENTE GENERAL'
-  const customerNameLines = doc.splitTextToSize(customerName, colWidth - maxLeftLabel - 10)
-  doc.text(customerNameLines[0], leftValueX, leftY)
-  leftY += dataLineHeight
+  const customerNameMaxWidth = colWidth - maxLeftLabel - 10
+  const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
+
+  // Mostrar hasta 2 líneas de la razón social
+  if (customerNameLines.length === 1) {
+    doc.text(customerNameLines[0], leftValueX, leftY)
+    leftY += dataLineHeight
+  } else {
+    // Primera línea al lado de la etiqueta
+    doc.text(customerNameLines[0], leftValueX, leftY)
+    leftY += 10
+    // Segunda línea (si existe) debajo
+    if (customerNameLines[1]) {
+      doc.text(customerNameLines[1], leftValueX, leftY)
+      leftY += dataLineHeight - 2
+    }
+  }
 
   // RUC/DNI
   doc.setFont('helvetica', 'bold')
