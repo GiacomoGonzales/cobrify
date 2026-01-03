@@ -834,15 +834,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   const customerName = invoice.customer?.name || 'CLIENTE GENERAL'
-  // Usar todo el ancho de la columna izquierda para el nombre (más espacio)
-  const customerNameMaxWidth = colWidth - 5
+  // Ancho máximo: desde donde termina la etiqueta hasta donde empieza la columna derecha
+  const customerNameMaxWidth = colRightX - leftValueX - 15
   const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
 
   // Mostrar hasta 2 líneas de la razón social
   doc.text(customerNameLines[0], leftValueX, leftY)
   leftY += 10
   if (customerNameLines.length > 1 && customerNameLines[1]) {
-    // Segunda línea debajo, alineada con el valor (no con la etiqueta)
+    // Segunda línea debajo, alineada con el valor
     doc.text(customerNameLines[1], leftValueX, leftY)
     leftY += dataLineHeight - 2
   } else {
