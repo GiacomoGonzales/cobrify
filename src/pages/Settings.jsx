@@ -2261,9 +2261,10 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       enableProductImages: enableProductImages,
                       hiddenMenuItems: hiddenMenuItems,
+                      pdfAccentColor: pdfAccentColor,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
-                    toast.success('Preferencias guardadas exitosamente. Recarga la página para ver los cambios en el menú.')
+                    toast.success('Preferencias guardadas exitosamente.')
                   } catch (error) {
                     console.error('Error al guardar preferencias:', error)
                     toast.error('Error al guardar las preferencias')
