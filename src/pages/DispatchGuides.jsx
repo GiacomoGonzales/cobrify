@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -902,13 +902,55 @@ export default function DispatchGuides() {
             </div>
 
             {/* Footer */}
-            <div className="border-t px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <div className="border-t px-6 py-4 bg-gray-50 flex flex-wrap justify-end gap-3">
               <Button
                 variant="outline"
                 onClick={() => setSelectedGuide(null)}
               >
                 Cerrar
               </Button>
+
+              {/* Descargar XML - Solo si tiene XML guardado */}
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl) && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const xmlUrl = selectedGuide.sunatResponse.xmlStorageUrl || selectedGuide.sunatResponse.xmlUrl
+                    window.open(xmlUrl, '_blank')
+                  }}
+                >
+                  <Code className="w-4 h-4 mr-2" />
+                  XML SUNAT
+                </Button>
+              )}
+
+              {/* Descargar CDR - Solo si fue aceptada y tiene CDR */}
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.sunatResponse?.cdrStorageUrl || selectedGuide.sunatResponse?.cdrUrl || selectedGuide.sunatResponse?.cdrData) && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedGuide.sunatResponse.cdrStorageUrl) {
+                      window.open(selectedGuide.sunatResponse.cdrStorageUrl, '_blank')
+                    } else if (selectedGuide.sunatResponse.cdrUrl) {
+                      window.open(selectedGuide.sunatResponse.cdrUrl, '_blank')
+                    } else if (selectedGuide.sunatResponse.cdrData) {
+                      const blob = new Blob([selectedGuide.sunatResponse.cdrData], { type: 'application/xml' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `CDR-${selectedGuide.number}.xml`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      URL.revokeObjectURL(url)
+                    }
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  CDR SUNAT
+                </Button>
+              )}
+
               <Button
                 onClick={() => {
                   handleDownloadPdf(selectedGuide)
