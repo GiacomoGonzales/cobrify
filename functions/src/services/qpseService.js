@@ -347,33 +347,56 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
       }
     }
 
-    // 6. Si el envío fue exitoso, parsear respuesta
+    // 6. Si el envío fue exitoso, parsear respuesta inicial
     console.log('🔍 Respuesta completa de SUNAT vía QPse:', JSON.stringify(resultadoEnvio, null, 2))
 
     let resultado = parseQPseResponse(resultadoEnvio)
 
-    console.log(`✅ Emisión completada - Estado: ${resultado.accepted ? 'ACEPTADO' : 'RECHAZADO'}`)
-    if (!resultado.accepted) {
-      console.log(`❌ Código de error: ${resultado.responseCode}`)
-      console.log(`❌ Descripción: ${resultado.description}`)
-      console.log(`❌ Notas: ${resultado.notes}`)
-    }
+    console.log(`📝 Estado inicial tras envío: ${resultado.accepted ? 'ACEPTADO' : 'RECHAZADO'}`)
 
-    // 7. Si fue aceptado, consultar estado para obtener URLs del CDR, XML y PDF
-    // Usar reintentos porque QPse puede tardar en procesar el CDR
-    if (resultado.accepted && (!resultado.cdrUrl || !resultado.xmlUrl || !resultado.pdfUrl)) {
-      console.log('📄 Consultando estado para obtener URLs de CDR/XML/PDF...')
+    // 7. IMPORTANTE: Para documentos con ticket (GRE, Comunicación de Baja, etc.)
+    // SIEMPRE debemos consultar getStatus para obtener la respuesta real de SUNAT
+    // El código 0 del envío solo significa "ticket obtenido", no "aceptado por SUNAT"
+    const tieneTicket = resultado.ticket || resultadoEnvio.ticket || resultadoEnvio.numero_ticket
+    const necesitaConsultarEstado = tieneTicket || resultado.accepted || !resultado.cdrUrl
 
-      // Reintentar hasta 3 veces con espera incremental
-      for (let intento = 1; intento <= 3; intento++) {
+    if (necesitaConsultarEstado) {
+      console.log('📄 Consultando estado final en SUNAT (getStatus)...')
+
+      // Reintentar hasta 5 veces con espera incremental para dar tiempo a SUNAT
+      for (let intento = 1; intento <= 5; intento++) {
         try {
-          // Esperar antes de consultar (2s, 3s, 4s)
+          // Esperar antes de consultar (2s, 3s, 4s, 5s, 6s)
           const tiempoEspera = 1000 + (intento * 1000)
-          console.log(`⏳ Intento ${intento}/3 - Esperando ${tiempoEspera}ms...`)
+          console.log(`⏳ Intento ${intento}/5 - Esperando ${tiempoEspera}ms...`)
           await new Promise(resolve => setTimeout(resolve, tiempoEspera))
 
           const estadoConsulta = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
           console.log(`📋 Estado consultado (intento ${intento}):`, JSON.stringify(estadoConsulta, null, 2))
+
+          // CRÍTICO: Verificar si SUNAT rechazó el documento en getStatus
+          const codigoEstado = estadoConsulta.codigo || estadoConsulta.code || estadoConsulta.estado || ''
+          const mensajeEstado = estadoConsulta.mensaje || estadoConsulta.descripcion || estadoConsulta.message || ''
+
+          // Si el código NO es 0, SUNAT rechazó el documento
+          if (codigoEstado && codigoEstado !== '0' && codigoEstado !== '0000' && codigoEstado !== 0) {
+            console.log(`❌ SUNAT rechazó el documento en getStatus`)
+            console.log(`❌ Código: ${codigoEstado}`)
+            console.log(`❌ Mensaje: ${mensajeEstado}`)
+
+            // Actualizar resultado como RECHAZADO
+            resultado.accepted = false
+            resultado.responseCode = codigoEstado
+            resultado.description = mensajeEstado
+            resultado.notes = estadoConsulta.observaciones || estadoConsulta.errores?.join(' | ') || ''
+            break
+          }
+
+          // Si SUNAT aceptó (código 0), actualizar URLs
+          if (codigoEstado === '0' || codigoEstado === '0000' || codigoEstado === 0 || estadoConsulta.sunat_success === true) {
+            resultado.accepted = true
+            console.log(`✅ SUNAT aceptó el documento`)
+          }
 
           // Actualizar URLs si están disponibles en la consulta
           if (estadoConsulta.url_cdr && !resultado.cdrUrl) {
@@ -394,9 +417,8 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
             resultado.hash = estadoConsulta.hash || estadoConsulta.codigo_hash
           }
 
-          // Si ya tenemos el CDR, salir del bucle
-          if (resultado.cdrUrl) {
-            console.log('✅ CDR obtenido exitosamente')
+          // Si ya tenemos respuesta definitiva (aceptado con CDR o rechazado), salir
+          if ((resultado.accepted && resultado.cdrUrl) || !resultado.accepted) {
             break
           }
         } catch (consultaError) {
@@ -404,9 +426,17 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
         }
       }
 
-      if (!resultado.cdrUrl) {
-        console.warn('⚠️ No se pudo obtener CDR después de 3 intentos')
+      if (resultado.accepted && !resultado.cdrUrl) {
+        console.warn('⚠️ No se pudo obtener CDR después de 5 intentos')
       }
+    }
+
+    // Log estado final
+    console.log(`✅ Emisión completada - Estado FINAL: ${resultado.accepted ? 'ACEPTADO' : 'RECHAZADO'}`)
+    if (!resultado.accepted) {
+      console.log(`❌ Código de error: ${resultado.responseCode}`)
+      console.log(`❌ Descripción: ${resultado.description}`)
+      console.log(`❌ Notas: ${resultado.notes}`)
     }
 
     // 8. Log si no tenemos URLs de CDR/XML/PDF
