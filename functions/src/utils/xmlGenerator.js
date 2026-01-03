@@ -2189,30 +2189,17 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const customerLegalEntity = customerParty.ele('cac:PartyLegalEntity')
   customerLegalEntity.ele('cbc:RegistrationName').txt(recipientData.name || 'DESTINATARIO')
 
-  // === REMITENTE (SellerSupplierParty) ===
-  // En GRE Transportista, el remitente es quien envía la mercancía - OBLIGATORIO
-  // Buscar datos del shipper en diferentes ubicaciones posibles
+  // === REMITENTE ===
+  // En GRE Transportista, el remitente va dentro de cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty
+  // Según validaciones SUNAT (error 3383): /DespatchAdvice/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty/cac:PartyIdentification/cbc:ID
   const shipperData = guideData.shipper || guideData.sender || guideData.remitente || {}
   const shipperRuc = shipperData.ruc || shipperData.documentNumber || guideData.shipperRuc || ''
   const shipperBusinessName = shipperData.businessName || shipperData.name || shipperData.razonSocial || guideData.shipperName || ''
+  const shipperDocType = shipperData.documentType || '6' // Por defecto RUC
 
   console.log('📦 [GRE-T XML] Datos del remitente (shipper):', JSON.stringify(shipperData))
   console.log('📦 [GRE-T XML] RUC del remitente:', shipperRuc)
   console.log('📦 [GRE-T XML] Razón social del remitente:', shipperBusinessName)
-
-  const sellerSupplierParty = root.ele('cac:SellerSupplierParty')
-  const shipperParty = sellerSupplierParty.ele('cac:Party')
-
-  const shipperPartyId = shipperParty.ele('cac:PartyIdentification')
-  shipperPartyId.ele('cbc:ID', {
-    'schemeID': '6',
-    'schemeName': 'Documento de Identidad',
-    'schemeAgencyName': 'PE:SUNAT',
-    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
-  }).txt(shipperRuc || '00000000000')
-
-  const shipperLegalEntity = shipperParty.ele('cac:PartyLegalEntity')
-  shipperLegalEntity.ele('cbc:RegistrationName').txt(shipperBusinessName || 'REMITENTE NO ESPECIFICADO')
 
   // === ENVÍO (Shipment) ===
   const shipment = root.ele('cac:Shipment')
@@ -2305,6 +2292,21 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'schemeName': 'Ubigeos'
   }).txt(guideData.destination?.ubigeo || '150101')
   deliveryAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
+
+  // === REMITENTE (dentro de cac:Delivery/cac:Despatch/cac:DespatchParty) ===
+  // Según validaciones SUNAT: /DespatchAdvice/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty
+  // Error 3383: "Debe consignar el Numero de documento de identidad del Remitente"
+  // Error 3387: "Debe consignar el Nombre o razon social del Remitente"
+  const despatch = delivery.ele('cac:Despatch')
+  const despatchParty = despatch.ele('cac:DespatchParty')
+
+  const despatchPartyId = despatchParty.ele('cac:PartyIdentification')
+  despatchPartyId.ele('cbc:ID', {
+    'schemeID': shipperDocType
+  }).txt(shipperRuc || '00000000000')
+
+  const despatchLegalEntity = despatchParty.ele('cac:PartyLegalEntity')
+  despatchLegalEntity.ele('cbc:RegistrationName').txt(shipperBusinessName || 'REMITENTE NO ESPECIFICADO')
 
   // === PUNTO DE PARTIDA (Origen) ===
   const originAddress = shipment.ele('cac:OriginAddress')
