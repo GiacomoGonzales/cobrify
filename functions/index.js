@@ -3014,8 +3014,8 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
         return
       }
 
-      const guideData = guideDoc.data()
-      console.log(`📄 [GRE-T] Guía: ${guideData.number}`)
+      let guideData = guideDoc.data()
+      console.log(`📄 [GRE-T] Guía: ${guideData.number || 'SIN NÚMERO (borrador)'}`)
 
       // Verificar si ya fue enviada y aceptada
       if (guideData.sunatStatus === 'accepted') {
@@ -3024,6 +3024,45 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
           sunatStatus: guideData.sunatStatus
         })
         return
+      }
+
+      // Si es un borrador sin número, asignar series y correlativo
+      if (!guideData.number || !guideData.series || !guideData.correlative) {
+        console.log('📝 [GRE-T] Borrador detectado - asignando número de serie...')
+
+        // Obtener la serie actual y el siguiente número correlativo
+        const series = businessData.series?.guia_transportista || { serie: 'V001', lastNumber: 0 }
+        const newCorrelative = (series.lastNumber || 0) + 1
+        const guideNumber = `${series.serie}-${String(newCorrelative).padStart(8, '0')}`
+
+        console.log(`📝 [GRE-T] Asignando número: ${guideNumber}`)
+
+        // Actualizar la guía con el número asignado
+        await guideRef.update({
+          series: series.serie,
+          correlative: newCorrelative,
+          number: guideNumber,
+          status: 'pending',
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        // Actualizar el contador de series en el negocio
+        await businessRef.update({
+          'series.guia_transportista.lastNumber': newCorrelative,
+          'series.guia_transportista.serie': series.serie,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        // Actualizar guideData con los nuevos valores
+        guideData = {
+          ...guideData,
+          series: series.serie,
+          correlative: newCorrelative,
+          number: guideNumber,
+          status: 'pending',
+        }
+
+        console.log(`✅ [GRE-T] Número asignado: ${guideNumber}`)
       }
 
       // 3. Preparar datos para emisión

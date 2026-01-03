@@ -2230,6 +2230,17 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'unitCode': 'KGM'
   }).txt((guideData.totalWeight || 0).toFixed(2))
 
+  // === VEHÍCULO - TransportHandlingUnit (OBLIGATORIO según error 2566) ===
+  // XPath: /DespatchAdvice/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID
+  const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
+  const vehiclePlate = vehicleData.plate || vehicleData.licensePlate || ''
+  console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
+  console.log('🚛 [GRE-T XML] Placa del vehículo:', vehiclePlate)
+
+  const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
+  const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
+  transportEquipment.ele('cbc:ID').txt(vehiclePlate || 'AAA-000')
+
   // === DATOS DE TRANSPORTE (ShipmentStage DEBE ir ANTES de Delivery y OriginAddress según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
   shipmentStage.ele('cbc:ID').txt('1')
@@ -2245,23 +2256,6 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // Fecha de inicio del traslado
   const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
   transitPeriod.ele('cbc:StartDate').txt(transferDate)
-
-  // === VEHÍCULO (obligatorio en GRE Transportista) ===
-  // Según UBL 2.1, TransportMeans DEBE ir ANTES de DriverPerson
-  const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
-  console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
-
-  const transportMeans = shipmentStage.ele('cac:TransportMeans')
-  const roadTransport = transportMeans.ele('cac:RoadTransport')
-  roadTransport.ele('cbc:LicensePlateID').txt(vehicleData.plate || vehicleData.licensePlate || 'AAA-000')
-
-  // Autorización MTC del vehículo (si aplica)
-  if (vehicleData.mtcAuthorization || vehicleData.mtcRegistration) {
-    roadTransport.ele('cbc:TransportAuthorizationCode', {
-      'listAgencyName': 'PE:MTC',
-      'listName': 'Certificado de Habilitación Vehicular'
-    }).txt(vehicleData.mtcAuthorization || vehicleData.mtcRegistration)
-  }
 
   // === CONDUCTOR (obligatorio en GRE Transportista) ===
   // Según UBL 2.1, DriverPerson DEBE ir DESPUÉS de TransportMeans
@@ -2293,11 +2287,22 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   }).txt(guideData.destination?.ubigeo || '150101')
   deliveryAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
 
+  // === PUNTO DE PARTIDA (dentro de cac:Delivery/cac:Despatch/cac:DespatchAddress) ===
+  // Según validaciones SUNAT (error 2775): /DespatchAdvice/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cbc:ID
+  const despatch = delivery.ele('cac:Despatch')
+
+  // Dirección de despacho (punto de partida/origen)
+  const despatchAddress = despatch.ele('cac:DespatchAddress')
+  despatchAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.origin?.ubigeo || '150101')
+  despatchAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
+
   // === REMITENTE (dentro de cac:Delivery/cac:Despatch/cac:DespatchParty) ===
   // Según validaciones SUNAT: /DespatchAdvice/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty
   // Error 3383: "Debe consignar el Numero de documento de identidad del Remitente"
   // Error 3387: "Debe consignar el Nombre o razon social del Remitente"
-  const despatch = delivery.ele('cac:Despatch')
   const despatchParty = despatch.ele('cac:DespatchParty')
 
   const despatchPartyId = despatchParty.ele('cac:PartyIdentification')
@@ -2307,14 +2312,6 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   const despatchLegalEntity = despatchParty.ele('cac:PartyLegalEntity')
   despatchLegalEntity.ele('cbc:RegistrationName').txt(shipperBusinessName || 'REMITENTE NO ESPECIFICADO')
-
-  // === PUNTO DE PARTIDA (Origen) ===
-  const originAddress = shipment.ele('cac:OriginAddress')
-  originAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.origin?.ubigeo || '150101')
-  originAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
   if (guideData.items && guideData.items.length > 0) {

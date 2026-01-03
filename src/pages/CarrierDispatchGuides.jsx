@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import Modal from '@/components/ui/Modal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings } from '@/services/firestoreService'
+import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
 import { generateCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
 
@@ -40,6 +42,11 @@ export default function CarrierDispatchGuides() {
   const [companySettings, setCompanySettings] = useState(null)
   const [selectedGuide, setSelectedGuide] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Estado para editar número de guía rechazada
+  const [editingGuide, setEditingGuide] = useState(null)
+  const [newCorrelative, setNewCorrelative] = useState('')
+  const [isUpdatingNumber, setIsUpdatingNumber] = useState(false)
 
   useEffect(() => {
     loadGuides()
@@ -145,6 +152,66 @@ export default function CarrierDispatchGuides() {
       toast.error(`Error al enviar guía: ${error.message}`)
     } finally {
       setSendingToSunat(null)
+    }
+  }
+
+  // Abrir modal para editar número de guía rechazada
+  const handleEditNumber = (guide) => {
+    setEditingGuide(guide)
+    // Extraer solo el correlativo del número (V001-00000302 -> 302)
+    const currentCorrelative = guide.correlative || parseInt(guide.number?.split('-')[1]) || 0
+    setNewCorrelative(String(currentCorrelative))
+  }
+
+  // Guardar nuevo número de guía
+  const handleSaveNewNumber = async () => {
+    if (!editingGuide || !newCorrelative) return
+
+    const correlative = parseInt(newCorrelative)
+    if (isNaN(correlative) || correlative <= 0) {
+      toast.error('Ingrese un número correlativo válido')
+      return
+    }
+
+    setIsUpdatingNumber(true)
+    try {
+      const businessId = getBusinessId()
+      const series = editingGuide.series || 'V001'
+      const newNumber = `${series}-${String(correlative).padStart(8, '0')}`
+
+      // Verificar si el número ya existe
+      const existingGuide = guides.find(g => g.number === newNumber && g.id !== editingGuide.id)
+      if (existingGuide) {
+        toast.error(`El número ${newNumber} ya existe`)
+        return
+      }
+
+      const result = await updateCarrierDispatchGuide(businessId, editingGuide.id, {
+        correlative: correlative,
+        number: newNumber,
+        sunatStatus: 'pending', // Resetear estado para permitir reenvío
+        sunatResponseCode: null,
+        sunatDescription: null,
+      })
+
+      if (result.success) {
+        toast.success(`Número actualizado a ${newNumber}`)
+        // Actualizar la lista local
+        setGuides(prev => prev.map(g =>
+          g.id === editingGuide.id
+            ? { ...g, correlative, number: newNumber, sunatStatus: 'pending', sunatResponseCode: null, sunatDescription: null }
+            : g
+        ))
+        setEditingGuide(null)
+        setNewCorrelative('')
+      } else {
+        throw new Error(result.error || 'Error al actualizar')
+      }
+    } catch (error) {
+      console.error('Error al actualizar número de guía:', error)
+      toast.error(error.message || 'Error al actualizar el número')
+    } finally {
+      setIsUpdatingNumber(false)
     }
   }
 
@@ -454,6 +521,15 @@ export default function CarrierDispatchGuides() {
                               )}
                             </button>
                           )}
+                          {(guide.sunatStatus === 'rejected' || guide.sunatStatus === 'error') && guide.number && (
+                            <button
+                              onClick={() => handleEditNumber(guide)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="Cambiar número de documento"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedGuide(guide)}
                             className="text-orange-600 hover:text-orange-900"
@@ -540,6 +616,90 @@ export default function CarrierDispatchGuides() {
         isOpen={showCreateModal}
         onClose={handleCloseModal}
       />
+
+      {/* Edit Number Modal */}
+      {editingGuide && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Edit3 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Cambiar Número</h2>
+                  <p className="text-blue-100 text-sm">{editingGuide.number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingGuide(null)
+                  setNewCorrelative('')
+                }}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                <p className="font-medium">Esta guía fue rechazada por SUNAT</p>
+                <p className="mt-1">El número {editingGuide.number} ya no puede ser usado. Asigne un nuevo número para reintentar el envío.</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="bg-gray-100 px-4 py-2 rounded-lg font-mono text-lg">
+                  {editingGuide.series || 'V001'}-
+                </div>
+                <Input
+                  type="number"
+                  value={newCorrelative}
+                  onChange={(e) => setNewCorrelative(e.target.value)}
+                  placeholder="Nuevo correlativo"
+                  className="font-mono text-lg"
+                  min="1"
+                />
+              </div>
+
+              <p className="text-sm text-gray-500">
+                Nuevo número: <span className="font-mono font-medium">
+                  {editingGuide.series || 'V001'}-{String(parseInt(newCorrelative) || 0).padStart(8, '0')}
+                </span>
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingGuide(null)
+                  setNewCorrelative('')
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveNewNumber}
+                disabled={isUpdatingNumber || !newCorrelative}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {isUpdatingNumber ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  'Guardar y Reenviar'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail Guide Modal */}
       {selectedGuide && (
