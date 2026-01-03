@@ -301,16 +301,15 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   let currentY = MARGIN_TOP
 
-  // ========== 1. ENCABEZADO - 3 COLUMNAS ==========
+  // ========== 1. ENCABEZADO - 3 COLUMNAS CON LOGO DINÁMICO ==========
 
   const headerHeight = 100
-  const logoColumnWidth = 100
+  const defaultLogoWidth = 100
   const docColumnWidth = 145
-  const infoColumnWidth = CONTENT_WIDTH - logoColumnWidth - docColumnWidth - 20
 
   const logoX = MARGIN_LEFT
-  const infoCenterX = MARGIN_LEFT + logoColumnWidth + 10 + (infoColumnWidth / 2)
   const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docColumnWidth
+  let actualLogoWidth = defaultLogoWidth // Ancho real del logo (se actualiza dinámicamente)
 
   // ===== COLUMNA 1: LOGO =====
   if (companySettings?.logoUrl) {
@@ -331,83 +330,81 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       })
 
       const aspectRatio = img.width / img.height
-
-      // Altura máxima: proporcional al header
       const maxLogoHeight = headerHeight - 15
+      // Ancho máximo: hasta donde empieza el recuadro del documento menos margen
+      const maxAllowedWidth = CONTENT_WIDTH - docColumnWidth - 30
 
       let logoWidth, logoHeight
 
       if (aspectRatio >= 3) {
-        // Logo EXTREMADAMENTE horizontal (3:1 o más):
-        // Permitir ancho generoso pero con altura mínima de 35pt
-        const maxLogoWidth = logoColumnWidth + 40
-        logoHeight = 40
+        // Logo EXTREMADAMENTE horizontal (3:1 o más): permitir más ancho
+        logoHeight = 50
         logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxLogoWidth) {
-          logoWidth = maxLogoWidth
+        if (logoWidth > maxAllowedWidth) {
+          logoWidth = maxAllowedWidth
           logoHeight = logoWidth / aspectRatio
-          if (logoHeight < 35) {
-            logoHeight = 35
-            logoWidth = logoHeight * aspectRatio
-          }
+        }
+        if (logoHeight < 40) {
+          logoHeight = 40
+          logoWidth = logoHeight * aspectRatio
         }
       } else if (aspectRatio >= 2.5) {
-        // Logo MUY horizontal (2.5:1 a 3:1): balance entre tamaño y espacio
-        const maxLogoWidth = logoColumnWidth + 35
-        logoHeight = 45
+        // Logo MUY horizontal (2.5:1 a 3:1)
+        logoHeight = 55
         logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxLogoWidth) {
-          logoWidth = maxLogoWidth
+        if (logoWidth > maxAllowedWidth) {
+          logoWidth = maxAllowedWidth
           logoHeight = logoWidth / aspectRatio
         }
-        if (logoHeight < 35) {
-          logoHeight = 35
+        if (logoHeight < 45) {
+          logoHeight = 45
           logoWidth = logoHeight * aspectRatio
         }
       } else if (aspectRatio >= 2) {
-        // Logo muy horizontal (2:1 a 2.5:1): permitir más ancho
-        const maxHorizontalWidth = logoColumnWidth + 30
-        logoHeight = maxLogoHeight * 0.65
+        // Logo muy horizontal (2:1 a 2.5:1)
+        logoHeight = maxLogoHeight * 0.75
         logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxHorizontalWidth) {
-          logoWidth = maxHorizontalWidth
+        if (logoWidth > maxAllowedWidth * 0.6) {
+          logoWidth = maxAllowedWidth * 0.6
           logoHeight = logoWidth / aspectRatio
         }
       } else if (aspectRatio >= 1.3) {
-        // Logo horizontal moderado (1.3:1 a 2:1): buen tamaño
-        const maxLogoWidth = logoColumnWidth + 25
-        logoWidth = maxLogoWidth
-        logoHeight = logoWidth / aspectRatio
-        if (logoHeight > maxLogoHeight) {
-          logoHeight = maxLogoHeight
-          logoWidth = logoHeight * aspectRatio
+        // Logo horizontal moderado (1.3:1 a 2:1)
+        logoHeight = maxLogoHeight * 0.85
+        logoWidth = logoHeight * aspectRatio
+        if (logoWidth > maxAllowedWidth * 0.5) {
+          logoWidth = maxAllowedWidth * 0.5
+          logoHeight = logoWidth / aspectRatio
         }
       } else if (aspectRatio >= 1) {
         // Logo cuadrado o casi cuadrado
-        const maxLogoWidth = logoColumnWidth
-        logoHeight = maxLogoHeight * 0.8
+        logoHeight = maxLogoHeight * 0.85
         logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxLogoWidth) {
-          logoWidth = maxLogoWidth
+        if (logoWidth > defaultLogoWidth + 10) {
+          logoWidth = defaultLogoWidth + 10
           logoHeight = logoWidth / aspectRatio
         }
       } else {
         // Logo vertical: priorizar altura máxima
-        const maxLogoWidth = logoColumnWidth
         logoHeight = maxLogoHeight
         logoWidth = logoHeight * aspectRatio
-        if (logoWidth > maxLogoWidth) {
-          logoWidth = maxLogoWidth
+        if (logoWidth > defaultLogoWidth) {
+          logoWidth = defaultLogoWidth
           logoHeight = logoWidth / aspectRatio
         }
       }
 
+      actualLogoWidth = logoWidth // Guardar el ancho real para posicionar el texto
       const logoYPos = currentY + (headerHeight - logoHeight) / 2 - 10
       doc.addImage(imgData, format, logoX, logoYPos, logoWidth, logoHeight, undefined, 'FAST')
     } catch (error) {
       console.warn('No se pudo cargar el logo:', error.message)
     }
   }
+
+  // Calcular columna de info dinámicamente basada en el logo real
+  const infoColumnWidth = CONTENT_WIDTH - actualLogoWidth - docColumnWidth - 20
+  const infoCenterX = MARGIN_LEFT + actualLogoWidth + 10 + (infoColumnWidth / 2)
 
   // ===== ESLOGAN debajo del logo =====
   if (companySettings?.companySlogan) {
@@ -417,7 +414,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setTextColor(...BLACK)
 
     // El eslogan ocupa el ancho del logo + área de información (centrado)
-    const sloganMaxWidth = logoColumnWidth + infoColumnWidth - 10
+    const sloganMaxWidth = actualLogoWidth + infoColumnWidth - 10
     const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
 
     // Limitar a máximo 2 líneas
