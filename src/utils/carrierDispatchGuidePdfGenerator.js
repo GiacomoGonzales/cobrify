@@ -356,27 +356,38 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     doc.text('AQUÍ', logoX + logoWidth/2, logoY + 56, { align: 'center' })
   }
 
-  // Datos de la empresa (centro)
+  // Datos de la empresa (centro) - mismo formato que facturas
   const centerX = logoX + logoWidth + 10
   const commercialName = (companySettings?.name || 'EMPRESA SAC').toUpperCase()
   const legalName = (companySettings?.businessName || '').toUpperCase()
-  const address = companySettings?.address || ''
   const phone = companySettings?.phone || ''
-  const city = companySettings?.city || ''
+  const email = companySettings?.email || ''
 
-  let totalTextHeight = 14
+  // Construir dirección completa con ubicación (igual que facturas)
+  let fullAddress = companySettings?.address || ''
+  if (companySettings?.district || companySettings?.province || companySettings?.department) {
+    const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+    if (locationParts.length > 0) {
+      fullAddress += ' - ' + locationParts.join(', ')
+    }
+  }
+
+  // Calcular altura total del texto
+  let totalTextHeight = 14 // Nombre comercial
   if (legalName && legalName !== commercialName) totalTextHeight += 12
-  if (address) totalTextHeight += 18
-  if (phone || city) totalTextHeight += 10
+  if (fullAddress || phone) totalTextHeight += 18
+  if (email) totalTextHeight += 10
 
   let centerY = currentY + (headerHeight - totalTextHeight) / 2 + 10
 
+  // Nombre comercial
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
   doc.text(commercialName, centerX + centerWidth/2, centerY, { align: 'center' })
   centerY += 14
 
+  // Razón social (si es diferente)
   if (legalName && legalName !== commercialName) {
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
@@ -385,25 +396,25 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     centerY += 12
   }
 
-  if (address) {
+  // Dirección y teléfono (mismo formato que facturas)
+  if (fullAddress || phone) {
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    const addressLines = doc.splitTextToSize(`Dirección: ${address}`, centerWidth - 10)
+    let addressLine = fullAddress
+    if (phone) addressLine += (fullAddress ? ' - ' : '') + 'Tel: ' + phone
+    const addressLines = doc.splitTextToSize(addressLine, centerWidth - 10)
     addressLines.slice(0, 2).forEach((line, i) => {
       doc.text(line, centerX + centerWidth/2, centerY + (i * 9), { align: 'center' })
     })
     centerY += addressLines.slice(0, 2).length * 9
   }
 
-  // Teléfono y ciudad
-  if (phone || city) {
+  // Email
+  if (email) {
     doc.setFontSize(7)
     doc.setTextColor(...MEDIUM_GRAY)
-    const contactInfo = []
-    if (phone) contactInfo.push(`Tel: ${phone}`)
-    if (city) contactInfo.push(city)
-    doc.text(contactInfo.join(' | '), centerX + centerWidth/2, centerY + 2, { align: 'center' })
+    doc.text(`Email: ${email}`, centerX + centerWidth/2, centerY + 2, { align: 'center' })
   }
 
   // Recuadro del documento (derecha)
