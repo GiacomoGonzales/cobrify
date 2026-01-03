@@ -750,18 +750,28 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   currentY += 18
 
-  // Filas de datos
-  const rowHeight = 16
+  // Filas de datos con altura dinámica según descripción
+  const minRowHeight = 16
+  const lineHeight = 8 // Altura por línea de texto
   doc.setTextColor(...BLACK)
   doc.setFont('helvetica', 'normal')
 
-  const maxItems = Math.min(items.length || 1, 8)
+  const maxItems = Math.min(items.length || 1, 15) // Aumentado para soportar más items
   for (let i = 0; i < maxItems; i++) {
     const item = items[i] || {}
 
+    // Calcular líneas de descripción para determinar altura de fila
+    doc.setFontSize(6)
+    const descText = item.description || '-'
+    const descLines = doc.splitTextToSize(descText, colWidths.desc - 6)
+    const numLines = descLines.length
+    const rowHeight = Math.max(minRowHeight, numLines * lineHeight + 8)
+
+    // Dibujar rectángulo de fila
     doc.setDrawColor(...LIGHT_GRAY)
     doc.rect(tableX, currentY, tableWidth, rowHeight)
 
+    // Dibujar líneas verticales de separación de columnas
     colX = tableX
     doc.line(colX + colWidths.num, currentY, colX + colWidths.num, currentY + rowHeight)
     colX += colWidths.num
@@ -775,30 +785,34 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     colX += colWidths.desc
     doc.line(colX + colWidths.qty, currentY, colX + colWidths.qty, currentY + rowHeight)
 
-    // Datos
+    // Datos - centrados verticalmente en la fila
+    const centerY = currentY + rowHeight / 2 + 2
+
     doc.setFontSize(6)
     colX = tableX
-    doc.text(String(i + 1), colX + colWidths.num/2, currentY + 10, { align: 'center' })
+    doc.text(String(i + 1), colX + colWidths.num/2, centerY, { align: 'center' })
     colX += colWidths.num
 
-    doc.text((item.code || '-').substring(0, 10), colX + colWidths.code/2, currentY + 10, { align: 'center' })
+    doc.text((item.code || '-').substring(0, 10), colX + colWidths.code/2, centerY, { align: 'center' })
     colX += colWidths.code
 
-    doc.text((item.sunatCode || '-').substring(0, 12), colX + colWidths.sunatCode/2, currentY + 10, { align: 'center' })
+    doc.text((item.sunatCode || '-').substring(0, 12), colX + colWidths.sunatCode/2, centerY, { align: 'center' })
     colX += colWidths.sunatCode
 
-    doc.text((item.gtin || '-').substring(0, 14), colX + colWidths.gtin/2, currentY + 10, { align: 'center' })
+    doc.text((item.gtin || '-').substring(0, 14), colX + colWidths.gtin/2, centerY, { align: 'center' })
     colX += colWidths.gtin
 
-    const descText = item.description || '-'
-    const truncatedDesc = descText.length > 35 ? descText.substring(0, 32) + '...' : descText
-    doc.text(truncatedDesc, colX + 3, currentY + 10)
+    // Descripción - múltiples líneas
+    const descStartY = currentY + 8
+    descLines.forEach((line, lineIdx) => {
+      doc.text(line, colX + 3, descStartY + (lineIdx * lineHeight))
+    })
     colX += colWidths.desc
 
-    doc.text(String(item.quantity || 1), colX + colWidths.qty/2, currentY + 10, { align: 'center' })
+    doc.text(String(item.quantity || 1), colX + colWidths.qty/2, centerY, { align: 'center' })
     colX += colWidths.qty
 
-    doc.text(item.unit || 'NIU', colX + colWidths.unit/2, currentY + 10, { align: 'center' })
+    doc.text(item.unit || 'NIU', colX + colWidths.unit/2, centerY, { align: 'center' })
 
     currentY += rowHeight
   }
