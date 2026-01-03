@@ -821,9 +821,9 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     const vehicleLabel = idx === 0 ? 'PRINCIPAL' : 'SECUNDARIO'
     doc.setFont('helvetica', 'bold')
     if (idx === 0) {
-      doc.setFillColor(128, 0, 128) // Purple for principal
+      doc.setFillColor(...ACCENT_COLOR) // Color de acento para principal
     } else {
-      doc.setFillColor(128, 128, 128) // Gray for secondary
+      doc.setFillColor(128, 128, 128) // Gris para secundario
     }
     doc.roundedRect(MARGIN_LEFT, currentY - 8, 55, 12, 2, 2, 'F')
     doc.setTextColor(255, 255, 255)
@@ -883,9 +883,9 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     const driverLabel = idx === 0 ? 'PRINCIPAL' : 'SECUNDARIO'
     doc.setFont('helvetica', 'bold')
     if (idx === 0) {
-      doc.setFillColor(180, 50, 80) // Rose for principal
+      doc.setFillColor(...ACCENT_COLOR) // Color de acento para principal
     } else {
-      doc.setFillColor(128, 128, 128) // Gray for secondary
+      doc.setFillColor(128, 128, 128) // Gris para secundario
     }
     doc.roundedRect(MARGIN_LEFT, currentY - 8, 55, 12, 2, 2, 'F')
     doc.setTextColor(255, 255, 255)
