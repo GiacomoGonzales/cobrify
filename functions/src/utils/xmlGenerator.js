@@ -2252,9 +2252,25 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
   transitPeriod.ele('cbc:StartDate').txt(transferDate)
 
+  // === VEHÍCULO (obligatorio en GRE Transportista) ===
+  // Según UBL 2.1, TransportMeans DEBE ir ANTES de DriverPerson
+  const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
+  console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
+
+  const transportMeans = shipmentStage.ele('cac:TransportMeans')
+  const roadTransport = transportMeans.ele('cac:RoadTransport')
+  roadTransport.ele('cbc:LicensePlateID').txt(vehicleData.plate || vehicleData.licensePlate || 'AAA-000')
+
+  // Autorización MTC del vehículo (si aplica)
+  if (vehicleData.mtcAuthorization || vehicleData.mtcRegistration) {
+    roadTransport.ele('cbc:TransportAuthorizationCode', {
+      'listAgencyName': 'PE:MTC',
+      'listName': 'Certificado de Habilitación Vehicular'
+    }).txt(vehicleData.mtcAuthorization || vehicleData.mtcRegistration)
+  }
+
   // === CONDUCTOR (obligatorio en GRE Transportista) ===
-  // El conductor SIEMPRE debe incluirse - es obligatorio según SUNAT
-  // Buscar datos del conductor en diferentes ubicaciones posibles
+  // Según UBL 2.1, DriverPerson DEBE ir DESPUÉS de TransportMeans
   const driverData = guideData.driver || guideData.transport?.driver || {}
   console.log('🚗 [GRE-T XML] Datos del conductor:', JSON.stringify(driverData))
 
@@ -2273,23 +2289,6 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // Licencia de conducir (obligatoria)
   const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
   driverLicense.ele('cbc:ID').txt(driverData.license || driverData.licenseNumber || 'Q00000000')
-
-  // === VEHÍCULO (obligatorio en GRE Transportista) ===
-  // El vehículo SIEMPRE debe incluirse - es obligatorio según SUNAT
-  const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
-  console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
-
-  const transportMeans = shipmentStage.ele('cac:TransportMeans')
-  const roadTransport = transportMeans.ele('cac:RoadTransport')
-  roadTransport.ele('cbc:LicensePlateID').txt(vehicleData.plate || vehicleData.licensePlate || 'AAA-000')
-
-  // Autorización MTC del vehículo (si aplica)
-  if (vehicleData.mtcAuthorization || vehicleData.mtcRegistration) {
-    roadTransport.ele('cbc:TransportAuthorizationCode', {
-      'listAgencyName': 'PE:MTC',
-      'listName': 'Certificado de Habilitación Vehicular'
-    }).txt(vehicleData.mtcAuthorization || vehicleData.mtcRegistration)
-  }
 
   // === PUNTO DE LLEGADA (Destino) - cac:Delivery contiene el punto de entrega ===
   const delivery = shipment.ele('cac:Delivery')
