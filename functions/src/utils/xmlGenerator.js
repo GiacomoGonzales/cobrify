@@ -2230,23 +2230,11 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'unitCode': 'KGM'
   }).txt((guideData.totalWeight || 0).toFixed(2))
 
-  // === VEHÍCULO - TransportHandlingUnit (OBLIGATORIO según error 2566) ===
-  // XPath: /DespatchAdvice/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID
-  const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
-  const vehiclePlate = vehicleData.plate || vehicleData.licensePlate || ''
-  console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
-  console.log('🚛 [GRE-T XML] Placa del vehículo:', vehiclePlate)
-
-  const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
-  const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
-  transportEquipment.ele('cbc:ID').txt(vehiclePlate || 'AAA-000')
-
-  // === DATOS DE TRANSPORTE (ShipmentStage DEBE ir ANTES de Delivery y OriginAddress según UBL 2.1) ===
+  // === DATOS DE TRANSPORTE (ShipmentStage DEBE ir ANTES de TransportHandlingUnit según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
   shipmentStage.ele('cbc:ID').txt('1')
 
   // Modalidad de transporte: siempre 01 (Público) para GRE Transportista
-  // porque el transportista ES la empresa de transporte
   shipmentStage.ele('cbc:TransportModeCode', {
     'listName': 'Modalidad de traslado',
     'listAgencyName': 'PE:SUNAT',
@@ -2258,7 +2246,6 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   transitPeriod.ele('cbc:StartDate').txt(transferDate)
 
   // === CONDUCTOR (obligatorio en GRE Transportista) ===
-  // Según UBL 2.1, DriverPerson DEBE ir DESPUÉS de TransportMeans
   const driverData = guideData.driver || guideData.transport?.driver || {}
   console.log('🚗 [GRE-T XML] Datos del conductor:', JSON.stringify(driverData))
 
@@ -2278,7 +2265,8 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
   driverLicense.ele('cbc:ID').txt(driverData.license || driverData.licenseNumber || 'Q00000000')
 
-  // === PUNTO DE LLEGADA (Destino) - cac:Delivery contiene el punto de entrega ===
+  // === PUNTO DE LLEGADA (Destino) - cac:Delivery DEBE ir ANTES de TransportHandlingUnit según UBL 2.1 ===
+  // Orden en cac:Shipment según UBL 2.1: ShipmentStage (24) -> Delivery (25) -> TransportHandlingUnit (26)
   const delivery = shipment.ele('cac:Delivery')
   const deliveryAddress = delivery.ele('cac:DeliveryAddress')
   deliveryAddress.ele('cbc:ID', {
@@ -2312,6 +2300,17 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   const despatchLegalEntity = despatchParty.ele('cac:PartyLegalEntity')
   despatchLegalEntity.ele('cbc:RegistrationName').txt(shipperBusinessName || 'REMITENTE NO ESPECIFICADO')
+
+  // === VEHÍCULO - TransportHandlingUnit (DEBE ir DESPUÉS de Delivery según UBL 2.1) ===
+  // XPath: /DespatchAdvice/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID
+  const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
+  const vehiclePlate = vehicleData.plate || vehicleData.licensePlate || ''
+  console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
+  console.log('🚛 [GRE-T XML] Placa del vehículo:', vehiclePlate)
+
+  const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
+  const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
+  transportEquipment.ele('cbc:ID').txt(vehiclePlate || 'AAA-000')
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
   if (guideData.items && guideData.items.length > 0) {
