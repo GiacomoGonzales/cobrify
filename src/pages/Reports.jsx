@@ -28,7 +28,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, getCustomersWithStats, getProducts, getProductCategories } from '@/services/firestoreService'
+import { getInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import {
@@ -135,6 +135,7 @@ export default function Reports() {
   const [productCategories, setProductCategories] = useState([])
   const [recipes, setRecipes] = useState([])
   const [expenses, setExpenses] = useState([])
+  const [purchases, setPurchases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all, custom
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
@@ -211,6 +212,17 @@ export default function Reports() {
           console.error('Error al cargar gastos:', error)
           setExpenses([])
         }
+      }
+
+      // Cargar compras para el cálculo de rentabilidad
+      try {
+        const purchasesResult = await getPurchases(getBusinessId())
+        if (purchasesResult.success) {
+          setPurchases(purchasesResult.data || [])
+        }
+      } catch (error) {
+        console.error('Error al cargar compras:', error)
+        setPurchases([])
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -913,6 +925,64 @@ export default function Reports() {
     })
   }, [expenses, dateRange, customStartDate, customEndDate])
 
+  // Filtrar compras por rango de fecha (para rentabilidad)
+  const filteredPurchases = useMemo(() => {
+    const now = new Date()
+    const filterDate = new Date()
+
+    // Para fechas personalizadas
+    if (dateRange === 'custom') {
+      if (!customStartDate || !customEndDate) {
+        return purchases
+      }
+      const startDate = new Date(customStartDate)
+      startDate.setHours(0, 0, 0, 0)
+      const endDate = new Date(customEndDate)
+      endDate.setHours(23, 59, 59, 999)
+
+      return purchases.filter(purchase => {
+        if (!purchase.createdAt) return false
+        const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
+        return purchaseDate >= startDate && purchaseDate <= endDate
+      })
+    }
+
+    switch (dateRange) {
+      case 'week':
+        filterDate.setDate(now.getDate() - 7)
+        break
+      case 'month':
+        filterDate.setMonth(now.getMonth() - 1)
+        break
+      case 'quarter':
+        filterDate.setMonth(now.getMonth() - 3)
+        break
+      case 'year':
+        filterDate.setFullYear(now.getFullYear() - 1)
+        break
+      case 'all':
+        return purchases
+      default:
+        return purchases
+    }
+
+    return purchases.filter(purchase => {
+      if (!purchase.createdAt) return false
+      const purchaseDate = purchase.createdAt.toDate ? purchase.createdAt.toDate() : new Date(purchase.createdAt)
+      return purchaseDate >= filterDate
+    })
+  }, [purchases, dateRange, customStartDate, customEndDate])
+
+  // Estadísticas de compras (costo de ventas)
+  const purchaseStats = useMemo(() => {
+    const totalPurchases = filteredPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
+    const purchaseCount = filteredPurchases.length
+    return {
+      total: totalPurchases,
+      count: purchaseCount
+    }
+  }, [filteredPurchases])
+
   // Estadísticas de gastos
   const expenseStats = useMemo(() => {
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0)
@@ -1125,38 +1195,64 @@ export default function Reports() {
 
   // Estadísticas de rentabilidad
   const profitabilityStats = useMemo(() => {
-    const totalIngresos = stats.totalRevenue
-    const totalGastos = expenseStats.total
-    const utilidadNeta = totalIngresos - totalGastos
-    const margenNeto = totalIngresos > 0 ? (utilidadNeta / totalIngresos) * 100 : 0
+    const totalVentas = stats.totalRevenue
+    const costoVentas = purchaseStats.total // Costo de los productos (compras)
+    const totalGastos = expenseStats.total // Gastos operativos
 
-    // Calcular ratio gastos/ingresos
-    const ratioGastos = totalIngresos > 0 ? (totalGastos / totalIngresos) * 100 : 0
+    // Utilidad Bruta = Ventas - Costo de Ventas
+    const utilidadBruta = totalVentas - costoVentas
+
+    // Utilidad Neta = Utilidad Bruta - Gastos Operativos
+    // Es decir: Ventas - Costo de Ventas - Gastos
+    const utilidadNeta = utilidadBruta - totalGastos
+
+    // Margen Bruto (%) = Utilidad Bruta / Ventas
+    const margenBruto = totalVentas > 0 ? (utilidadBruta / totalVentas) * 100 : 0
+
+    // Margen Neto (%) = Utilidad Neta / Ventas
+    const margenNeto = totalVentas > 0 ? (utilidadNeta / totalVentas) * 100 : 0
+
+    // Calcular ratio gastos/ingresos (solo gastos operativos)
+    const ratioGastos = totalVentas > 0 ? (totalGastos / totalVentas) * 100 : 0
+
+    // Ratio costo de ventas
+    const ratioCostoVentas = totalVentas > 0 ? (costoVentas / totalVentas) * 100 : 0
 
     return {
-      totalIngresos,
+      totalVentas,
+      totalIngresos: totalVentas, // Mantener compatibilidad
+      costoVentas,
+      utilidadBruta,
       totalGastos,
       utilidadNeta,
+      margenBruto,
       margenNeto,
-      ratioGastos
+      ratioGastos,
+      ratioCostoVentas
     }
-  }, [stats.totalRevenue, expenseStats.total])
+  }, [stats.totalRevenue, purchaseStats.total, expenseStats.total])
 
   // Función para exportar reporte de rentabilidad
   const exportProfitabilityReport = async () => {
-    // Hoja 1: Resumen
+    // Hoja 1: Resumen con fórmula completa
     const summaryData = [
-      { 'Concepto': 'Total Ingresos', 'Valor': profitabilityStats.totalIngresos },
-      { 'Concepto': 'Total Gastos', 'Valor': profitabilityStats.totalGastos },
+      { 'Concepto': 'Total Ventas', 'Valor': profitabilityStats.totalVentas },
+      { 'Concepto': 'Costo de Ventas (Compras)', 'Valor': profitabilityStats.costoVentas },
+      { 'Concepto': 'Utilidad Bruta', 'Valor': profitabilityStats.utilidadBruta },
+      { 'Concepto': 'Margen Bruto (%)', 'Valor': profitabilityStats.margenBruto.toFixed(2) + '%' },
+      { 'Concepto': '---', 'Valor': '---' },
+      { 'Concepto': 'Total Gastos Operativos', 'Valor': profitabilityStats.totalGastos },
+      { 'Concepto': '---', 'Valor': '---' },
       { 'Concepto': 'Utilidad Neta', 'Valor': profitabilityStats.utilidadNeta },
       { 'Concepto': 'Margen Neto (%)', 'Valor': profitabilityStats.margenNeto.toFixed(2) + '%' },
-      { 'Concepto': 'Ratio Gastos/Ingresos (%)', 'Valor': profitabilityStats.ratioGastos.toFixed(2) + '%' },
+      { 'Concepto': '---', 'Valor': '---' },
+      { 'Concepto': 'Fórmula:', 'Valor': 'Ventas - Costo de Ventas - Gastos = Utilidad Neta' },
     ]
 
     // Hoja 2: Detalle por período
     const detailData = profitabilityByPeriod.map(p => ({
       'Período': p.period,
-      'Ingresos': p.ingresos,
+      'Ventas': p.ingresos,
       'Gastos': p.gastos,
       'Utilidad': p.utilidad,
       'Margen (%)': p.ingresos > 0 ? ((p.utilidad / p.ingresos) * 100).toFixed(2) + '%' : '0%'
@@ -1165,7 +1261,7 @@ export default function Reports() {
     // Agregar fila de totales
     detailData.push({
       'Período': 'TOTAL',
-      'Ingresos': profitabilityStats.totalIngresos,
+      'Ventas': profitabilityStats.totalVentas,
       'Gastos': profitabilityStats.totalGastos,
       'Utilidad': profitabilityStats.utilidadNeta,
       'Margen (%)': profitabilityStats.margenNeto.toFixed(2) + '%'
@@ -2701,15 +2797,16 @@ export default function Reports() {
             </button>
           </div>
 
-          {/* KPIs de Rentabilidad */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* KPIs de Rentabilidad - Fórmula: Ventas - Costo de Ventas - Gastos = Utilidad Neta */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Fila 1: Ventas, Costo de Ventas, Utilidad Bruta */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Total Ingresos</p>
+                    <p className="text-sm font-medium text-gray-600">Total Ventas</p>
                     <p className="text-2xl font-bold text-blue-600 mt-2">
-                      {formatCurrency(profitabilityStats.totalIngresos)}
+                      {formatCurrency(profitabilityStats.totalVentas)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {stats.totalInvoices} ventas
@@ -2722,6 +2819,45 @@ export default function Reports() {
               </CardContent>
             </Card>
 
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Costo de Ventas</p>
+                    <p className="text-2xl font-bold text-orange-600 mt-2">
+                      {formatCurrency(profitabilityStats.costoVentas)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {purchaseStats.count} compras
+                    </p>
+                  </div>
+                  <div className="p-3 bg-orange-100 rounded-lg">
+                    <ShoppingCart className="w-6 h-6 text-orange-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Utilidad Bruta</p>
+                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadBruta >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
+                      {formatCurrency(profitabilityStats.utilidadBruta)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Ventas - Costo ({profitabilityStats.margenBruto.toFixed(1)}%)
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${profitabilityStats.utilidadBruta >= 0 ? 'bg-teal-100' : 'bg-red-100'}`}>
+                    <BarChart3 className={`w-6 h-6 ${profitabilityStats.utilidadBruta >= 0 ? 'text-teal-600' : 'text-red-600'}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Fila 2: Gastos, Utilidad Neta, Margen Neto */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -2741,7 +2877,7 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className={`border-2 ${profitabilityStats.utilidadNeta >= 0 ? 'border-emerald-300' : 'border-red-300'}`}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -2750,7 +2886,7 @@ export default function Reports() {
                       {formatCurrency(profitabilityStats.utilidadNeta)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Ingresos - Gastos
+                      U. Bruta - Gastos
                     </p>
                   </div>
                   <div className={`p-3 rounded-lg ${profitabilityStats.utilidadNeta >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
@@ -2769,35 +2905,34 @@ export default function Reports() {
                       {profitabilityStats.margenNeto.toFixed(1)}%
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Utilidad / Ingresos
+                      Utilidad Neta / Ventas
                     </p>
                   </div>
                   <div className={`p-3 rounded-lg ${profitabilityStats.margenNeto >= 20 ? 'bg-emerald-100' : profitabilityStats.margenNeto >= 0 ? 'bg-yellow-100' : 'bg-red-100'}`}>
-                    <BarChart3 className={`w-6 h-6 ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-600' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-600'}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Ratio Gastos</p>
-                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.ratioGastos <= 50 ? 'text-emerald-600' : profitabilityStats.ratioGastos <= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      {profitabilityStats.ratioGastos.toFixed(1)}%
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Gastos / Ingresos
-                    </p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${profitabilityStats.ratioGastos <= 50 ? 'bg-emerald-100' : profitabilityStats.ratioGastos <= 80 ? 'bg-yellow-100' : 'bg-red-100'}`}>
-                    <PieChart className={`w-6 h-6 ${profitabilityStats.ratioGastos <= 50 ? 'text-emerald-600' : profitabilityStats.ratioGastos <= 80 ? 'text-yellow-600' : 'text-red-600'}`} />
+                    <PieChart className={`w-6 h-6 ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-600' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-600'}`} />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {/* Resumen de fórmula */}
+          <Card className="bg-gray-50">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+                <span className="font-semibold text-blue-600">{formatCurrency(profitabilityStats.totalVentas)}</span>
+                <span className="text-gray-400">−</span>
+                <span className="font-semibold text-orange-600">{formatCurrency(profitabilityStats.costoVentas)}</span>
+                <span className="text-gray-400">−</span>
+                <span className="font-semibold text-red-600">{formatCurrency(profitabilityStats.totalGastos)}</span>
+                <span className="text-gray-400">=</span>
+                <span className={`font-bold ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatCurrency(profitabilityStats.utilidadNeta)}
+                </span>
+                <span className="text-gray-500 ml-2">(Utilidad Neta)</span>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Gráfico Principal: Ingresos vs Gastos */}
           <Card>
