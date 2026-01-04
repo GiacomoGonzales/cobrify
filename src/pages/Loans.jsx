@@ -130,6 +130,10 @@ export default function Loans() {
   const [isSaving, setIsSaving] = useState(false)
   const [isPayingInstallment, setIsPayingInstallment] = useState(false)
 
+  // Modal de pago con fecha
+  const [paymentModal, setPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+
   // Filtros
   const [typeFilter, setTypeFilter] = useState('all') // 'all', 'bank', 'third_party'
   const [statusFilter, setStatusFilter] = useState('all') // 'all', 'active', 'paid'
@@ -268,19 +272,32 @@ export default function Loans() {
     }
   }
 
-  const handlePayInstallment = async (loan, installmentIndex) => {
+  // Abrir modal de pago
+  const openPaymentModal = (loan, installmentIndex) => {
+    setPaymentDate(new Date().toISOString().split('T')[0]) // Reset a fecha actual
+    setPaymentModal({ open: true, loan, installmentIndex })
+  }
+
+  // Confirmar pago con fecha seleccionada
+  const handlePayInstallment = async () => {
+    const { loan, installmentIndex } = paymentModal
+
     if (isDemoMode) {
       toast.error('No se pueden modificar préstamos en modo demo')
       return
     }
 
+    if (!loan || installmentIndex === null) return
+
     setIsPayingInstallment(true)
     try {
+      const selectedDate = new Date(paymentDate + 'T12:00:00') // Usar mediodía para evitar problemas de timezone
+
       const updatedInstallments = [...loan.installments]
       updatedInstallments[installmentIndex] = {
         ...updatedInstallments[installmentIndex],
         status: 'paid',
-        paidAt: new Date().toISOString(),
+        paidAt: selectedDate.toISOString(),
         paidAmount: updatedInstallments[installmentIndex].amount
       }
 
@@ -299,8 +316,10 @@ export default function Loans() {
       if (result.success) {
         toast.success(`Cuota ${installmentIndex + 1} pagada exitosamente`)
         loadLoans()
-        // Actualizar el modal
+        // Actualizar el modal de visualización
         setViewingLoan({ ...loan, installments: updatedInstallments, paidInstallments, paidAmount: totalPaid, status: allPaid ? 'paid' : 'active' })
+        // Cerrar modal de pago
+        setPaymentModal({ open: false, loan: null, installmentIndex: null })
       } else {
         throw new Error(result.error)
       }
@@ -959,18 +978,20 @@ export default function Loans() {
                       {inst.status === 'pending' && (
                         <Button
                           size="sm"
-                          onClick={() => handlePayInstallment(viewingLoan, idx)}
-                          disabled={isPayingInstallment}
+                          onClick={() => openPaymentModal(viewingLoan, idx)}
                         >
-                          {isPayingInstallment ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            'Pagar'
-                          )}
+                          Pagar
                         </Button>
                       )}
                       {inst.status === 'paid' && (
-                        <Badge variant="success" className="text-xs">Pagado</Badge>
+                        <div className="text-right">
+                          <Badge variant="success" className="text-xs">Pagado</Badge>
+                          {inst.paidAt && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatDate(new Date(inst.paidAt))}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1024,6 +1045,78 @@ export default function Loans() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal Registrar Pago */}
+      <Modal
+        isOpen={paymentModal.open}
+        onClose={() => setPaymentModal({ open: false, loan: null, installmentIndex: null })}
+        title="Registrar Pago de Cuota"
+        size="sm"
+      >
+        {paymentModal.loan && paymentModal.installmentIndex !== null && (
+          <div className="space-y-4">
+            {/* Info de la cuota */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">
+                    Cuota {paymentModal.installmentIndex + 1} de {paymentModal.loan.totalInstallments}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Vence: {formatDate(new Date(paymentModal.loan.installments[paymentModal.installmentIndex].dueDate))}
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-primary-600">
+                  {formatCurrency(paymentModal.loan.installments[paymentModal.installmentIndex].amount)}
+                </p>
+              </div>
+            </div>
+
+            {/* Selector de fecha */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha de Pago
+              </label>
+              <input
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Selecciona la fecha en que se realizó el pago
+              </p>
+            </div>
+
+            {/* Botones */}
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setPaymentModal({ open: false, loan: null, installmentIndex: null })}
+                disabled={isPayingInstallment}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handlePayInstallment}
+                disabled={isPayingInstallment || !paymentDate}
+              >
+                {isPayingInstallment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Confirmar Pago
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
