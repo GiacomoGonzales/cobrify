@@ -14,14 +14,16 @@ import {
 
 // Categorías de gastos predefinidas
 export const EXPENSE_CATEGORIES = [
-  { id: 'servicios', name: 'Servicios', description: 'Luz, agua, internet, alquiler', icon: 'Zap' },
+  { id: 'servicios', name: 'Servicios Básicos', description: 'Luz, agua, internet, teléfono', icon: 'Zap' },
+  { id: 'alquiler', name: 'Alquiler de Local', description: 'Renta del local comercial', icon: 'Building' },
   { id: 'proveedores', name: 'Proveedores / Mercadería', description: 'Compras de inventario', icon: 'Package' },
+  { id: 'gastos_ventas', name: 'Gastos de Ventas', description: 'Comisiones, empaques, delivery', icon: 'ShoppingBag' },
   { id: 'transporte', name: 'Transporte / Combustible', description: 'Delivery, gasolina', icon: 'Truck' },
   { id: 'personal', name: 'Sueldos / Personal', description: 'Pagos a empleados', icon: 'Users' },
   { id: 'impuestos', name: 'Impuestos', description: 'SUNAT, municipalidad', icon: 'FileText' },
   { id: 'mantenimiento', name: 'Mantenimiento', description: 'Reparaciones, limpieza', icon: 'Wrench' },
   { id: 'marketing', name: 'Marketing / Publicidad', description: 'Redes sociales, volantes', icon: 'Megaphone' },
-  { id: 'bancarios', name: 'Gastos Bancarios', description: 'Comisiones, ITF', icon: 'Building' },
+  { id: 'bancarios', name: 'Gastos Bancarios', description: 'Comisiones, ITF', icon: 'CreditCard' },
   { id: 'otros', name: 'Otros', description: 'Gastos varios', icon: 'MoreHorizontal' }
 ]
 
