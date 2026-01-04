@@ -14,7 +14,10 @@ import {
   Calendar,
   CreditCard,
   UserPlus,
-  Activity
+  Activity,
+  FileText,
+  Receipt,
+  Zap
 } from 'lucide-react'
 import {
   LineChart,
@@ -33,7 +36,7 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { getAdminStats, getSystemAlerts } from '@/services/adminStatsService'
+import { getAdminStats, getSystemAlerts, getGlobalBillingStats } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4']
@@ -41,6 +44,8 @@ const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null)
   const [alerts, setAlerts] = useState([])
+  const [billingStats, setBillingStats] = useState(null)
+  const [billingLoading, setBillingLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -49,6 +54,7 @@ export default function AdminDashboard() {
       if (showRefreshing) setRefreshing(true)
       else setLoading(true)
 
+      // Cargar stats principales primero (rápido)
       const [statsData, alertsData] = await Promise.all([
         getAdminStats(),
         getSystemAlerts()
@@ -56,9 +62,21 @@ export default function AdminDashboard() {
 
       setStats(statsData)
       setAlerts(alertsData)
+      setLoading(false)
+      setRefreshing(false)
+
+      // Cargar estadísticas de facturación en segundo plano (puede demorar)
+      setBillingLoading(true)
+      try {
+        const billingData = await getGlobalBillingStats()
+        setBillingStats(billingData)
+      } catch (e) {
+        console.error('Error al cargar billing stats:', e)
+      } finally {
+        setBillingLoading(false)
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error)
-    } finally {
       setLoading(false)
       setRefreshing(false)
     }
@@ -82,89 +100,197 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       {/* Header con botón refresh */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      <div className="flex justify-between items-center">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Resumen General</h2>
-          <p className="text-sm text-gray-500">Métricas en tiempo real del sistema</p>
+          <p className="text-sm text-gray-500 hidden sm:block">Métricas en tiempo real del sistema</p>
         </div>
         <button
           onClick={() => loadData(true)}
           disabled={refreshing}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors text-sm"
+          className="p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md hover:shadow-lg flex items-center gap-2"
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">Actualizar</span>
+          <RefreshCw className={`w-5 h-5 sm:w-4 sm:h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline text-sm font-medium">Actualizar</span>
         </button>
+      </div>
+
+      {/* Hero Stats - Estadísticas Globales de Facturación */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 sm:p-8 lg:p-10 shadow-xl">
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 -mb-16 -ml-16 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+              <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg sm:text-xl font-bold text-white">Facturación Global</h3>
+              <p className="text-sm text-white/70">Estadísticas de todo el sistema</p>
+            </div>
+          </div>
+
+          {billingLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white mx-auto mb-3"></div>
+                <p className="text-white/70 text-sm">Calculando estadísticas...</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+                {/* Total Comprobantes */}
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 sm:p-6 border border-white/20">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-lg">
+                      <Receipt className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-white/70 font-medium">Comprobantes Emitidos</p>
+                      <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
+                        {billingStats?.totalDocuments?.toLocaleString() || '0'}
+                      </p>
+                    </div>
+                  </div>
+                  {billingStats?.documentTypes && billingStats.documentTypes.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-white/20">
+                      <div className="flex flex-wrap gap-2">
+                        {billingStats.documentTypes.map((docType, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-white/20 rounded text-xs text-white">
+                            {docType.name}: {docType.count.toLocaleString()}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Total Facturado */}
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-5 sm:p-6 border border-white/20">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white/20 rounded-lg">
+                      <DollarSign className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-white/70 font-medium">Total Facturado</p>
+                      <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
+                        S/ {billingStats?.totalAmount?.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-white/20">
+                    <p className="text-sm text-white/70">
+                      Promedio por comprobante: <span className="text-white font-semibold">
+                        S/ {billingStats?.totalDocuments > 0
+                          ? (billingStats.totalAmount / billingStats.totalDocuments).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : '0.00'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top negocios que más facturan */}
+              {billingStats?.topBusinesses && billingStats.topBusinesses.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-white/20">
+                  <p className="text-sm font-medium text-white/80 mb-3">Top Negocios por Facturación</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {billingStats.topBusinesses.slice(0, 3).map((business, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2">
+                        <span className="w-6 h-6 flex items-center justify-center bg-white/20 rounded-full text-xs text-white font-bold">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-white font-medium truncate">{business.businessName}</p>
+                          <p className="text-xs text-white/60">
+                            {business.documentCount} docs - S/ {business.totalAmount.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         {/* MRR */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-4 sm:p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">MRR</p>
-              <p className="text-lg sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-1 truncate">
+              <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">MRR</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-2 truncate">
                 S/ {stats?.mrr?.toFixed(2) || '0.00'}
               </p>
-              <p className="text-xs text-gray-400 mt-1 hidden sm:block">Ingresos mensuales</p>
+              <p className="text-xs text-gray-500 mt-2 hidden sm:block">Ingresos mensuales</p>
             </div>
-            <div className="p-2 sm:p-3 bg-green-100 rounded-lg sm:rounded-xl flex-shrink-0">
-              <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-green-600" />
+            <div className="p-3 sm:p-4 bg-gradient-to-br from-emerald-400 to-green-600 rounded-xl sm:rounded-2xl flex-shrink-0 shadow-lg shadow-green-200 group-hover:scale-110 transition-transform duration-300">
+              <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
             </div>
           </div>
         </div>
 
         {/* Usuarios Activos */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-4 sm:p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Activos</p>
-              <p className="text-lg sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-1">{stats?.activeUsers || 0}</p>
-              <p className="text-xs text-gray-400 mt-1 hidden sm:block">de {stats?.totalUsers || 0} totales</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Activos</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-2">{stats?.activeUsers || 0}</p>
+              <p className="text-xs text-gray-500 mt-2 hidden sm:block">de {stats?.totalUsers || 0} totales</p>
             </div>
-            <div className="p-2 sm:p-3 bg-indigo-100 rounded-lg sm:rounded-xl flex-shrink-0">
-              <Users className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-indigo-600" />
+            <div className="p-3 sm:p-4 bg-gradient-to-br from-indigo-400 to-purple-600 rounded-xl sm:rounded-2xl flex-shrink-0 shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform duration-300">
+              <Users className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
             </div>
           </div>
         </div>
 
         {/* Nuevos este mes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-4 sm:p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Nuevos</p>
-              <p className="text-lg sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-1">{stats?.newThisMonth || 0}</p>
-              <div className="flex items-center mt-1">
+              <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Nuevos</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-2">{stats?.newThisMonth || 0}</p>
+              <div className="flex items-center mt-2">
                 {stats?.growthRate >= 0 ? (
-                  <>
-                    <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-1" />
-                    <span className="text-xs text-green-600">+{stats?.growthRate}%</span>
-                  </>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    +{stats?.growthRate}%
+                  </span>
                 ) : (
-                  <>
-                    <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4 text-red-500 mr-1" />
-                    <span className="text-xs text-red-600">{stats?.growthRate}%</span>
-                  </>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                    <TrendingDown className="w-3 h-3 mr-1" />
+                    {stats?.growthRate}%
+                  </span>
                 )}
               </div>
             </div>
-            <div className="p-2 sm:p-3 bg-blue-100 rounded-lg sm:rounded-xl flex-shrink-0">
-              <UserPlus className="w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 text-blue-600" />
+            <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-400 to-cyan-600 rounded-xl sm:rounded-2xl flex-shrink-0 shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform duration-300">
+              <UserPlus className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
             </div>
           </div>
         </div>
 
         {/* Por vencer */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-4 sm:p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Por vencer</p>
-              <p className="text-lg sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-1">{stats?.expiringThisWeek || 0}</p>
-              <p className="text-xs text-gray-400 mt-1 hidden sm:block">7 días</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Por vencer</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mt-2">{stats?.expiringThisWeek || 0}</p>
+              <p className="text-xs text-gray-500 mt-2 hidden sm:block">en 7 días</p>
             </div>
-            <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl flex-shrink-0 ${stats?.expiringThisWeek > 0 ? 'bg-orange-100' : 'bg-gray-100'}`}>
-              <AlertTriangle className={`w-5 h-5 sm:w-6 sm:h-6 lg:w-8 lg:h-8 ${stats?.expiringThisWeek > 0 ? 'text-orange-600' : 'text-gray-400'}`} />
+            <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300 ${
+              stats?.expiringThisWeek > 0
+                ? 'bg-gradient-to-br from-orange-400 to-red-500 shadow-orange-200'
+                : 'bg-gradient-to-br from-gray-300 to-gray-400 shadow-gray-200'
+            }`}>
+              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 text-white" />
             </div>
           </div>
         </div>
@@ -173,96 +299,115 @@ export default function AdminDashboard() {
       {/* Segunda fila de KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {/* Tasa de Conversión */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-          <div className="flex items-center justify-between mb-3 lg:mb-4">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Tasa de Conversión</p>
-            <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Tasa de Conversión</p>
+            <div className="p-2 bg-gradient-to-br from-violet-400 to-purple-600 rounded-lg shadow-md shadow-purple-200">
+              <Activity className="w-4 h-4 text-white" />
+            </div>
           </div>
           <div className="flex items-end gap-2">
-            <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-indigo-600">{stats?.conversionRate || 0}%</span>
-            <span className="text-xs sm:text-sm text-gray-400 mb-1">trial a pago</span>
+            <span className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              {stats?.conversionRate || 0}%
+            </span>
+            <span className="text-xs sm:text-sm text-gray-500 mb-2">trial a pago</span>
           </div>
-          <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div className="mt-4 h-3 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-700 ease-out"
               style={{ width: `${stats?.conversionRate || 0}%` }}
             ></div>
           </div>
         </div>
 
-        {/* Usuarios Suspendidos */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-          <div className="flex items-center justify-between mb-3 lg:mb-4">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Estado de Usuarios</p>
-            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+        {/* Estado de Usuarios */}
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-5 lg:p-6 transition-all duration-300 hover:-translate-y-1">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Estado de Usuarios</p>
+            <div className="p-2 bg-gradient-to-br from-slate-400 to-gray-600 rounded-lg shadow-md shadow-gray-200">
+              <Users className="w-4 h-4 text-white" />
+            </div>
           </div>
-          <div className="space-y-2 sm:space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-green-50 border border-green-100">
               <div className="flex items-center gap-2">
-                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500" />
-                <span className="text-xs sm:text-sm text-gray-600">Activos</span>
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span className="text-sm text-gray-700 font-medium">Activos</span>
               </div>
-              <span className="font-semibold text-gray-900 text-sm sm:text-base">{stats?.activeUsers || 0}</span>
+              <span className="font-bold text-green-600 text-lg">{stats?.activeUsers || 0}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-orange-50 border border-orange-100">
               <div className="flex items-center gap-2">
-                <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-orange-500" />
-                <span className="text-xs sm:text-sm text-gray-600">En Trial</span>
+                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                <span className="text-sm text-gray-700 font-medium">En Trial</span>
               </div>
-              <span className="font-semibold text-gray-900 text-sm sm:text-base">{stats?.trialUsers || 0}</span>
+              <span className="font-bold text-orange-600 text-lg">{stats?.trialUsers || 0}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-red-50 border border-red-100">
               <div className="flex items-center gap-2">
-                <XCircle className="w-3 h-3 sm:w-4 sm:h-4 text-red-500" />
-                <span className="text-xs sm:text-sm text-gray-600">Suspendidos</span>
+                <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                <span className="text-sm text-gray-700 font-medium">Suspendidos</span>
               </div>
-              <span className="font-semibold text-gray-900 text-sm sm:text-base">{stats?.suspendedUsers || 0}</span>
+              <span className="font-bold text-red-600 text-lg">{stats?.suspendedUsers || 0}</span>
             </div>
           </div>
         </div>
 
         {/* Ingresos Totales */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6 sm:col-span-2 lg:col-span-1">
-          <div className="flex items-center justify-between mb-3 lg:mb-4">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Ingresos Totales</p>
-            <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+        <div className="group bg-white rounded-2xl shadow-md hover:shadow-xl border border-gray-100 p-5 lg:p-6 sm:col-span-2 lg:col-span-1 transition-all duration-300 hover:-translate-y-1">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs sm:text-sm font-semibold text-gray-400 uppercase tracking-wide">Ingresos Totales</p>
+            <div className="p-2 bg-gradient-to-br from-emerald-400 to-teal-600 rounded-lg shadow-md shadow-teal-200">
+              <CreditCard className="w-4 h-4 text-white" />
+            </div>
           </div>
           <div className="flex items-end gap-2">
-            <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-green-600">S/ {stats?.totalRevenue?.toFixed(2) || '0.00'}</span>
+            <span className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-emerald-500 to-teal-600 bg-clip-text text-transparent">
+              S/ {stats?.totalRevenue?.toFixed(2) || '0.00'}
+            </span>
           </div>
-          <p className="text-xs text-gray-400 mt-2">Desde el inicio</p>
+          <p className="text-sm text-gray-500 mt-3 flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            Desde el inicio del sistema
+          </p>
         </div>
       </div>
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Gráfico de Crecimiento */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-          <h3 className="text-base lg:text-lg font-semibold text-gray-900 mb-3 lg:mb-4">Crecimiento de Usuarios</h3>
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg border border-gray-100 p-5 lg:p-6 transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base lg:text-lg font-bold text-gray-900">Crecimiento de Usuarios</h3>
+            <div className="p-2 bg-gradient-to-br from-indigo-400 to-purple-600 rounded-lg shadow-md">
+              <TrendingUp className="w-4 h-4 text-white" />
+            </div>
+          </div>
           <div className="h-56 sm:h-64 lg:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={stats?.growthChartData || []}>
                 <defs>
                   <linearGradient id="colorNuevos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#9CA3AF" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#9CA3AF" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" axisLine={false} tickLine={false} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#fff',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '8px'
+                    border: 'none',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="nuevos"
-                  stroke="#4F46E5"
-                  strokeWidth={2}
+                  stroke="#8B5CF6"
+                  strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#colorNuevos)"
                   name="Nuevos usuarios"
@@ -273,8 +418,13 @@ export default function AdminDashboard() {
         </div>
 
         {/* Distribución por Plan */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-          <h3 className="text-base lg:text-lg font-semibold text-gray-900 mb-3 lg:mb-4">Distribución por Plan</h3>
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg border border-gray-100 p-5 lg:p-6 transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base lg:text-lg font-bold text-gray-900">Distribución por Plan</h3>
+            <div className="p-2 bg-gradient-to-br from-pink-400 to-rose-600 rounded-lg shadow-md">
+              <Activity className="w-4 h-4 text-white" />
+            </div>
+          </div>
           <div className="h-56 sm:h-64 lg:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -284,7 +434,7 @@ export default function AdminDashboard() {
                   cy="50%"
                   innerRadius={60}
                   outerRadius={100}
-                  paddingAngle={2}
+                  paddingAngle={3}
                   dataKey="value"
                   label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                   labelLine={false}
@@ -296,8 +446,9 @@ export default function AdminDashboard() {
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#fff',
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '8px'
+                    border: 'none',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)'
                   }}
                 />
               </PieChart>
@@ -309,29 +460,33 @@ export default function AdminDashboard() {
       {/* Alertas y Actividad Reciente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Alertas */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-          <div className="flex items-center justify-between mb-3 lg:mb-4">
-            <h3 className="text-base lg:text-lg font-semibold text-gray-900">Alertas del Sistema</h3>
-            <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">
-              {alerts.filter(a => a.type === 'error' || a.type === 'warning').length}
-            </span>
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg border border-gray-100 p-5 lg:p-6 transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base lg:text-lg font-bold text-gray-900">Alertas del Sistema</h3>
+            {alerts.filter(a => a.type === 'error' || a.type === 'warning').length > 0 && (
+              <span className="px-3 py-1 text-xs font-bold bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-full shadow-md">
+                {alerts.filter(a => a.type === 'error' || a.type === 'warning').length}
+              </span>
+            )}
           </div>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {alerts.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-500" />
-                <p>No hay alertas pendientes</p>
+              <div className="text-center py-10">
+                <div className="w-16 h-16 mx-auto mb-3 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-8 h-8 text-green-500" />
+                </div>
+                <p className="text-gray-500 font-medium">No hay alertas pendientes</p>
               </div>
             ) : (
               alerts.slice(0, 8).map((alert, index) => (
                 <Link
                   key={index}
                   to={`/app/admin/users?search=${alert.userId}`}
-                  className={`block p-3 rounded-lg border transition-colors hover:shadow-md ${
+                  className={`block p-3 rounded-xl border-l-4 transition-all duration-200 hover:shadow-md hover:-translate-x-1 ${
                     alert.type === 'error'
-                      ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                      ? 'bg-red-50 border-red-500 hover:bg-red-100'
                       : alert.type === 'warning'
-                      ? 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+                      ? 'bg-orange-50 border-orange-500 hover:bg-orange-100'
                       : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
                   }`}
                 >
@@ -364,46 +519,48 @@ export default function AdminDashboard() {
         </div>
 
         {/* Usuarios Recientes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-          <div className="flex items-center justify-between mb-3 lg:mb-4">
-            <h3 className="text-base lg:text-lg font-semibold text-gray-900">Usuarios Recientes</h3>
+        <div className="bg-white rounded-2xl shadow-md hover:shadow-lg border border-gray-100 p-5 lg:p-6 transition-shadow duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base lg:text-lg font-bold text-gray-900">Usuarios Recientes</h3>
             <Link
               to="/app/admin/users"
-              className="text-xs sm:text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+              className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg flex items-center gap-1 transition-colors"
             >
               <span className="hidden sm:inline">Ver todos</span>
               <span className="sm:hidden">Ver</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {(stats?.recentUsers || []).length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>No hay usuarios recientes</p>
+              <div className="text-center py-10">
+                <div className="w-16 h-16 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-500 font-medium">No hay usuarios recientes</p>
               </div>
             ) : (
               stats.recentUsers.map((user, index) => (
                 <Link
                   key={index}
                   to={`/app/admin/users?search=${user.email}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-xl bg-gray-50 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all duration-200"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                      <span className="text-indigo-600 font-semibold">
+                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-xl flex items-center justify-center shadow-md">
+                      <span className="text-white font-bold text-sm">
                         {(user.businessName || user.email || '?')[0].toUpperCase()}
                       </span>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">
+                      <p className="text-sm font-semibold text-gray-900">
                         {user.businessName || 'Sin nombre'}
                       </p>
                       <p className="text-xs text-gray-500">{user.email}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+                    <span className="px-2 py-1 text-xs font-medium bg-white text-gray-700 rounded-lg shadow-sm border border-gray-100">
                       {PLANS[user.plan]?.name || user.plan}
                     </span>
                     <p className="text-xs text-gray-400 mt-1">
@@ -418,40 +575,43 @@ export default function AdminDashboard() {
       </div>
 
       {/* Pagos Recientes */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-        <div className="flex items-center justify-between mb-3 lg:mb-4">
-          <h3 className="text-base lg:text-lg font-semibold text-gray-900">Pagos Recientes</h3>
+      <div className="bg-white rounded-2xl shadow-md hover:shadow-lg border border-gray-100 p-5 lg:p-6 transition-shadow duration-300">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base lg:text-lg font-bold text-gray-900">Pagos Recientes</h3>
           <Link
             to="/app/admin/payments"
-            className="text-xs sm:text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+            className="px-3 py-1.5 text-xs font-medium bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg flex items-center gap-1 transition-colors"
           >
             <span className="hidden sm:inline">Ver historial</span>
             <span className="sm:hidden">Ver</span>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
 
         {/* Vista móvil - Cards */}
         <div className="sm:hidden space-y-3">
           {(stats?.recentPayments || []).length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No hay pagos recientes
+            <div className="text-center py-10">
+              <div className="w-16 h-16 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                <CreditCard className="w-8 h-8 text-gray-400" />
+              </div>
+              <p className="text-gray-500 font-medium">No hay pagos recientes</p>
             </div>
           ) : (
             stats.recentPayments.map((payment, index) => (
-              <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex justify-between items-start mb-2">
+              <div key={index} className="p-4 bg-gradient-to-r from-gray-50 to-white rounded-xl border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{payment.businessName || 'Sin nombre'}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{payment.businessName || 'Sin nombre'}</p>
                     <p className="text-xs text-gray-500 truncate">{payment.email}</p>
                   </div>
-                  <span className="text-sm font-semibold text-green-600 ml-2">S/ {payment.amount?.toFixed(2)}</span>
+                  <span className="text-base font-bold text-emerald-600 ml-2">S/ {payment.amount?.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded">
+                  <span className="px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg">
                     {PLANS[payment.plan]?.name || payment.plan}
                   </span>
-                  <span className="text-xs text-gray-500">{format(payment.date, 'dd/MM/yy', { locale: es })}</span>
+                  <span className="text-xs text-gray-500 font-medium">{format(payment.date, 'dd/MM/yy', { locale: es })}</span>
                 </div>
               </div>
             ))
@@ -462,46 +622,56 @@ export default function AdminDashboard() {
         <div className="hidden sm:block overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Usuario</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Plan</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Método</th>
-                <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Monto</th>
-                <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Fecha</th>
+              <tr className="bg-gray-50 rounded-lg">
+                <th className="text-left py-4 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider rounded-l-lg">Usuario</th>
+                <th className="text-left py-4 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Plan</th>
+                <th className="text-left py-4 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider hidden md:table-cell">Método</th>
+                <th className="text-right py-4 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Monto</th>
+                <th className="text-right py-4 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider rounded-r-lg">Fecha</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-100">
               {(stats?.recentPayments || []).length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="text-center py-8 text-gray-500">
-                    No hay pagos recientes
+                  <td colSpan="5" className="text-center py-10">
+                    <div className="w-16 h-16 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                      <CreditCard className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500 font-medium">No hay pagos recientes</p>
                   </td>
                 </tr>
               ) : (
                 stats.recentPayments.map((payment, index) => (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {payment.businessName || 'Sin nombre'}
-                        </p>
-                        <p className="text-xs text-gray-500">{payment.email}</p>
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-lg flex items-center justify-center shadow-sm">
+                          <span className="text-white font-bold text-xs">
+                            {(payment.businessName || payment.email || '?')[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {payment.businessName || 'Sin nombre'}
+                          </p>
+                          <p className="text-xs text-gray-500">{payment.email}</p>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded">
+                    <td className="py-4 px-4">
+                      <span className="px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg">
                         {PLANS[payment.plan]?.name || payment.plan}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600 hidden md:table-cell">
+                    <td className="py-4 px-4 text-sm text-gray-600 hidden md:table-cell font-medium">
                       {payment.method}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className="text-sm font-semibold text-green-600">
+                    <td className="py-4 px-4 text-right">
+                      <span className="text-sm font-bold text-emerald-600">
                         S/ {payment.amount?.toFixed(2)}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right text-sm text-gray-500">
+                    <td className="py-4 px-4 text-right text-sm text-gray-500 font-medium">
                       {format(payment.date, 'dd/MM/yyyy', { locale: es })}
                     </td>
                   </tr>

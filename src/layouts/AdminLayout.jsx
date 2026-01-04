@@ -13,7 +13,6 @@ import {
   Shield,
   Menu,
   X,
-  Bell,
   Search,
   Building2
 } from 'lucide-react'
@@ -23,37 +22,43 @@ const navItems = [
     path: '/app/admin/dashboard',
     icon: LayoutDashboard,
     label: 'Dashboard',
-    description: 'Métricas y KPIs'
+    description: 'Métricas y KPIs',
+    color: 'from-violet-500 to-purple-600'
   },
   {
     path: '/app/admin/users',
     icon: Users,
     label: 'Usuarios',
-    description: 'Gestión de cuentas'
+    description: 'Gestión de cuentas',
+    color: 'from-blue-500 to-cyan-600'
   },
   {
     path: '/app/admin/resellers',
     icon: Building2,
     label: 'Resellers',
-    description: 'Red de revendedores'
+    description: 'Red de revendedores',
+    color: 'from-emerald-500 to-teal-600'
   },
   {
     path: '/app/admin/payments',
     icon: CreditCard,
     label: 'Pagos',
-    description: 'Historial de pagos'
+    description: 'Historial de pagos',
+    color: 'from-amber-500 to-orange-600'
   },
   {
     path: '/app/admin/analytics',
     icon: BarChart3,
     label: 'Analytics',
-    description: 'Reportes y gráficos'
+    description: 'Reportes y gráficos',
+    color: 'from-pink-500 to-rose-600'
   },
   {
     path: '/app/admin/settings',
     icon: Settings,
     label: 'Configuración',
-    description: 'Ajustes del sistema'
+    description: 'Ajustes del sistema',
+    color: 'from-slate-500 to-gray-600'
   }
 ]
 
@@ -65,10 +70,10 @@ export default function AdminLayout() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando panel de administración...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white/70">Cargando panel de administración...</p>
         </div>
       </div>
     )
@@ -81,50 +86,94 @@ export default function AdminLayout() {
   const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-safe overflow-x-hidden max-w-full">
+    <div className="min-h-screen bg-gray-50 pt-safe overflow-x-hidden max-w-full">
       {/* Mobile Header */}
-      <div className="lg:hidden bg-indigo-900 text-white p-4 flex items-center justify-between">
+      <div className="lg:hidden bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 text-white p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 hover:bg-indigo-800 rounded-lg -ml-2"
+            className="p-2 hover:bg-white/10 rounded-xl transition-colors -ml-2"
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
-          <Shield className="w-7 h-7" />
-          <span className="font-bold text-lg">Admin Panel</span>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg">
+              <Shield className="w-5 h-5" />
+            </div>
+            <span className="font-bold">Admin</span>
+          </div>
         </div>
+        <NavLink
+          to="/app/dashboard"
+          className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </NavLink>
       </div>
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50 pt-safe" onClick={() => setMobileMenuOpen(false)}>
-          <div className="bg-indigo-900 w-72 h-full pt-safe" onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-indigo-800">
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm pt-safe" onClick={() => setMobileMenuOpen(false)}>
+          <div
+            className="bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 w-80 h-full pt-safe shadow-2xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Mobile Menu Header */}
+            <div className="p-5 border-b border-white/10">
               <div className="flex items-center gap-3">
-                <Shield className="w-8 h-8 text-white" />
-                <span className="font-bold text-lg text-white">Admin Panel</span>
+                <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <span className="font-bold text-lg text-white">Admin Panel</span>
+                  <p className="text-xs text-white/50">Sistema de gestión</p>
+                </div>
               </div>
             </div>
-            <nav className="p-4 space-y-2">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+
+            {/* Mobile Nav Items */}
+            <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+              {navItems.map((item) => {
+                const isActive = location.pathname.startsWith(item.path)
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${
                       isActive
-                        ? 'bg-indigo-700 text-white'
-                        : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
-                    }`
-                  }
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </NavLink>
-              ))}
+                        ? 'bg-white/15 shadow-lg'
+                        : 'hover:bg-white/10'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg bg-gradient-to-br ${item.color} shadow-md`}>
+                      <item.icon className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <span className={`font-medium ${isActive ? 'text-white' : 'text-white/80'}`}>
+                        {item.label}
+                      </span>
+                      <p className="text-xs text-white/40">{item.description}</p>
+                    </div>
+                  </NavLink>
+                )
+              })}
             </nav>
+
+            {/* Mobile User Info */}
+            <div className="p-4 border-t border-white/10">
+              <div className="p-3 bg-white/5 rounded-xl mb-3">
+                <p className="text-sm font-medium text-white truncate">{user?.email}</p>
+                <p className="text-xs text-white/50">Super Administrador</p>
+              </div>
+              <button
+                onClick={logout}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Cerrar sesión
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -132,62 +181,73 @@ export default function AdminLayout() {
       <div className="flex w-full">
         {/* Sidebar - Desktop */}
         <aside
-          className={`hidden lg:flex flex-col bg-indigo-900 text-white min-h-screen transition-all duration-300 ${
-            sidebarCollapsed ? 'w-20' : 'w-64'
+          className={`hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white min-h-screen transition-all duration-300 relative ${
+            sidebarCollapsed ? 'w-20' : 'w-72'
           }`}
         >
+          {/* Decorative blur */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl"></div>
+
           {/* Logo */}
-          <div className="p-4 border-b border-indigo-800">
+          <div className="relative z-10 p-5 border-b border-white/10">
             <div className="flex items-center gap-3">
-              <Shield className="w-8 h-8 flex-shrink-0" />
+              <div className="p-2.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg shadow-purple-500/30 flex-shrink-0">
+                <Shield className="w-6 h-6" />
+              </div>
               {!sidebarCollapsed && (
                 <div>
                   <span className="font-bold text-lg">Admin Panel</span>
-                  <p className="text-xs text-indigo-300">Cobrify</p>
+                  <p className="text-xs text-white/50 mt-0.5">Cobrify Pro</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                title={sidebarCollapsed ? item.label : ''}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+          <nav className="relative z-10 flex-1 p-4 space-y-1.5">
+            {navItems.map((item) => {
+              const isActive = location.pathname.startsWith(item.path)
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  title={sidebarCollapsed ? item.label : ''}
+                  className={`group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                     isActive
-                      ? 'bg-indigo-700 text-white shadow-lg'
-                      : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
-                  }`
-                }
-              >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {!sidebarCollapsed && (
-                  <div>
-                    <span className="font-medium">{item.label}</span>
-                    <p className="text-xs text-indigo-300">{item.description}</p>
+                      ? 'bg-white/15 shadow-lg backdrop-blur-sm'
+                      : 'hover:bg-white/10'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg bg-gradient-to-br ${item.color} shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all flex-shrink-0`}>
+                    <item.icon className="w-4 h-4 text-white" />
                   </div>
-                )}
-              </NavLink>
-            ))}
+                  {!sidebarCollapsed && (
+                    <div className="min-w-0">
+                      <span className={`font-medium block ${isActive ? 'text-white' : 'text-white/80 group-hover:text-white'}`}>
+                        {item.label}
+                      </span>
+                      <p className="text-xs text-white/40 truncate">{item.description}</p>
+                    </div>
+                  )}
+                </NavLink>
+              )
+            })}
           </nav>
 
           {/* User Info & Collapse Button */}
-          <div className="p-4 border-t border-indigo-800">
+          <div className="relative z-10 p-4 border-t border-white/10">
             {!sidebarCollapsed && (
-              <div className="mb-4 p-3 bg-indigo-800 rounded-lg">
+              <div className="mb-4 p-3 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
                 <p className="text-sm font-medium truncate">{user?.email}</p>
-                <p className="text-xs text-indigo-300">Super Administrador</p>
+                <p className="text-xs text-white/50 mt-0.5">Super Administrador</p>
               </div>
             )}
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="p-2 hover:bg-indigo-800 rounded-lg transition-colors"
+                className="p-2.5 hover:bg-white/10 rounded-xl transition-all hover:scale-105"
                 title={sidebarCollapsed ? 'Expandir' : 'Colapsar'}
               >
                 {sidebarCollapsed ? (
@@ -200,7 +260,7 @@ export default function AdminLayout() {
               {!sidebarCollapsed && (
                 <button
                   onClick={logout}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-indigo-200 hover:text-white hover:bg-indigo-800 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                   Salir
@@ -213,42 +273,44 @@ export default function AdminLayout() {
         {/* Main Content */}
         <main className="flex-1 min-h-screen min-w-0 overflow-x-hidden">
           {/* Top Bar */}
-          <header className="bg-white shadow-sm border-b border-gray-200 px-4 lg:px-6 py-3 lg:py-4">
+          <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-gray-200/50 px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <h1 className="text-lg lg:text-xl font-bold text-gray-900 truncate">
-                  {currentPage?.label || 'Admin'}
-                </h1>
-                <p className="text-xs lg:text-sm text-gray-500 hidden sm:block">
-                  {currentPage?.description || 'Panel de administración'}
-                </p>
+                <div className="flex items-center gap-3">
+                  {currentPage && (
+                    <div className={`hidden sm:flex p-2 rounded-lg bg-gradient-to-br ${currentPage.color} shadow-md`}>
+                      <currentPage.icon className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <div>
+                    <h1 className="text-lg lg:text-xl font-bold text-gray-900 truncate">
+                      {currentPage?.label || 'Admin'}
+                    </h1>
+                    <p className="text-xs lg:text-sm text-gray-500 hidden sm:block">
+                      {currentPage?.description || 'Panel de administración'}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 lg:gap-4">
+              <div className="flex items-center gap-2 lg:gap-3">
                 {/* Search - solo desktop */}
-                <div className="hidden lg:flex items-center bg-gray-100 rounded-lg px-3 py-2">
-                  <Search className="w-4 h-4 text-gray-400 mr-2" />
+                <div className="hidden lg:flex items-center bg-gray-100/80 hover:bg-gray-100 rounded-xl px-4 py-2.5 transition-colors group">
+                  <Search className="w-4 h-4 text-gray-400 mr-2 group-focus-within:text-indigo-500" />
                   <input
                     type="text"
                     placeholder="Buscar..."
-                    className="bg-transparent border-none outline-none text-sm w-48"
+                    className="bg-transparent border-none outline-none text-sm w-48 placeholder-gray-400"
                   />
                 </div>
-
-                {/* Notifications */}
-                <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
 
                 {/* Back to App */}
                 <NavLink
                   to="/app/dashboard"
-                  className="flex items-center gap-1 lg:gap-2 px-2 lg:px-4 py-2 text-xs lg:text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 rounded-xl transition-all shadow-md hover:shadow-lg"
                 >
                   <ChevronLeft className="w-4 h-4" />
-                  <span className="hidden sm:inline">Volver a la App</span>
-                  <span className="sm:hidden">App</span>
+                  <span className="hidden sm:inline">Volver</span>
                 </NavLink>
               </div>
             </div>
