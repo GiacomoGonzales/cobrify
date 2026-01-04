@@ -265,7 +265,7 @@ function PlansSection({ plans }) {
                     <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Emisión
                   </span>
                   <span className="font-medium">
-                    {plan.category === 'qpse' ? 'QPse' : plan.category === 'sunat_direct' ? 'SUNAT' : plan.category}
+                    {plan.category === 'qpse' ? 'QPse' : plan.category === 'sunat_direct' ? 'SUNAT' : plan.category === 'offline' ? 'Sin conexión' : plan.category}
                   </span>
                 </div>
               )}
