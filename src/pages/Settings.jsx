@@ -3261,8 +3261,8 @@ export default function Settings() {
                         Series globales del negocio
                       </p>
                     </div>
-                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-                      Por defecto
+                    <span className="px-2 py-1 text-xs font-medium bg-cyan-100 text-cyan-700 rounded-full">
+                      Principal
                     </span>
                   </div>
                   {!editingSeries ? (

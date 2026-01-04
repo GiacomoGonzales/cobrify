@@ -2617,8 +2617,8 @@ export default function AdminUsers() {
                           ) : (
                             <div className="flex items-center gap-2">
                               <h4 className="font-medium text-gray-900">{mainBranchName}</h4>
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                                Por defecto
+                              <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full">
+                                Principal
                               </span>
                             </div>
                           )}
@@ -2654,11 +2654,9 @@ export default function AdminUsers() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="font-medium text-gray-900">{branch.name}</h4>
-                              {branch.isDefault && (
-                                <span className="px-2 py-0.5 bg-cyan-100 text-cyan-700 text-xs rounded-full">
-                                  Principal
-                                </span>
-                              )}
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                Sucursal adicional
+                              </span>
                             </div>
                             {branch.address && (
                               <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
