@@ -124,9 +124,9 @@ const isInDateRange = (date, startDate, endDate) => {
   if (!date) return false
   const d = toDate(date)
   if (!d) return false
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  end.setHours(23, 59, 59, 999)
+  // Usar 'T00:00:00' para forzar interpretación en hora local, no UTC
+  const start = new Date(startDate + 'T00:00:00')
+  const end = new Date(endDate + 'T23:59:59')
   return d >= start && d <= end
 }
 
