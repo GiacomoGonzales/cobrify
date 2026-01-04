@@ -36,7 +36,7 @@ export const customerSchema = z.object({
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   // Nivel de precio para sistema de múltiples precios
-  priceLevel: z.enum(['price1', 'price2', 'price3']).optional().nullable(),
+  priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable(),
 }).superRefine((data, ctx) => {
   // Solo validar si hay número de documento
   if (data.documentNumber && data.documentNumber.trim() !== '') {
@@ -133,6 +133,21 @@ export const productSchema = z.object({
   price3: z
     .number()
     .positive('El precio 3 debe ser mayor a 0')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseFloat(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable()
+    )
+    .nullable()
+    .optional(),
+  price4: z
+    .number()
+    .positive('El precio 4 debe ser mayor a 0')
     .or(
       z
         .string()

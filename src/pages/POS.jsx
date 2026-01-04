@@ -4269,7 +4269,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         size="sm"
       >
         {productForPriceSelection && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
             <p className="text-sm text-gray-600">
               Este producto tiene múltiples precios. Selecciona el precio a aplicar:
             </p>
