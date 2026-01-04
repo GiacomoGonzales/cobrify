@@ -44,7 +44,8 @@ import {
   Landmark,
   Store,
   MapPin,
-  Phone
+  Phone,
+  FileText
 } from 'lucide-react'
 import {
   getBranches,
@@ -124,6 +125,7 @@ export default function AdminUsers() {
   const [featuresForm, setFeaturesForm] = useState({
     productImages: false,
     hidePaymentMethods: false,
+    certificates: false,
     expenseManagement: false,
     loans: false
   })
@@ -846,6 +848,7 @@ export default function AdminUsers() {
     setFeaturesForm({
       productImages: user.features?.productImages || false,
       hidePaymentMethods: user.features?.hidePaymentMethods || false,
+      certificates: user.features?.certificates || false,
       expenseManagement: user.features?.expenseManagement || false,
       loans: user.features?.loans || false
     })
@@ -2471,6 +2474,36 @@ export default function AdminUsers() {
                   <div className="mt-3 flex items-center gap-2 p-2 bg-emerald-100 rounded-lg">
                     <CheckCircle className="w-4 h-4 text-emerald-600" />
                     <span className="text-sm text-emerald-700 font-medium">Acceso al módulo de Préstamos</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Feature: Certificados (Extintores) */}
+              <div className="p-3 sm:p-4 bg-amber-50 rounded-lg sm:rounded-xl border border-amber-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 bg-amber-500 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Certificados</h3>
+                      <p className="text-xs text-gray-500 truncate">Certificados de extintores (operatividad y capacitación)</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={featuresForm.certificates}
+                      onChange={e => setFeaturesForm({ ...featuresForm, certificates: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
+                </div>
+                {featuresForm.certificates && (
+                  <div className="mt-3 flex items-center gap-2 p-2 bg-amber-100 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm text-amber-700 font-medium">Acceso al módulo de Certificados</span>
                   </div>
                 )}
               </div>

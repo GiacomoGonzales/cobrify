@@ -42,6 +42,7 @@ import {
   MapPin,
   DollarSign,
   UserCheck,
+  Award,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -181,6 +182,14 @@ function Sidebar() {
       label: 'Préstamos',
       pageId: 'loans',
       menuId: 'loans',
+    },
+    {
+      path: '/certificados',
+      icon: Award,
+      label: 'Certificados',
+      pageId: 'certificates',
+      menuId: 'certificates',
+      requiresFeature: 'certificates',
     },
     {
       path: '/ingredientes',
@@ -454,6 +463,14 @@ function Sidebar() {
       label: 'Préstamos',
       pageId: 'loans',
       menuId: 'loans',
+    },
+    {
+      path: '/certificados',
+      icon: Award,
+      label: 'Certificados',
+      pageId: 'certificates',
+      menuId: 'certificates',
+      requiresFeature: 'certificates',
     },
     {
       path: '/reportes',

@@ -71,6 +71,7 @@ import TermsAndConditions from './pages/TermsAndConditions'
 import MigratePurchases from './pages/MigratePurchases'
 import Expenses from './pages/Expenses'
 import Loans from './pages/Loans'
+import Certificates from './pages/Certificates'
 import CashFlow from './pages/CashFlow'
 // Pharmacy pages
 import Laboratories from './pages/Laboratories'
@@ -165,6 +166,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
               {/* Rutas de modo restaurante en demo */}
@@ -199,6 +201,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="ingredientes" element={<Ingredients />} />
@@ -241,6 +244,7 @@ function App() {
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
