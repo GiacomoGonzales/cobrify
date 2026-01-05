@@ -1046,9 +1046,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const FOOTER_TEXT_HEIGHT = 25
   const QR_BOX_HEIGHT = 75
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
-  const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
   const HAS_DETRACTION = invoice.hasDetraction && invoice.detractionAmount > 0
+  // Altura de la sección de información de detracción (leyenda SPOT + datos)
+  const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
+  const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +36 si hay detracción (2 filas: detracción + neto a pagar)
   const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)
   const SON_SECTION_HEIGHT = 22
@@ -1264,31 +1266,36 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Filas de DETRACCIÓN (si aplica)
   if (HAS_DETRACTION) {
-    // Fila: DETRACCIÓN (mismo estilo que las otras filas)
-    doc.setFillColor(255, 250, 240) // Fondo crema suave
+    // Fila: DETRACCIÓN (estilo neutro como las otras filas)
+    doc.setFillColor(250, 250, 250) // Gris claro neutro
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
     doc.setDrawColor(200, 200, 200)
     doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setTextColor(180, 80, 0) // Texto naranja oscuro
+    doc.setTextColor(...DARK_GRAY)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.text(`DETRACCIÓN (${invoice.detractionRate || 0}%)`, totalsX + 5, footerY + 10)
     doc.text('- S/ ' + (invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
-    // Fila: NETO A PAGAR (fondo del color de la empresa, como TOTAL)
-    doc.setFillColor(34, 139, 34) // Verde bosque
+    // Fila: NETO A PAGAR (mismo estilo que TOTAL - color de acento de la empresa)
+    doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-    doc.setTextColor(255, 255, 255) // Texto blanco
+    doc.setTextColor(255, 255, 255)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('NETO A PAGAR', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
     doc.text('S/ ' + (invoice.netPayable || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
+    footerY += totalsRowHeight + 6
   }
 
   // --- CUENTAS BANCARIAS (izquierda) con borde ---
   doc.setTextColor(...BLACK)
+
+  // --- SECCIÓN DE DETRACCIÓN (si aplica) ---
+  // Se muestra debajo de la tabla de bancos o en su lugar
+  let detractionSectionEndY = totalsStartY // Para saber dónde terminó la sección
 
   if (bankAccountsArray.length > 0) {
     const bankTableX = MARGIN_LEFT
@@ -1374,12 +1381,85 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(truncateText(account.cci || '-', COL_CCI, 7), colStart.cci + 2, bankY + 8)
       bankY += bankRowHeight
     })
+    detractionSectionEndY = bankY
+  }
+
+  // --- SECCIÓN INFORMACIÓN DE DETRACCIÓN (si aplica) ---
+  if (HAS_DETRACTION) {
+    const detractionInfoX = MARGIN_LEFT
+    const detractionInfoWidth = bankSectionWidth
+    let detractionInfoY = detractionSectionEndY + (bankAccountsArray.length > 0 ? 5 : 0)
+
+    // Si no hay bancos, empezar desde totalsStartY
+    if (bankAccountsArray.length === 0) {
+      detractionInfoY = totalsStartY
+    }
+
+    const detractionRowHeight = 12
+    const spotLegendHeight = 22
+    const detractionDataRows = 4 // código, cuenta, porcentaje, monto
+    const detractionTotalHeight = spotLegendHeight + (detractionDataRows * detractionRowHeight)
+
+    // Recuadro exterior
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(detractionInfoX, detractionInfoY, detractionInfoWidth, detractionTotalHeight)
+
+    // Fondo verde para leyenda SPOT (como en el ejemplo)
+    doc.setFillColor(200, 230, 200) // Verde claro
+    doc.rect(detractionInfoX, detractionInfoY, detractionInfoWidth, spotLegendHeight, 'F')
+
+    // Leyenda SPOT
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0, 80, 0) // Verde oscuro
+    doc.text('Operación sujeta al Sistema de Pago de Obligaciones', detractionInfoX + 5, detractionInfoY + 9)
+    doc.text('Tributarias - SPOT', detractionInfoX + 5, detractionInfoY + 17)
+
+    // Línea después de SPOT
+    doc.setDrawColor(180, 180, 180)
+    doc.line(detractionInfoX, detractionInfoY + spotLegendHeight, detractionInfoX + detractionInfoWidth, detractionInfoY + spotLegendHeight)
+
+    let dataY = detractionInfoY + spotLegendHeight + 10
+    doc.setTextColor(...BLACK)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+
+    // Código bien o servicio
+    doc.text('Código bien o servicio:', detractionInfoX + 5, dataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(invoice.detractionType || '-', detractionInfoX + 95, dataY)
+    dataY += detractionRowHeight
+
+    // N° cuenta Banco de la Nación
+    doc.setFont('helvetica', 'normal')
+    doc.text('N° cuenta Banco de la Nación:', detractionInfoX + 5, dataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(invoice.detractionBankAccount || '-', detractionInfoX + 115, dataY)
+    dataY += detractionRowHeight
+
+    // Porcentaje de detracción
+    doc.setFont('helvetica', 'normal')
+    doc.text('Porcentaje de detracción:', detractionInfoX + 5, dataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${invoice.detractionRate || 0}%`, detractionInfoX + 95, dataY)
+    dataY += detractionRowHeight
+
+    // Monto de detracción
+    doc.setFont('helvetica', 'normal')
+    doc.text('Monto de detracción:', detractionInfoX + 5, dataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`S/ ${(invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, detractionInfoX + 95, dataY)
+
+    // Guardar donde termina la sección de detracción
+    detractionSectionEndY = detractionInfoY + detractionTotalHeight + 5
   }
 
   // ========== QR Y VALIDACIÓN SUNAT ==========
 
-  // Ajustar posición Y después de los totales (4 filas si hay descuento, 3 si no)
-  footerY = totalsStartY + totalsRowHeight * totalsSectionRows + 15
+  // Calcular posición Y: usar el máximo entre totales (derecha) y sección izquierda (bancos + detracción)
+  const totalsEndY = totalsStartY + totalsRowHeight * totalsSectionRows + 15
+  footerY = Math.max(totalsEndY, detractionSectionEndY + 5)
 
   // Verificar si hay cuotas para mostrar
   const hasCuotas = invoice.documentType === 'factura' &&

@@ -352,6 +352,13 @@ export function generateInvoiceXML(invoiceData, businessData) {
     'listAgencyName': 'United Nations Economic Commission for Europe'
   }).txt(invoiceData.currency || 'PEN')
 
+  // Leyenda SPOT para operaciones con detracción (obligatoria según SUNAT)
+  if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
+    root.ele('cbc:Note', {
+      'languageLocaleID': '2006'
+    }).txt('Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central')
+  }
+
   // === ELEMENTOS ESPECÍFICOS PARA NOTAS DE CRÉDITO/DÉBITO ===
   if (isNote) {
     // 1. Referencia al documento modificado (BillingReference)
