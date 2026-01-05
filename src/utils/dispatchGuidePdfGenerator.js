@@ -913,3 +913,110 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   return doc
 }
+
+/**
+ * Exporta el PDF como blob para enviar por WhatsApp u otros usos
+ */
+export const getDispatchGuidePDFBlob = async (guide, companySettings) => {
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false)
+  return doc.output('blob')
+}
+
+/**
+ * Abre el PDF en una nueva pestaña para vista previa (o comparte en móvil)
+ */
+export const previewDispatchGuidePDF = async (guide, companySettings) => {
+  const { Share } = await import('@capacitor/share')
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false)
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      // En móvil, guardar el PDF y abrirlo con Share para vista previa
+      const pdfBase64 = doc.output('datauristring').split(',')[1]
+      const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
+
+      // Guardar directamente en Documents (mejor compatibilidad con Share)
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: pdfBase64,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('PDF para vista previa guardado en:', result.uri)
+
+      // Abrir con el visor de PDF del sistema
+      await Share.share({
+        title: `Guía de Remisión ${guide.number || ''}`,
+        url: result.uri,
+        dialogTitle: 'Ver guía de remisión'
+      })
+
+      return result.uri
+    } catch (error) {
+      console.error('Error al generar vista previa en móvil:', error)
+      // Fallback: abrir como data URL si Share falla
+      const pdfDataUri = doc.output('datauristring')
+      window.open(pdfDataUri, '_blank')
+      return pdfDataUri
+    }
+  } else {
+    // En web, abrir en nueva pestaña
+    const blob = doc.output('blob')
+    const blobUrl = URL.createObjectURL(blob)
+    window.open(blobUrl, '_blank')
+    return blobUrl
+  }
+}
+
+/**
+ * Comparte el PDF por WhatsApp u otras apps
+ */
+export const shareDispatchGuidePDF = async (guide, companySettings, method = 'share') => {
+  const { Share } = await import('@capacitor/share')
+  const doc = await generateDispatchGuidePDF(guide, companySettings, false)
+  const isNativePlatform = Capacitor.isNativePlatform()
+  const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
+
+  if (isNativePlatform) {
+    try {
+      const pdfBase64 = doc.output('datauristring').split(',')[1]
+
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: pdfBase64,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('PDF para compartir guardado en:', result.uri)
+
+      // Compartir usando Share API nativo
+      await Share.share({
+        title: `Guía de Remisión ${guide.number || ''}`,
+        text: `Guía de Remisión Electrónica ${guide.number || ''}`,
+        url: result.uri,
+        dialogTitle: 'Compartir guía de remisión'
+      })
+
+      return { success: true, uri: result.uri }
+    } catch (error) {
+      console.error('Error al compartir PDF en móvil:', error)
+      throw error
+    }
+  } else {
+    // En web, descargar o abrir WhatsApp Web
+    if (method === 'whatsapp') {
+      // En web no podemos adjuntar archivos a WhatsApp, solo enviar texto
+      const text = `Guía de Remisión Electrónica: ${guide.number || ''}`
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`
+      window.open(whatsappUrl, '_blank')
+      return { success: true, method: 'whatsapp-text' }
+    } else {
+      // Descargar el PDF
+      doc.save(fileName)
+      return { success: true, method: 'download' }
+    }
+  }
+}
