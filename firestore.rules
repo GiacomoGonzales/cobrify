@@ -416,6 +416,18 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
+
+      // Subcollection: Training Certificates (Certificados de Capacitación)
+      match /certificates_training/{certificateId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Subcollection: Operability Certificates (Certificados de Operatividad)
+      match /certificates_operability/{certificateId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
     }
   }
 }
