@@ -2282,7 +2282,7 @@ export default function POS() {
       // Crear mensaje con link de descarga
       const message = `Hola ${customerName},
 
-Gracias por tu compra en *${companySettings?.businessName || 'nuestra tienda'}*.
+Gracias por tu compra en *${companySettings?.tradeName || companySettings?.name || 'nuestra tienda'}*.
 
 *${docTypeName}:* ${lastInvoiceData.number}
 *Total:* ${total}

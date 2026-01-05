@@ -263,7 +263,7 @@ export default function InvoiceList() {
       // Crear mensaje con link de descarga
       const message = `Hola ${customerName},
 
-Gracias por tu compra en *${companySettings?.businessName || 'nuestra tienda'}*.
+Gracias por tu compra en *${companySettings?.tradeName || companySettings?.name || 'nuestra tienda'}*.
 
 *${docTypeName}:* ${invoice.number}
 *Total:* ${total}
