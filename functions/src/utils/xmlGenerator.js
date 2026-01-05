@@ -1946,7 +1946,14 @@ export function generateDispatchGuideXML(guideData, businessData) {
     const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
     transitPeriod.ele('cbc:StartDate').txt(transferDate)
 
-    // Datos del conductor
+    // Datos del vehículo (TransportMeans debe ir ANTES de DriverPerson según UBL 2.1)
+    if (guideData.transport.vehicle) {
+      const transportMeans = shipmentStage.ele('cac:TransportMeans')
+      const roadTransport = transportMeans.ele('cac:RoadTransport')
+      roadTransport.ele('cbc:LicensePlateID').txt(guideData.transport.vehicle.plate)
+    }
+
+    // Datos del conductor (DriverPerson debe ir DESPUÉS de TransportMeans)
     const driverPerson = shipmentStage.ele('cac:DriverPerson')
     driverPerson.ele('cbc:ID', {
       'schemeID': guideData.transport.driver.documentType || '1',
@@ -1962,13 +1969,6 @@ export function generateDispatchGuideXML(guideData, businessData) {
     // Licencia de conducir
     const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
     driverLicense.ele('cbc:ID').txt(guideData.transport.driver.license)
-
-    // Datos del vehículo
-    if (guideData.transport.vehicle) {
-      const transportMeans = shipmentStage.ele('cac:TransportMeans')
-      const roadTransport = transportMeans.ele('cac:RoadTransport')
-      roadTransport.ele('cbc:LicensePlateID').txt(guideData.transport.vehicle.plate)
-    }
   }
 
   // === TRANSPORTE PÚBLICO ===
