@@ -1930,27 +1930,7 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'unitCode': 'KGM'
   }).txt((guideData.totalWeight || 0).toFixed(2))
 
-  // === PUNTO DE PARTIDA (Origen) ===
-  const deliveryAddress = shipment.ele('cac:Delivery').ele('cac:DeliveryAddress')
-  deliveryAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.origin?.ubigeo || '150101')
-  deliveryAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
-
-  // === PUNTO DE LLEGADA (Destino) ===
-  const originAddress = shipment.ele('cac:OriginAddress')
-  originAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.destination?.ubigeo || '150101')
-  originAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
-
-  // === FECHA DE INICIO DEL TRASLADO ===
-  const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
-  transportHandlingUnit.ele('cac:ActualPackage').ele('cbc:ID').txt(transferDate)
-
-  // === DATOS DE TRANSPORTE ===
+  // === DATOS DE TRANSPORTE (ShipmentStage debe ir ANTES de Delivery según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
   shipmentStage.ele('cbc:ID').txt('1')
 
@@ -1993,6 +1973,10 @@ export function generateDispatchGuideXML(guideData, businessData) {
 
   // === TRANSPORTE PÚBLICO ===
   if (guideData.transportMode === '01' && guideData.transport?.carrier) {
+    // Período de tránsito (también para transporte público)
+    const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
+    transitPeriod.ele('cbc:StartDate').txt(transferDate)
+
     const carrierParty = shipmentStage.ele('cac:CarrierParty')
 
     // RUC del transportista
@@ -2008,6 +1992,26 @@ export function generateDispatchGuideXML(guideData, businessData) {
     const carrierLegalEntity = carrierParty.ele('cac:PartyLegalEntity')
     carrierLegalEntity.ele('cbc:RegistrationName').txt(guideData.transport.carrier.businessName)
   }
+
+  // === DELIVERY: Punto de llegada y punto de partida (después de ShipmentStage según UBL 2.1) ===
+  const delivery = shipment.ele('cac:Delivery')
+
+  // Punto de LLEGADA (destino) - DeliveryAddress
+  const deliveryAddress = delivery.ele('cac:DeliveryAddress')
+  deliveryAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.destination?.ubigeo || '150101')
+  deliveryAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
+
+  // Punto de PARTIDA (origen) - Despatch/DespatchAddress
+  const despatch = delivery.ele('cac:Despatch')
+  const despatchAddress = despatch.ele('cac:DespatchAddress')
+  despatchAddress.ele('cbc:ID', {
+    'schemeAgencyName': 'PE:INEI',
+    'schemeName': 'Ubigeos'
+  }).txt(guideData.origin?.ubigeo || '150101')
+  despatchAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
   if (guideData.items && guideData.items.length > 0) {
