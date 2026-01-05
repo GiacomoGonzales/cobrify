@@ -1792,6 +1792,15 @@ export function generateDispatchGuideXML(guideData, businessData) {
     transferDate = issueDate
   }
 
+  // IMPORTANTE: Si la fecha de traslado es anterior a la fecha de emisión,
+  // usar la fecha de traslado como fecha de emisión para evitar error SUNAT 2329
+  // "La fecha de emision se encuentra fuera del limite permitido"
+  if (transferDate < issueDate) {
+    console.log(`⚠️ [GRE-R] Fecha de traslado (${transferDate}) es anterior a fecha de emisión (${issueDate})`)
+    console.log(`📅 [GRE-R] Ajustando fecha de emisión a: ${transferDate}`)
+    issueDate = transferDate
+  }
+
   // Construir XML según especificación UBL 2.1 - DespatchAdvice
   const root = create({ version: '1.0', encoding: 'UTF-8' })
     .ele('DespatchAdvice', {
