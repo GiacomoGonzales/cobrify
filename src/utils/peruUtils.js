@@ -19,6 +19,43 @@ export const ID_TYPES = {
   PASSPORT: 'PASSPORT',
 }
 
+// Tipos de detracción SUNAT con sus porcentajes
+// Referencia: https://orientacion.sunat.gob.pe/detracciones
+export const DETRACTION_TYPES = [
+  // Bienes
+  { code: '001', name: 'Azúcar y melaza de caña', rate: 10, category: 'bienes' },
+  { code: '003', name: 'Alcohol etílico', rate: 10, category: 'bienes' },
+  { code: '004', name: 'Recursos hidrobiológicos', rate: 4, category: 'bienes' },
+  { code: '005', name: 'Maíz amarillo duro', rate: 4, category: 'bienes' },
+  { code: '006', name: 'Algodón', rate: 12, category: 'bienes' },
+  { code: '007', name: 'Caña de azúcar', rate: 10, category: 'bienes' },
+  { code: '008', name: 'Madera', rate: 4, category: 'bienes' },
+  { code: '009', name: 'Arena y piedra', rate: 10, category: 'bienes' },
+  { code: '010', name: 'Residuos, subproductos, desechos, recortes', rate: 15, category: 'bienes' },
+  { code: '011', name: 'Bienes gravados con IGV por renuncia a exoneración', rate: 10, category: 'bienes' },
+  { code: '014', name: 'Carnes y despojos comestibles', rate: 4, category: 'bienes' },
+  { code: '016', name: 'Aceite de pescado', rate: 10, category: 'bienes' },
+  { code: '017', name: 'Harina, polvo y pellets de pescado', rate: 4, category: 'bienes' },
+  { code: '031', name: 'Oro gravado con el IGV', rate: 10, category: 'bienes' },
+  { code: '034', name: 'Minerales metálicos no auríferos', rate: 10, category: 'bienes' },
+  { code: '035', name: 'Bienes exonerados del IGV', rate: 1.5, category: 'bienes' },
+  { code: '036', name: 'Oro y demás minerales metálicos exonerados del IGV', rate: 1.5, category: 'bienes' },
+  // Servicios
+  { code: '012', name: 'Intermediación laboral y tercerización', rate: 12, category: 'servicios' },
+  { code: '019', name: 'Arrendamiento de bienes', rate: 10, category: 'servicios' },
+  { code: '020', name: 'Mantenimiento y reparación de bienes muebles', rate: 12, category: 'servicios' },
+  { code: '021', name: 'Movimiento de carga', rate: 10, category: 'servicios' },
+  { code: '022', name: 'Otros servicios empresariales', rate: 12, category: 'servicios' },
+  { code: '024', name: 'Comisión mercantil', rate: 10, category: 'servicios' },
+  { code: '025', name: 'Fabricación de bienes por encargo', rate: 10, category: 'servicios' },
+  { code: '026', name: 'Servicio de transporte de personas', rate: 10, category: 'servicios' },
+  { code: '030', name: 'Contratos de construcción', rate: 4, category: 'servicios' },
+  { code: '037', name: 'Demás servicios gravados con el IGV', rate: 12, category: 'servicios' },
+]
+
+// Monto mínimo para aplicar detracción (en soles)
+export const DETRACTION_MIN_AMOUNT = 700
+
 /**
  * Calcula el IGV (18%) de un monto
  * @param {number} amount - Monto base

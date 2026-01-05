@@ -38,7 +38,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
-import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES } from '@/utils/peruUtils'
+import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -353,6 +353,11 @@ export default function POS() {
   const [guideNumber, setGuideNumber] = useState('') // N° de Guía de Remisión
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState('') // N° de Orden de Compra
   const [orderNumber, setOrderNumber] = useState('') // N° de Pedido
+
+  // Estados para detracción (solo facturas)
+  const [hasDetraction, setHasDetraction] = useState(false)
+  const [detractionType, setDetractionType] = useState('') // Código SUNAT del tipo de bien/servicio
+  const [detractionBankAccount, setDetractionBankAccount] = useState('') // Cuenta del Banco de la Nación
 
   // Ref para controlar si ya se cargó el borrador
   const draftLoadedRef = useRef(false)
@@ -1327,6 +1332,13 @@ export default function POS() {
         documentType: ID_TYPES.DNI
       }))
     }
+
+    // Resetear detracción cuando no es factura
+    if (documentType !== 'factura') {
+      setHasDetraction(false)
+      setDetractionType('')
+      setDetractionBankAccount('')
+    }
   }, [documentType])
 
   // Handlers para descuento
@@ -1847,6 +1859,16 @@ export default function POS() {
           guideNumber: guideNumber || null,
           purchaseOrderNumber: purchaseOrderNumber || null,
           orderNumber: orderNumber || null,
+          // Datos de detracción
+          hasDetraction: hasDetraction,
+          ...(hasDetraction && detractionType && {
+            detractionType: detractionType,
+            detractionTypeName: DETRACTION_TYPES.find(t => t.code === detractionType)?.name || '',
+            detractionRate: DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0,
+            detractionAmount: Number(((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)),
+            detractionBankAccount: detractionBankAccount || null,
+            netPayable: Number((amounts.total - (amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)),
+          }),
         }),
       }
 
@@ -3219,6 +3241,115 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             />
                           </div>
                         </div>
+                      </div>
+
+                      {/* Sección de Detracción */}
+                      <div className="mt-3 pt-2 border-t border-gray-100">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={hasDetraction}
+                            onChange={e => {
+                              setHasDetraction(e.target.checked)
+                              if (!e.target.checked) {
+                                setDetractionType('')
+                                setDetractionBankAccount('')
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700">Sujeto a Detracción</span>
+                          {amounts.total >= DETRACTION_MIN_AMOUNT && !hasDetraction && (
+                            <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                              Monto ≥ S/ {DETRACTION_MIN_AMOUNT}
+                            </span>
+                          )}
+                        </label>
+
+                        {hasDetraction && (
+                          <div className="mt-2 space-y-2 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                            {/* Tipo de bien/servicio */}
+                            <div>
+                              <label className="text-[10px] text-gray-500 mb-0.5 block">Tipo de Bien/Servicio</label>
+                              <select
+                                value={detractionType}
+                                onChange={e => setDetractionType(e.target.value)}
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                              >
+                                <option value="">Seleccionar...</option>
+                                <optgroup label="Bienes">
+                                  {DETRACTION_TYPES.filter(t => t.category === 'bienes').map(type => (
+                                    <option key={type.code} value={type.code}>
+                                      {type.code} - {type.name} ({type.rate}%)
+                                    </option>
+                                  ))}
+                                </optgroup>
+                                <optgroup label="Servicios">
+                                  {DETRACTION_TYPES.filter(t => t.category === 'servicios').map(type => (
+                                    <option key={type.code} value={type.code}>
+                                      {type.code} - {type.name} ({type.rate}%)
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              </select>
+                            </div>
+
+                            {detractionType && (
+                              <>
+                                {/* Porcentaje y Monto */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[10px] text-gray-500 mb-0.5 block">Porcentaje</label>
+                                    <div className="px-2 py-1.5 text-xs bg-gray-100 border border-gray-200 rounded-lg text-gray-700 font-medium">
+                                      {DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0}%
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-gray-500 mb-0.5 block">Monto Detracción</label>
+                                    <div className="px-2 py-1.5 text-xs bg-amber-100 border border-amber-300 rounded-lg text-amber-800 font-bold">
+                                      S/ {((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Cuenta Banco de la Nación */}
+                                <div>
+                                  <label className="text-[10px] text-gray-500 mb-0.5 block">
+                                    N° Cuenta Banco de la Nación (Proveedor)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={detractionBankAccount}
+                                    onChange={e => setDetractionBankAccount(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="Ej: 00-123-456789"
+                                    maxLength={20}
+                                    className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+
+                                {/* Resumen */}
+                                <div className="text-[10px] text-gray-600 bg-white p-2 rounded border border-gray-200">
+                                  <div className="flex justify-between">
+                                    <span>Total Factura:</span>
+                                    <span className="font-medium">{formatCurrency(amounts.total)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-amber-700">
+                                    <span>(-) Detracción ({DETRACTION_TYPES.find(t => t.code === detractionType)?.rate}%):</span>
+                                    <span className="font-medium">
+                                      {formatCurrency((amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between font-bold text-green-700 border-t pt-1 mt-1">
+                                    <span>Neto a Pagar:</span>
+                                    <span>
+                                      {formatCurrency(amounts.total - (amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </>
