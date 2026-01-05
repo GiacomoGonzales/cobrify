@@ -51,6 +51,7 @@ export default function Customers() {
       email: '',
       phone: '',
       address: '',
+      studentName: '',
       priceLevel: null,
     },
   })
@@ -103,6 +104,7 @@ export default function Customers() {
       email: '',
       phone: '',
       address: '',
+      studentName: '',
     })
     setIsModalOpen(true)
   }
@@ -117,6 +119,7 @@ export default function Customers() {
       email: customer.email || '',
       phone: customer.phone || '',
       address: customer.address || '',
+      studentName: customer.studentName || '',
       priceLevel: customer.priceLevel || null,
     })
     setIsModalOpen(true)
@@ -216,7 +219,8 @@ export default function Customers() {
         customer.name?.toLowerCase().includes(search) ||
         customer.documentNumber?.includes(search) ||
         customer.businessName?.toLowerCase().includes(search) ||
-        customer.email?.toLowerCase().includes(search)
+        customer.email?.toLowerCase().includes(search) ||
+        customer.studentName?.toLowerCase().includes(search)
       )
     })
     .sort((a, b) => {
@@ -286,7 +290,7 @@ export default function Customers() {
               <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar por nombre, RUC, DNI..."
+                placeholder="Buscar por nombre, RUC, DNI, alumno..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
@@ -417,6 +421,11 @@ export default function Customers() {
                         <p className="font-medium">{customer.name}</p>
                         {customer.businessName && customer.businessName !== customer.name && (
                           <p className="text-xs text-gray-500">{customer.businessName}</p>
+                        )}
+                        {customer.studentName && (
+                          <p className="text-xs text-primary-600 font-medium">
+                            Alumno: {customer.studentName}
+                          </p>
                         )}
                       </div>
                     </TableCell>
@@ -551,6 +560,16 @@ export default function Customers() {
             error={errors.address?.message}
             {...register('address')}
           />
+
+          {/* Campo Alumno - solo si está habilitado en configuración */}
+          {businessSettings?.posCustomFields?.showStudentField && (
+            <Input
+              label="Alumno"
+              placeholder="Nombre del alumno"
+              error={errors.studentName?.message}
+              {...register('studentName')}
+            />
+          )}
 
           {/* Nivel de precio - solo si está habilitado múltiples precios */}
           {businessSettings?.multiplePricesEnabled && (
