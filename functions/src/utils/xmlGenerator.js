@@ -1856,6 +1856,16 @@ export function generateDispatchGuideXML(guideData, businessData) {
       'listName': 'Tipo de Documento',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
     }).txt(guideData.referencedInvoice.documentType || '01')
+
+    // RUC del emisor del documento relacionado (obligatorio según SUNAT - error 3380)
+    const issuerParty = additionalDoc.ele('cac:IssuerParty')
+    const issuerPartyId = issuerParty.ele('cac:PartyIdentification')
+    issuerPartyId.ele('cbc:ID', {
+      'schemeID': '6',
+      'schemeName': 'Documento de Identidad',
+      'schemeAgencyName': 'PE:SUNAT',
+      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    }).txt(guideData.referencedInvoice.ruc || businessData.ruc)
   }
 
   // === REMITENTE (Emisor de la guía) ===
