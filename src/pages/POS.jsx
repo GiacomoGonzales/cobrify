@@ -336,7 +336,8 @@ export default function POS() {
     businessName: '',
     address: '',
     email: '',
-    phone: ''
+    phone: '',
+    studentName: '' // Campo libre para nombre de alumno
   })
 
   // Estados para pagos parciales (solo notas de venta)
@@ -1760,6 +1761,7 @@ export default function POS() {
               email: customerData.email || '',
               phone: customerData.phone || '',
               address: customerData.address || '',
+              studentName: customerData.studentName || '',
             }
           : {
               documentType: ID_TYPES.DNI,
@@ -1769,6 +1771,7 @@ export default function POS() {
               email: '',
               phone: '',
               address: '',
+              studentName: customerData.studentName || '',
             },
         items: items,
         subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
@@ -3277,6 +3280,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social' : 'Nombre'}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
+                    {companySettings?.posCustomFields?.showStudentField && (
+                      <input
+                        type="text"
+                        value={customerData.studentName}
+                        onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
+                        placeholder="Alumno (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
                     <input
                       type="text"
                       value={customerData.address}
@@ -3360,6 +3372,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       placeholder={customerData.documentType === ID_TYPES.RUC ? 'Razón Social (opcional)' : 'Nombre (opcional)'}
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
+                    {companySettings?.posCustomFields?.showStudentField && (
+                      <input
+                        type="text"
+                        value={customerData.studentName}
+                        onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
+                        placeholder="Alumno (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    )}
                     <input
                       type="tel"
                       value={customerData.phone}

@@ -177,6 +177,11 @@ export default function Settings() {
     itemStatusTracking: false, // Seguimiento de estado por item (false = por orden completa)
   })
 
+  // Campos personalizados del POS
+  const [posCustomFields, setPosCustomFields] = useState({
+    showStudentField: false, // Mostrar campo "Alumno" en el POS
+  })
+
   // Estados para cambio de contraseña
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -537,6 +542,9 @@ export default function Settings() {
         setBusinessMode(businessData.businessMode || 'retail')
         if (businessData.restaurantConfig) {
           setRestaurantConfig(businessData.restaurantConfig)
+        }
+        if (businessData.posCustomFields) {
+          setPosCustomFields(businessData.posCustomFields)
         }
 
         // Cargar configuración de impresora desde localStorage (por dispositivo)
@@ -899,6 +907,7 @@ export default function Settings() {
         companySlogan: companySlogan || '',
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
+        posCustomFields: posCustomFields,
         updatedAt: serverTimestamp(),
       }, { merge: true })
 
@@ -2089,6 +2098,33 @@ export default function Settings() {
                   </p>
                 </div>
               </label>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Campos Personalizados del POS */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Campos Personalizados del POS</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Activa campos adicionales para capturar información extra en tus comprobantes.
+                </p>
+                <div className="space-y-3">
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showStudentField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Campo "Alumno"</span>
+                      <span className="text-xs text-gray-500">Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showStudentField}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+                </div>
+              </div>
 
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
