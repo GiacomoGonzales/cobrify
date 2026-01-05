@@ -76,6 +76,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // AdminStats collection (estadísticas para panel de admin)
+    match /adminStats/{docId} {
+      // Solo admins pueden leer/escribir estadísticas
+      allow read, write: if isAdmin();
+    }
+
     // Settings collection (configuración global como tiers de resellers)
     match /settings/{settingId} {
       // Usuarios autenticados pueden leer configuración de tiers (necesario para resellers)
