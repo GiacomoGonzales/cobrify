@@ -3,6 +3,8 @@ import QRCode from 'qrcode'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = {
@@ -1072,9 +1074,55 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   // Generar o retornar
   if (download) {
-    const filename = `GRE_Transportista_${guide.number || 'borrador'}.pdf`
-    doc.save(filename)
-    return { success: true, filename }
+    const fileName = `GRE_Transportista_${guide.number || 'borrador'}.pdf`
+    const isNativePlatform = Capacitor.isNativePlatform()
+
+    if (isNativePlatform) {
+      try {
+        const pdfOutput = doc.output('datauristring')
+        const base64Data = pdfOutput.split(',')[1]
+
+        const pdfDir = 'PDFs'
+        try {
+          await Filesystem.mkdir({
+            path: pdfDir,
+            directory: Directory.Documents,
+            recursive: true
+          })
+        } catch (mkdirError) {
+          console.log('Directorio ya existe:', mkdirError)
+        }
+
+        const result = await Filesystem.writeFile({
+          path: `${pdfDir}/${fileName}`,
+          data: base64Data,
+          directory: Directory.Documents,
+          recursive: true
+        })
+
+        console.log('PDF guardado en:', result.uri)
+
+        // Abrir el diálogo de compartir para que el usuario pueda ver/compartir el PDF
+        try {
+          await Share.share({
+            title: fileName,
+            text: `Guía de Remisión Transportista: ${fileName}`,
+            url: result.uri,
+            dialogTitle: 'Compartir Guía de Remisión'
+          })
+        } catch (shareError) {
+          console.log('Compartir cancelado o no disponible:', shareError)
+        }
+
+        return { success: true, uri: result.uri, fileName, doc }
+      } catch (error) {
+        console.error('Error al guardar PDF en móvil:', error)
+        throw error
+      }
+    } else {
+      doc.save(fileName)
+      return { success: true, fileName }
+    }
   } else {
     return {
       success: true,

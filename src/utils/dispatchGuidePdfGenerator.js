@@ -4,6 +4,7 @@ import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -901,6 +902,19 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
         })
 
         console.log('PDF guardado en:', result.uri)
+
+        // Abrir el diálogo de compartir para que el usuario pueda ver/compartir el PDF
+        try {
+          await Share.share({
+            title: fileName,
+            text: `Guía de Remisión: ${fileName}`,
+            url: result.uri,
+            dialogTitle: 'Compartir Guía de Remisión'
+          })
+        } catch (shareError) {
+          console.log('Compartir cancelado o no disponible:', shareError)
+        }
+
         return { success: true, uri: result.uri, fileName, doc }
       } catch (error) {
         console.error('Error al guardar PDF en móvil:', error)
@@ -926,7 +940,6 @@ export const getDispatchGuidePDFBlob = async (guide, companySettings) => {
  * Abre el PDF en una nueva pestaña para vista previa (o comparte en móvil)
  */
 export const previewDispatchGuidePDF = async (guide, companySettings) => {
-  const { Share } = await import('@capacitor/share')
   const doc = await generateDispatchGuidePDF(guide, companySettings, false)
   const isNativePlatform = Capacitor.isNativePlatform()
 
@@ -974,7 +987,6 @@ export const previewDispatchGuidePDF = async (guide, companySettings) => {
  * Comparte el PDF por WhatsApp u otras apps
  */
 export const shareDispatchGuidePDF = async (guide, companySettings, method = 'share') => {
-  const { Share } = await import('@capacitor/share')
   const doc = await generateDispatchGuidePDF(guide, companySettings, false)
   const isNativePlatform = Capacitor.isNativePlatform()
   const fileName = `Guia_Remision_${(guide.number || 'T001-00000001').replace(/\//g, '-')}.pdf`
