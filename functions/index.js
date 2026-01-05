@@ -6327,9 +6327,9 @@ export const calculateGlobalBillingStats = onCall(
       throw new HttpsError('unauthenticated', 'Debe estar autenticado para ejecutar esta función')
     }
 
-    // Verificar que es un admin (opcional: verificar custom claims)
-    const userDoc = await db.collection('users').doc(request.auth.uid).get()
-    if (!userDoc.exists() || userDoc.data().role !== 'admin') {
+    // Verificar que es un admin (buscar en colección 'admins')
+    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
+    if (!adminDoc.exists()) {
       throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
     }
 
