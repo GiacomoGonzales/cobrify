@@ -1913,7 +1913,7 @@ export function generateDispatchGuideXML(guideData, businessData) {
 
   // === ENVÍO (Shipment) ===
   const shipment = root.ele('cac:Shipment')
-  shipment.ele('cbc:ID').txt('1')
+  shipment.ele('cbc:ID').txt('SUNAT_Envio')
 
   // Motivo de traslado (Catálogo 20)
   shipment.ele('cbc:HandlingCode', {
@@ -1922,16 +1922,15 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
 
-  // Descripción del motivo (opcional)
+  // Descripción del motivo - Solo para importación/exportación (08, 09, 19) según SUNAT
+  // Error 3418: "Si el motivo de traslado no es 08-Importacion ni 09-Exportacion ni 19-Traslado
+  // de mercancia extranjera, no debe consignar el campo 'Sustento de la diferencia del Peso bruto'"
   const transferReasonNames = {
-    '01': 'VENTA',
-    '02': 'COMPRA',
-    '04': 'TRASLADO ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA',
     '08': 'IMPORTACION',
     '09': 'EXPORTACION',
-    '13': 'OTROS'
+    '19': 'TRASLADO DE MERCANCIA EXTRANJERA'
   }
-  if (transferReasonNames[guideData.transferReason]) {
+  if (['08', '09', '19'].includes(guideData.transferReason)) {
     shipment.ele('cbc:Information').txt(transferReasonNames[guideData.transferReason])
   }
 
@@ -1942,7 +1941,7 @@ export function generateDispatchGuideXML(guideData, businessData) {
 
   // === DATOS DE TRANSPORTE (ShipmentStage debe ir ANTES de Delivery según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
-  shipmentStage.ele('cbc:ID').txt('1')
+  // Nota: No incluir cbc:ID en ShipmentStage según ejemplos EFACT
 
   // Modalidad de transporte (01=Público, 02=Privado)
   shipmentStage.ele('cbc:TransportModeCode', {
@@ -1965,11 +1964,9 @@ export function generateDispatchGuideXML(guideData, businessData) {
 
     // Datos del conductor (DriverPerson debe ir DESPUÉS de TransportMeans)
     const driverPerson = shipmentStage.ele('cac:DriverPerson')
+    // Solo schemeID según ejemplos EFACT
     driverPerson.ele('cbc:ID', {
-      'schemeID': guideData.transport.driver.documentType || '1',
-      'schemeName': 'Documento de Identidad',
-      'schemeAgencyName': 'PE:SUNAT',
-      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+      'schemeID': guideData.transport.driver.documentType || '1'
     }).txt(guideData.transport.driver.documentNumber)
 
     driverPerson.ele('cbc:FirstName').txt(guideData.transport.driver.name)
@@ -2012,7 +2009,9 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'schemeAgencyName': 'PE:INEI',
     'schemeName': 'Ubigeos'
   }).txt(guideData.destination?.ubigeo || '150101')
-  deliveryAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
+  // Usar AddressLine/Line en lugar de StreetName según ejemplos EFACT
+  const deliveryAddressLine = deliveryAddress.ele('cac:AddressLine')
+  deliveryAddressLine.ele('cbc:Line').txt(guideData.destination?.address || '')
 
   // Punto de PARTIDA (origen) - Despatch/DespatchAddress
   const despatch = delivery.ele('cac:Despatch')
@@ -2021,7 +2020,32 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'schemeAgencyName': 'PE:INEI',
     'schemeName': 'Ubigeos'
   }).txt(guideData.origin?.ubigeo || '150101')
-  despatchAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
+  // Usar AddressLine/Line en lugar de StreetName según ejemplos EFACT
+  const despatchAddressLine = despatchAddress.ele('cac:AddressLine')
+  despatchAddressLine.ele('cbc:Line').txt(guideData.origin?.address || '')
+
+  // === VEHÍCULO PRINCIPAL - TransportHandlingUnit (OBLIGATORIO para transporte privado) ===
+  // Según ejemplos EFACT, TransportHandlingUnit SIEMPRE debe existir para transporte privado
+  // Estructura correcta:
+  //   <cac:TransportHandlingUnit>
+  //     <cac:TransportEquipment>
+  //       <cbc:ID>PLACA</cbc:ID>
+  //     </cac:TransportEquipment>
+  //   </cac:TransportHandlingUnit>
+  if (guideData.transportMode === '02' && guideData.transport?.vehicle?.plate) {
+    const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
+    // Vehículo principal dentro de TransportEquipment
+    const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
+    transportEquipment.ele('cbc:ID').txt(guideData.transport.vehicle.plate)
+
+    // Vehículos secundarios (si existen)
+    if (guideData.transport.additionalVehicles?.length > 0) {
+      guideData.transport.additionalVehicles.forEach(vehicle => {
+        const additionalEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
+        additionalEquipment.ele('cbc:ID').txt(vehicle.plate)
+      })
+    }
+  }
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
   if (guideData.items && guideData.items.length > 0) {
