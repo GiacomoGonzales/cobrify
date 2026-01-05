@@ -818,35 +818,38 @@ export const generateOperabilityCertificatePDF = async (certificate, companySett
   doc.setLineWidth(1)
   doc.line(margin, y, pageWidth - margin, y)
 
-  // Datos del cliente
+  // Datos del cliente - valores alineados
   y += 10
   doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
-  doc.text('PARA:', margin, y)
+  const labelX = margin
+  const valueX = margin + 28 // Posición fija para todos los valores
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('PARA:', labelX, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(certificate.customerName || '', margin + 15, y)
+  doc.text(certificate.customerName || '', valueX, y)
 
   y += 6
   doc.setFont('helvetica', 'bold')
-  doc.text('RUC:', margin, y)
+  doc.text('RUC:', labelX, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(certificate.customerRuc || '', margin + 15, y)
+  doc.text(certificate.customerRuc || '', valueX, y)
 
   y += 6
   doc.setFont('helvetica', 'bold')
-  doc.text('DIRECCION:', margin, y)
+  doc.text('DIRECCIÓN:', labelX, y)
   doc.setFont('helvetica', 'normal')
   const addressLines = doc.splitTextToSize(certificate.customerAddress || '', contentWidth - 30)
-  doc.text(addressLines, margin + 28, y)
+  doc.text(addressLines, valueX, y)
   y += addressLines.length * 5
 
   // Fecha de revisión
   y += 6
   doc.setFont('helvetica', 'bold')
-  doc.text('REVISADO:', margin, y)
+  doc.text('REVISADO:', labelX, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatMonthYear(certificate.expirationDate), margin + 25, y)
+  doc.text(formatMonthYear(certificate.expirationDate), valueX, y)
 
   // Línea separadora
   y += 8
