@@ -2295,6 +2295,7 @@ export default function Settings() {
                     await setDoc(businessRef, {
                       businessMode: businessMode,
                       restaurantConfig: restaurantConfig,
+                      posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
                       hiddenMenuItems: hiddenMenuItems,
                       pdfAccentColor: pdfAccentColor,
@@ -2706,6 +2707,7 @@ export default function Settings() {
                     const businessRef = doc(db, 'businesses', getBusinessId())
                     await setDoc(businessRef, {
                       restaurantConfig: restaurantConfig,
+                      posCustomFields: posCustomFields,
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
