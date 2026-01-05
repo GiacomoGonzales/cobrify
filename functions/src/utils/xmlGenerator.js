@@ -510,6 +510,30 @@ export function generateInvoiceXML(invoiceData, businessData) {
     paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
   }
 
+  // === DETRACCIÓN ===
+  // Solo se agrega si la factura tiene detracción habilitada
+  // Según UBL 2.1 SUNAT: PaymentMeans + PaymentTerms adicional
+  if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
+    console.log(`📋 Agregando detracción al XML: tipo=${invoiceData.detractionType}, tasa=${invoiceData.detractionRate}%, monto=${invoiceData.detractionAmount}`)
+
+    // PaymentMeans - Medio de pago (cuenta del Banco de la Nación)
+    const paymentMeans = root.ele('cac:PaymentMeans')
+    paymentMeans.ele('cbc:ID').txt('Detraccion')
+    paymentMeans.ele('cbc:PaymentMeansCode').txt('001') // 001 = Transferencia bancaria
+    if (invoiceData.detractionBankAccount) {
+      const payeeAccount = paymentMeans.ele('cac:PayeeFinancialAccount')
+      payeeAccount.ele('cbc:ID').txt(invoiceData.detractionBankAccount)
+    }
+
+    // PaymentTerms - Datos de la detracción (código, porcentaje, monto)
+    const detractionTerms = root.ele('cac:PaymentTerms')
+    detractionTerms.ele('cbc:ID').txt('Detraccion')
+    detractionTerms.ele('cbc:PaymentMeansID').txt(invoiceData.detractionType) // Código catálogo 54
+    detractionTerms.ele('cbc:PaymentPercent').txt(String(invoiceData.detractionRate || 0))
+    detractionTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(parseFloat(invoiceData.detractionAmount).toFixed(2))
+  }
+
   // === DESCUENTO ===
   // IMPORTANTE: El descuento viene CON IGV desde el POS
   // En lugar de usar descuento global (que causa errores 4309/4310 en SUNAT),
