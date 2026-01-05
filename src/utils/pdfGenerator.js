@@ -1049,8 +1049,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
   const HAS_DETRACTION = invoice.hasDetraction && invoice.detractionAmount > 0
-  // Altura base 55, +15 si hay descuento, +30 si hay detracción (2 filas extra)
-  const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_DETRACTION ? 30 : 0)
+  // Altura base 55, +15 si hay descuento, +36 si hay detracción (2 filas: detracción + neto a pagar)
+  const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)
   const SON_SECTION_HEIGHT = 22
 
   // Posición Y donde termina el área de productos (empieza el pie fijo)
@@ -1264,37 +1264,27 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Filas de DETRACCIÓN (si aplica)
   if (HAS_DETRACTION) {
-    // Fila: DETRACCIÓN (fondo ámbar)
-    doc.setFillColor(255, 243, 224) // Fondo ámbar claro
+    // Fila: DETRACCIÓN (mismo estilo que las otras filas)
+    doc.setFillColor(255, 250, 240) // Fondo crema suave
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
     doc.setDrawColor(200, 200, 200)
     doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setTextColor(180, 100, 0) // Texto ámbar oscuro
+    doc.setTextColor(180, 80, 0) // Texto naranja oscuro
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
+    doc.setFontSize(9)
     doc.text(`DETRACCIÓN (${invoice.detractionRate || 0}%)`, totalsX + 5, footerY + 10)
     doc.text('- S/ ' + (invoice.detractionAmount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
 
-    // Fila: NETO A PAGAR (fondo verde)
-    doc.setFillColor(232, 245, 233) // Fondo verde claro
+    // Fila: NETO A PAGAR (fondo del color de la empresa, como TOTAL)
+    doc.setFillColor(34, 139, 34) // Verde bosque
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
-    doc.setTextColor(46, 125, 50) // Texto verde oscuro
+    doc.setTextColor(255, 255, 255) // Texto blanco
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('NETO A PAGAR', totalsX + 5, footerY + 14)
     doc.setFontSize(11)
     doc.text('S/ ' + (invoice.netPayable || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
-
-    // Leyenda de detracción debajo de totales
-    doc.setTextColor(100, 100, 100)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
-    const detractionLegendY = totalsStartY + totalsRowHeight * totalsSectionRows + 10
-    doc.text(`Operación sujeta a detracción - ${invoice.detractionType || ''}: ${invoice.detractionTypeName || ''}`, totalsX, detractionLegendY)
-    if (invoice.detractionBankAccount) {
-      doc.text(`Cta. Detracciones BN: ${invoice.detractionBankAccount}`, totalsX, detractionLegendY + 8)
-    }
   }
 
   // --- CUENTAS BANCARIAS (izquierda) con borde ---
