@@ -1,4 +1,4 @@
-import { onRequest } from 'firebase-functions/v2/https'
+import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
@@ -6315,19 +6315,22 @@ export const redirectShortUrl = onRequest(
  *
  * Se ejecuta automáticamente cada hora y también puede ser llamada manualmente.
  */
-export const calculateGlobalBillingStats = onRequest(
+export const calculateGlobalBillingStats = onCall(
   {
     region: 'us-central1',
     timeoutSeconds: 540, // 9 minutos máximo
     memory: '1GiB',
-    cors: true,
   },
-  async (req, res) => {
-    setCorsHeaders(res)
+  async (request) => {
+    // Verificar que el usuario está autenticado
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado para ejecutar esta función')
+    }
 
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('')
-      return
+    // Verificar que es un admin (opcional: verificar custom claims)
+    const userDoc = await db.collection('users').doc(request.auth.uid).get()
+    if (!userDoc.exists() || userDoc.data().role !== 'admin') {
+      throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
     }
 
     try {
@@ -6458,7 +6461,7 @@ export const calculateGlobalBillingStats = onRequest(
 
       console.log(`✅ [BillingStats] Completado en ${elapsedTime}s - ${totalDocuments} docs, S/ ${totalAmount.toFixed(2)}`)
 
-      res.status(200).json({
+      return {
         success: true,
         message: 'Estadísticas calculadas y cacheadas exitosamente',
         stats: {
@@ -6469,14 +6472,11 @@ export const calculateGlobalBillingStats = onRequest(
           calculationTimeSeconds: parseFloat(elapsedTime),
           businessesProcessed: mainBusinesses.length
         }
-      })
+      }
 
     } catch (error) {
       console.error('❌ [BillingStats] Error:', error)
-      res.status(500).json({
-        success: false,
-        error: error.message
-      })
+      throw new HttpsError('internal', error.message)
     }
   }
 )

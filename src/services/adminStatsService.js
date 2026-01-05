@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase'
+import { db, functions } from '@/lib/firebase'
 import {
   collection,
   query,
@@ -11,6 +11,7 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { PLANS } from './subscriptionService'
 
 /**
@@ -587,22 +588,15 @@ export async function getGlobalBillingStats() {
  */
 export async function recalculateGlobalBillingStats() {
   try {
-    const functionUrl = import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || 'https://us-central1-cobrify-webapp.cloudfunctions.net'
-
-    const response = await fetch(`${functionUrl}/calculateGlobalBillingStats`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-
-    const result = await response.json()
-    return result
+    // Usar Cloud Function callable (autenticada)
+    const calculateStats = httpsCallable(functions, 'calculateGlobalBillingStats')
+    const result = await calculateStats()
+    return result.data
   } catch (error) {
     console.error('Error al recalcular estadísticas:', error)
     return {
       success: false,
-      error: error.message
+      error: error.message || 'Error desconocido'
     }
   }
 }
