@@ -36,7 +36,7 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { getAdminStats, getSystemAlerts, getGlobalBillingStats } from '@/services/adminStatsService'
+import { getAdminStats, getSystemAlerts, getGlobalBillingStats, recalculateGlobalBillingStats } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4']
@@ -46,6 +46,7 @@ export default function AdminDashboard() {
   const [alerts, setAlerts] = useState([])
   const [billingStats, setBillingStats] = useState(null)
   const [billingLoading, setBillingLoading] = useState(true)
+  const [billingRecalculating, setBillingRecalculating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -86,6 +87,28 @@ export default function AdminDashboard() {
     loadData()
   }, [])
 
+  const handleRecalculateBilling = async () => {
+    setBillingRecalculating(true)
+    try {
+      const result = await recalculateGlobalBillingStats()
+      if (result.success && result.stats) {
+        setBillingStats({
+          ...result.stats,
+          calculatedAt: new Date(),
+          fromCache: true
+        })
+      } else {
+        // Recargar desde caché después del recálculo
+        const billingData = await getGlobalBillingStats()
+        setBillingStats(billingData)
+      }
+    } catch (e) {
+      console.error('Error al recalcular:', e)
+    } finally {
+      setBillingRecalculating(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -122,22 +145,48 @@ export default function AdminDashboard() {
         <div className="absolute bottom-0 left-0 -mb-16 -ml-16 w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
 
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-              <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-white">Facturación Global</h3>
+                <p className="text-sm text-white/70">
+                  {billingStats?.calculatedAt
+                    ? `Actualizado: ${format(billingStats.calculatedAt, "dd/MM/yyyy HH:mm", { locale: es })}`
+                    : 'Estadísticas de todo el sistema'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg sm:text-xl font-bold text-white">Facturación Global</h3>
-              <p className="text-sm text-white/70">Estadísticas de todo el sistema</p>
-            </div>
+            <button
+              onClick={handleRecalculateBilling}
+              disabled={billingRecalculating || billingLoading}
+              className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors disabled:opacity-50"
+              title="Recalcular estadísticas"
+            >
+              <RefreshCw className={`w-5 h-5 text-white ${billingRecalculating ? 'animate-spin' : ''}`} />
+            </button>
           </div>
 
-          {billingLoading ? (
+          {billingLoading || billingRecalculating ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white mx-auto mb-3"></div>
-                <p className="text-white/70 text-sm">Calculando estadísticas...</p>
+                <p className="text-white/70 text-sm">
+                  {billingRecalculating ? 'Recalculando estadísticas...' : 'Cargando estadísticas...'}
+                </p>
               </div>
+            </div>
+          ) : billingStats?.needsCalculation ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <p className="text-white/70 text-sm mb-4">No hay estadísticas en caché</p>
+              <button
+                onClick={handleRecalculateBilling}
+                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white text-sm font-medium transition-colors"
+              >
+                Calcular ahora
+              </button>
             </div>
           ) : (
             <>

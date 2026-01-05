@@ -6307,3 +6307,310 @@ export const redirectShortUrl = onRequest(
     }
   }
 )
+
+/**
+ * Cloud Function: Calcula y cachea estadísticas globales de facturación
+ * Esto evita que el dashboard tenga que consultar TODAS las facturas de TODOS los negocios
+ * cada vez que se carga.
+ *
+ * Se ejecuta automáticamente cada hora y también puede ser llamada manualmente.
+ */
+export const calculateGlobalBillingStats = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 540, // 9 minutos máximo
+    memory: '1GiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    try {
+      console.log('📊 [BillingStats] Iniciando cálculo de estadísticas globales...')
+      const startTime = Date.now()
+
+      // Obtener todas las suscripciones (negocios principales)
+      const subscriptionsSnapshot = await db.collection('subscriptions').get()
+      const mainBusinesses = subscriptionsSnapshot.docs.filter(doc => !doc.data().ownerId)
+
+      console.log(`📊 [BillingStats] Procesando ${mainBusinesses.length} negocios...`)
+
+      // Procesar en lotes para evitar timeout
+      const BATCH_SIZE = 20
+      let totalDocuments = 0
+      let totalAmount = 0
+      const byDocType = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+      const byDocTypeAmount = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+      const topBusinesses = []
+
+      for (let i = 0; i < mainBusinesses.length; i += BATCH_SIZE) {
+        const batch = mainBusinesses.slice(i, i + BATCH_SIZE)
+
+        const batchPromises = batch.map(async (subscriptionDoc) => {
+          const subscriptionData = subscriptionDoc.data()
+          const businessId = subscriptionDoc.id
+
+          try {
+            const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+            const invoicesSnapshot = await invoicesRef.get()
+
+            let businessTotal = 0
+            let businessCount = 0
+            const docTypeCounts = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+            const docTypeAmounts = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+
+            invoicesSnapshot.forEach(invoiceDoc => {
+              const invoice = invoiceDoc.data()
+
+              if (invoice.status !== 'anulado' && invoice.status !== 'cancelled' && invoice.status !== 'voided') {
+                businessCount++
+
+                const amount = parseFloat(invoice.total) ||
+                              parseFloat(invoice.totals?.total) ||
+                              parseFloat(invoice.importeTotal) ||
+                              parseFloat(invoice.mtoImpVenta) ||
+                              0
+                businessTotal += amount
+
+                const docType = invoice.tipoDocumento || invoice.docType || invoice.tipoComprobante || '03'
+                if (docTypeCounts[docType] !== undefined) {
+                  docTypeCounts[docType]++
+                  docTypeAmounts[docType] += amount
+                }
+              }
+            })
+
+            return {
+              businessId,
+              businessName: subscriptionData.businessName || subscriptionData.email || 'Sin nombre',
+              email: subscriptionData.email,
+              documentCount: businessCount,
+              totalAmount: businessTotal,
+              docTypeCounts,
+              docTypeAmounts
+            }
+          } catch (e) {
+            console.error(`❌ Error procesando ${businessId}:`, e.message)
+            return null
+          }
+        })
+
+        const batchResults = await Promise.all(batchPromises)
+
+        // Agregar resultados del lote
+        batchResults.forEach(result => {
+          if (!result || result.documentCount === 0) return
+
+          totalDocuments += result.documentCount
+          totalAmount += result.totalAmount
+
+          Object.keys(byDocType).forEach(key => {
+            byDocType[key] += result.docTypeCounts[key] || 0
+            byDocTypeAmount[key] += result.docTypeAmounts[key] || 0
+          })
+
+          if (result.documentCount > 0) {
+            topBusinesses.push({
+              businessId: result.businessId,
+              businessName: result.businessName,
+              email: result.email,
+              documentCount: result.documentCount,
+              totalAmount: result.totalAmount
+            })
+          }
+        })
+
+        console.log(`📊 [BillingStats] Procesados ${Math.min(i + BATCH_SIZE, mainBusinesses.length)}/${mainBusinesses.length} negocios...`)
+      }
+
+      // Ordenar y tomar top 10
+      topBusinesses.sort((a, b) => b.totalAmount - a.totalAmount)
+      const top10Businesses = topBusinesses.slice(0, 10)
+
+      // Formatear tipos de documento
+      const documentTypes = [
+        { type: '01', name: 'Facturas', count: byDocType['01'], amount: byDocTypeAmount['01'] },
+        { type: '03', name: 'Boletas', count: byDocType['03'], amount: byDocTypeAmount['03'] },
+        { type: '07', name: 'Notas de Crédito', count: byDocType['07'], amount: byDocTypeAmount['07'] },
+        { type: '08', name: 'Notas de Débito', count: byDocType['08'], amount: byDocTypeAmount['08'] },
+        { type: '09', name: 'Guías de Remisión', count: byDocType['09'], amount: byDocTypeAmount['09'] }
+      ].filter(d => d.count > 0)
+
+      const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2)
+
+      // Guardar en documento de caché
+      const statsData = {
+        totalDocuments,
+        totalAmount,
+        documentTypes,
+        topBusinesses: top10Businesses,
+        calculatedAt: FieldValue.serverTimestamp(),
+        calculationTimeSeconds: parseFloat(elapsedTime),
+        businessesProcessed: mainBusinesses.length
+      }
+
+      await db.collection('adminStats').doc('globalBilling').set(statsData)
+
+      console.log(`✅ [BillingStats] Completado en ${elapsedTime}s - ${totalDocuments} docs, S/ ${totalAmount.toFixed(2)}`)
+
+      res.status(200).json({
+        success: true,
+        message: 'Estadísticas calculadas y cacheadas exitosamente',
+        stats: {
+          totalDocuments,
+          totalAmount,
+          documentTypes,
+          topBusinesses: top10Businesses,
+          calculationTimeSeconds: parseFloat(elapsedTime),
+          businessesProcessed: mainBusinesses.length
+        }
+      })
+
+    } catch (error) {
+      console.error('❌ [BillingStats] Error:', error)
+      res.status(500).json({
+        success: false,
+        error: error.message
+      })
+    }
+  }
+)
+
+/**
+ * Scheduled Function: Actualiza estadísticas de facturación cada hora
+ */
+export const scheduledBillingStatsUpdate = onSchedule(
+  {
+    schedule: 'every 1 hours',
+    timeZone: 'America/Lima',
+    region: 'us-central1',
+    timeoutSeconds: 540,
+    memory: '1GiB'
+  },
+  async (event) => {
+    console.log('📊 [Scheduled BillingStats] Iniciando actualización programada...')
+
+    try {
+      const startTime = Date.now()
+
+      // Obtener todas las suscripciones (negocios principales)
+      const subscriptionsSnapshot = await db.collection('subscriptions').get()
+      const mainBusinesses = subscriptionsSnapshot.docs.filter(doc => !doc.data().ownerId)
+
+      const BATCH_SIZE = 20
+      let totalDocuments = 0
+      let totalAmount = 0
+      const byDocType = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+      const byDocTypeAmount = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+      const topBusinesses = []
+
+      for (let i = 0; i < mainBusinesses.length; i += BATCH_SIZE) {
+        const batch = mainBusinesses.slice(i, i + BATCH_SIZE)
+
+        const batchPromises = batch.map(async (subscriptionDoc) => {
+          const subscriptionData = subscriptionDoc.data()
+          const businessId = subscriptionDoc.id
+
+          try {
+            const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+            const invoicesSnapshot = await invoicesRef.get()
+
+            let businessTotal = 0
+            let businessCount = 0
+            const docTypeCounts = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+            const docTypeAmounts = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
+
+            invoicesSnapshot.forEach(invoiceDoc => {
+              const invoice = invoiceDoc.data()
+
+              if (invoice.status !== 'anulado' && invoice.status !== 'cancelled' && invoice.status !== 'voided') {
+                businessCount++
+
+                const amount = parseFloat(invoice.total) ||
+                              parseFloat(invoice.totals?.total) ||
+                              parseFloat(invoice.importeTotal) ||
+                              parseFloat(invoice.mtoImpVenta) ||
+                              0
+                businessTotal += amount
+
+                const docType = invoice.tipoDocumento || invoice.docType || invoice.tipoComprobante || '03'
+                if (docTypeCounts[docType] !== undefined) {
+                  docTypeCounts[docType]++
+                  docTypeAmounts[docType] += amount
+                }
+              }
+            })
+
+            return {
+              businessId,
+              businessName: subscriptionData.businessName || subscriptionData.email || 'Sin nombre',
+              email: subscriptionData.email,
+              documentCount: businessCount,
+              totalAmount: businessTotal,
+              docTypeCounts,
+              docTypeAmounts
+            }
+          } catch (e) {
+            return null
+          }
+        })
+
+        const batchResults = await Promise.all(batchPromises)
+
+        batchResults.forEach(result => {
+          if (!result || result.documentCount === 0) return
+
+          totalDocuments += result.documentCount
+          totalAmount += result.totalAmount
+
+          Object.keys(byDocType).forEach(key => {
+            byDocType[key] += result.docTypeCounts[key] || 0
+            byDocTypeAmount[key] += result.docTypeAmounts[key] || 0
+          })
+
+          if (result.documentCount > 0) {
+            topBusinesses.push({
+              businessId: result.businessId,
+              businessName: result.businessName,
+              email: result.email,
+              documentCount: result.documentCount,
+              totalAmount: result.totalAmount
+            })
+          }
+        })
+      }
+
+      topBusinesses.sort((a, b) => b.totalAmount - a.totalAmount)
+
+      const documentTypes = [
+        { type: '01', name: 'Facturas', count: byDocType['01'], amount: byDocTypeAmount['01'] },
+        { type: '03', name: 'Boletas', count: byDocType['03'], amount: byDocTypeAmount['03'] },
+        { type: '07', name: 'Notas de Crédito', count: byDocType['07'], amount: byDocTypeAmount['07'] },
+        { type: '08', name: 'Notas de Débito', count: byDocType['08'], amount: byDocTypeAmount['08'] },
+        { type: '09', name: 'Guías de Remisión', count: byDocType['09'], amount: byDocTypeAmount['09'] }
+      ].filter(d => d.count > 0)
+
+      const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2)
+
+      await db.collection('adminStats').doc('globalBilling').set({
+        totalDocuments,
+        totalAmount,
+        documentTypes,
+        topBusinesses: topBusinesses.slice(0, 10),
+        calculatedAt: FieldValue.serverTimestamp(),
+        calculationTimeSeconds: parseFloat(elapsedTime),
+        businessesProcessed: mainBusinesses.length
+      })
+
+      console.log(`✅ [Scheduled BillingStats] Completado en ${elapsedTime}s`)
+
+    } catch (error) {
+      console.error('❌ [Scheduled BillingStats] Error:', error)
+    }
+  }
+)

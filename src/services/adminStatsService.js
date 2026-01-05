@@ -539,117 +539,70 @@ export async function deletePayment(subscriptionId, paymentIndex) {
 }
 
 /**
- * Obtiene estadísticas globales de facturación de todos los negocios
- * @returns {Promise<{totalDocuments: number, totalAmount: number, byDocType: object}>}
+ * Obtiene estadísticas globales de facturación desde el caché
+ * Las estadísticas se calculan cada hora por una Cloud Function
+ * @returns {Promise<{totalDocuments: number, totalAmount: number, documentTypes: array, topBusinesses: array, calculatedAt: Date}>}
  */
 export async function getGlobalBillingStats() {
   try {
-    // Primero obtenemos todos los negocios (usuarios)
-    const subscriptionsRef = collection(db, 'subscriptions')
-    const subscriptionsSnapshot = await getDocs(subscriptionsRef)
+    // Leer desde el documento de caché
+    const cacheRef = doc(db, 'adminStats', 'globalBilling')
+    const cacheDoc = await getDoc(cacheRef)
 
-    // Filtrar solo negocios principales (no sub-usuarios)
-    const mainBusinesses = subscriptionsSnapshot.docs.filter(doc => !doc.data().ownerId)
-
-    // Ejecutar todas las consultas de invoices EN PARALELO
-    const businessPromises = mainBusinesses.map(async (subscriptionDoc) => {
-      const subscriptionData = subscriptionDoc.data()
-      const businessId = subscriptionDoc.id
-
-      try {
-        const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
-        const invoicesSnapshot = await getDocs(invoicesRef)
-
-        let businessTotal = 0
-        let businessCount = 0
-        const docTypeCounts = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
-        const docTypeAmounts = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
-
-        invoicesSnapshot.forEach(invoiceDoc => {
-          const invoice = invoiceDoc.data()
-
-          if (invoice.status !== 'anulado' && invoice.status !== 'cancelled') {
-            businessCount++
-
-            const amount = parseFloat(invoice.total) ||
-                          parseFloat(invoice.totals?.total) ||
-                          parseFloat(invoice.importeTotal) ||
-                          parseFloat(invoice.mtoImpVenta) ||
-                          0
-            businessTotal += amount
-
-            const docType = invoice.tipoDocumento || invoice.docType || invoice.tipoComprobante || '03'
-            if (docTypeCounts[docType] !== undefined) {
-              docTypeCounts[docType]++
-              docTypeAmounts[docType] += amount
-            }
-          }
-        })
-
-        return {
-          businessId,
-          businessName: subscriptionData.businessName || subscriptionData.email || 'Sin nombre',
-          email: subscriptionData.email,
-          documentCount: businessCount,
-          totalAmount: businessTotal,
-          docTypeCounts,
-          docTypeAmounts
-        }
-      } catch (e) {
-        return null // Ignorar errores individuales
+    if (cacheDoc.exists()) {
+      const data = cacheDoc.data()
+      return {
+        totalDocuments: data.totalDocuments || 0,
+        totalAmount: data.totalAmount || 0,
+        documentTypes: data.documentTypes || [],
+        topBusinesses: data.topBusinesses || [],
+        calculatedAt: data.calculatedAt?.toDate?.() || null,
+        calculationTimeSeconds: data.calculationTimeSeconds || 0,
+        businessesProcessed: data.businessesProcessed || 0,
+        fromCache: true
       }
-    })
+    }
 
-    // Esperar todas las consultas en paralelo
-    const results = await Promise.all(businessPromises)
-
-    // Agregar los resultados
-    let totalDocuments = 0
-    let totalAmount = 0
-    const byDocType = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
-    const byDocTypeAmount = { '01': 0, '03': 0, '07': 0, '08': 0, '09': 0 }
-    const topBusinesses = []
-
-    results.forEach(result => {
-      if (!result || result.documentCount === 0) return
-
-      totalDocuments += result.documentCount
-      totalAmount += result.totalAmount
-
-      Object.keys(byDocType).forEach(key => {
-        byDocType[key] += result.docTypeCounts[key] || 0
-        byDocTypeAmount[key] += result.docTypeAmounts[key] || 0
-      })
-
-      topBusinesses.push({
-        businessId: result.businessId,
-        businessName: result.businessName,
-        email: result.email,
-        documentCount: result.documentCount,
-        totalAmount: result.totalAmount
-      })
-    })
-
-    // Ordenar top businesses por monto facturado
-    topBusinesses.sort((a, b) => b.totalAmount - a.totalAmount)
-
-    // Formatear tipos de documento
-    const documentTypes = [
-      { type: '01', name: 'Facturas', count: byDocType['01'], amount: byDocTypeAmount['01'] },
-      { type: '03', name: 'Boletas', count: byDocType['03'], amount: byDocTypeAmount['03'] },
-      { type: '07', name: 'Notas de Crédito', count: byDocType['07'], amount: byDocTypeAmount['07'] },
-      { type: '08', name: 'Notas de Débito', count: byDocType['08'], amount: byDocTypeAmount['08'] },
-      { type: '09', name: 'Guías de Remisión', count: byDocType['09'], amount: byDocTypeAmount['09'] }
-    ].filter(d => d.count > 0)
-
+    // Si no hay caché, retornar valores vacíos
+    // El usuario puede usar el botón de recalcular
     return {
-      totalDocuments,
-      totalAmount,
-      documentTypes,
-      topBusinesses: topBusinesses.slice(0, 10)
+      totalDocuments: 0,
+      totalAmount: 0,
+      documentTypes: [],
+      topBusinesses: [],
+      calculatedAt: null,
+      fromCache: false,
+      needsCalculation: true
     }
   } catch (error) {
     console.error('Error al obtener estadísticas de facturación:', error)
     throw error
+  }
+}
+
+/**
+ * Fuerza el recálculo de las estadísticas de facturación
+ * Llama a la Cloud Function que hace el cálculo pesado
+ * @returns {Promise<{success: boolean, stats?: object, error?: string}>}
+ */
+export async function recalculateGlobalBillingStats() {
+  try {
+    const functionUrl = import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || 'https://us-central1-cobrify-webapp.cloudfunctions.net'
+
+    const response = await fetch(`${functionUrl}/calculateGlobalBillingStats`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+
+    const result = await response.json()
+    return result
+  } catch (error) {
+    console.error('Error al recalcular estadísticas:', error)
+    return {
+      success: false,
+      error: error.message
+    }
   }
 }
