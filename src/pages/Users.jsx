@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Users as UsersIcon, Plus, Edit2, Trash2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -18,6 +18,7 @@ import {
   updateUserData,
   toggleUserStatus,
   deleteManagedUser,
+  CATEGORY_NAMES,
 } from '@/services/userManagementService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -48,6 +49,55 @@ export default function Users() {
 
   // Obtener páginas disponibles según el modo del negocio
   const availablePages = getAvailablePagesByMode(businessMode)
+
+  // Agrupar páginas por categoría para mejor visualización
+  const pagesByCategory = useMemo(() => {
+    const grouped = {}
+    availablePages.forEach(page => {
+      const category = page.category || 'otros'
+      if (!grouped[category]) {
+        grouped[category] = []
+      }
+      grouped[category].push(page)
+    })
+    return grouped
+  }, [availablePages])
+
+  // Estado para controlar qué categorías están expandidas
+  const [expandedCategories, setExpandedCategories] = useState({})
+
+  // Inicializar todas las categorías como expandidas al abrir el modal
+  useEffect(() => {
+    if (isModalOpen) {
+      const initial = {}
+      Object.keys(pagesByCategory).forEach(cat => {
+        initial[cat] = true
+      })
+      setExpandedCategories(initial)
+    }
+  }, [isModalOpen, pagesByCategory])
+
+  const toggleCategory = (category) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }))
+  }
+
+  // Seleccionar/deseleccionar todas las páginas de una categoría
+  const toggleCategoryPages = (category) => {
+    const categoryPages = pagesByCategory[category] || []
+    const categoryPageIds = categoryPages.map(p => p.id)
+    const allSelected = categoryPageIds.every(id => selectedPages.includes(id))
+
+    if (allSelected) {
+      // Deseleccionar todas de esta categoría
+      setSelectedPages(prev => prev.filter(id => !categoryPageIds.includes(id)))
+    } else {
+      // Seleccionar todas de esta categoría
+      setSelectedPages(prev => [...new Set([...prev, ...categoryPageIds])])
+    }
+  }
 
   const {
     register,
@@ -477,304 +527,309 @@ export default function Users() {
         </CardContent>
       </Card>
 
-      {/* Modal de Crear/Editar Usuario */}
+      {/* Modal de Crear/Editar Usuario - Amplio y organizado */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={isEditMode ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
+        size="5xl"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          {/* Datos básicos */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Datos del Usuario</h3>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* COLUMNA IZQUIERDA - Datos del usuario */}
+            <div className="space-y-5">
+              {/* Datos básicos */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <UsersIcon className="w-5 h-5 text-primary-600" />
+                  Datos del Usuario
+                </h3>
 
-            <Input
-              label="Nombre Completo"
-              placeholder="Ej: Juan Pérez"
-              error={errors.displayName?.message}
-              {...register('displayName', {
-                required: 'Nombre es requerido',
-              })}
-            />
-
-            <Input
-              label="Email"
-              type="email"
-              placeholder="usuario@ejemplo.com"
-              disabled={isEditMode}
-              error={errors.email?.message}
-              {...register('email', {
-                required: 'Email es requerido',
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: 'Email inválido',
-                },
-              })}
-            />
-
-            {!isEditMode && (
-              <div className="relative">
                 <Input
-                  label="Contraseña"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Mínimo 6 caracteres"
-                  error={errors.password?.message}
-                  {...register('password', {
-                    required: 'Contraseña es requerida',
-                    minLength: {
-                      value: 6,
-                      message: 'Mínimo 6 caracteres',
+                  label="Nombre Completo"
+                  placeholder="Ej: Juan Pérez"
+                  error={errors.displayName?.message}
+                  {...register('displayName', {
+                    required: 'Nombre es requerido',
+                  })}
+                />
+
+                <Input
+                  label="Email"
+                  type="email"
+                  placeholder="usuario@ejemplo.com"
+                  disabled={isEditMode}
+                  error={errors.email?.message}
+                  {...register('email', {
+                    required: 'Email es requerido',
+                    pattern: {
+                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                      message: 'Email inválido',
                     },
                   })}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            )}
-          </div>
 
-          {/* Vinculación con Agente (solo en modo inmobiliaria) */}
-          {isRealEstateMode && agents.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-cyan-600" />
-                Vincular con Agente
-              </h3>
-              <p className="text-sm text-gray-600">
-                Si este usuario es un agente/corredor, vincúlalo para que vea sus propias comisiones
-              </p>
-              <select
-                value={selectedAgentId}
-                onChange={(e) => setSelectedAgentId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="">Sin vincular (verá todas las comisiones)</option>
-                {agents.map(agent => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name} - {agent.commissionPercent}% comisión
-                  </option>
-                ))}
-              </select>
-              {selectedAgentId && (
-                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
-                  <p className="text-sm text-cyan-800">
-                    Este usuario solo verá las comisiones de las operaciones donde esté asignado como agente.
+                {!isEditMode && (
+                  <div className="relative">
+                    <Input
+                      label="Contraseña"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Mínimo 6 caracteres"
+                      error={errors.password?.message}
+                      {...register('password', {
+                        required: 'Contraseña es requerida',
+                        minLength: {
+                          value: 6,
+                          message: 'Mínimo 6 caracteres',
+                        },
+                      })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Vinculación con Agente (solo en modo inmobiliaria) */}
+              {isRealEstateMode && agents.length > 0 && (
+                <div className="bg-cyan-50 rounded-xl p-4 space-y-3">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-cyan-600" />
+                    Vincular con Agente
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Vincula al usuario con un agente para que vea solo sus comisiones
                   </p>
+                  <select
+                    value={selectedAgentId}
+                    onChange={(e) => setSelectedAgentId(e.target.value)}
+                    className="w-full px-3 py-2 border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-white"
+                  >
+                    <option value="">Sin vincular (verá todas)</option>
+                    {agents.map(agent => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name} - {agent.commissionPercent}%
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Selección de páginas con checkboxes */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Permisos de Acceso</h3>
-              <button
-                type="button"
-                onClick={selectAllPages}
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-              >
-                {selectedPages.length === availablePages.length
-                  ? 'Desmarcar Todas'
-                  : 'Marcar Todas'}
-              </button>
-            </div>
+              {/* Restricción de Almacenes */}
+              {warehouses.length > 0 && (
+                <div className="bg-amber-50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Warehouse className="w-5 h-5 text-amber-600" />
+                      Almacenes
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={selectAllWarehouses}
+                      className="text-xs text-amber-700 hover:text-amber-800 font-medium"
+                    >
+                      {selectedWarehouses.length === warehouses.length ? 'Ninguno' : 'Todos'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    Sin selección = acceso a todos
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                    {warehouses.map((warehouse) => (
+                      <label
+                        key={warehouse.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                          selectedWarehouses.includes(warehouse.id)
+                            ? 'bg-amber-200 text-amber-900'
+                            : 'bg-white hover:bg-amber-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedWarehouses.includes(warehouse.id)}
+                          onChange={() => toggleWarehouseSelection(warehouse.id)}
+                          className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500"
+                        />
+                        <span className="truncate">{warehouse.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            <p className="text-sm text-gray-600">
-              Selecciona las páginas a las que este usuario tendrá acceso
-            </p>
-
-            <div className="border border-gray-200 rounded-lg p-4 max-h-80 overflow-y-auto">
-              <div className="space-y-3">
-                {availablePages.map((page) => (
-                  <label
-                    key={page.id}
-                    className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedPages.includes(page.id)}
-                      onChange={() => togglePageSelection(page.id)}
-                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                    />
-                    <div className="ml-3">
-                      <p className="font-medium text-gray-900">{page.name}</p>
-                      <p className="text-xs text-gray-500">{page.path}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {selectedPages.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-800">
-                  <span className="font-semibold">{selectedPages.length}</span> página
-                  {selectedPages.length !== 1 ? 's' : ''} seleccionada
-                  {selectedPages.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Restricción de Almacenes */}
-          {warehouses.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <Warehouse className="w-5 h-5 text-amber-600" />
-                  Restricción de Almacenes
-                </h3>
-                <button
-                  type="button"
-                  onClick={selectAllWarehouses}
-                  className="text-sm text-amber-600 hover:text-amber-700 font-medium"
-                >
-                  {selectedWarehouses.length === warehouses.length
-                    ? 'Desmarcar Todos'
-                    : 'Marcar Todos'}
-                </button>
-              </div>
-
-              <p className="text-sm text-gray-600">
-                Selecciona los almacenes a los que este usuario tendrá acceso.
-                Si no seleccionas ninguno, tendrá acceso a todos.
-              </p>
-
-              <div className="border border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto">
-                <div className="space-y-3">
-                  {warehouses.map((warehouse) => (
+              {/* Restricción de Sucursales */}
+              {branches.length > 0 && (
+                <div className="bg-cyan-50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                      <Store className="w-5 h-5 text-cyan-600" />
+                      Sucursales
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={selectAllBranches}
+                      className="text-xs text-cyan-700 hover:text-cyan-800 font-medium"
+                    >
+                      {selectedBranches.length === branches.length + 1 ? 'Ninguna' : 'Todas'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-cyan-700">
+                    Sin selección = acceso a todas
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
                     <label
-                      key={warehouse.id}
-                      className="flex items-center p-3 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                        selectedBranches.includes('main')
+                          ? 'bg-cyan-200 text-cyan-900'
+                          : 'bg-white hover:bg-cyan-100'
+                      }`}
                     >
                       <input
                         type="checkbox"
-                        checked={selectedWarehouses.includes(warehouse.id)}
-                        onChange={() => toggleWarehouseSelection(warehouse.id)}
-                        className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        checked={selectedBranches.includes('main')}
+                        onChange={() => toggleBranchSelection('main')}
+                        className="w-4 h-4 text-cyan-600 border-cyan-300 rounded focus:ring-cyan-500"
                       />
-                      <div className="ml-3">
-                        <p className="font-medium text-gray-900">{warehouse.name}</p>
-                        {warehouse.address && (
-                          <p className="text-xs text-gray-500">{warehouse.address}</p>
-                        )}
-                      </div>
+                      <span className="truncate">Principal</span>
                     </label>
-                  ))}
-                </div>
-              </div>
-
-              {selectedWarehouses.length === 0 ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm text-green-800">
-                    Este usuario tendrá acceso a <span className="font-semibold">todos los almacenes</span>
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-sm text-amber-800">
-                    Acceso restringido a <span className="font-semibold">{selectedWarehouses.length}</span> almacén
-                    {selectedWarehouses.length !== 1 ? 'es' : ''}
-                  </p>
+                    {branches.map((branch) => (
+                      <label
+                        key={branch.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                          selectedBranches.includes(branch.id)
+                            ? 'bg-cyan-200 text-cyan-900'
+                            : 'bg-white hover:bg-cyan-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedBranches.includes(branch.id)}
+                          onChange={() => toggleBranchSelection(branch.id)}
+                          className="w-4 h-4 text-cyan-600 border-cyan-300 rounded focus:ring-cyan-500"
+                        />
+                        <span className="truncate">{branch.name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-          )}
 
-          {/* Restricción de Sucursales */}
-          {branches.length > 0 && (
+            {/* COLUMNA DERECHA - Permisos de páginas */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <Store className="w-5 h-5 text-cyan-600" />
-                  Restricción de Sucursales
-                </h3>
-                <button
-                  type="button"
-                  onClick={selectAllBranches}
-                  className="text-sm text-cyan-600 hover:text-cyan-700 font-medium"
-                >
-                  {selectedBranches.length === branches.length + 1
-                    ? 'Desmarcar Todas'
-                    : 'Marcar Todas'}
-                </button>
-              </div>
-
-              <p className="text-sm text-gray-600">
-                Selecciona las sucursales a las que este usuario tendrá acceso.
-                Si no seleccionas ninguna, tendrá acceso a todas.
-              </p>
-
-              <div className="border border-gray-200 rounded-lg p-4 max-h-48 overflow-y-auto">
-                <div className="space-y-3">
-                  {/* Sucursal Principal (siempre mostrar primero) */}
-                  <label
-                    className="flex items-center p-3 hover:bg-cyan-50 rounded-lg cursor-pointer transition-colors border-b border-gray-100 pb-4"
+                <h3 className="font-semibold text-gray-900">Permisos de Acceso</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500">
+                    {selectedPages.length}/{availablePages.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={selectAllPages}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
                   >
-                    <input
-                      type="checkbox"
-                      checked={selectedBranches.includes('main')}
-                      onChange={() => toggleBranchSelection('main')}
-                      className="w-5 h-5 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
-                    />
-                    <div className="ml-3">
-                      <p className="font-medium text-gray-900">
-                        Sucursal Principal
-                        <span className="ml-2 text-xs text-green-600">(Sede Central)</span>
-                      </p>
-                      <p className="text-xs text-gray-500">Acceso a la sucursal principal del negocio</p>
-                    </div>
-                  </label>
-                  {/* Otras sucursales */}
-                  {branches.map((branch) => (
-                    <label
-                      key={branch.id}
-                      className="flex items-center p-3 hover:bg-cyan-50 rounded-lg cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedBranches.includes(branch.id)}
-                        onChange={() => toggleBranchSelection(branch.id)}
-                        className="w-5 h-5 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
-                      />
-                      <div className="ml-3">
-                        <p className="font-medium text-gray-900">
-                          {branch.name}
-                        </p>
-                        {branch.address && (
-                          <p className="text-xs text-gray-500">{branch.address}</p>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+                    {selectedPages.length === availablePages.length ? 'Ninguna' : 'Todas'}
+                  </button>
                 </div>
               </div>
 
-              {selectedBranches.length === 0 ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm text-green-800">
-                    Este usuario tendrá acceso a <span className="font-semibold">todas las sucursales</span>
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3">
-                  <p className="text-sm text-cyan-800">
-                    Acceso restringido a <span className="font-semibold">{selectedBranches.length}</span> sucursal
-                    {selectedBranches.length !== 1 ? 'es' : ''}
+              {/* Lista de páginas por categoría */}
+              <div className="border border-gray-200 rounded-xl overflow-hidden max-h-[460px] overflow-y-auto">
+                {Object.entries(pagesByCategory).map(([category, pages]) => {
+                  const categoryPageIds = pages.map(p => p.id)
+                  const selectedInCategory = categoryPageIds.filter(id => selectedPages.includes(id)).length
+                  const allSelected = selectedInCategory === pages.length
+                  const someSelected = selectedInCategory > 0 && !allSelected
+
+                  return (
+                    <div key={category} className="border-b border-gray-100 last:border-b-0">
+                      {/* Header de categoría */}
+                      <div
+                        className="flex items-center justify-between px-4 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                        onClick={() => toggleCategory(category)}
+                      >
+                        <div className="flex items-center gap-2">
+                          {expandedCategories[category] ? (
+                            <ChevronDown className="w-4 h-4 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-gray-500" />
+                          )}
+                          <span className="font-medium text-gray-700">
+                            {CATEGORY_NAMES[category] || category}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            ({selectedInCategory}/{pages.length})
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleCategoryPages(category)
+                          }}
+                          className={`p-1 rounded transition-colors ${
+                            allSelected
+                              ? 'text-green-600 hover:bg-green-100'
+                              : someSelected
+                              ? 'text-amber-600 hover:bg-amber-100'
+                              : 'text-gray-400 hover:bg-gray-200'
+                          }`}
+                        >
+                          {allSelected ? (
+                            <CheckCircle2 className="w-5 h-5" />
+                          ) : someSelected ? (
+                            <CheckCircle2 className="w-5 h-5" />
+                          ) : (
+                            <XCircle className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Páginas de la categoría */}
+                      {expandedCategories[category] && (
+                        <div className="grid grid-cols-2 gap-1 p-2">
+                          {pages.map((page) => (
+                            <label
+                              key={page.id}
+                              className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-sm ${
+                                selectedPages.includes(page.id)
+                                  ? 'bg-primary-100 text-primary-900 ring-1 ring-primary-300'
+                                  : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedPages.includes(page.id)}
+                                onChange={() => togglePageSelection(page.id)}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              />
+                              <span className="truncate">{page.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {selectedPages.length === 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-sm text-red-700">
+                    Debes seleccionar al menos una página
                   </p>
                 </div>
               )}
             </div>
-          )}
+          </div>
 
           {/* Botones */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-6 mt-6 border-t border-gray-200">
             <Button
               type="button"
               variant="outline"
@@ -784,7 +839,7 @@ export default function Users() {
             >
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1" disabled={isSubmitting}>
+            <Button type="submit" className="flex-1" disabled={isSubmitting || selectedPages.length === 0}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />

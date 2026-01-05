@@ -18,54 +18,103 @@ import { createUserWithEmailAndPassword, signOut } from 'firebase/auth'
  */
 
 // Lista de todas las páginas/módulos disponibles en el sistema
-// Páginas comunes a ambos modos
+// Organizados por categorías para mejor visualización
+
+// ============ PÁGINAS COMUNES (todos los modos) ============
 export const COMMON_PAGES = [
-  { id: 'dashboard', name: 'Dashboard', path: '/dashboard', mode: 'both' },
-  { id: 'pos', name: 'Punto de Venta (POS)', path: '/pos', mode: 'both' },
-  { id: 'invoices', name: 'Facturas/Boletas', path: '/invoices', mode: 'both' },
-  { id: 'customers', name: 'Clientes', path: '/customers', mode: 'both' },
-  { id: 'products', name: 'Productos/Servicios', path: '/products', mode: 'both' },
-  { id: 'reports', name: 'Reportes', path: '/reports', mode: 'both' },
-  { id: 'cash-register', name: 'Control de Caja', path: '/cash-register', mode: 'both' },
-  { id: 'settings', name: 'Configuración', path: '/settings', mode: 'both' },
-  { id: 'users', name: 'Gestión de Usuarios', path: '/users', mode: 'both' },
+  // Principales
+  { id: 'dashboard', name: 'Dashboard', path: '/dashboard', category: 'principal' },
+  { id: 'pos', name: 'Punto de Venta (POS)', path: '/pos', category: 'principal' },
+  { id: 'invoices', name: 'Ventas', path: '/facturas', category: 'principal' },
+  { id: 'customers', name: 'Clientes', path: '/clientes', category: 'principal' },
+  { id: 'products', name: 'Productos', path: '/productos', category: 'principal' },
+  // Finanzas
+  { id: 'cash-register', name: 'Control de Caja', path: '/caja', category: 'finanzas' },
+  { id: 'reports', name: 'Reportes', path: '/reportes', category: 'finanzas' },
+  { id: 'expenses', name: 'Gastos', path: '/gastos', category: 'finanzas' },
+  { id: 'cash-flow', name: 'Flujo de Caja', path: '/flujo-caja', category: 'finanzas' },
+  // Sistema
+  { id: 'settings', name: 'Configuración', path: '/configuracion', category: 'sistema' },
+  { id: 'users', name: 'Gestión de Usuarios', path: '/usuarios', category: 'sistema' },
 ]
 
-// Páginas específicas de modo retail
+// ============ PÁGINAS MODO RETAIL ============
 export const RETAIL_PAGES = [
-  { id: 'purchases', name: 'Compras', path: '/purchases', mode: 'retail' },
-  { id: 'inventory', name: 'Inventario', path: '/inventory', mode: 'retail' },
-  { id: 'suppliers', name: 'Proveedores', path: '/suppliers', mode: 'retail' },
-  { id: 'quotations', name: 'Cotizaciones', path: '/quotations', mode: 'retail' },
+  // Documentos
+  { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
+  { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },
+  { id: 'carrier-dispatch-guides', name: 'GRE Transportista', path: '/guias-transportista', category: 'documentos' },
+  // Inventario
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
+  { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
+  // Compras y Proveedores
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
+  // Ventas
+  { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
+  // Producción
+  { id: 'ingredients', name: 'Insumos', path: '/ingredientes', category: 'produccion' },
+  { id: 'recipes', name: 'Composición', path: '/recetas', category: 'produccion' },
+  // Otros
+  { id: 'loans', name: 'Préstamos', path: '/prestamos', category: 'otros' },
+  { id: 'certificates', name: 'Certificados', path: '/certificados', category: 'otros' },
 ]
 
-// Páginas específicas de modo restaurante
+// ============ PÁGINAS MODO RESTAURANTE ============
 export const RESTAURANT_PAGES = [
-  { id: 'tables', name: 'Mesas', path: '/tables', mode: 'restaurant' },
-  { id: 'waiters', name: 'Mozos', path: '/waiters', mode: 'restaurant' },
-  { id: 'orders', name: 'Órdenes Activas', path: '/orders', mode: 'restaurant' },
-  { id: 'kitchen', name: 'Vista de Cocina', path: '/kitchen', mode: 'restaurant' },
-  { id: 'ingredients', name: 'Ingredientes', path: '/ingredients', mode: 'restaurant' },
-  { id: 'recipes', name: 'Recetas', path: '/recipes', mode: 'restaurant' },
+  // Operaciones
+  { id: 'tables', name: 'Mesas', path: '/mesas', category: 'operaciones' },
+  { id: 'orders', name: 'Órdenes', path: '/ordenes', category: 'operaciones' },
+  { id: 'kitchen', name: 'Cocina', path: '/cocina', category: 'operaciones' },
+  { id: 'waiters', name: 'Mozos', path: '/mozos', category: 'operaciones' },
+  // Inventario y Producción
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'ingredients', name: 'Ingredientes', path: '/ingredientes', category: 'produccion' },
+  { id: 'recipes', name: 'Recetas', path: '/recetas', category: 'produccion' },
+  { id: 'purchase-history', name: 'Historial de Compras', path: '/ingredientes/historial', category: 'produccion' },
+  // Compras
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
 ]
 
-// Páginas específicas de modo farmacia
+// ============ PÁGINAS MODO FARMACIA ============
 export const PHARMACY_PAGES = [
-  { id: 'purchases', name: 'Compras', path: '/purchases', mode: 'pharmacy' },
-  { id: 'inventory', name: 'Inventario', path: '/inventory', mode: 'pharmacy' },
-  { id: 'suppliers', name: 'Proveedores', path: '/suppliers', mode: 'pharmacy' },
-  { id: 'laboratories', name: 'Laboratorios', path: '/laboratories', mode: 'pharmacy' },
-  { id: 'batch-control', name: 'Control de Lotes', path: '/batch-control', mode: 'pharmacy' },
-  { id: 'expiry-alerts', name: 'Alertas de Vencimiento', path: '/expiry-alerts', mode: 'pharmacy' },
+  // Inventario
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'batch-control', name: 'Control de Lotes', path: '/control-lotes', category: 'inventario' },
+  { id: 'expiry-alerts', name: 'Alertas de Vencimiento', path: '/alertas-vencimiento', category: 'inventario' },
+  { id: 'laboratories', name: 'Laboratorios', path: '/laboratorios', category: 'inventario' },
+  // Compras
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
+  // Otros
+  { id: 'loans', name: 'Préstamos', path: '/prestamos', category: 'otros' },
+  { id: 'certificates', name: 'Certificados', path: '/certificados', category: 'otros' },
 ]
 
-// Páginas específicas de modo inmobiliaria
+// ============ PÁGINAS MODO INMOBILIARIA ============
 export const REAL_ESTATE_PAGES = [
-  { id: 'properties', name: 'Propiedades', path: '/propiedades', mode: 'real_estate' },
-  { id: 'agents', name: 'Agentes/Corredores', path: '/agentes', mode: 'real_estate' },
-  { id: 'operations', name: 'Operaciones', path: '/operaciones', mode: 'real_estate' },
-  { id: 'commissions', name: 'Comisiones', path: '/comisiones', mode: 'real_estate' },
+  { id: 'properties', name: 'Propiedades', path: '/propiedades', category: 'principal' },
+  { id: 'agents', name: 'Agentes/Corredores', path: '/agentes', category: 'equipo' },
+  { id: 'operations', name: 'Operaciones', path: '/operaciones', category: 'ventas' },
+  { id: 'commissions', name: 'Comisiones', path: '/comisiones', category: 'finanzas' },
 ]
+
+// Nombres de categorías para mostrar en la UI
+export const CATEGORY_NAMES = {
+  principal: 'Principal',
+  documentos: 'Documentos',
+  inventario: 'Inventario',
+  compras: 'Compras y Proveedores',
+  ventas: 'Ventas',
+  produccion: 'Producción',
+  operaciones: 'Operaciones',
+  finanzas: 'Finanzas',
+  equipo: 'Equipo',
+  sistema: 'Sistema',
+  otros: 'Otros',
+}
 
 // Lista completa de todas las páginas
 export const AVAILABLE_PAGES = [
