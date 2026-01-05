@@ -15,6 +15,7 @@ import {
   Building2,
   User,
   X,
+  Pencil,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -133,6 +134,11 @@ export default function Loans() {
   // Modal de pago con fecha
   const [paymentModal, setPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+
+  // Modal de edición de pago
+  const [editPaymentModal, setEditPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
+  const [editPaymentDate, setEditPaymentDate] = useState('')
+  const [isEditingPayment, setIsEditingPayment] = useState(false)
 
   // Filtros
   const [typeFilter, setTypeFilter] = useState('all') // 'all', 'bank', 'third_party'
@@ -328,6 +334,57 @@ export default function Loans() {
       toast.error('Error al registrar el pago')
     } finally {
       setIsPayingInstallment(false)
+    }
+  }
+
+  // Abrir modal de edición de pago
+  const openEditPaymentModal = (loan, installmentIndex) => {
+    const installment = loan.installments[installmentIndex]
+    const paidDate = installment.paidAt ? new Date(installment.paidAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    setEditPaymentDate(paidDate)
+    setEditPaymentModal({ open: true, loan, installmentIndex })
+  }
+
+  // Confirmar edición de pago
+  const handleEditPayment = async () => {
+    const { loan, installmentIndex } = editPaymentModal
+
+    if (isDemoMode) {
+      toast.error('No se pueden modificar préstamos en modo demo')
+      return
+    }
+
+    if (!loan || installmentIndex === null) return
+
+    setIsEditingPayment(true)
+    try {
+      const selectedDate = new Date(editPaymentDate + 'T12:00:00')
+
+      const updatedInstallments = [...loan.installments]
+      updatedInstallments[installmentIndex] = {
+        ...updatedInstallments[installmentIndex],
+        paidAt: selectedDate.toISOString(),
+      }
+
+      const result = await updateLoan(getBusinessId(), loan.id, {
+        installments: updatedInstallments,
+      })
+
+      if (result.success) {
+        toast.success(`Fecha de pago de cuota ${installmentIndex + 1} actualizada`)
+        loadLoans()
+        // Actualizar el modal de visualización
+        setViewingLoan({ ...loan, installments: updatedInstallments })
+        // Cerrar modal de edición
+        setEditPaymentModal({ open: false, loan: null, installmentIndex: null })
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al editar pago:', error)
+      toast.error('Error al actualizar la fecha de pago')
+    } finally {
+      setIsEditingPayment(false)
     }
   }
 
@@ -984,13 +1041,24 @@ export default function Loans() {
                         </Button>
                       )}
                       {inst.status === 'paid' && (
-                        <div className="text-right">
-                          <Badge variant="success" className="text-xs">Pagado</Badge>
-                          {inst.paidAt && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              {formatDate(new Date(inst.paidAt))}
-                            </p>
-                          )}
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <Badge variant="success" className="text-xs">Pagado</Badge>
+                            {inst.paidAt && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {formatDate(new Date(inst.paidAt))}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEditPaymentModal(viewingLoan, idx)}
+                            className="text-blue-600 hover:bg-blue-50"
+                            title="Editar fecha de pago"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -1111,6 +1179,78 @@ export default function Loans() {
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Confirmar Pago
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Editar Fecha de Pago */}
+      <Modal
+        isOpen={editPaymentModal.open}
+        onClose={() => setEditPaymentModal({ open: false, loan: null, installmentIndex: null })}
+        title="Editar Fecha de Pago"
+        size="sm"
+      >
+        {editPaymentModal.loan && editPaymentModal.installmentIndex !== null && (
+          <div className="space-y-4">
+            {/* Info de la cuota */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">
+                    Cuota {editPaymentModal.installmentIndex + 1} de {editPaymentModal.loan.totalInstallments}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {editPaymentModal.loan.lenderName}
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-green-600">
+                  {formatCurrency(editPaymentModal.loan.installments[editPaymentModal.installmentIndex].amount)}
+                </p>
+              </div>
+            </div>
+
+            {/* Selector de fecha */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nueva Fecha de Pago
+              </label>
+              <input
+                type="date"
+                value={editPaymentDate}
+                onChange={(e) => setEditPaymentDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Modifica la fecha en que se realizó el pago para corregir el flujo de caja
+              </p>
+            </div>
+
+            {/* Botones */}
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setEditPaymentModal({ open: false, loan: null, installmentIndex: null })}
+                disabled={isEditingPayment}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleEditPayment}
+                disabled={isEditingPayment || !editPaymentDate}
+              >
+                {isEditingPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Guardar Cambios
                   </>
                 )}
               </Button>
