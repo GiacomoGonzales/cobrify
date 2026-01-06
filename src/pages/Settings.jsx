@@ -2150,6 +2150,7 @@ export default function Settings() {
                         { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
                         { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
                         { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
                         { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },

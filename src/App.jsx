@@ -25,6 +25,7 @@ import Reports from './pages/Reports'
 import Suppliers from './pages/Suppliers'
 import Purchases from './pages/Purchases'
 import CreatePurchase from './pages/CreatePurchase'
+import PurchaseOrders from './pages/PurchaseOrders'
 import CashRegister from './pages/CashRegister'
 import AccountSuspended from './pages/AccountSuspended'
 import MySubscription from './pages/MySubscription'
@@ -162,6 +163,7 @@ function App() {
               <Route path="compras/nueva" element={<CreatePurchase />} />
               <Route path="compras/editar/:purchaseId" element={<CreatePurchase />} />
               <Route path="compras/migrar" element={<MigratePurchases />} />
+              <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
@@ -240,6 +242,7 @@ function App() {
               <Route path="compras/nueva" element={<CreatePurchase />} />
               <Route path="compras/editar/:purchaseId" element={<CreatePurchase />} />
               <Route path="compras/migrar" element={<MigratePurchases />} />
+              <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />

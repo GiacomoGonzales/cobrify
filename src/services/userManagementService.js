@@ -50,6 +50,7 @@ export const RETAIL_PAGES = [
   { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
   // Compras y Proveedores
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
   // Ventas
   { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
