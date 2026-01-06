@@ -265,6 +265,12 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Purchase Orders (Órdenes de Compra a proveedores)
+      match /purchaseOrders/{orderId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Warehouses (Almacenes)
       match /warehouses/{warehouseId} {
         // Admins pueden leer/escribir cualquier almacén
