@@ -2829,6 +2829,78 @@ export const sendDispatchGuideToSunatFn = onRequest(
 
       console.log('📋 [GRE] Resultado de emisión:', JSON.stringify(result, null, 2))
 
+      // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (GRE REMITENTE) ==========
+      let xmlStorageUrl = null
+      let cdrStorageUrl = null
+
+      if (result.accepted) {
+        const documentNumber = guideData.number
+        console.log(`📁 [GRE] Guardando archivos para ${documentNumber}...`)
+
+        try {
+          if (result.method === 'sunat_direct') {
+            // Guardar XML firmado (si está disponible)
+            if (result.xml) {
+              xmlStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}.xml`,
+                result.xml
+              )
+              console.log(`✅ [GRE] XML guardado: ${xmlStorageUrl ? 'OK' : 'NO'}`)
+            }
+            // Guardar CDR
+            if (result.cdrData) {
+              cdrStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}-CDR.xml`,
+                result.cdrData
+              )
+              console.log(`✅ [GRE] CDR guardado: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+            }
+          } else if (result.method === 'qpse') {
+            // Para QPse, descargar desde las URLs proporcionadas
+            if (result.xmlUrl) {
+              const xmlContent = await downloadFromUrl(result.xmlUrl)
+              if (xmlContent) {
+                xmlStorageUrl = await saveToStorage(
+                  businessId,
+                  guideId,
+                  `${documentNumber}.xml`,
+                  xmlContent
+                )
+              }
+            }
+            // CDR puede venir como URL o como contenido directo
+            if (result.cdrUrl) {
+              const cdrContent = await downloadFromUrl(result.cdrUrl)
+              if (cdrContent) {
+                cdrStorageUrl = await saveToStorage(
+                  businessId,
+                  guideId,
+                  `${documentNumber}-CDR.xml`,
+                  cdrContent
+                )
+              }
+            } else if (result.cdrData) {
+              console.log('📄 [GRE] CDR recibido como contenido directo, guardando...')
+              cdrStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}-CDR.xml`,
+                result.cdrData
+              )
+            }
+          }
+
+          console.log(`✅ [GRE] Archivos guardados - XML: ${xmlStorageUrl ? 'OK' : 'NO'}, CDR: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+        } catch (storageError) {
+          console.error('⚠️ [GRE] Error guardando archivos en Storage (no crítico):', storageError)
+          // Continuar sin fallar la emisión
+        }
+      }
+
       // 5. Actualizar el estado de la guía en Firestore
       const updateData = {
         sunatStatus: result.accepted ? 'accepted' : (result.error ? 'error' : 'rejected'),
@@ -2843,11 +2915,15 @@ export const sendDispatchGuideToSunatFn = onRequest(
         if (result.cdrData) {
           updateData.cdrData = result.cdrData
         }
+        if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
+        if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       } else if (result.method === 'qpse') {
         if (result.cdrUrl) updateData.cdrUrl = result.cdrUrl
         if (result.xmlUrl) updateData.xmlUrl = result.xmlUrl
         if (result.pdfUrl) updateData.pdfUrl = result.pdfUrl
         if (result.hash) updateData.hash = result.hash
+        if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
+        if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       }
 
       await guideRef.update(removeUndefined(updateData))
@@ -3078,6 +3154,78 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
 
       console.log('📋 [GRE-T] Resultado de emisión:', JSON.stringify(result, null, 2))
 
+      // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (GRE TRANSPORTISTA) ==========
+      let xmlStorageUrl = null
+      let cdrStorageUrl = null
+
+      if (result.accepted) {
+        const documentNumber = guideData.number
+        console.log(`📁 [GRE-T] Guardando archivos para ${documentNumber}...`)
+
+        try {
+          if (result.method === 'sunat_direct') {
+            // Guardar XML firmado (si está disponible)
+            if (result.xml) {
+              xmlStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}.xml`,
+                result.xml
+              )
+              console.log(`✅ [GRE-T] XML guardado: ${xmlStorageUrl ? 'OK' : 'NO'}`)
+            }
+            // Guardar CDR
+            if (result.cdrData) {
+              cdrStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}-CDR.xml`,
+                result.cdrData
+              )
+              console.log(`✅ [GRE-T] CDR guardado: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+            }
+          } else if (result.method === 'qpse') {
+            // Para QPse, descargar desde las URLs proporcionadas
+            if (result.xmlUrl) {
+              const xmlContent = await downloadFromUrl(result.xmlUrl)
+              if (xmlContent) {
+                xmlStorageUrl = await saveToStorage(
+                  businessId,
+                  guideId,
+                  `${documentNumber}.xml`,
+                  xmlContent
+                )
+              }
+            }
+            // CDR puede venir como URL o como contenido directo
+            if (result.cdrUrl) {
+              const cdrContent = await downloadFromUrl(result.cdrUrl)
+              if (cdrContent) {
+                cdrStorageUrl = await saveToStorage(
+                  businessId,
+                  guideId,
+                  `${documentNumber}-CDR.xml`,
+                  cdrContent
+                )
+              }
+            } else if (result.cdrData) {
+              console.log('📄 [GRE-T] CDR recibido como contenido directo, guardando...')
+              cdrStorageUrl = await saveToStorage(
+                businessId,
+                guideId,
+                `${documentNumber}-CDR.xml`,
+                result.cdrData
+              )
+            }
+          }
+
+          console.log(`✅ [GRE-T] Archivos guardados - XML: ${xmlStorageUrl ? 'OK' : 'NO'}, CDR: ${cdrStorageUrl ? 'OK' : 'NO'}`)
+        } catch (storageError) {
+          console.error('⚠️ [GRE-T] Error guardando archivos en Storage (no crítico):', storageError)
+          // Continuar sin fallar la emisión
+        }
+      }
+
       // 5. Actualizar el estado de la guía en Firestore
       const updateData = {
         sunatStatus: result.accepted ? 'accepted' : (result.error ? 'error' : 'rejected'),
@@ -3092,11 +3240,15 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
         if (result.cdrData) {
           updateData.cdrData = result.cdrData
         }
+        if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
+        if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       } else if (result.method === 'qpse') {
         if (result.cdrUrl) updateData.cdrUrl = result.cdrUrl
         if (result.xmlUrl) updateData.xmlUrl = result.xmlUrl
         if (result.pdfUrl) updateData.pdfUrl = result.pdfUrl
         if (result.hash) updateData.hash = result.hash
+        if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
+        if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       }
 
       await guideRef.update(removeUndefined(updateData))

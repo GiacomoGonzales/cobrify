@@ -1144,4 +1144,49 @@ function hexToRgb(hex) {
   ] : [230, 126, 34]
 }
 
+/**
+ * Abre el PDF de Guía de Remisión Transportista en una nueva pestaña para vista previa (o comparte en móvil)
+ */
+export const previewCarrierDispatchGuidePDF = async (guide, companySettings) => {
+  // Generar el PDF sin descarga
+  const result = await generateCarrierDispatchGuidePDF(guide, companySettings, false)
+
+  const isNativePlatform = Capacitor.isNativePlatform()
+
+  if (isNativePlatform) {
+    try {
+      // En móvil, guardar el PDF y abrirlo con Share para vista previa
+      const pdfBase64 = result.dataUrl.split(',')[1]
+      const fileName = `GRE_Transportista_${guide.number || 'borrador'}.pdf`
+
+      // Guardar directamente en Documents
+      const saveResult = await Filesystem.writeFile({
+        path: fileName,
+        data: pdfBase64,
+        directory: Directory.Documents,
+        recursive: true
+      })
+
+      console.log('PDF para vista previa guardado en:', saveResult.uri)
+
+      // Abrir con el visor de PDF del sistema
+      await Share.share({
+        title: `Guía Transportista ${guide.number || ''}`,
+        url: saveResult.uri,
+        dialogTitle: 'Ver guía de remisión'
+      })
+
+      return saveResult.uri
+    } catch (error) {
+      console.error('Error al generar vista previa en móvil:', error)
+      throw error
+    }
+  } else {
+    // En web, crear blob URL y abrir en nueva pestaña
+    const blobUrl = URL.createObjectURL(result.blob)
+    window.open(blobUrl, '_blank')
+    return blobUrl
+  }
+}
+
 export default generateCarrierDispatchGuidePDF

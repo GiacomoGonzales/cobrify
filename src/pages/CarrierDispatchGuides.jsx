@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -8,7 +8,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
-import { generateCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
+import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -48,9 +48,24 @@ export default function CarrierDispatchGuides() {
   const [newCorrelative, setNewCorrelative] = useState('')
   const [isUpdatingNumber, setIsUpdatingNumber] = useState(false)
 
+  // Estado para dropdown menu de acciones
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const menuRef = useRef(null)
+
   useEffect(() => {
     loadGuides()
     loadCompanySettings()
+  }, [])
+
+  // Cerrar menú al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const loadGuides = async () => {
@@ -233,6 +248,22 @@ export default function CarrierDispatchGuides() {
       toast.error('Error al generar el PDF')
     } finally {
       setDownloadingPdf(null)
+    }
+  }
+
+  // Vista previa del PDF (abre en nueva pestaña)
+  const handlePreviewPdf = async (guide) => {
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+
+    try {
+      toast.info(`Generando vista previa...`)
+      await previewCarrierDispatchGuidePDF(guide, companySettings)
+    } catch (error) {
+      console.error('Error al generar vista previa:', error)
+      toast.error('Error al generar vista previa')
     }
   }
 
@@ -496,59 +527,152 @@ export default function CarrierDispatchGuides() {
                         {getStatusBadge(guide.status, guide.sunatStatus)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          {guide.sunatStatus !== 'accepted' && (
-                            <button
-                              onClick={() => handleSendToSunat(guide)}
-                              disabled={sendingToSunat === guide.id}
-                              className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors
-                                ${sendingToSunat === guide.id
-                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                }`}
-                              title="Enviar a SUNAT"
-                            >
-                              {sendingToSunat === guide.id ? (
+                        <div className="relative" ref={openMenuId === guide.id ? menuRef : null}>
+                          {/* Botón de menú */}
+                          <button
+                            onClick={() => setOpenMenuId(openMenuId === guide.id ? null : guide.id)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            title="Acciones"
+                          >
+                            <MoreVertical className="w-5 h-5 text-gray-500" />
+                          </button>
+
+                          {/* Dropdown Menu */}
+                          {openMenuId === guide.id && (
+                            <div className="absolute right-0 mt-1 w-52 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+                              {/* Ver detalles */}
+                              <button
+                                onClick={() => {
+                                  setOpenMenuId(null)
+                                  setSelectedGuide(guide)
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                              >
+                                <Eye className="w-4 h-4 text-orange-600" />
+                                <span>Ver detalles</span>
+                              </button>
+
+                              {/* Vista previa / Imprimir */}
+                              <button
+                                onClick={() => {
+                                  setOpenMenuId(null)
+                                  handlePreviewPdf(guide)
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                              >
+                                <Printer className="w-4 h-4 text-purple-600" />
+                                <span>Vista previa / Imprimir</span>
+                              </button>
+
+                              {/* Descargar PDF */}
+                              <button
+                                onClick={() => {
+                                  setOpenMenuId(null)
+                                  handleDownloadPdf(guide)
+                                }}
+                                disabled={downloadingPdf === guide.id}
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
+                              >
+                                {downloadingPdf === guide.id ? (
+                                  <Loader2 className="w-4 h-4 text-green-600 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4 text-green-600" />
+                                )}
+                                <span>{downloadingPdf === guide.id ? 'Generando...' : 'Descargar PDF'}</span>
+                              </button>
+
+                              {/* XML SUNAT - Solo si fue aceptada */}
+                              {guide.sunatStatus === 'accepted' && (guide.xmlStorageUrl || guide.xmlUrl || guide.sunatResponse?.xmlStorageUrl || guide.sunatResponse?.xmlUrl) && (
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    const xmlUrl = guide.xmlStorageUrl || guide.xmlUrl || guide.sunatResponse?.xmlStorageUrl || guide.sunatResponse?.xmlUrl
+                                    window.open(xmlUrl, '_blank')
+                                    toast.success('Descargando XML de SUNAT')
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Code className="w-4 h-4 text-indigo-600" />
+                                  <span>XML SUNAT</span>
+                                </button>
+                              )}
+
+                              {/* CDR SUNAT - Solo si fue aceptada */}
+                              {guide.sunatStatus === 'accepted' && (guide.cdrStorageUrl || guide.cdrUrl || guide.sunatResponse?.cdrStorageUrl || guide.sunatResponse?.cdrUrl || guide.cdrData || guide.sunatResponse?.cdrData) && (
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    if (guide.cdrStorageUrl) {
+                                      window.open(guide.cdrStorageUrl, '_blank')
+                                    } else if (guide.cdrUrl) {
+                                      window.open(guide.cdrUrl, '_blank')
+                                    } else if (guide.sunatResponse?.cdrStorageUrl) {
+                                      window.open(guide.sunatResponse.cdrStorageUrl, '_blank')
+                                    } else if (guide.sunatResponse?.cdrUrl) {
+                                      window.open(guide.sunatResponse.cdrUrl, '_blank')
+                                    } else if (guide.cdrData || guide.sunatResponse?.cdrData) {
+                                      const cdrData = guide.cdrData || guide.sunatResponse.cdrData
+                                      const blob = new Blob([cdrData], { type: 'application/xml' })
+                                      const url = URL.createObjectURL(blob)
+                                      const a = document.createElement('a')
+                                      a.href = url
+                                      a.download = `CDR-${guide.number}.xml`
+                                      document.body.appendChild(a)
+                                      a.click()
+                                      document.body.removeChild(a)
+                                      URL.revokeObjectURL(url)
+                                    }
+                                    toast.success('Descargando CDR de SUNAT')
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <FileCheck className="w-4 h-4 text-green-600" />
+                                  <span>CDR SUNAT</span>
+                                </button>
+                              )}
+
+                              {/* Separador antes de acciones SUNAT */}
+                              {guide.sunatStatus !== 'accepted' && (
+                                <div className="border-t border-gray-100 my-1" />
+                              )}
+
+                              {/* Enviar a SUNAT - Solo si no está aceptada */}
+                              {guide.sunatStatus !== 'accepted' && (
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    handleSendToSunat(guide)
+                                  }}
+                                  disabled={sendingToSunat === guide.id}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600 disabled:opacity-50"
+                                >
+                                  {sendingToSunat === guide.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Send className="w-4 h-4" />
+                                  )}
+                                  <span>{sendingToSunat === guide.id ? 'Enviando...' : 'Enviar a SUNAT'}</span>
+                                </button>
+                              )}
+
+                              {/* Cambiar número - Solo si rechazada o error */}
+                              {(guide.sunatStatus === 'rejected' || guide.sunatStatus === 'error') && guide.number && (
                                 <>
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  <span>Enviando...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Send className="w-3 h-3" />
-                                  <span>Enviar</span>
+                                  <div className="border-t border-gray-100 my-1" />
+                                  <button
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      handleEditNumber(guide)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                                  >
+                                    <Edit3 className="w-4 h-4" />
+                                    <span>Cambiar número</span>
+                                  </button>
                                 </>
                               )}
-                            </button>
+                            </div>
                           )}
-                          {(guide.sunatStatus === 'rejected' || guide.sunatStatus === 'error') && guide.number && (
-                            <button
-                              onClick={() => handleEditNumber(guide)}
-                              className="text-blue-600 hover:text-blue-900"
-                              title="Cambiar número de documento"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => setSelectedGuide(guide)}
-                            className="text-orange-600 hover:text-orange-900"
-                            title="Ver detalles"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDownloadPdf(guide)}
-                            disabled={downloadingPdf === guide.id}
-                            className={`${downloadingPdf === guide.id ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-900'}`}
-                            title="Descargar PDF"
-                          >
-                            {downloadingPdf === guide.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Download className="w-4 h-4" />
-                            )}
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -912,11 +1036,11 @@ export default function CarrierDispatchGuides() {
               </Button>
 
               {/* Descargar XML - Solo si tiene XML guardado */}
-              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl) && (
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.xmlStorageUrl || selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl) && (
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const xmlUrl = selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl
+                    const xmlUrl = selectedGuide.xmlStorageUrl || selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl
                     window.open(xmlUrl, '_blank')
                   }}
                 >
@@ -926,11 +1050,13 @@ export default function CarrierDispatchGuides() {
               )}
 
               {/* Descargar CDR - Solo si fue aceptada y tiene CDR */}
-              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.cdrUrl || selectedGuide.sunatResponse?.cdrStorageUrl || selectedGuide.sunatResponse?.cdrUrl || selectedGuide.cdrData || selectedGuide.sunatResponse?.cdrData) && (
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.cdrStorageUrl || selectedGuide.cdrUrl || selectedGuide.sunatResponse?.cdrStorageUrl || selectedGuide.sunatResponse?.cdrUrl || selectedGuide.cdrData || selectedGuide.sunatResponse?.cdrData) && (
                 <Button
                   variant="outline"
                   onClick={() => {
-                    if (selectedGuide.cdrUrl) {
+                    if (selectedGuide.cdrStorageUrl) {
+                      window.open(selectedGuide.cdrStorageUrl, '_blank')
+                    } else if (selectedGuide.cdrUrl) {
                       window.open(selectedGuide.cdrUrl, '_blank')
                     } else if (selectedGuide.sunatResponse?.cdrStorageUrl) {
                       window.open(selectedGuide.sunatResponse.cdrStorageUrl, '_blank')
