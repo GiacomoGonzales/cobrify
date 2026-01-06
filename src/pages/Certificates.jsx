@@ -16,7 +16,9 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Pencil
+  Pencil,
+  MoreVertical,
+  Printer
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -162,6 +164,8 @@ export default function Certificates() {
   const [searchTerm, setSearchTerm] = useState('')
   const [certificates, setCertificates] = useState({ training: [], operability: [] })
   const [customers, setCustomers] = useState([])
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
 
   // Modales
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -912,41 +916,25 @@ export default function Certificates() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setViewingCertificate(cert)}
-                        title="Ver detalles"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => editCertificate({ ...cert, type: activeTab })}
-                        title="Editar certificado"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => downloadCertificatePDF({ ...cert, type: activeTab })}
-                        title="Descargar PDF"
-                      >
-                        <Download className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeletingCertificate(cert)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        title="Eliminar certificado"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {/* Botón menú de acciones */}
+                    <button
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 200
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === cert.id ? null : cert.id)
+                      }}
+                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -954,6 +942,78 @@ export default function Certificates() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dropdown Menu (fuera del contenedor, con position fixed) */}
+      {openMenuId && (
+        <>
+          {/* Backdrop para cerrar al hacer clic fuera */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpenMenuId(null)}
+          />
+
+          {/* Menu */}
+          <div
+            className="fixed w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+            style={{
+              top: `${menuPosition.top}px`,
+              right: `${menuPosition.right}px`,
+              transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)'
+            }}
+          >
+            {(() => {
+              const cert = filteredCertificates.find(c => c.id === openMenuId)
+              if (!cert) return null
+
+              return (
+                <>
+                  <button
+                    onClick={() => {
+                      setViewingCertificate(cert)
+                      setOpenMenuId(null)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Ver detalles
+                  </button>
+                  <button
+                    onClick={() => {
+                      editCertificate({ ...cert, type: activeTab })
+                      setOpenMenuId(null)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => {
+                      downloadCertificatePDF({ ...cert, type: activeTab })
+                      setOpenMenuId(null)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar PDF
+                  </button>
+                  <div className="border-t border-gray-100 my-1"></div>
+                  <button
+                    onClick={() => {
+                      setDeletingCertificate(cert)
+                      setOpenMenuId(null)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar
+                  </button>
+                </>
+              )
+            })()}
+          </div>
+        </>
+      )}
 
       {/* Modal Seleccionar Tipo de Certificado */}
       <Modal
