@@ -1207,6 +1207,15 @@ Gracias por tu preferencia.`
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
+            onClick={() => navigate('/app/nota-credito')}
+            className="w-full sm:w-auto"
+            title="Crear nota de crédito"
+          >
+            <FileMinus className="w-4 h-4 mr-2" />
+            + Nota de Crédito
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => setShowXMLExportModal(true)}
             className="w-full sm:w-auto"
             title="Descargar XML y CDR para auditoría SUNAT"

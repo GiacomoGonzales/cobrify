@@ -315,7 +315,8 @@ export default function POS() {
     price: '',
     quantity: 1,
     unit: 'NIU',
-    taxAffectation: '10' // '10'=Gravado 18%, '20'=Exonerado, '30'=Inafecto
+    taxAffectation: '10', // '10'=Gravado 18%, '20'=Exonerado, '30'=Inafecto
+    addIgv: false // Si true, se agrega IGV al precio ingresado
   })
 
   // Estado para configuración de impresión web legible
@@ -1089,7 +1090,7 @@ export default function POS() {
       return
     }
 
-    const price = parseFloat(customProduct.price)
+    let price = parseFloat(customProduct.price)
     if (!price || price <= 0) {
       toast.error('El precio debe ser mayor a 0')
       return
@@ -1099,6 +1100,14 @@ export default function POS() {
     if (quantity <= 0) {
       toast.error('La cantidad debe ser mayor a 0')
       return
+    }
+
+    // Si addIgv está activado y el producto es gravado, agregar IGV al precio
+    if (customProduct.addIgv && customProduct.taxAffectation === '10' && !taxConfig.igvExempt) {
+      const igvRate = taxConfig.igvRate || 18
+      price = price * (1 + igvRate / 100)
+      // Redondear a 2 decimales
+      price = Math.round(price * 100) / 100
     }
 
     // Crear producto personalizado con ID único
@@ -1119,7 +1128,7 @@ export default function POS() {
     toast.success('Producto personalizado agregado al carrito')
 
     // Resetear y cerrar modal
-    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10' })
+    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false })
     setShowCustomProductModal(false)
   }
 
@@ -4185,7 +4194,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         isOpen={showCustomProductModal}
         onClose={() => {
           setShowCustomProductModal(false)
-          setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10' })
+          setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false })
         }}
         title="Agregar Producto Personalizado"
         size="md"
@@ -4247,6 +4256,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </div>
           </div>
 
+          {/* Checkbox para indicar si el precio incluye IGV */}
+          {!taxConfig.igvExempt && customProduct.taxAffectation === '10' && (
+            <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <input
+                type="checkbox"
+                id="addIgvCheckbox"
+                checked={!customProduct.addIgv}
+                onChange={(e) => setCustomProduct({ ...customProduct, addIgv: !e.target.checked })}
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <label htmlFor="addIgvCheckbox" className="text-sm text-gray-700 cursor-pointer">
+                <span className="font-medium">El precio incluye IGV</span>
+              </label>
+            </div>
+          )}
+
           {/* Unit of Measure and Tax Type */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -4289,27 +4314,41 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
 
           {/* Preview */}
-          {customProduct.name && customProduct.price > 0 && (
-            <div className="mt-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
-              <p className="text-xs font-medium text-primary-900 mb-2">Vista Previa:</p>
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-semibold text-gray-900">{customProduct.name}</p>
-                  <p className="text-sm text-gray-600">
-                    Cantidad: {customProduct.quantity || 1}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-primary-600">
-                    {formatCurrency(parseFloat(customProduct.price) * (parseFloat(customProduct.quantity) || 1))}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {formatCurrency(customProduct.price)} × {customProduct.quantity || 1}
-                  </p>
+          {customProduct.name && customProduct.price > 0 && (() => {
+            const basePrice = parseFloat(customProduct.price)
+            const quantity = parseFloat(customProduct.quantity) || 1
+            const igvRate = taxConfig.igvRate || 18
+            const shouldAddIgv = customProduct.addIgv && customProduct.taxAffectation === '10' && !taxConfig.igvExempt
+            const finalPrice = shouldAddIgv ? Math.round(basePrice * (1 + igvRate / 100) * 100) / 100 : basePrice
+            const totalFinal = finalPrice * quantity
+
+            return (
+              <div className="mt-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+                <p className="text-xs font-medium text-primary-900 mb-2">Vista Previa:</p>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-semibold text-gray-900">{customProduct.name}</p>
+                    <p className="text-sm text-gray-600">
+                      Cantidad: {quantity}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-primary-600">
+                      {formatCurrency(totalFinal)}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {formatCurrency(finalPrice)} × {quantity}
+                    </p>
+                    {shouldAddIgv && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        Sin IGV: {formatCurrency(basePrice)} + {igvRate}% IGV
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
@@ -4317,7 +4356,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               variant="outline"
               onClick={() => {
                 setShowCustomProductModal(false)
-                setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10' })
+                setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false })
               }}
               className="flex-1"
             >
