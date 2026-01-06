@@ -79,6 +79,9 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
   ])
   const [showProductSearch, setShowProductSearch] = useState(null)
 
+  // IGV
+  const [pricesIncludeIgv, setPricesIncludeIgv] = useState(true) // Por defecto, los precios ya incluyen IGV
+
   useEffect(() => {
     if (isOpen) {
       loadData()
@@ -271,9 +274,13 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
     return (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
   }
 
-  const subtotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0)
-  const igv = subtotal * 0.18
-  const total = subtotal + igv
+  const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0)
+
+  // Si los precios incluyen IGV, extraemos el IGV del total
+  // Si no incluyen IGV, calculamos el IGV sobre el subtotal
+  const subtotal = pricesIncludeIgv ? itemsTotal / 1.18 : itemsTotal
+  const igv = pricesIncludeIgv ? itemsTotal - subtotal : itemsTotal * 0.18
+  const total = pricesIncludeIgv ? itemsTotal : itemsTotal + igv
 
   // Obtener datos del proveedor
   const getSupplierData = () => {
@@ -367,6 +374,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
         igv: igv,
         total: total,
         currency: currency,
+        pricesIncludeIgv: pricesIncludeIgv,
         deliveryDate: deliveryDate,
         paymentCondition: paymentCondition,
         notes: notes,
@@ -412,6 +420,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
     setDeliveryDate('')
     setPaymentCondition('contado')
     setCurrency('PEN')
+    setPricesIncludeIgv(true)
     setNotes('')
   }
 
@@ -650,6 +659,23 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
                   <option value="PEN">Soles (S/)</option>
                   <option value="USD">Dólares ($)</option>
                 </Select>
+              </div>
+
+              {/* Checkbox IGV */}
+              <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="pricesIncludeIgv"
+                  checked={pricesIncludeIgv}
+                  onChange={(e) => setPricesIncludeIgv(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="pricesIncludeIgv" className="text-sm text-gray-700 cursor-pointer">
+                  <span className="font-medium">Los precios incluyen IGV</span>
+                  <span className="text-gray-500 ml-1 text-xs">
+                    (desmarcar si los precios son sin IGV)
+                  </span>
+                </label>
               </div>
             </div>
 
