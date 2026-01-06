@@ -15,7 +15,9 @@ import {
   ShoppingCart,
   Truck,
   Package,
+  ArrowRightCircle,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -37,6 +39,7 @@ import CreatePurchaseOrderModal from '@/components/CreatePurchaseOrderModal'
 export default function PurchaseOrders() {
   const { user, isDemoMode, getBusinessId } = useAppContext()
   const toast = useToast()
+  const navigate = useNavigate()
   const [orders, setOrders] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -187,9 +190,10 @@ export default function PurchaseOrders() {
   }
 
   const filteredOrders = orders.filter(order => {
+    const supplierName = order.supplier?.businessName || order.supplier?.name || ''
     const matchesSearch =
       (order.number?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-      (order.supplier?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+      supplierName.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesStatus = filterStatus === 'all' || order.status === filterStatus
 
@@ -350,7 +354,7 @@ export default function PurchaseOrders() {
                       {getStatusBadge(order.status)}
                     </div>
                     <p className="text-sm text-gray-600 truncate">
-                      {order.supplier?.name || 'Proveedor no especificado'}
+                      {order.supplier?.businessName || order.supplier?.name || 'Proveedor no especificado'}
                     </p>
                     <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
                       <span>
@@ -484,6 +488,25 @@ export default function PurchaseOrders() {
                     </>
                   )}
 
+                  {order.status === 'received' && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          // Navegar a crear compra con los datos de la orden
+                          navigate('/app/compras/nueva', {
+                            state: { fromPurchaseOrder: order }
+                          })
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-orange-50 flex items-center gap-3 text-orange-600"
+                      >
+                        <ArrowRightCircle className="w-4 h-4" />
+                        <span>Convertir en Compra</span>
+                      </button>
+                    </>
+                  )}
+
                   {order.status !== 'received' && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
@@ -518,11 +541,11 @@ export default function PurchaseOrders() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-500">Proveedor</p>
-                <p className="font-medium">{viewingOrder.supplier?.name || '-'}</p>
+                <p className="font-medium">{viewingOrder.supplier?.businessName || viewingOrder.supplier?.name || '-'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">RUC</p>
-                <p className="font-medium">{viewingOrder.supplier?.documentNumber || '-'}</p>
+                <p className="font-medium">{viewingOrder.supplier?.ruc || viewingOrder.supplier?.documentNumber || '-'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Fecha</p>

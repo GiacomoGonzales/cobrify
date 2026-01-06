@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -44,8 +44,12 @@ export default function CreatePurchase() {
   const { user } = useAuth()
   const { getBusinessId, businessMode } = useAppContext()
   const navigate = useNavigate()
+  const location = useLocation()
   const { purchaseId } = useParams() // Para modo edición
   const toast = useToast()
+
+  // Datos de orden de compra (si viene desde PurchaseOrders)
+  const fromPurchaseOrder = location.state?.fromPurchaseOrder || null
 
   // Modo edición
   const isEditMode = !!purchaseId
@@ -108,6 +112,75 @@ export default function CreatePurchase() {
   useEffect(() => {
     loadData()
   }, [user, purchaseId])
+
+  // Pre-llenar datos si viene de una orden de compra
+  useEffect(() => {
+    if (fromPurchaseOrder && suppliers.length > 0 && !isEditMode) {
+      // Buscar el proveedor en la lista o usar los datos de la orden
+      const orderSupplier = fromPurchaseOrder.supplier
+      if (orderSupplier) {
+        // Buscar por ID o por RUC
+        const existingSupplier = suppliers.find(s =>
+          s.id === orderSupplier.id || s.ruc === orderSupplier.ruc
+        )
+
+        if (existingSupplier) {
+          setSelectedSupplier(existingSupplier)
+          setSupplierSearch(existingSupplier.businessName || '')
+        } else {
+          // Usar los datos de la orden directamente
+          setSelectedSupplier({
+            ruc: orderSupplier.ruc,
+            businessName: orderSupplier.businessName,
+            address: orderSupplier.address || '',
+            phone: orderSupplier.phone || '',
+            email: orderSupplier.email || '',
+          })
+          setSupplierSearch(orderSupplier.businessName || '')
+        }
+      }
+
+      // Pre-llenar items
+      if (fromPurchaseOrder.items && fromPurchaseOrder.items.length > 0) {
+        const newItems = fromPurchaseOrder.items.map(item => {
+          // Buscar producto por ID o por nombre
+          const existingProduct = products.find(p =>
+            p.id === item.productId || p.name === item.name
+          )
+
+          return {
+            productId: existingProduct?.id || item.productId || '',
+            productName: item.name || '',
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            cost: item.unitPrice || 0,
+            costWithoutIGV: (item.unitPrice || 0) / 1.18,
+            batchNumber: '',
+            expirationDate: '',
+            itemType: 'product',
+            unit: item.unit || 'NIU',
+          }
+        })
+        setPurchaseItems(newItems)
+
+        // Pre-llenar búsquedas de productos
+        const searches = {}
+        newItems.forEach((item, index) => {
+          searches[index] = item.productName
+        })
+        setProductSearches(searches)
+      }
+
+      // Notas de la orden
+      if (fromPurchaseOrder.notes) {
+        setNotes(`Desde OC ${fromPurchaseOrder.number}: ${fromPurchaseOrder.notes}`)
+      } else if (fromPurchaseOrder.number) {
+        setNotes(`Desde Orden de Compra: ${fromPurchaseOrder.number}`)
+      }
+
+      toast.info(`Datos pre-llenados desde OC ${fromPurchaseOrder.number}`)
+    }
+  }, [fromPurchaseOrder, suppliers, products, isEditMode])
 
   const loadData = async () => {
     const businessId = getBusinessId()
