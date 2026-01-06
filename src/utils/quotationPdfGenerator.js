@@ -673,6 +673,23 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.text('SOLES', rightValueX, rightY)
   rightY += dataLineHeight
 
+  // Destinatario (si existe)
+  if (quotation.recipientName) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('ATENCIÓN:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(quotation.recipientName, rightValueX, rightY)
+    rightY += dataLineHeight
+
+    if (quotation.recipientPosition) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('CARGO:', colRightX, rightY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(quotation.recipientPosition, rightValueX, rightY)
+      rightY += dataLineHeight
+    }
+  }
+
   currentY = Math.max(leftY, rightY) + 10
 
   // ========== PREPARAR DATOS ==========

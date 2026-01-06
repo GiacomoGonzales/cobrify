@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package } from 'lucide-react'
+import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -16,8 +16,10 @@ import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation 
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
+// Reordenadas: las más comunes primero (UNIDAD, HORA, SERVICIO)
 const UNITS = [
   { value: 'NIU', label: 'Unidad' },
+  { value: 'HUR', label: 'Hora' },
   { value: 'ZZ', label: 'Servicio' },
   { value: 'KGM', label: 'Kilogramo' },
   { value: 'GRM', label: 'Gramo' },
@@ -28,7 +30,6 @@ const UNITS = [
   { value: 'BX', label: 'Caja' },
   { value: 'PK', label: 'Paquete' },
   { value: 'SET', label: 'Juego' },
-  { value: 'HUR', label: 'Hora' },
   { value: 'DZN', label: 'Docena' },
   { value: 'PR', label: 'Par' },
   { value: 'MIL', label: 'Millar' },
@@ -126,7 +127,16 @@ export default function CreateQuotation() {
   const [discountType, setDiscountType] = useState('fixed')
   const [terms, setTerms] = useState('')
   const [notes, setNotes] = useState('')
-  const [hideIgv, setHideIgv] = useState(false) // Nuevo: ocultar IGV
+  const [hideIgv, setHideIgv] = useState(false)
+
+  // Serie y número personalizado
+  const [customSeries, setCustomSeries] = useState('')
+  const [customNumber, setCustomNumber] = useState('')
+  const [useCustomNumber, setUseCustomNumber] = useState(false)
+
+  // Destinatario (persona a quien va dirigida la cotización)
+  const [recipientName, setRecipientName] = useState('')
+  const [recipientPosition, setRecipientPosition] = useState('')
   const [quotationItems, setQuotationItems] = useState([
     { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
   ])
@@ -204,6 +214,17 @@ export default function CreateQuotation() {
           setTerms(q.terms || '')
           setNotes(q.notes || '')
           setHideIgv(q.hideIgv || false)
+
+          // Cargar destinatario
+          setRecipientName(q.recipientName || '')
+          setRecipientPosition(q.recipientPosition || '')
+
+          // Cargar serie/número personalizado si existe
+          if (q.customSeries || q.customNumber) {
+            setUseCustomNumber(true)
+            setCustomSeries(q.customSeries || '')
+            setCustomNumber(q.customNumber || '')
+          }
         } else {
           toast.error('No se encontró la cotización')
           navigate('/app/cotizaciones')
@@ -609,6 +630,8 @@ export default function CreateQuotation() {
           expiryDate: expiryDate,
           terms: terms,
           notes: notes,
+          recipientName: recipientName,
+          recipientPosition: recipientPosition,
         }
 
         const result = await updateQuotation(user.uid, quotationId, quotationData)
@@ -619,13 +642,22 @@ export default function CreateQuotation() {
         toast.success(`Cotización ${editingQuotationNumber} actualizada exitosamente`)
       } else {
         // MODO CREACIÓN: Crear nueva cotización
-        const numberResult = await getNextQuotationNumber(user.uid)
-        if (!numberResult.success) {
-          throw new Error('Error al generar número de cotización')
+        let finalNumber
+
+        if (useCustomNumber && customSeries && customNumber) {
+          // Usar serie y número personalizado
+          finalNumber = `${customSeries}-${customNumber.padStart(8, '0')}`
+        } else {
+          // Usar número automático
+          const numberResult = await getNextQuotationNumber(user.uid)
+          if (!numberResult.success) {
+            throw new Error('Error al generar número de cotización')
+          }
+          finalNumber = numberResult.number
         }
 
         const quotationData = {
-          number: numberResult.number,
+          number: finalNumber,
           customer: customerData,
           items: items,
           subtotal: baseAmounts.subtotal,
@@ -640,6 +672,10 @@ export default function CreateQuotation() {
           status: 'draft',
           terms: terms,
           notes: notes,
+          recipientName: recipientName,
+          recipientPosition: recipientPosition,
+          customSeries: useCustomNumber ? customSeries : '',
+          customNumber: useCustomNumber ? customNumber : '',
           sentVia: [],
         }
 
@@ -648,7 +684,7 @@ export default function CreateQuotation() {
           throw new Error(result.error || 'Error al crear la cotización')
         }
 
-        toast.success(`Cotización ${numberResult.number} creada exitosamente`)
+        toast.success(`Cotización ${finalNumber} creada exitosamente`)
       }
 
       setTimeout(() => {
@@ -699,6 +735,63 @@ export default function CreateQuotation() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Form Fields */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Serie y Número (solo en modo creación) */}
+          {!isEditing && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Hash className="w-5 h-5" />
+                  Serie y Numeración
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="useCustomNumber"
+                      checked={useCustomNumber}
+                      onChange={e => setUseCustomNumber(e.target.checked)}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <label htmlFor="useCustomNumber" className="text-sm font-medium text-gray-700">
+                      Usar serie y número personalizado
+                    </label>
+                  </div>
+
+                  {useCustomNumber && (
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                      <Input
+                        label="Serie"
+                        value={customSeries}
+                        onChange={e => setCustomSeries(e.target.value.toUpperCase())}
+                        placeholder="COT"
+                        maxLength={4}
+                      />
+                      <Input
+                        label="Número"
+                        type="number"
+                        value={customNumber}
+                        onChange={e => setCustomNumber(e.target.value)}
+                        placeholder="1"
+                        min="1"
+                      />
+                      <div className="col-span-2 text-sm text-gray-500">
+                        Vista previa: <strong>{customSeries || 'COT'}-{(customNumber || '1').padStart(8, '0')}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {!useCustomNumber && (
+                    <p className="text-sm text-gray-500">
+                      Se generará automáticamente el siguiente número disponible según la configuración de series.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Cliente */}
           <Card>
             <CardHeader>
@@ -889,6 +982,28 @@ export default function CreateQuotation() {
                     </div>
                   </div>
                 )}
+
+                {/* Destinatario (dentro del card de cliente) */}
+                <div className="pt-4 mt-4 border-t border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <User className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">Dirigido a (opcional)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="Nombre del contacto"
+                      value={recipientName}
+                      onChange={e => setRecipientName(e.target.value)}
+                      placeholder="Ej: Juan Pérez"
+                    />
+                    <Input
+                      label="Cargo"
+                      value={recipientPosition}
+                      onChange={e => setRecipientPosition(e.target.value)}
+                      placeholder="Ej: Gerente de Compras"
+                    />
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1127,13 +1242,34 @@ export default function CreateQuotation() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Términos y Condiciones
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Términos y Condiciones
+                    </label>
+                    {businessSettings?.termsTemplates?.length > 0 && (
+                      <select
+                        onChange={e => {
+                          const template = businessSettings.termsTemplates.find(t => t.id === e.target.value)
+                          if (template) {
+                            setTerms(template.content)
+                          }
+                        }}
+                        className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Usar plantilla...</option>
+                        {businessSettings.termsTemplates.map(template => (
+                          <option key={template.id} value={template.id}>
+                            {template.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   <textarea
                     value={terms}
                     onChange={e => setTerms(e.target.value)}
-                    rows="3"
+                    rows="6"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Ejemplo: Precios sujetos a cambio sin previo aviso. Válido solo para pedidos confirmados..."
                   />
@@ -1146,7 +1282,7 @@ export default function CreateQuotation() {
                   <textarea
                     value={notes}
                     onChange={e => setNotes(e.target.value)}
-                    rows="3"
+                    rows="4"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Observaciones adicionales..."
                   />

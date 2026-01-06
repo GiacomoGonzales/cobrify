@@ -15,6 +15,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
+import Modal from '@/components/ui/Modal'
 import { companySettingsSchema } from '@/utils/schemas'
 import { getSubscription } from '@/services/subscriptionService'
 import { consultarRUC } from '@/services/documentLookupService'
@@ -157,6 +158,13 @@ export default function Settings() {
 
   // Estados para menú personalizado
   const [hiddenMenuItems, setHiddenMenuItems] = useState([])
+
+  // Estados para plantillas de términos y condiciones
+  const [termsTemplates, setTermsTemplates] = useState([])
+  const [showTermsTemplateModal, setShowTermsTemplateModal] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState(null)
+  const [templateName, setTemplateName] = useState('')
+  const [templateContent, setTemplateContent] = useState('')
 
   // Estados para catálogo público
   const [catalogEnabled, setCatalogEnabled] = useState(false)
@@ -529,6 +537,11 @@ export default function Settings() {
         // Cargar menú personalizado
         if (businessData.hiddenMenuItems && Array.isArray(businessData.hiddenMenuItems)) {
           setHiddenMenuItems(businessData.hiddenMenuItems)
+        }
+
+        // Cargar plantillas de términos
+        if (businessData.termsTemplates && Array.isArray(businessData.termsTemplates)) {
+          setTermsTemplates(businessData.termsTemplates)
         }
 
         // Cargar configuración de catálogo
@@ -2129,6 +2142,89 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Plantillas de Términos y Condiciones */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-base font-semibold text-gray-900">Plantillas de Términos</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTemplate(null)
+                      setTemplateName('')
+                      setTemplateContent('')
+                      setShowTermsTemplateModal(true)
+                    }}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    + Nueva Plantilla
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Crea plantillas de términos y condiciones para usarlas rápidamente en tus cotizaciones.
+                  Ideal para diferentes tipos de servicios (transporte, montacargas, grúas, etc.).
+                </p>
+
+                {termsTemplates.length === 0 ? (
+                  <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                    <p className="text-gray-500 text-sm">No hay plantillas creadas</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTemplate(null)
+                        setTemplateName('')
+                        setTemplateContent('')
+                        setShowTermsTemplateModal(true)
+                      }}
+                      className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      Crear primera plantilla
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {termsTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900">{template.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{template.content.substring(0, 80)}...</p>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTemplate(template)
+                              setTemplateName(template.name)
+                              setTemplateContent(template.content)
+                              setShowTermsTemplateModal(true)
+                            }}
+                            className="text-gray-600 hover:text-primary-600 text-sm"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm('¿Eliminar esta plantilla?')) {
+                                setTermsTemplates(termsTemplates.filter(t => t.id !== template.id))
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-700 text-sm"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Personalización del Menú Lateral */}
               <div>
                 <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar Menú Lateral</h3>
@@ -2299,6 +2395,7 @@ export default function Settings() {
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
                       hiddenMenuItems: hiddenMenuItems,
+                      termsTemplates: termsTemplates,
                       pdfAccentColor: pdfAccentColor,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
@@ -4590,6 +4687,79 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* Modal: Crear/Editar Plantilla de Términos */}
+      <Modal
+        isOpen={showTermsTemplateModal}
+        onClose={() => setShowTermsTemplateModal(false)}
+        title={editingTemplate ? 'Editar Plantilla' : 'Nueva Plantilla de Términos'}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nombre de la plantilla"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="Ej: Servicio de Transporte"
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Términos y Condiciones
+            </label>
+            <textarea
+              value={templateContent}
+              onChange={(e) => setTemplateContent(e.target.value)}
+              rows="10"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Escribe aquí los términos y condiciones para este tipo de servicio..."
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowTermsTemplateModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!templateName.trim() || !templateContent.trim()) {
+                  toast.error('El nombre y contenido son obligatorios')
+                  return
+                }
+
+                if (editingTemplate) {
+                  // Editar plantilla existente
+                  setTermsTemplates(termsTemplates.map(t =>
+                    t.id === editingTemplate.id
+                      ? { ...t, name: templateName, content: templateContent }
+                      : t
+                  ))
+                  toast.success('Plantilla actualizada')
+                } else {
+                  // Crear nueva plantilla
+                  const newTemplate = {
+                    id: Date.now().toString(),
+                    name: templateName,
+                    content: templateContent,
+                  }
+                  setTermsTemplates([...termsTemplates, newTemplate])
+                  toast.success('Plantilla creada')
+                }
+
+                setShowTermsTemplateModal(false)
+                setTemplateName('')
+                setTemplateContent('')
+                setEditingTemplate(null)
+              }}
+            >
+              {editingTemplate ? 'Guardar Cambios' : 'Crear Plantilla'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
