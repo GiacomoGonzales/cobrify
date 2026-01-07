@@ -414,7 +414,7 @@ export default function Customers() {
                   {businessSettings?.posCustomFields?.showStudentField ? (
                     <>
                       <TableHead>Alumno</TableHead>
-                      <TableHead className="hidden md:table-cell">Horario</TableHead>
+                      <TableHead>Horario</TableHead>
                     </>
                   ) : (
                     <TableHead className="hidden lg:table-cell">Dirección</TableHead>
@@ -462,7 +462,7 @@ export default function Customers() {
                         <TableCell>
                           <p className="text-sm">{customer.studentName || '-'}</p>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
+                        <TableCell>
                           <p className="text-sm text-gray-600">{customer.studentSchedule || '-'}</p>
                         </TableCell>
                       </>
