@@ -614,12 +614,30 @@ export default function CarrierDispatchGuides() {
                   </button>
 
                   {/* XML SUNAT - Solo si fue aceptada */}
-                  {guide.sunatStatus === 'accepted' && (guide.xmlStorageUrl || guide.xmlUrl || guide.sunatResponse?.xmlStorageUrl || guide.sunatResponse?.xmlUrl) && (
+                  {guide.sunatStatus === 'accepted' && (guide.xmlStorageUrl || guide.xmlUrl || guide.sunatResponse?.xmlStorageUrl || guide.sunatResponse?.xmlUrl || guide.xmlData || guide.sunatResponse?.xmlData) && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
-                        const xmlUrl = guide.xmlStorageUrl || guide.xmlUrl || guide.sunatResponse?.xmlStorageUrl || guide.sunatResponse?.xmlUrl
-                        window.open(xmlUrl, '_blank')
+                        if (guide.xmlStorageUrl) {
+                          window.open(guide.xmlStorageUrl, '_blank')
+                        } else if (guide.xmlUrl) {
+                          window.open(guide.xmlUrl, '_blank')
+                        } else if (guide.sunatResponse?.xmlStorageUrl) {
+                          window.open(guide.sunatResponse.xmlStorageUrl, '_blank')
+                        } else if (guide.sunatResponse?.xmlUrl) {
+                          window.open(guide.sunatResponse.xmlUrl, '_blank')
+                        } else if (guide.xmlData || guide.sunatResponse?.xmlData) {
+                          const xmlData = guide.xmlData || guide.sunatResponse.xmlData
+                          const blob = new Blob([xmlData], { type: 'application/xml' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `${guide.number}.xml`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        }
                         toast.success('Descargando XML de SUNAT')
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
@@ -1062,12 +1080,30 @@ export default function CarrierDispatchGuides() {
               </Button>
 
               {/* Descargar XML - Solo si tiene XML guardado */}
-              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.xmlStorageUrl || selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl) && (
+              {selectedGuide.sunatStatus === 'accepted' && (selectedGuide.xmlStorageUrl || selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl || selectedGuide.xmlData || selectedGuide.sunatResponse?.xmlData) && (
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const xmlUrl = selectedGuide.xmlStorageUrl || selectedGuide.xmlUrl || selectedGuide.sunatResponse?.xmlStorageUrl || selectedGuide.sunatResponse?.xmlUrl
-                    window.open(xmlUrl, '_blank')
+                    if (selectedGuide.xmlStorageUrl) {
+                      window.open(selectedGuide.xmlStorageUrl, '_blank')
+                    } else if (selectedGuide.xmlUrl) {
+                      window.open(selectedGuide.xmlUrl, '_blank')
+                    } else if (selectedGuide.sunatResponse?.xmlStorageUrl) {
+                      window.open(selectedGuide.sunatResponse.xmlStorageUrl, '_blank')
+                    } else if (selectedGuide.sunatResponse?.xmlUrl) {
+                      window.open(selectedGuide.sunatResponse.xmlUrl, '_blank')
+                    } else if (selectedGuide.xmlData || selectedGuide.sunatResponse?.xmlData) {
+                      const xmlData = selectedGuide.xmlData || selectedGuide.sunatResponse.xmlData
+                      const blob = new Blob([xmlData], { type: 'application/xml' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `${selectedGuide.number}.xml`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      URL.revokeObjectURL(url)
+                    }
                   }}
                 >
                   <Code className="w-4 h-4 mr-2" />

@@ -2912,9 +2912,8 @@ export const sendDispatchGuideToSunatFn = onRequest(
 
       // Agregar datos específicos según el método
       if (result.method === 'sunat_direct') {
-        if (result.cdrData) {
-          updateData.cdrData = result.cdrData
-        }
+        if (result.cdrData) updateData.cdrData = result.cdrData
+        if (result.xml) updateData.xmlData = result.xml // Guardar XML firmado como fallback
         if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
         if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       } else if (result.method === 'qpse') {
@@ -2922,6 +2921,8 @@ export const sendDispatchGuideToSunatFn = onRequest(
         if (result.xmlUrl) updateData.xmlUrl = result.xmlUrl
         if (result.pdfUrl) updateData.pdfUrl = result.pdfUrl
         if (result.hash) updateData.hash = result.hash
+        if (result.cdrData) updateData.cdrData = result.cdrData // Guardar CDR como fallback
+        if (result.xmlFirmado) updateData.xmlData = result.xmlFirmado // Guardar XML firmado como fallback
         if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
         if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       }
@@ -3237,9 +3238,8 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
 
       // Agregar datos específicos según el método
       if (result.method === 'sunat_direct') {
-        if (result.cdrData) {
-          updateData.cdrData = result.cdrData
-        }
+        if (result.cdrData) updateData.cdrData = result.cdrData
+        if (result.xml) updateData.xmlData = result.xml // Guardar XML firmado como fallback
         if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
         if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       } else if (result.method === 'qpse') {
@@ -3247,6 +3247,8 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
         if (result.xmlUrl) updateData.xmlUrl = result.xmlUrl
         if (result.pdfUrl) updateData.pdfUrl = result.pdfUrl
         if (result.hash) updateData.hash = result.hash
+        if (result.cdrData) updateData.cdrData = result.cdrData // Guardar CDR como fallback
+        if (result.xmlFirmado) updateData.xmlData = result.xmlFirmado // Guardar XML firmado como fallback
         if (xmlStorageUrl) updateData.xmlStorageUrl = xmlStorageUrl
         if (cdrStorageUrl) updateData.cdrStorageUrl = cdrStorageUrl
       }
