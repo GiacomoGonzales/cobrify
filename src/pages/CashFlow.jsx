@@ -453,8 +453,10 @@ export default function CashFlow() {
     }, {})
 
     // 2. Compras pagadas (filtradas por sucursal)
+    // Usar invoiceDate (fecha de factura) en lugar de createdAt (fecha de registro)
     const paidPurchases = purchases.filter(p => {
-      const inRange = isInDateRange(p.createdAt, dateRange.startDate, dateRange.endDate)
+      const purchaseDate = p.invoiceDate || p.createdAt
+      const inRange = isInDateRange(purchaseDate, dateRange.startDate, dateRange.endDate)
       return inRange && p.paymentStatus === 'paid' && filterByBranch(p, 'purchase')
     })
     const purchasesTotal = paidPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
