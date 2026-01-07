@@ -411,13 +411,14 @@ export default function Customers() {
                   <TableHead>Nombre / Razón Social</TableHead>
                   <TableHead>Documento</TableHead>
                   <TableHead>Contacto</TableHead>
-                  {businessSettings?.posCustomFields?.showStudentField && (
+                  {businessSettings?.posCustomFields?.showStudentField ? (
                     <>
                       <TableHead>Alumno</TableHead>
                       <TableHead className="hidden md:table-cell">Horario</TableHead>
                     </>
+                  ) : (
+                    <TableHead className="hidden lg:table-cell">Dirección</TableHead>
                   )}
-                  <TableHead className="hidden lg:table-cell">Dirección</TableHead>
                   <TableHead className="text-center hidden md:table-cell">Pedidos</TableHead>
                   <TableHead className="text-right hidden md:table-cell">Total Gastado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -456,7 +457,7 @@ export default function Customers() {
                         )}
                       </div>
                     </TableCell>
-                    {businessSettings?.posCustomFields?.showStudentField && (
+                    {businessSettings?.posCustomFields?.showStudentField ? (
                       <>
                         <TableCell>
                           <p className="text-sm">{customer.studentName || '-'}</p>
@@ -465,10 +466,11 @@ export default function Customers() {
                           <p className="text-sm text-gray-600">{customer.studentSchedule || '-'}</p>
                         </TableCell>
                       </>
+                    ) : (
+                      <TableCell className="hidden lg:table-cell">
+                        <p className="text-sm text-gray-600">{customer.address || '-'}</p>
+                      </TableCell>
                     )}
-                    <TableCell className="hidden lg:table-cell">
-                      <p className="text-sm text-gray-600">{customer.address || '-'}</p>
-                    </TableCell>
                     <TableCell className="text-center hidden md:table-cell">
                       <div className="inline-flex items-center justify-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full">
                         <span className="text-sm font-semibold">{customer.ordersCount || 0}</span>
