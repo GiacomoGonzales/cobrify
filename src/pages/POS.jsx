@@ -1784,6 +1784,7 @@ export default function POS() {
               phone: customerData.phone || '',
               address: customerData.address || '',
               studentName: customerData.studentName || '',
+              studentSchedule: customerData.studentSchedule || '',
             }
           : {
               documentType: ID_TYPES.DNI,
@@ -1794,6 +1795,7 @@ export default function POS() {
               phone: '',
               address: '',
               studentName: customerData.studentName || '',
+              studentSchedule: customerData.studentSchedule || '',
             },
         items: items,
         subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
