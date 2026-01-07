@@ -2199,7 +2199,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     guideData.relatedGuides.forEach(related => {
       if (related.number) {
         const additionalDoc = root.ele('cac:AdditionalDocumentReference')
-        additionalDoc.ele('cbc:ID').txt(related.number)
+        additionalDoc.ele('cbc:ID').txt(related.number.trim())
         additionalDoc.ele('cbc:DocumentTypeCode', {
           'listAgencyName': 'PE:SUNAT',
           'listName': 'Tipo de Documento',
@@ -2215,7 +2215,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
             'schemeName': 'Documento de Identidad',
             'schemeAgencyName': 'PE:SUNAT',
             'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
-          }).txt(related.ruc)
+          }).txt(related.ruc.trim())
         }
       }
     })
