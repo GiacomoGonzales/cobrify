@@ -35,8 +35,9 @@ export const customerSchema = z.object({
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
-  // Campo para nombre de alumno (academias, escuelas, etc.)
+  // Campos para alumno (academias, escuelas, etc.)
   studentName: z.string().optional().or(z.literal('')),
+  studentSchedule: z.string().optional().or(z.literal('')),
   // Nivel de precio para sistema de múltiples precios
   priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable(),
 }).superRefine((data, ctx) => {
