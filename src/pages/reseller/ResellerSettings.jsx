@@ -57,7 +57,8 @@ export default function ResellerSettings() {
     ruc: resellerData?.ruc || '',
     phone: resellerData?.phone || '',
     address: resellerData?.address || '',
-    contactName: resellerData?.contactName || ''
+    contactName: resellerData?.contactName || '',
+    customDomain: resellerData?.customDomain || ''
   })
 
   const [brandingData, setBrandingData] = useState({
@@ -78,7 +79,8 @@ export default function ResellerSettings() {
         ruc: resellerData.ruc || '',
         phone: resellerData.phone || '',
         address: resellerData.address || '',
-        contactName: resellerData.contactName || ''
+        contactName: resellerData.contactName || '',
+        customDomain: resellerData.customDomain || ''
       })
       setBrandingData({
         companyName: resellerData.branding?.companyName || resellerData.companyName || '',
@@ -205,7 +207,7 @@ export default function ResellerSettings() {
     console.log('   brandingData:', brandingData)
 
     try {
-      // Guardar datos de empresa (subdomain y customDomain se configuran solo desde admin)
+      // Guardar datos de empresa
       console.log('📝 Updating reseller document...')
       await updateDoc(doc(db, 'resellers', resellerId), {
         companyName: formData.companyName,
@@ -213,6 +215,7 @@ export default function ResellerSettings() {
         phone: formData.phone,
         address: formData.address,
         contactName: formData.contactName,
+        customDomain: formData.customDomain?.toLowerCase().trim() || null,
         updatedAt: Timestamp.now()
       })
       console.log('✅ Reseller document updated')
@@ -540,7 +543,39 @@ export default function ResellerSettings() {
                       </div>
                     </div>
 
-                    {/* Nota: El subdominio y dominio personalizado se configuran desde el panel de Admin */}
+                    {/* Dominio Personalizado */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <Globe className="w-4 h-4 inline mr-1" />
+                        Dominio Personalizado
+                        <span className="text-xs text-gray-500 ml-1">(opcional)</span>
+                      </label>
+                      <div className="relative">
+                        <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          name="customDomain"
+                          value={formData.customDomain}
+                          onChange={handleChange}
+                          placeholder="facturacion.tuempresa.com"
+                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                        />
+                      </div>
+                      {formData.customDomain && (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                          <strong className="flex items-center gap-1 mb-1">
+                            <Globe className="w-3 h-3" />
+                            Configuración DNS requerida:
+                          </strong>
+                          <ol className="list-decimal ml-4 space-y-1 text-amber-700">
+                            <li>En tu proveedor de dominio, crea un registro <strong>CNAME</strong></li>
+                            <li>Apunta <code className="bg-amber-100 px-1 rounded">{formData.customDomain}</code> → <code className="bg-amber-100 px-1 rounded">cname.vercel-dns.com</code></li>
+                            <li>Espera 24-48 horas para la propagación DNS</li>
+                            <li>Contacta soporte para activar el dominio en Vercel</li>
+                          </ol>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
