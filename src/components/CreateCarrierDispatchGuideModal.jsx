@@ -61,7 +61,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const [mtcRegistration, setMtcRegistration] = useState('')
 
   // GRE Remitente relacionada(s)
-  const [relatedGuides, setRelatedGuides] = useState([{ number: '', ruc: '' }])
+  const [relatedGuides, setRelatedGuides] = useState([{ number: '', ruc: '', error: '' }])
 
   // Datos del remitente (quien envía la mercancía)
   const [shipperRuc, setShipperRuc] = useState('')
@@ -251,9 +251,27 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
     }
   }
 
+  // Validar formato de número de guía (T001-00000001, EG07-00000001, etc.)
+  const validateGuideNumber = (value) => {
+    if (!value) return ''
+
+    // Verificar espacios al inicio o final
+    if (value !== value.trim()) {
+      return 'El número tiene espacios al inicio o final'
+    }
+
+    // Formato esperado: LETRA(s)+NÚMEROS-NÚMEROS (ej: T001-00000001, EG07-00000001)
+    const guidePattern = /^[A-Z]{1,4}\d{2,4}-\d{1,8}$/i
+    if (!guidePattern.test(value)) {
+      return 'Formato inválido. Ej: T001-00000001 o EG07-00000001'
+    }
+
+    return ''
+  }
+
   // Agregar GRE Remitente relacionada
   const addRelatedGuide = () => {
-    setRelatedGuides([...relatedGuides, { number: '', ruc: '' }])
+    setRelatedGuides([...relatedGuides, { number: '', ruc: '', error: '' }])
   }
 
   const removeRelatedGuide = (index) => {
@@ -265,6 +283,19 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const updateRelatedGuide = (index, field, value) => {
     const updated = [...relatedGuides]
     updated[index][field] = value
+
+    // Validar número de guía
+    if (field === 'number') {
+      updated[index].error = validateGuideNumber(value)
+    }
+
+    // Validar RUC (11 dígitos numéricos)
+    if (field === 'ruc' && value && !/^\d{11}$/.test(value)) {
+      updated[index].rucError = 'RUC debe tener 11 dígitos'
+    } else if (field === 'ruc') {
+      updated[index].rucError = ''
+    }
+
     setRelatedGuides(updated)
   }
 
@@ -657,9 +688,10 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
             <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <Input
                 label={index === 0 ? "Número de GRE Remitente" : ""}
-                placeholder="T001-00000001"
+                placeholder="EG07-00000001"
                 value={guide.number}
                 onChange={(e) => updateRelatedGuide(index, 'number', e.target.value)}
+                error={guide.error}
               />
               <Input
                 label={index === 0 ? "RUC del Remitente" : ""}
@@ -667,6 +699,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
                 value={guide.ruc}
                 onChange={(e) => updateRelatedGuide(index, 'ruc', e.target.value)}
                 maxLength={11}
+                error={guide.rucError}
               />
               <div className="flex gap-2">
                 {relatedGuides.length > 1 && (
