@@ -877,13 +877,23 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     leftY += dataLineHeight
   }
 
-  // Alumno (si existe)
-  if (invoice.customer?.studentName) {
-    doc.setFont('helvetica', 'bold')
-    doc.text('ALUMNO:', colLeftX, leftY)
-    doc.setFont('helvetica', 'normal')
-    doc.text(invoice.customer.studentName, leftValueX, leftY)
-    leftY += dataLineHeight
+  // Alumno y Horario (solo si está habilitado en configuración)
+  if (companySettings?.posCustomFields?.showStudentField) {
+    if (invoice.customer?.studentName) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('ALUMNO:', colLeftX, leftY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(invoice.customer.studentName, leftValueX, leftY)
+      leftY += dataLineHeight
+    }
+
+    if (invoice.customer?.studentSchedule) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('HORARIO:', colLeftX, leftY)
+      doc.setFont('helvetica', 'normal')
+      doc.text(invoice.customer.studentSchedule, leftValueX, leftY)
+      leftY += dataLineHeight
+    }
   }
 
   // Vendedor (si existe)

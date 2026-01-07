@@ -770,6 +770,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         printer = printer.text(convertSpanishText(`Vendedor: ${invoice.sellerName}\n`));
       }
 
+      // Alumno y Horario (solo si está habilitado en configuración)
+      if (business?.posCustomFields?.showStudentField) {
+        if (invoice.customer?.studentName) {
+          printer = printer.text(convertSpanishText(`Alumno: ${invoice.customer.studentName}\n`));
+        }
+        if (invoice.customer?.studentSchedule) {
+          printer = printer.text(convertSpanishText(`Horario: ${invoice.customer.studentSchedule}\n`));
+        }
+      }
+
       printer = addSeparator(printer, format.separator, paperWidth, 'left');
     }
 
@@ -1745,6 +1755,16 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
     // Vendedor (si existe)
     if (invoice.sellerName) {
       builder.text(`Vendedor: ${invoice.sellerName}`).newLine();
+    }
+
+    // Alumno y Horario (solo si está habilitado en configuración)
+    if (business?.posCustomFields?.showStudentField) {
+      if (invoice.customer?.studentName) {
+        builder.text(`Alumno: ${invoice.customer.studentName}`).newLine();
+      }
+      if (invoice.customer?.studentSchedule) {
+        builder.text(`Horario: ${invoice.customer.studentSchedule}`).newLine();
+      }
     }
 
     builder.text(format.separator).newLine()
