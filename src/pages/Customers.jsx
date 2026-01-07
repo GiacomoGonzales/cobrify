@@ -411,6 +411,12 @@ export default function Customers() {
                   <TableHead>Nombre / Razón Social</TableHead>
                   <TableHead>Documento</TableHead>
                   <TableHead>Contacto</TableHead>
+                  {businessSettings?.posCustomFields?.showStudentField && (
+                    <>
+                      <TableHead>Alumno</TableHead>
+                      <TableHead className="hidden md:table-cell">Horario</TableHead>
+                    </>
+                  )}
                   <TableHead className="hidden lg:table-cell">Dirección</TableHead>
                   <TableHead className="text-center hidden md:table-cell">Pedidos</TableHead>
                   <TableHead className="text-right hidden md:table-cell">Total Gastado</TableHead>
@@ -425,14 +431,6 @@ export default function Customers() {
                         <p className="font-medium">{customer.name}</p>
                         {customer.businessName && customer.businessName !== customer.name && (
                           <p className="text-xs text-gray-500">{customer.businessName}</p>
-                        )}
-                        {customer.studentName && (
-                          <div className="text-xs text-primary-600">
-                            <span className="font-medium">Alumno: {customer.studentName}</span>
-                            {customer.studentSchedule && (
-                              <span className="text-gray-500 ml-2">({customer.studentSchedule})</span>
-                            )}
-                          </div>
                         )}
                       </div>
                     </TableCell>
@@ -458,6 +456,16 @@ export default function Customers() {
                         )}
                       </div>
                     </TableCell>
+                    {businessSettings?.posCustomFields?.showStudentField && (
+                      <>
+                        <TableCell>
+                          <p className="text-sm">{customer.studentName || '-'}</p>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <p className="text-sm text-gray-600">{customer.studentSchedule || '-'}</p>
+                        </TableCell>
+                      </>
+                    )}
                     <TableCell className="hidden lg:table-cell">
                       <p className="text-sm text-gray-600">{customer.address || '-'}</p>
                     </TableCell>
