@@ -1931,24 +1931,24 @@ export default function POS() {
 
       const invoiceId = result.id
 
-      // 3.1. Envío automático a SUNAT (si está configurado)
+      // 3.1. Envío automático a SUNAT (si está configurado) - Fire & Forget (no bloquea)
       const shouldAutoSend = companySettings?.autoSendToSunat === true
       const canSendToSunat = documentType === 'factura' || documentType === 'boleta'
 
       if (shouldAutoSend && canSendToSunat) {
-        try {
-          console.log('🚀 Enviando automáticamente a SUNAT...')
-          toast.info('Enviando comprobante a SUNAT...', 3000)
+        console.log('🚀 Enviando automáticamente a SUNAT (background)...')
+        toast.info('Enviando a SUNAT en segundo plano...', 3000)
 
-          // Usar businessId para obtener las credenciales correctas (del owner)
-          await sendInvoiceToSunat(businessId, invoiceId)
-
-          console.log('✅ Comprobante enviado a SUNAT exitosamente')
-          toast.success('Comprobante enviado a SUNAT exitosamente', 5000)
-        } catch (sunatError) {
-          console.error('❌ Error al enviar a SUNAT:', sunatError)
-          toast.warning('El comprobante se guardó correctamente, pero hubo un error al enviarlo a SUNAT. Puedes reenviarlo desde la lista de comprobantes.', 7000)
-        }
+        // Fire & Forget: No esperamos la respuesta para no bloquear la UI
+        sendInvoiceToSunat(businessId, invoiceId)
+          .then(() => {
+            console.log('✅ Comprobante enviado a SUNAT exitosamente')
+            toast.success('✅ Comprobante aceptado por SUNAT', 4000)
+          })
+          .catch((sunatError) => {
+            console.error('❌ Error al enviar a SUNAT:', sunatError)
+            toast.warning('Error al enviar a SUNAT. Reenvía desde Ventas.', 5000)
+          })
       }
 
       // 3.2. Guardar cliente automáticamente (si tiene documento válido)
