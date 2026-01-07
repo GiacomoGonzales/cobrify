@@ -52,6 +52,7 @@ export default function Customers() {
       phone: '',
       address: '',
       studentName: '',
+      studentSchedule: '',
       priceLevel: null,
     },
   })
@@ -105,6 +106,7 @@ export default function Customers() {
       phone: '',
       address: '',
       studentName: '',
+      studentSchedule: '',
     })
     setIsModalOpen(true)
   }
@@ -120,6 +122,7 @@ export default function Customers() {
       phone: customer.phone || '',
       address: customer.address || '',
       studentName: customer.studentName || '',
+      studentSchedule: customer.studentSchedule || '',
       priceLevel: customer.priceLevel || null,
     })
     setIsModalOpen(true)
@@ -220,7 +223,8 @@ export default function Customers() {
         customer.documentNumber?.includes(search) ||
         customer.businessName?.toLowerCase().includes(search) ||
         customer.email?.toLowerCase().includes(search) ||
-        customer.studentName?.toLowerCase().includes(search)
+        customer.studentName?.toLowerCase().includes(search) ||
+        customer.studentSchedule?.toLowerCase().includes(search)
       )
     })
     .sort((a, b) => {
@@ -423,9 +427,12 @@ export default function Customers() {
                           <p className="text-xs text-gray-500">{customer.businessName}</p>
                         )}
                         {customer.studentName && (
-                          <p className="text-xs text-primary-600 font-medium">
-                            Alumno: {customer.studentName}
-                          </p>
+                          <div className="text-xs text-primary-600">
+                            <span className="font-medium">Alumno: {customer.studentName}</span>
+                            {customer.studentSchedule && (
+                              <span className="text-gray-500 ml-2">({customer.studentSchedule})</span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </TableCell>
@@ -561,14 +568,22 @@ export default function Customers() {
             {...register('address')}
           />
 
-          {/* Campo Alumno - solo si está habilitado en configuración */}
+          {/* Campos Alumno y Horario - solo si está habilitado en configuración */}
           {businessSettings?.posCustomFields?.showStudentField && (
-            <Input
-              label="Alumno"
-              placeholder="Nombre del alumno"
-              error={errors.studentName?.message}
-              {...register('studentName')}
-            />
+            <>
+              <Input
+                label="Nombre del Alumno"
+                placeholder="Nombre del alumno inscrito"
+                error={errors.studentName?.message}
+                {...register('studentName')}
+              />
+              <Input
+                label="Horario / Turno"
+                placeholder="Ej: Lunes y Miércoles 5:00 PM"
+                error={errors.studentSchedule?.message}
+                {...register('studentSchedule')}
+              />
+            </>
           )}
 
           {/* Nivel de precio - solo si está habilitado múltiples precios */}

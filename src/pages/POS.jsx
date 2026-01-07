@@ -338,7 +338,8 @@ export default function POS() {
     address: '',
     email: '',
     phone: '',
-    studentName: '' // Campo libre para nombre de alumno
+    studentName: '', // Campo libre para nombre de alumno
+    studentSchedule: '' // Horario/turno del alumno
   })
 
   // Estados para pagos parciales (solo notas de venta)
@@ -3021,7 +3022,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   businessName: customer.businessName || '',
                                   address: customer.address || '',
                                   email: customer.email || '',
-                                  phone: customer.phone || ''
+                                  phone: customer.phone || '',
+                                  studentName: customer.studentName || '',
+                                  studentSchedule: customer.studentSchedule || ''
                                 })
                               }}
                               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
@@ -3421,13 +3424,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
                     {companySettings?.posCustomFields?.showStudentField && (
-                      <input
-                        type="text"
-                        value={customerData.studentName}
-                        onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
-                        placeholder="Alumno (opcional)"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={customerData.studentName}
+                          onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
+                          placeholder="Alumno"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                        <input
+                          type="text"
+                          value={customerData.studentSchedule}
+                          onChange={e => setCustomerData({ ...customerData, studentSchedule: e.target.value })}
+                          placeholder="Horario"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
                     )}
                     <input
                       type="text"
@@ -3513,13 +3525,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
                     {companySettings?.posCustomFields?.showStudentField && (
-                      <input
-                        type="text"
-                        value={customerData.studentName}
-                        onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
-                        placeholder="Alumno (opcional)"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={customerData.studentName}
+                          onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
+                          placeholder="Alumno (opcional)"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                        <input
+                          type="text"
+                          value={customerData.studentSchedule}
+                          onChange={e => setCustomerData({ ...customerData, studentSchedule: e.target.value })}
+                          placeholder="Horario (opcional)"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
                     )}
                     <input
                       type="tel"
