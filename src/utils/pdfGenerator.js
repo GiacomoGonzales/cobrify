@@ -411,6 +411,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Paleta de colores
   const BLACK = [0, 0, 0]
+  const WHITE = [255, 255, 255]
   const DARK_GRAY = [60, 60, 60]
   const MEDIUM_GRAY = [120, 120, 120]
   const LIGHT_GRAY = [240, 240, 240]
