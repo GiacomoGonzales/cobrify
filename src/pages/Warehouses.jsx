@@ -33,7 +33,7 @@ import {
   deleteWarehouse,
   syncAllProductsStock,
 } from '@/services/warehouseService'
-import { getProducts, getAllBranchSeriesFS } from '@/services/firestoreService'
+import { getProducts, getAllBranchSeriesFS, getCompanySettings } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { FileText } from 'lucide-react'
 
@@ -48,10 +48,10 @@ const warehouseSchema = z.object({
 })
 
 export default function Warehouses() {
-  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, companySettings } = useAppContext()
-  const mainBranchName = companySettings?.mainBranchName || 'Sucursal Principal'
+  const { user, getBusinessId, filterBranchesByAccess, isDemoMode } = useAppContext()
   const toast = useToast()
   const [warehouses, setWarehouses] = useState([])
+  const [companySettings, setCompanySettings] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingWarehouse, setEditingWarehouse] = useState(null)
@@ -81,10 +81,27 @@ export default function Warehouses() {
     },
   })
 
+  // Nombre de sucursal principal (dinámico)
+  const mainBranchName = companySettings?.mainBranchName || 'Sucursal Principal'
+
   useEffect(() => {
     loadWarehouses()
     loadBranches()
+    loadCompanySettings()
   }, [user])
+
+  // Cargar configuración de la empresa
+  const loadCompanySettings = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const result = await getCompanySettings(getBusinessId())
+      if (result.success) {
+        setCompanySettings(result.data)
+      }
+    } catch (error) {
+      console.error('Error al cargar configuración:', error)
+    }
+  }
 
   // Cargar sucursales para filtro y asignación
   const loadBranches = async () => {

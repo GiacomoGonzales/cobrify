@@ -915,18 +915,27 @@ export default function AdminUsers() {
 
     setSavingMainBranch(true)
     try {
+      const trimmedName = mainBranchName.trim()
+
+      // Actualizar en el documento del usuario
       const userRef = doc(db, 'users', branchesUserToEdit.id)
       await updateDoc(userRef, {
-        mainBranchName: mainBranchName.trim()
+        mainBranchName: trimmedName
+      })
+
+      // También actualizar en el documento del negocio (para que lo lea companySettings)
+      const businessRef = doc(db, 'businesses', branchesUserToEdit.id)
+      await updateDoc(businessRef, {
+        mainBranchName: trimmedName
       })
 
       // Actualizar el usuario en la lista local
       setUsers(users.map(u =>
         u.id === branchesUserToEdit.id
-          ? { ...u, mainBranchName: mainBranchName.trim() }
+          ? { ...u, mainBranchName: trimmedName }
           : u
       ))
-      setBranchesUserToEdit(prev => ({ ...prev, mainBranchName: mainBranchName.trim() }))
+      setBranchesUserToEdit(prev => ({ ...prev, mainBranchName: trimmedName }))
 
       toast.success('Nombre de sucursal actualizado')
       setEditingMainBranch(false)
