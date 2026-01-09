@@ -818,6 +818,19 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text(convertSpanishText('Vendedor: ' + receiptData.sellerName) + '\n'));
     }
 
+    // Alumno y Horario (solo si existen en los datos)
+    if (customer?.studentName) {
+      commands.push(ESCPOSCommands.text(convertSpanishText('Alumno: ' + customer.studentName) + '\n'));
+    }
+    if (customer?.studentSchedule) {
+      commands.push(ESCPOSCommands.text(convertSpanishText('Horario: ' + customer.studentSchedule) + '\n'));
+    }
+
+    // Placa de Vehículo (solo si existe en los datos)
+    if (customer?.vehiclePlate) {
+      commands.push(ESCPOSCommands.text(convertSpanishText('Placa: ' + customer.vehiclePlate.toUpperCase()) + '\n'));
+    }
+
     commands.push(ESCPOSCommands.text(separator + '\n'));
 
     // ========== Detalle de Productos ==========
