@@ -144,6 +144,13 @@ export default function Reports() {
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
 
+  // Helper para parsear fecha en zona horaria local (evita problemas con UTC)
+  const parseLocalDate = (dateString) => {
+    if (!dateString) return null
+    const [year, month, day] = dateString.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
+
   useEffect(() => {
     loadData()
     loadBranches()
@@ -296,9 +303,9 @@ export default function Reports() {
       if (!customStartDate || !customEndDate) {
         return validInvoices.map(addCostCalculations)
       }
-      const startDate = new Date(customStartDate)
+      const startDate = parseLocalDate(customStartDate)
       startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(customEndDate)
+      const endDate = parseLocalDate(customEndDate)
       endDate.setHours(23, 59, 59, 999)
 
       return validInvoices
@@ -351,8 +358,8 @@ export default function Reports() {
     // Para fechas personalizadas, calcular período anterior con la misma duración
     if (dateRange === 'custom') {
       if (!customStartDate || !customEndDate) return 0
-      const customStart = new Date(customStartDate)
-      const customEnd = new Date(customEndDate)
+      const customStart = parseLocalDate(customStartDate)
+      const customEnd = parseLocalDate(customEndDate)
       const duration = customEnd.getTime() - customStart.getTime()
       endDate = new Date(customStart.getTime() - 1) // Un día antes del inicio
       startDate = new Date(endDate.getTime() - duration)
@@ -712,8 +719,8 @@ export default function Reports() {
       if (!customStartDate || !customEndDate) {
         return []
       }
-      const startDate = new Date(customStartDate)
-      const endDate = new Date(customEndDate)
+      const startDate = parseLocalDate(customStartDate)
+      const endDate = parseLocalDate(customEndDate)
       const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
 
       // Si el rango es menor a 60 días, agrupar por día; sino por mes
@@ -904,9 +911,9 @@ export default function Reports() {
       if (!customStartDate || !customEndDate) {
         return expenses
       }
-      const startDate = new Date(customStartDate)
+      const startDate = parseLocalDate(customStartDate)
       startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(customEndDate)
+      const endDate = parseLocalDate(customEndDate)
       endDate.setHours(23, 59, 59, 999)
 
       return expenses.filter(expense => {
@@ -952,9 +959,9 @@ export default function Reports() {
       if (!customStartDate || !customEndDate) {
         return purchases
       }
-      const startDate = new Date(customStartDate)
+      const startDate = parseLocalDate(customStartDate)
       startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(customEndDate)
+      const endDate = parseLocalDate(customEndDate)
       endDate.setHours(23, 59, 59, 999)
 
       return purchases.filter(purchase => {
@@ -1058,8 +1065,8 @@ export default function Reports() {
       if (!customStartDate || !customEndDate) {
         return []
       }
-      const startDate = new Date(customStartDate)
-      const endDate = new Date(customEndDate)
+      const startDate = parseLocalDate(customStartDate)
+      const endDate = parseLocalDate(customEndDate)
       const diffDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
 
       if (diffDays <= 60) {
