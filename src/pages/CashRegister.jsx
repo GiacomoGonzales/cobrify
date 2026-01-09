@@ -679,46 +679,68 @@ export default function CashRegister() {
         return // No contar ventas al crédito sin pagar
       }
 
-      // Si la factura tiene múltiples métodos de pago (array payments)
-      if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+      // Verificar si tiene historial de pagos (ventas al crédito o parciales que fueron pagadas)
+      // Si tiene paymentHistory, usar eso para obtener los métodos de pago reales
+      const hasPaymentHistory = invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0
+
+      if (hasPaymentHistory) {
+        // Usar el historial de pagos para sumar por método correcto
+        // Esto aplica a ventas al crédito pagadas y pagos parciales
+        const isPartialPayment = invoice.paymentStatus === 'partial'
+
+        invoice.paymentHistory.forEach(payment => {
+          const amount = parseFloat(payment.amount) || 0
+          switch (payment.method) {
+            case 'Efectivo':
+              salesCash += amount
+              break
+            case 'Tarjeta':
+              salesCard += amount
+              break
+            case 'Transferencia':
+              salesTransfer += amount
+              break
+            case 'Yape':
+              salesYape += amount
+              break
+            case 'Plin':
+              salesPlin += amount
+              break
+            case 'Rappi':
+              salesRappi += amount
+              break
+          }
+        })
+      } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+        // Ventas normales sin historial de pagos - usar array payments
         const invoiceTotal = parseFloat(invoice.total) || 0
 
-        // Para pagos parciales, solo sumar lo realmente pagado (amountPaid)
-        // Para pagos completos, usar el total de la factura
-        const isPartialPayment = invoice.paymentStatus === 'partial'
-        const amountToCount = isPartialPayment ? (parseFloat(invoice.amountPaid) || 0) : invoiceTotal
-
-        // Si hay un solo método de pago, usar el monto correspondiente
+        // Si hay un solo método de pago, usar el TOTAL DE LA FACTURA
         if (invoice.payments.length === 1) {
           const method = invoice.payments[0].method
           switch (method) {
             case 'Efectivo':
-              salesCash += amountToCount
+              salesCash += invoiceTotal
               break
             case 'Tarjeta':
-              salesCard += amountToCount
+              salesCard += invoiceTotal
               break
             case 'Transferencia':
-              salesTransfer += amountToCount
+              salesTransfer += invoiceTotal
               break
             case 'Yape':
-              salesYape += amountToCount
+              salesYape += invoiceTotal
               break
             case 'Plin':
-              salesPlin += amountToCount
+              salesPlin += invoiceTotal
               break
             case 'Rappi':
-              salesRappi += amountToCount
+              salesRappi += invoiceTotal
               break
           }
         } else {
-          // Múltiples métodos de pago: usar los montos reales de cada pago del historial
-          // Para pagos parciales, usar paymentHistory que tiene los pagos reales
-          const paymentsToSum = isPartialPayment && invoice.paymentHistory
-            ? invoice.paymentHistory
-            : invoice.payments
-
-          paymentsToSum.forEach(payment => {
+          // Múltiples métodos de pago: usar los montos reales de cada pago
+          invoice.payments.forEach(payment => {
             const amount = parseFloat(payment.amount) || 0
             switch (payment.method) {
               case 'Efectivo':
