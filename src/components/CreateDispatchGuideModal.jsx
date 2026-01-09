@@ -366,9 +366,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
 
     if (transportMode === '02') {
-      if (!driverDocNumber || !driverName || !driverLastName || !driverLicense || !vehiclePlate) {
-        toast.error('Debe completar todos los datos del conductor y vehículo para transporte privado')
-        return
+      // Si es vehículo M1 o L, los datos del conductor y placa son opcionales
+      if (!isM1LVehicle) {
+        if (!driverDocNumber || !driverName || !driverLastName || !driverLicense || !vehiclePlate) {
+          toast.error('Debe completar todos los datos del conductor y vehículo para transporte privado')
+          return
+        }
       }
     } else {
       if (!carrierRuc || !carrierName) {
@@ -801,10 +804,23 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 onChange={(e) => setIsM1LVehicle(e.target.checked)}
                 className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
               />
-              <span className="text-sm text-gray-700">
-                Traslado en vehículos de categoría M1 o L
-              </span>
+              <div>
+                <span className="text-sm text-gray-700">
+                  Traslado en vehículos de categoría M1 o L
+                </span>
+                <p className="text-xs text-gray-500">
+                  (Motos, mototaxis, autos, taxis - hasta 8 asientos)
+                </p>
+              </div>
             </label>
+
+            {isM1LVehicle && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700">
+                  <strong>Simplificado:</strong> Para vehículos M1 o L, los datos del conductor y placa son opcionales según normativa SUNAT.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Datos del vehículo (solo transporte privado) */}
@@ -812,14 +828,17 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
                 <Truck className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Datos del vehículo</h3>
+                <h3 className="font-semibold text-gray-800">
+                  Datos del vehículo
+                  {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
+                </h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input
-                  label="Placa Principal"
-                  placeholder="ABC-123"
-                  required
+                  label={isM1LVehicle ? "Placa Principal (opcional)" : "Placa Principal"}
+                  placeholder={isM1LVehicle ? "Ej: ABC-123 o dejar vacío" : "ABC-123"}
+                  required={!isM1LVehicle}
                   value={vehiclePlate}
                   onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
                 />
@@ -849,13 +868,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
                 <User className="w-5 h-5 text-gray-600" />
-                <h3 className="font-semibold text-gray-800">Datos del conductor</h3>
+                <h3 className="font-semibold text-gray-800">
+                  Datos del conductor
+                  {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
+                </h3>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Select
-                  label="Tipo de documento"
-                  required
+                  label={isM1LVehicle ? "Tipo de documento (opcional)" : "Tipo de documento"}
+                  required={!isM1LVehicle}
                   value={driverDocType}
                   onChange={(e) => setDriverDocType(e.target.value)}
                 >
@@ -867,17 +889,17 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 </Select>
 
                 <Input
-                  label="N° Doc. de identidad"
+                  label={isM1LVehicle ? "N° Doc. de identidad (opcional)" : "N° Doc. de identidad"}
                   placeholder="12345678"
-                  required
+                  required={!isM1LVehicle}
                   value={driverDocNumber}
                   onChange={(e) => setDriverDocNumber(e.target.value)}
                 />
 
                 <Input
-                  label="N° de licencia o brevete"
+                  label={isM1LVehicle ? "N° de licencia (opcional)" : "N° de licencia o brevete"}
                   placeholder="Q12345678"
-                  required
+                  required={!isM1LVehicle}
                   value={driverLicense}
                   onChange={(e) => setDriverLicense(e.target.value)}
                 />
@@ -885,17 +907,17 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Nombre del conductor"
+                  label={isM1LVehicle ? "Nombre del conductor (opcional)" : "Nombre del conductor"}
                   placeholder="Juan"
-                  required
+                  required={!isM1LVehicle}
                   value={driverName}
                   onChange={(e) => setDriverName(e.target.value)}
                 />
 
                 <Input
-                  label="Apellido del conductor"
+                  label={isM1LVehicle ? "Apellido del conductor (opcional)" : "Apellido del conductor"}
                   placeholder="Pérez García"
-                  required
+                  required={!isM1LVehicle}
                   value={driverLastName}
                   onChange={(e) => setDriverLastName(e.target.value)}
                 />
