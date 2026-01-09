@@ -260,6 +260,27 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [isOpen, getBusinessId, referenceInvoice?.branchId])
 
+  // Sincronizar ubigeo y dirección del destinatario con el punto de llegada
+  // (generalmente el punto de llegada es la dirección del destinatario)
+  useEffect(() => {
+    // Sincronizar departamento
+    if (recipientDepartment) {
+      setDestinationDepartment(recipientDepartment)
+    }
+    // Sincronizar provincia
+    if (recipientProvince) {
+      setDestinationProvince(recipientProvince)
+    }
+    // Sincronizar distrito
+    if (recipientDistrict) {
+      setDestinationDistrict(recipientDistrict)
+    }
+    // Sincronizar dirección
+    if (recipientAddress) {
+      setDestinationAddress(recipientAddress)
+    }
+  }, [recipientDepartment, recipientProvince, recipientDistrict, recipientAddress])
+
   // Obtener ubigeo completo
   const getUbigeo = (dept, prov, dist) => {
     if (dept && prov && dist) {
