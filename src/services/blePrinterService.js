@@ -827,7 +827,12 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
 
     if (items && items.length > 0) {
       for (const item of items) {
-        const itemName = convertSpanishText(item.description || item.name || '');
+        // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+        const itemName = convertSpanishText(item.name || item.description || '');
+        // Observaciones adicionales (IMEI, placa, serie, etc.)
+        const itemObservations = item.observations
+          ? convertSpanishText(item.observations)
+          : null;
         let itemTotal = 0;
         let unitPrice = 0;
 
@@ -861,6 +866,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         // Línea 3: Código si existe
         if (item.code) {
           commands.push(ESCPOSCommands.text('Codigo: ' + convertSpanishText(item.code) + '\n'));
+        }
+
+        // Línea 4: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
+        if (itemObservations) {
+          commands.push(ESCPOSCommands.text('  ' + itemObservations + '\n'));
         }
 
         // Espacio entre items (solo para 80mm)

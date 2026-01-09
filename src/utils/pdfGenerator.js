@@ -1098,10 +1098,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Función para calcular altura dinámica de cada item
   const calculateItemHeight = (item) => {
+    // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
     const itemName = item.name || item.description || ''
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    let itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    // Concatenar observaciones adicionales si existen (IMEI, placa, serie, etc.)
+    if (item.observations) {
+      itemDesc += ` - ${item.observations}`
+    }
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
     const calculatedHeight = Math.max(minProductRowHeight, descLines.length * lineHeight + 6)

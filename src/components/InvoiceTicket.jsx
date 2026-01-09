@@ -440,8 +440,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
         .item-code {
           font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
-          color: #666;
-          font-weight: ${webPrintLegible ? '600' : '400'};
+          color: #000;
+          font-weight: ${webPrintLegible ? '600' : '500'};
           margin-top: 1px;
         }
 
@@ -658,15 +658,23 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               : item.quantity.toFixed(3).replace(/\.?0+$/, '');
             const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${item.unit.toLowerCase()}` : '';
 
+            // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+            const itemName = item.name || item.description || '';
+            // Observaciones adicionales (IMEI, placa, serie, etc.)
+            const itemObservations = item.observations || null;
+
             return (
               <div key={index} className="item-row">
-                <div className="item-desc">{item.description || item.name}</div>
+                <div className="item-desc">{itemName}</div>
                 <div className="item-details">
                   <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(item.price || item.unitPrice)}</span>
                   <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
                 </div>
                 {item.code && (
                   <div className="item-code">Código: {item.code}</div>
+                )}
+                {itemObservations && (
+                  <div className="item-code">{itemObservations}</div>
                 )}
               </div>
             );

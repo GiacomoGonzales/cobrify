@@ -1243,6 +1243,21 @@ export default function POS() {
     toast.success('Precio actualizado')
   }
 
+  // Actualizar observaciones de un item (IMEI, placa, serie, etc.)
+  const updateItemObservations = (itemId, observations) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+    setCart(cart.map(item => {
+      const matchId = item.cartId || item.id
+      if (matchId === itemId) {
+        return { ...item, observations }
+      }
+      return item
+    }))
+  }
+
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
@@ -1647,6 +1662,7 @@ export default function POS() {
           unitPrice: item.price,
           subtotal: item.price * item.quantity,
           taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
+          ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         }))
 
@@ -1751,6 +1767,7 @@ export default function POS() {
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
+        ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
       }))
@@ -3638,6 +3655,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     {item.presentationName} (×{item.presentationFactor})
                                   </p>
                                 )}
+                                {/* Campo de observaciones (IMEI, placa, serie, etc.) */}
+                                <input
+                                  type="text"
+                                  placeholder="IMEI, placa, serie..."
+                                  value={item.observations || ''}
+                                  onChange={(e) => updateItemObservations(itemId, e.target.value)}
+                                  className="w-full text-xs px-2 py-1 border border-gray-200 rounded mt-1 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                                />
                               </div>
                               <button
                                 onClick={() => removeFromCart(itemId)}
@@ -4684,9 +4709,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               ...lastInvoiceData,
               items: lastInvoiceData.items.map(item => ({
                 code: item.code,
+                name: item.name,
                 description: item.name,
                 quantity: item.quantity,
                 price: item.unitPrice,
+                observations: item.observations,
               })),
               series: lastInvoiceData.series,
               number: lastInvoiceData.correlativeNumber,

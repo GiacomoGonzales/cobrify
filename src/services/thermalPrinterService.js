@@ -497,8 +497,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // NO mostrar header de columnas para ningún formato (ni 58mm ni 80mm)
     for (const item of invoice.items) {
-      // Soportar tanto 'description' (facturas) como 'name' (POS)
-      const itemName = convertSpanishText(item.description || item.name || '');
+      // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+      const itemName = convertSpanishText(item.name || item.description || '');
+      // Observaciones adicionales (IMEI, placa, serie, etc.)
+      const itemObservations = item.observations
+        ? convertSpanishText(item.observations)
+        : null;
 
       // Calcular el precio total del item y precio unitario
       let itemTotal = 0;
@@ -539,7 +543,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
 
-        // Línea 4: Separación entre items (línea vacía)
+        // Línea 4: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
+        if (itemObservations) {
+          itemsText += `  ${itemObservations}\n`;
+        }
+
+        // Línea 5: Separación entre items (línea vacía)
         itemsText += '\n';
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
@@ -560,6 +569,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         // Línea 3: Código si existe (alineado a la izquierda)
         if (item.code) {
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
+        }
+
+        // Línea 4: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
+        if (itemObservations) {
+          itemsText += `  ${itemObservations}\n`;
         }
       }
     }
@@ -1289,7 +1303,8 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       // Items (con todos los campos necesarios)
       items: (invoice.items || []).map(item => ({
         name: item.name || '',
-        description: item.description || item.name || '',
+        description: item.description || '', // Descripción del producto (del catálogo)
+        observations: item.observations || '', // Observaciones adicionales (IMEI, placa, serie, etc.)
         code: item.code || '',
         quantity: item.quantity || 1,
         unit: item.unit || '',
@@ -1775,7 +1790,10 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 
     // Items
     for (const item of invoice.items) {
-      const itemName = item.description || item.name || '';
+      // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+      const itemName = item.name || item.description || '';
+      // Observaciones adicionales (IMEI, placa, serie, etc.)
+      const itemObservations = item.observations || null;
       const unitPrice = item.unitPrice || item.price || 0;
       const itemTotal = item.total || item.subtotal || (unitPrice * item.quantity);
 
@@ -1789,6 +1807,11 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
         .text(`${qtyFormatted}${unitSuffix} x S/ ${unitPrice.toFixed(2)}`)
         .text(`  S/ ${itemTotal.toFixed(2)}`)
         .newLine();
+
+      // Observaciones adicionales si existen (IMEI, placa, serie, etc.)
+      if (itemObservations) {
+        builder.text(`  ${itemObservations}`).newLine();
+      }
     }
 
     builder.text(format.separator).newLine()

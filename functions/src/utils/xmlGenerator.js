@@ -872,8 +872,12 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
     // Descripción del item
     const lineItem = invoiceLine.ele('cac:Item')
-    // Usar 'description' si existe, sino 'name' (por compatibilidad con POS)
-    const itemDescription = item.description || item.name || 'Producto'
+    // Usar 'name' como nombre base, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+    const itemName = item.name || item.description || 'Producto'
+    // Concatenar observaciones adicionales si existen (IMEI, placa, serie, etc.)
+    const itemDescription = item.observations
+      ? `${itemName} - ${item.observations}`
+      : itemName
     lineItem.ele('cbc:Description').txt(itemDescription)
 
     const sellersItemId = lineItem.ele('cac:SellersItemIdentification')
@@ -1284,7 +1288,12 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
     // Descripción del item
     const lineItem = creditNoteLine.ele('cac:Item')
-    const itemDescription = item.description || item.name || 'Producto'
+    // Usar 'name' como nombre base, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+    const itemName = item.name || item.description || 'Producto'
+    // Concatenar observaciones adicionales si existen (IMEI, placa, serie, etc.)
+    const itemDescription = item.observations
+      ? `${itemName} - ${item.observations}`
+      : itemName
     lineItem.ele('cbc:Description').txt(itemDescription)
 
     const sellersItemId = lineItem.ele('cac:SellersItemIdentification')
@@ -1694,7 +1703,12 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
     // Descripción del item
     const lineItem = debitNoteLine.ele('cac:Item')
-    const itemDescription = item.description || item.name || 'Producto'
+    // Usar 'name' como nombre base, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
+    const itemName = item.name || item.description || 'Producto'
+    // Concatenar observaciones adicionales si existen (IMEI, placa, serie, etc.)
+    const itemDescription = item.observations
+      ? `${itemName} - ${item.observations}`
+      : itemName
     lineItem.ele('cbc:Description').txt(itemDescription)
 
     const sellersItemId = lineItem.ele('cac:SellersItemIdentification')
