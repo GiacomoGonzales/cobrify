@@ -126,6 +126,7 @@ export default function Settings() {
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
+  const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
 
   // Estados para configuración de notas de venta
@@ -504,6 +505,7 @@ export default function Settings() {
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
         setEnableProductImages(businessData.enableProductImages || false)
+        setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
 
         // Cargar configuración de notas de venta
@@ -2113,6 +2115,26 @@ export default function Settings() {
                 </div>
               </label>
 
+              {/* Guías de Remisión */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={dispatchGuidesEnabled}
+                  onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Habilitar Guías de Remisión Electrónicas
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {dispatchGuidesEnabled
+                      ? '✓ Habilitado: Podrás generar guías de remisión electrónicas (GRE) desde tus comprobantes. Ideal para negocios que realizan envíos o traslados de mercadería.'
+                      : '✗ Deshabilitado: No se mostrará la opción de generar guías de remisión en tus comprobantes.'}
+                  </p>
+                </div>
+              </label>
+
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -2409,6 +2431,7 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
+                      dispatchGuidesEnabled: dispatchGuidesEnabled,
                       hiddenMenuItems: hiddenMenuItems,
                       termsTemplates: termsTemplates,
                       pdfAccentColor: pdfAccentColor,
