@@ -1592,35 +1592,39 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.setLineWidth(0.5)
       doc.rect(MARGIN_LEFT, paymentBoxY, paymentBoxWidth, paymentBoxHeight)
 
-      // Header
-      doc.setFillColor(245, 245, 245)
+      // Header con color de acento
+      doc.setFillColor(...ACCENT_COLOR)
       doc.rect(MARGIN_LEFT, paymentBoxY, paymentBoxWidth, 18, 'F')
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(9)
-      doc.setTextColor(...BLACK)
+      doc.setTextColor(...WHITE)
       const paymentTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS'
       doc.text(paymentTitle, MARGIN_LEFT + 5, paymentBoxY + 12)
 
       let paymentY = paymentBoxY + 25
+      const labelWidth = 50 // Ancho fijo para las etiquetas
+      const valueX = MARGIN_LEFT + labelWidth + 10 // Posición X para los valores
 
       // Si es pago parcial, mostrar monto pagado y saldo pendiente
       if (invoice.paymentStatus === 'partial') {
-        doc.setFont('helvetica', 'normal')
         doc.setFontSize(8)
-        doc.setTextColor(...DARK_GRAY)
 
         // Monto pagado
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...DARK_GRAY)
         doc.text('Monto Pagado:', MARGIN_LEFT + 5, paymentY)
         doc.setFont('helvetica', 'bold')
-        doc.text('S/ ' + (invoice.amountPaid || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), MARGIN_LEFT + 60, paymentY)
+        doc.setTextColor(...BLACK)
+        doc.text('S/ ' + (invoice.amountPaid || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), valueX, paymentY)
         paymentY += 12
 
         // Saldo pendiente
         doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...DARK_GRAY)
         doc.text('Saldo Pendiente:', MARGIN_LEFT + 5, paymentY)
         doc.setFont('helvetica', 'bold')
-        doc.setTextColor(255, 102, 0) // Naranja para el saldo
-        doc.text('S/ ' + (invoice.balance || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), MARGIN_LEFT + 60, paymentY)
+        doc.setTextColor(220, 38, 38) // Rojo para el saldo pendiente
+        doc.text('S/ ' + (invoice.balance || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), valueX, paymentY)
         paymentY += 12
       }
 
