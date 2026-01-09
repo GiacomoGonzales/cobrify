@@ -896,6 +896,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     }
   }
 
+  // Placa de Vehículo (solo si está habilitado en configuración)
+  if (companySettings?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('PLACA:', colLeftX, leftY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(invoice.customer.vehiclePlate.toUpperCase(), leftValueX, leftY)
+    leftY += dataLineHeight
+  }
+
   // Vendedor (si existe)
   if (invoice.sellerName) {
     doc.setFont('helvetica', 'bold')

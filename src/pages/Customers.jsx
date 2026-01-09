@@ -123,6 +123,7 @@ export default function Customers() {
       address: customer.address || '',
       studentName: customer.studentName || '',
       studentSchedule: customer.studentSchedule || '',
+      vehiclePlate: customer.vehiclePlate || '',
       priceLevel: customer.priceLevel || null,
     })
     setIsModalOpen(true)
@@ -224,7 +225,8 @@ export default function Customers() {
         customer.businessName?.toLowerCase().includes(search) ||
         customer.email?.toLowerCase().includes(search) ||
         customer.studentName?.toLowerCase().includes(search) ||
-        customer.studentSchedule?.toLowerCase().includes(search)
+        customer.studentSchedule?.toLowerCase().includes(search) ||
+        customer.vehiclePlate?.toLowerCase().includes(search)
       )
     })
     .sort((a, b) => {
@@ -419,6 +421,9 @@ export default function Customers() {
                   ) : (
                     <TableHead className="hidden lg:table-cell">Dirección</TableHead>
                   )}
+                  {businessSettings?.posCustomFields?.showVehiclePlateField && (
+                    <TableHead>Placa</TableHead>
+                  )}
                   <TableHead className="text-center hidden md:table-cell">Pedidos</TableHead>
                   <TableHead className="text-right hidden md:table-cell">Total Gastado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -469,6 +474,11 @@ export default function Customers() {
                     ) : (
                       <TableCell className="hidden lg:table-cell">
                         <p className="text-sm text-gray-600">{customer.address || '-'}</p>
+                      </TableCell>
+                    )}
+                    {businessSettings?.posCustomFields?.showVehiclePlateField && (
+                      <TableCell>
+                        <p className="text-sm font-medium uppercase">{customer.vehiclePlate || '-'}</p>
                       </TableCell>
                     )}
                     <TableCell className="text-center hidden md:table-cell">
@@ -594,6 +604,17 @@ export default function Customers() {
                 {...register('studentSchedule')}
               />
             </>
+          )}
+
+          {/* Campo Placa de Vehículo - solo si está habilitado en configuración */}
+          {businessSettings?.posCustomFields?.showVehiclePlateField && (
+            <Input
+              label="Placa de Vehículo"
+              placeholder="Ej: ABC-123"
+              error={errors.vehiclePlate?.message}
+              {...register('vehiclePlate')}
+              className="uppercase"
+            />
           )}
 
           {/* Nivel de precio - solo si está habilitado múltiples precios */}

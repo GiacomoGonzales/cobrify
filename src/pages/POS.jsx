@@ -339,7 +339,8 @@ export default function POS() {
     email: '',
     phone: '',
     studentName: '', // Campo libre para nombre de alumno
-    studentSchedule: '' // Horario/turno del alumno
+    studentSchedule: '', // Horario/turno del alumno
+    vehiclePlate: '' // Placa de vehículo
   })
 
   // Estados para pagos parciales (solo notas de venta)
@@ -1802,6 +1803,7 @@ export default function POS() {
               address: customerData.address || '',
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
+              vehiclePlate: customerData.vehiclePlate || '',
             }
           : {
               documentType: ID_TYPES.DNI,
@@ -1813,6 +1815,7 @@ export default function POS() {
               address: '',
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
+              vehiclePlate: customerData.vehiclePlate || '',
             },
         items: items,
         subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
@@ -3460,6 +3463,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         />
                       </div>
                     )}
+                    {companySettings?.posCustomFields?.showVehiclePlateField && (
+                      <input
+                        type="text"
+                        value={customerData.vehiclePlate}
+                        onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
+                        placeholder="Placa de Vehículo"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                      />
+                    )}
                     <input
                       type="text"
                       value={customerData.address}
@@ -3560,6 +3572,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
                       </div>
+                    )}
+                    {companySettings?.posCustomFields?.showVehiclePlateField && (
+                      <input
+                        type="text"
+                        value={customerData.vehiclePlate}
+                        onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
+                        placeholder="Placa de Vehículo (opcional)"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                      />
                     )}
                     <input
                       type="tel"

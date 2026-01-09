@@ -794,6 +794,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         }
       }
 
+      // Placa de Vehículo (solo si está habilitado en configuración)
+      if (business?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate) {
+        printer = printer.text(convertSpanishText(`Placa: ${invoice.customer.vehiclePlate.toUpperCase()}\n`));
+      }
+
       printer = addSeparator(printer, format.separator, paperWidth, 'left');
     }
 
@@ -1780,6 +1785,11 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       if (invoice.customer?.studentSchedule) {
         builder.text(`Horario: ${invoice.customer.studentSchedule}`).newLine();
       }
+    }
+
+    // Placa de Vehículo (solo si está habilitado en configuración)
+    if (business?.posCustomFields?.showVehiclePlateField && invoice.customer?.vehiclePlate) {
+      builder.text(`Placa: ${invoice.customer.vehiclePlate.toUpperCase()}`).newLine();
     }
 
     builder.text(format.separator).newLine()

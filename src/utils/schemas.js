@@ -38,6 +38,8 @@ export const customerSchema = z.object({
   // Campos para alumno (academias, escuelas, etc.)
   studentName: z.string().optional().or(z.literal('')),
   studentSchedule: z.string().optional().or(z.literal('')),
+  // Campo para placa de vehículo (venta de baterías, autopartes, etc.)
+  vehiclePlate: z.string().optional().or(z.literal('')),
   // Nivel de precio para sistema de múltiples precios
   priceLevel: z.enum(['price1', 'price2', 'price3', 'price4']).optional().nullable(),
 }).superRefine((data, ctx) => {

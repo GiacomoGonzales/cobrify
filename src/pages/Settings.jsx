@@ -188,6 +188,7 @@ export default function Settings() {
   // Campos personalizados del POS
   const [posCustomFields, setPosCustomFields] = useState({
     showStudentField: false, // Mostrar campo "Alumno" en el POS
+    showVehiclePlateField: false, // Mostrar campo "Placa de Vehículo" en el POS
   })
 
   // Estados para cambio de contraseña
@@ -2133,6 +2134,20 @@ export default function Settings() {
                       type="checkbox"
                       checked={posCustomFields.showStudentField}
                       onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+                  <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                    posCustomFields.showVehiclePlateField ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 block">Campo "Placa de Vehículo"</span>
+                      <span className="text-xs text-gray-500">Muestra un campo para ingresar la placa del vehículo en el POS y comprobantes</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={posCustomFields.showVehiclePlateField}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
                       className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
                   </label>
