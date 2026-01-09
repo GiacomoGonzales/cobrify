@@ -1574,6 +1574,78 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     footerY = qrBoxY + qrBoxHeight + 5
   } else {
+    // Para notas de venta: mostrar estado de pago si hay pagos parciales
+    if (invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
+      const paymentBoxY = footerY
+      const paymentBoxWidth = CONTENT_WIDTH
+      const paymentRowHeight = 12
+
+      // Calcular altura del recuadro según contenido
+      let paymentBoxHeight = 25 // Header
+      if (invoice.paymentStatus === 'partial') {
+        paymentBoxHeight += 24 // Monto pagado + Saldo pendiente
+      }
+      paymentBoxHeight += 15 + (invoice.paymentHistory.length * 12) // Historial de pagos
+
+      // Recuadro para estado de pago
+      doc.setDrawColor(...BLACK)
+      doc.setLineWidth(0.5)
+      doc.rect(MARGIN_LEFT, paymentBoxY, paymentBoxWidth, paymentBoxHeight)
+
+      // Header
+      doc.setFillColor(245, 245, 245)
+      doc.rect(MARGIN_LEFT, paymentBoxY, paymentBoxWidth, 18, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor(...BLACK)
+      const paymentTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS'
+      doc.text(paymentTitle, MARGIN_LEFT + 5, paymentBoxY + 12)
+
+      let paymentY = paymentBoxY + 25
+
+      // Si es pago parcial, mostrar monto pagado y saldo pendiente
+      if (invoice.paymentStatus === 'partial') {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(...DARK_GRAY)
+
+        // Monto pagado
+        doc.text('Monto Pagado:', MARGIN_LEFT + 5, paymentY)
+        doc.setFont('helvetica', 'bold')
+        doc.text('S/ ' + (invoice.amountPaid || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), MARGIN_LEFT + 60, paymentY)
+        paymentY += 12
+
+        // Saldo pendiente
+        doc.setFont('helvetica', 'normal')
+        doc.text('Saldo Pendiente:', MARGIN_LEFT + 5, paymentY)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(255, 102, 0) // Naranja para el saldo
+        doc.text('S/ ' + (invoice.balance || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), MARGIN_LEFT + 60, paymentY)
+        paymentY += 12
+      }
+
+      // Historial de pagos
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      doc.text('HISTORIAL DE PAGOS:', MARGIN_LEFT + 5, paymentY)
+      paymentY += 10
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...DARK_GRAY)
+
+      for (const payment of invoice.paymentHistory) {
+        const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date)
+        const dateStr = paymentDate.toLocaleDateString('es-PE')
+        const amountStr = 'S/ ' + (payment.amount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })
+        doc.text(`• ${dateStr} - ${amountStr} (${payment.method || 'Efectivo'})`, MARGIN_LEFT + 8, paymentY)
+        paymentY += 10
+      }
+
+      footerY = paymentBoxY + paymentBoxHeight + 10
+    }
+
     doc.setFontSize(8)
     doc.setTextColor(...MEDIUM_GRAY)
     doc.text('DOCUMENTO NO VÁLIDO PARA EFECTOS TRIBUTARIOS', MARGIN_LEFT, footerY + 10)
