@@ -100,6 +100,10 @@ export default function LandingRouter() {
                 secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
                 accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
                 whatsapp: data.branding?.whatsapp || data.phone || '',
+                // Precios de la landing page
+                priceMonthly: data.branding?.priceMonthly ?? 19.90,
+                priceSemester: data.branding?.priceSemester ?? 99.90,
+                priceAnnual: data.branding?.priceAnnual ?? 149.90,
               }
             }
             console.log('✅ LandingRouter: Preview reseller loaded:', resellerData.branding?.companyName)

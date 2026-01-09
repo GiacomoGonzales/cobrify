@@ -14,6 +14,17 @@ export default function ResellerLandingPage({ reseller }) {
   const secondaryColor = reseller?.branding?.secondaryColor || '#1d4ed8'
   const whatsapp = reseller?.branding?.whatsapp || reseller?.phone || ''
 
+  // Precios dinámicos
+  const priceMonthly = reseller?.branding?.priceMonthly ?? 19.90
+  const priceSemester = reseller?.branding?.priceSemester ?? 99.90
+  const priceAnnual = reseller?.branding?.priceAnnual ?? 149.90
+
+  // Calcular ahorros
+  const savingSemester = (priceMonthly * 6) - priceSemester
+  const savingSemesterPercent = Math.round((savingSemester / (priceMonthly * 6)) * 100)
+  const savingAnnual = (priceMonthly * 12) - priceAnnual
+  const savingAnnualPercent = Math.round((savingAnnual / (priceMonthly * 12)) * 100)
+
   // Formatear número de WhatsApp (quitar espacios, guiones, etc.)
   const whatsappNumber = whatsapp.replace(/[^0-9]/g, '')
   const whatsappLink = whatsappNumber
@@ -478,7 +489,7 @@ export default function ResellerLandingPage({ reseller }) {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Mensual</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className="text-4xl font-bold text-gray-900">S/19.90</span>
+                  <span className="text-4xl font-bold text-gray-900">S/{priceMonthly.toFixed(2)}</span>
                   <span className="text-gray-600 ml-2">/mes</span>
                 </div>
                 <p className="text-sm text-gray-500">Pago mes a mes</p>
@@ -524,10 +535,10 @@ export default function ResellerLandingPage({ reseller }) {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-white mb-2">Semestral</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className="text-4xl font-bold text-white">S/99.90</span>
+                  <span className="text-4xl font-bold text-white">S/{priceSemester.toFixed(2)}</span>
                   <span className="text-white/80 ml-2">/6 meses</span>
                 </div>
-                <p className="text-sm text-white/80">Ahorra S/19.50 (16%)</p>
+                <p className="text-sm text-white/80">Ahorra S/{savingSemester.toFixed(2)} ({savingSemesterPercent}%)</p>
               </div>
               <ul className="space-y-3 mb-8 text-left">
                 <li className="flex items-start text-white">
@@ -570,10 +581,10 @@ export default function ResellerLandingPage({ reseller }) {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Anual</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className="text-4xl font-bold text-gray-900">S/149.90</span>
+                  <span className="text-4xl font-bold text-gray-900">S/{priceAnnual.toFixed(2)}</span>
                   <span className="text-gray-600 ml-2">/año</span>
                 </div>
-                <p className="text-sm text-green-600 font-semibold">Ahorra S/88.90 (37%)</p>
+                <p className="text-sm text-green-600 font-semibold">Ahorra S/{savingAnnual.toFixed(2)} ({savingAnnualPercent}%)</p>
               </div>
               <ul className="space-y-3 mb-8 text-left">
                 <li className="flex items-start text-gray-700">

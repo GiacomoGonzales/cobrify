@@ -33,7 +33,8 @@ import {
   Globe,
   Link2,
   Share2,
-  FileText
+  FileText,
+  DollarSign
 } from 'lucide-react'
 
 export default function ResellerSettings() {
@@ -69,6 +70,10 @@ export default function ResellerSettings() {
     secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
     whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
     description: resellerData?.branding?.description || '',
+    // Precios de la landing page
+    priceMonthly: resellerData?.branding?.priceMonthly ?? 19.90,
+    priceSemester: resellerData?.branding?.priceSemester ?? 99.90,
+    priceAnnual: resellerData?.branding?.priceAnnual ?? 149.90,
   })
 
   // Sincronizar formData y brandingData cuando resellerData se cargue
@@ -90,6 +95,10 @@ export default function ResellerSettings() {
         secondaryColor: resellerData.branding?.secondaryColor || '#059669',
         whatsapp: resellerData.branding?.whatsapp || resellerData.phone || '',
         description: resellerData.branding?.description || '',
+        // Precios de la landing page
+        priceMonthly: resellerData.branding?.priceMonthly ?? 19.90,
+        priceSemester: resellerData.branding?.priceSemester ?? 99.90,
+        priceAnnual: resellerData.branding?.priceAnnual ?? 149.90,
       })
       setDataLoaded(true)
     }
@@ -800,6 +809,59 @@ export default function ResellerSettings() {
                             }))}
                             className="w-8 h-8 rounded-lg cursor-pointer border border-gray-300"
                           />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Precios de la Landing */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <DollarSign className="w-4 h-4 inline mr-1" />
+                        Precios de tu Landing Page
+                      </label>
+                      <p className="text-xs text-gray-500 mb-3">Personaliza los precios que se mostrarán en tu landing</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Mensual</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">S/</span>
+                            <input
+                              type="number"
+                              step="0.10"
+                              min="0"
+                              value={brandingData.priceMonthly}
+                              onChange={(e) => setBrandingData(prev => ({ ...prev, priceMonthly: parseFloat(e.target.value) || 0 }))}
+                              className="w-full pl-7 pr-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Semestral</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">S/</span>
+                            <input
+                              type="number"
+                              step="0.10"
+                              min="0"
+                              value={brandingData.priceSemester}
+                              onChange={(e) => setBrandingData(prev => ({ ...prev, priceSemester: parseFloat(e.target.value) || 0 }))}
+                              className="w-full pl-7 pr-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Anual</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">S/</span>
+                            <input
+                              type="number"
+                              step="0.10"
+                              min="0"
+                              value={brandingData.priceAnnual}
+                              onChange={(e) => setBrandingData(prev => ({ ...prev, priceAnnual: parseFloat(e.target.value) || 0 }))}
+                              className="w-full pl-7 pr-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>

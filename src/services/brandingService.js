@@ -106,6 +106,10 @@ export async function updateResellerBranding(resellerId, branding) {
         accentColor: branding.accentColor || DEFAULT_BRANDING.accentColor,
         whatsapp: branding.whatsapp || '',
         description: branding.description || '',
+        // Precios de la landing page
+        priceMonthly: branding.priceMonthly ?? 19.90,
+        priceSemester: branding.priceSemester ?? 99.90,
+        priceAnnual: branding.priceAnnual ?? 149.90,
       },
       updatedAt: Timestamp.now()
     })
@@ -248,6 +252,10 @@ export async function getResellerByHostname(hostname) {
           secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
           accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
           whatsapp: data.branding?.whatsapp || data.phone || '',
+          // Precios de la landing page
+          priceMonthly: data.branding?.priceMonthly ?? 19.90,
+          priceSemester: data.branding?.priceSemester ?? 99.90,
+          priceAnnual: data.branding?.priceAnnual ?? 149.90,
         }
       }
     }
