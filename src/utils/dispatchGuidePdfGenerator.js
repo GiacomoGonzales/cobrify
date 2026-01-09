@@ -728,7 +728,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFont('helvetica', 'normal')
   doc.text('Placa del vehículo:', MARGIN_LEFT, currentY)
   doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
-  doc.text(plateValue, leftValueX + 5, currentY)
+  // Si es M1/L y no hay placa, mostrar "N/A (Vehículo M1/L)"
+  const plateDisplay = plateValue === '-' && guide.isM1LVehicle ? 'N/A (Vehículo M1/L)' : plateValue
+  doc.text(plateDisplay, leftValueX + 5, currentY)
 
   doc.text('Modalidad de transporte:', rightLabelX, currentY)
   doc.setFont('helvetica', 'bold')
@@ -736,11 +738,29 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   currentY += 16
 
+  // Fila 1.5: Indicador vehículo M1 o L (si aplica)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Indicador vehículo M1 o L:', MARGIN_LEFT, currentY)
+  doc.setFont('helvetica', 'bold')
+  const m1lIndicator = guide.isM1LVehicle ? 'SI' : 'NO'
+  doc.text(m1lIndicator, leftValueX + 5, currentY)
+
+  if (guide.isM1LVehicle) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6)
+    doc.text('(Motos, mototaxis, autos, taxis - hasta 8 asientos)', leftValueX + 25, currentY)
+    doc.setFontSize(7)
+  }
+
+  currentY += 16
+
   // Fila 2: DNI del Conductor | Peso Total
   doc.setFont('helvetica', 'normal')
   doc.text('DNI del Conductor:', MARGIN_LEFT, currentY)
   doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
-  doc.text(dniValue, leftValueX + 5, currentY)
+  // Si es M1/L y no hay DNI, mostrar "N/A"
+  const dniDisplay = dniValue === '-' && guide.isM1LVehicle ? 'N/A' : dniValue
+  doc.text(dniDisplay, leftValueX + 5, currentY)
 
   doc.text('Peso Total Aprox. (KGM):', rightLabelX, currentY)
   doc.setFont('helvetica', 'bold')
@@ -752,11 +772,15 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFont('helvetica', 'normal')
   doc.text('Nombre del Conductor:', MARGIN_LEFT, currentY)
   doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12) // Mismo ancho que Placa y DNI
-  doc.text(driverFullName.substring(0, 22), leftValueX + 5, currentY) // Truncar para que quepa en el recuadro
+  // Si es M1/L y no hay nombre, mostrar "N/A"
+  const nameDisplay = driverFullName === '-' && guide.isM1LVehicle ? 'N/A' : driverFullName.substring(0, 22)
+  doc.text(nameDisplay, leftValueX + 5, currentY) // Truncar para que quepa en el recuadro
 
   doc.text('Licencia:', rightLabelX, currentY)
   doc.rect(rightValueX - 5, currentY - 8, 70, 12)
-  doc.text(driver.license || '-', rightValueX, currentY)
+  // Si es M1/L y no hay licencia, mostrar "N/A"
+  const licenseDisplay = (!driver.license || driver.license === '-') && guide.isM1LVehicle ? 'N/A' : (driver.license || '-')
+  doc.text(licenseDisplay, rightValueX, currentY)
 
   currentY += 18
 
