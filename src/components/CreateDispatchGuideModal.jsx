@@ -6,7 +6,8 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createDispatchGuide } from '@/services/firestoreService'
+import { createDispatchGuide, getCompanySettings } from '@/services/firestoreService'
+import { getBranch } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = [
@@ -208,6 +209,56 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       }
     }
   }, [referenceInvoice])
+
+  // Cargar dirección de origen desde el negocio o sucursal
+  useEffect(() => {
+    const loadOriginAddress = async () => {
+      const businessId = getBusinessId()
+      if (!businessId) return
+
+      try {
+        // Obtener configuración del negocio (dirección principal)
+        const companyResult = await getCompanySettings(businessId)
+        if (!companyResult.success || !companyResult.data) return
+
+        const businessData = companyResult.data
+
+        // Si la factura tiene branchId, obtener dirección de esa sucursal
+        if (referenceInvoice?.branchId) {
+          const branchResult = await getBranch(businessId, referenceInvoice.branchId)
+          if (branchResult.success && branchResult.data?.address) {
+            // Usar dirección de la sucursal
+            setOriginAddress(branchResult.data.address)
+            // Las sucursales no tienen ubigeo separado, usar el del negocio si está disponible
+            if (businessData.ubigeo && businessData.ubigeo.length === 6) {
+              setOriginDepartment(businessData.ubigeo.substring(0, 2))
+              setOriginProvince(businessData.ubigeo.substring(2, 4))
+              setOriginDistrict(businessData.ubigeo.substring(4, 6))
+            }
+            return
+          }
+        }
+
+        // Usar dirección del negocio principal
+        if (businessData.address) {
+          setOriginAddress(businessData.address)
+        }
+
+        // Usar ubigeo del negocio para auto-llenar departamento/provincia/distrito
+        if (businessData.ubigeo && businessData.ubigeo.length === 6) {
+          setOriginDepartment(businessData.ubigeo.substring(0, 2))
+          setOriginProvince(businessData.ubigeo.substring(2, 4))
+          setOriginDistrict(businessData.ubigeo.substring(4, 6))
+        }
+      } catch (error) {
+        console.error('Error al cargar dirección de origen:', error)
+      }
+    }
+
+    if (isOpen) {
+      loadOriginAddress()
+    }
+  }, [isOpen, getBusinessId, referenceInvoice?.branchId])
 
   // Obtener ubigeo completo
   const getUbigeo = (dept, prov, dist) => {
