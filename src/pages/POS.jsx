@@ -1271,7 +1271,10 @@ export default function POS() {
       businessName: '',
       address: '',
       email: '',
-      phone: ''
+      phone: '',
+      studentName: '',
+      studentSchedule: '',
+      vehiclePlate: ''
     })
     setPayments([{ method: '', amount: '' }])
     setLastInvoiceData(null)
@@ -1738,6 +1741,9 @@ export default function POS() {
           email: '',
           phone: '',
           address: '',
+          studentName: '',
+          studentSchedule: '',
+          vehiclePlate: ''
         })
         setPayments([{ id: Date.now(), method: '', amount: '' }])
         setSelectedCustomer(null)
