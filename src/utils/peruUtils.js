@@ -19,36 +19,41 @@ export const ID_TYPES = {
   PASSPORT: 'PASSPORT',
 }
 
-// Tipos de detracción SUNAT con sus porcentajes
+// Tipos de detracción SUNAT con sus porcentajes (Catálogo 54)
 // Referencia: https://orientacion.sunat.gob.pe/detracciones
+// Actualizado: Enero 2026
 export const DETRACTION_TYPES = [
-  // Bienes
+  // Bienes (Anexo 1 y 2)
   { code: '001', name: 'Azúcar y melaza de caña', rate: 10, category: 'bienes' },
   { code: '003', name: 'Alcohol etílico', rate: 10, category: 'bienes' },
   { code: '004', name: 'Recursos hidrobiológicos', rate: 4, category: 'bienes' },
   { code: '005', name: 'Maíz amarillo duro', rate: 4, category: 'bienes' },
-  { code: '006', name: 'Algodón', rate: 12, category: 'bienes' },
   { code: '007', name: 'Caña de azúcar', rate: 10, category: 'bienes' },
   { code: '008', name: 'Madera', rate: 4, category: 'bienes' },
   { code: '009', name: 'Arena y piedra', rate: 10, category: 'bienes' },
-  { code: '010', name: 'Residuos, subproductos, desechos, recortes', rate: 15, category: 'bienes' },
-  { code: '011', name: 'Bienes gravados con IGV por renuncia a exoneración', rate: 10, category: 'bienes' },
+  { code: '010', name: 'Residuos, subproductos, desechos, recortes y desperdicios', rate: 15, category: 'bienes' },
   { code: '014', name: 'Carnes y despojos comestibles', rate: 4, category: 'bienes' },
   { code: '016', name: 'Aceite de pescado', rate: 10, category: 'bienes' },
-  { code: '017', name: 'Harina, polvo y pellets de pescado', rate: 4, category: 'bienes' },
+  { code: '017', name: 'Harina, polvo y pellets de pescado, crustáceos, moluscos', rate: 4, category: 'bienes' },
+  { code: '023', name: 'Leche', rate: 4, category: 'bienes' },
   { code: '031', name: 'Oro gravado con el IGV', rate: 10, category: 'bienes' },
+  { code: '032', name: 'Páprika y otros frutos de los géneros capsicum o pimienta', rate: 10, category: 'bienes' },
   { code: '034', name: 'Minerales metálicos no auríferos', rate: 10, category: 'bienes' },
   { code: '035', name: 'Bienes exonerados del IGV', rate: 1.5, category: 'bienes' },
   { code: '036', name: 'Oro y demás minerales metálicos exonerados del IGV', rate: 1.5, category: 'bienes' },
-  // Servicios
+  { code: '039', name: 'Minerales no metálicos', rate: 10, category: 'bienes' },
+  { code: '041', name: 'Plomo', rate: 15, category: 'bienes' },
+  // Servicios (Anexo 3)
   { code: '012', name: 'Intermediación laboral y tercerización', rate: 12, category: 'servicios' },
-  { code: '019', name: 'Arrendamiento de bienes', rate: 10, category: 'servicios' },
+  { code: '019', name: 'Arrendamiento de bienes muebles', rate: 10, category: 'servicios' },
   { code: '020', name: 'Mantenimiento y reparación de bienes muebles', rate: 12, category: 'servicios' },
   { code: '021', name: 'Movimiento de carga', rate: 10, category: 'servicios' },
   { code: '022', name: 'Otros servicios empresariales', rate: 12, category: 'servicios' },
   { code: '024', name: 'Comisión mercantil', rate: 10, category: 'servicios' },
   { code: '025', name: 'Fabricación de bienes por encargo', rate: 10, category: 'servicios' },
   { code: '026', name: 'Servicio de transporte de personas', rate: 10, category: 'servicios' },
+  { code: '027', name: 'Servicio de transporte de carga', rate: 4, category: 'servicios', minAmount: 400 },
+  { code: '028', name: 'Transporte de pasajeros', rate: 10, category: 'servicios' },
   { code: '030', name: 'Contratos de construcción', rate: 4, category: 'servicios' },
   { code: '037', name: 'Demás servicios gravados con el IGV', rate: 12, category: 'servicios' },
 ]
