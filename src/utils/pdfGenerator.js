@@ -1582,11 +1582,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       const paymentRowHeight = 12
 
       // Calcular altura del recuadro según contenido
-      let paymentBoxHeight = 25 // Header
+      let paymentBoxHeight = 32 // Header + padding
       if (invoice.paymentStatus === 'partial') {
         paymentBoxHeight += 24 // Monto pagado + Saldo pendiente
       }
-      paymentBoxHeight += 15 + (invoice.paymentHistory.length * 12) // Historial de pagos
+      paymentBoxHeight += 18 + (invoice.paymentHistory.length * 12) // Historial de pagos
 
       // Recuadro para estado de pago
       doc.setDrawColor(...BLACK)
@@ -1602,7 +1602,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       const paymentTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS'
       doc.text(paymentTitle, MARGIN_LEFT + 5, paymentBoxY + 12)
 
-      let paymentY = paymentBoxY + 25
+      let paymentY = paymentBoxY + 32 // Más espacio después del header
       const valueX = MARGIN_LEFT + 70 // Posición X fija para los valores (después de "Saldo Pendiente:")
 
       // Si es pago parcial, mostrar monto pagado y saldo pendiente
