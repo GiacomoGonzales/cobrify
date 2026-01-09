@@ -636,8 +636,25 @@ export default function Reports() {
     const methods = {}
 
     filteredInvoices.forEach(invoice => {
-      // Soportar múltiples formas de pago
-      if (invoice.payments && Array.isArray(invoice.payments)) {
+      // Priorizar paymentHistory (ventas al crédito o parciales pagadas)
+      if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+        invoice.paymentHistory.forEach(payment => {
+          const method = payment.method || 'Efectivo'
+          const amount = payment.amount || 0
+
+          if (!methods[method]) {
+            methods[method] = {
+              method,
+              total: 0,
+              count: 0,
+            }
+          }
+
+          methods[method].total += amount
+          methods[method].count += 1
+        })
+      } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+        // Ventas normales con array payments
         invoice.payments.forEach(payment => {
           const method = payment.method || 'Efectivo'
           const amount = payment.amount || 0
@@ -1970,9 +1987,15 @@ export default function Reports() {
                   </TableHeader>
                   <TableBody>
                     {filteredInvoices.slice(0, 20).map(invoice => {
-                      // Obtener métodos de pago
+                      // Obtener métodos de pago - priorizar paymentHistory
                       let paymentMethods = 'Efectivo'
-                      if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+                      if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+                        if (invoice.paymentHistory.length === 1) {
+                          paymentMethods = invoice.paymentHistory[0].method || 'Efectivo'
+                        } else {
+                          paymentMethods = 'Múltiples'
+                        }
+                      } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
                         if (invoice.payments.length === 1) {
                           paymentMethods = invoice.payments[0].method || 'Efectivo'
                         } else {
