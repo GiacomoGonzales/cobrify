@@ -674,37 +674,51 @@ export default function CashRegister() {
 
     // Recorrer cada factura válida y sumar por método de pago
     validInvoices.forEach(invoice => {
+      // Si es venta al crédito pendiente de pago, no sumar nada al control de caja
+      if (invoice.paymentStatus === 'pending') {
+        return // No contar ventas al crédito sin pagar
+      }
+
       // Si la factura tiene múltiples métodos de pago (array payments)
       if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
         const invoiceTotal = parseFloat(invoice.total) || 0
 
-        // Si hay un solo método de pago, usar el TOTAL DE LA FACTURA (no el monto pagado que puede incluir vuelto)
+        // Para pagos parciales, solo sumar lo realmente pagado (amountPaid)
+        // Para pagos completos, usar el total de la factura
+        const isPartialPayment = invoice.paymentStatus === 'partial'
+        const amountToCount = isPartialPayment ? (parseFloat(invoice.amountPaid) || 0) : invoiceTotal
+
+        // Si hay un solo método de pago, usar el monto correspondiente
         if (invoice.payments.length === 1) {
           const method = invoice.payments[0].method
           switch (method) {
             case 'Efectivo':
-              salesCash += invoiceTotal
+              salesCash += amountToCount
               break
             case 'Tarjeta':
-              salesCard += invoiceTotal
+              salesCard += amountToCount
               break
             case 'Transferencia':
-              salesTransfer += invoiceTotal
+              salesTransfer += amountToCount
               break
             case 'Yape':
-              salesYape += invoiceTotal
+              salesYape += amountToCount
               break
             case 'Plin':
-              salesPlin += invoiceTotal
+              salesPlin += amountToCount
               break
             case 'Rappi':
-              salesRappi += invoiceTotal
+              salesRappi += amountToCount
               break
           }
         } else {
-          // Múltiples métodos de pago: usar los montos reales de cada pago
-          // (en pagos mixtos el usuario ingresa montos exactos, no hay vuelto por método)
-          invoice.payments.forEach(payment => {
+          // Múltiples métodos de pago: usar los montos reales de cada pago del historial
+          // Para pagos parciales, usar paymentHistory que tiene los pagos reales
+          const paymentsToSum = isPartialPayment && invoice.paymentHistory
+            ? invoice.paymentHistory
+            : invoice.payments
+
+          paymentsToSum.forEach(payment => {
             const amount = parseFloat(payment.amount) || 0
             switch (payment.method) {
               case 'Efectivo':
@@ -730,7 +744,10 @@ export default function CashRegister() {
         }
       } else {
         // Facturas antiguas sin array payments - usar paymentMethod y sumar el total completo
-        const total = invoice.total || 0
+        // Para pagos parciales, solo sumar amountPaid
+        const isPartialPayment = invoice.paymentStatus === 'partial'
+        const total = isPartialPayment ? (parseFloat(invoice.amountPaid) || 0) : (invoice.total || 0)
+
         switch (invoice.paymentMethod) {
           case 'Efectivo':
             salesCash += total
