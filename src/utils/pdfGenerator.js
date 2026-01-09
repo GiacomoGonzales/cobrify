@@ -1603,8 +1603,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(paymentTitle, MARGIN_LEFT + 5, paymentBoxY + 12)
 
       let paymentY = paymentBoxY + 25
-      const labelWidth = 50 // Ancho fijo para las etiquetas
-      const valueX = MARGIN_LEFT + labelWidth + 10 // Posición X para los valores
+      const valueX = MARGIN_LEFT + 70 // Posición X fija para los valores (después de "Saldo Pendiente:")
 
       // Si es pago parcial, mostrar monto pagado y saldo pendiente
       if (invoice.paymentStatus === 'partial') {
