@@ -205,7 +205,7 @@ export default function ResellerLandingPage({ reseller }) {
               <div className="flex flex-col sm:flex-row gap-4">
                 {whatsappLink && (
                   <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                    <Button size="lg" className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg w-full sm:w-auto font-semibold text-white">
+                    <Button variant="ghost" size="lg" className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg w-full sm:w-auto font-semibold text-white">
                       Contáctanos por WhatsApp
                     </Button>
                   </a>
@@ -549,13 +549,13 @@ export default function ResellerLandingPage({ reseller }) {
               </ul>
               {whatsappLink ? (
                 <a href={`${whatsappLink.replace('información', 'contratar el plan Semestral')}`} target="_blank" rel="noopener noreferrer">
-                  <Button className="w-full bg-white font-semibold shadow-lg" style={{ color: primaryColor }}>
+                  <Button variant="ghost" className="w-full bg-white font-semibold shadow-lg" style={{ color: primaryColor }}>
                     Contratar Plan
                   </Button>
                 </a>
               ) : (
                 <Link to="/login">
-                  <Button className="w-full bg-white font-semibold shadow-lg" style={{ color: primaryColor }}>
+                  <Button variant="ghost" className="w-full bg-white font-semibold shadow-lg" style={{ color: primaryColor }}>
                     Comenzar
                   </Button>
                 </Link>
@@ -623,13 +623,13 @@ export default function ResellerLandingPage({ reseller }) {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {whatsappLink && (
               <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
-                <Button size="lg" className="bg-white hover:bg-gray-100 w-full sm:w-auto font-semibold" style={{ color: primaryColor }}>
+                <Button variant="ghost" size="lg" className="bg-white hover:bg-gray-100 w-full sm:w-auto font-semibold" style={{ color: primaryColor }}>
                   Contactar por WhatsApp
                 </Button>
               </a>
             )}
             <Link to="/login">
-              <Button size="lg" className="bg-white/20 text-white hover:bg-white/30 border-2 border-white/30 w-full sm:w-auto font-semibold">
+              <Button variant="ghost" size="lg" className="bg-white/20 text-white hover:bg-white/30 border-2 border-white/30 w-full sm:w-auto font-semibold">
                 Iniciar Sesión
               </Button>
             </Link>
