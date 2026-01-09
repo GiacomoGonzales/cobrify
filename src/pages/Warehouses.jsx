@@ -48,7 +48,8 @@ const warehouseSchema = z.object({
 })
 
 export default function Warehouses() {
-  const { user, getBusinessId, filterBranchesByAccess, isDemoMode } = useAppContext()
+  const { user, getBusinessId, filterBranchesByAccess, isDemoMode, companySettings } = useAppContext()
+  const mainBranchName = companySettings?.mainBranchName || 'Sucursal Principal'
   const toast = useToast()
   const [warehouses, setWarehouses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -122,7 +123,7 @@ export default function Warehouses() {
 
   // Helper para obtener nombre de sucursal
   const getBranchName = (branchId) => {
-    if (!branchId) return 'Sucursal Principal'
+    if (!branchId) return mainBranchName
     const branch = branches.find(b => b.id === branchId)
     return branch?.name || 'Sin asignar'
   }
@@ -489,7 +490,7 @@ export default function Warehouses() {
                   className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
                 >
                   <option value="all">Todas las sucursales</option>
-                  <option value="main">Sucursal Principal</option>
+                  <option value="main">{mainBranchName}</option>
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}
@@ -675,7 +676,7 @@ export default function Warehouses() {
                 {...register('branchId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="">Sucursal Principal</option>
+                <option value="">{mainBranchName}</option>
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
