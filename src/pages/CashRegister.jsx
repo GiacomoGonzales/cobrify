@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -774,6 +774,28 @@ export default function CashRegister() {
     // Total de ventas (todos los métodos)
     const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi
 
+    // Calcular ventas pendientes de cobro (crédito y pagos parciales)
+    let pendingTotal = 0
+    let pendingCount = 0
+    todayInvoices.forEach(invoice => {
+      // Excluir notas de crédito, débito, convertidas y anuladas
+      if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') return
+      if (invoice.convertedFrom) return
+      if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
+          invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending') return
+
+      // Ventas al crédito (pendientes de cobro total)
+      if (invoice.paymentStatus === 'pending') {
+        pendingTotal += parseFloat(invoice.total) || 0
+        pendingCount++
+      }
+      // Pagos parciales (saldo pendiente)
+      else if (invoice.paymentStatus === 'partial') {
+        pendingTotal += parseFloat(invoice.balance) || 0
+        pendingCount++
+      }
+    })
+
     // Ingresos adicionales (movimientos tipo income)
     const income = movements
       .filter(m => m.type === 'income')
@@ -804,7 +826,9 @@ export default function CashRegister() {
       income,
       expense,
       expected,
-      difference
+      difference,
+      pendingTotal,
+      pendingCount
     }
   }
 
@@ -975,6 +999,25 @@ export default function CashRegister() {
                 </div>
               </CardContent>
             </Card>
+
+            {totals.pendingCount > 0 && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Pendiente de Cobro</p>
+                      <p className="text-2xl font-bold text-orange-600">
+                        {formatCurrency(totals.pendingTotal)}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                      <Clock className="w-6 h-6 text-orange-600" />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">{totals.pendingCount} venta{totals.pendingCount !== 1 ? 's' : ''} sin cobrar</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Resumen y Movimientos */}
@@ -1045,6 +1088,15 @@ export default function CashRegister() {
                     <span className="text-xs sm:text-sm text-red-600">- Egresos:</span>
                     <span className="text-sm sm:text-base font-semibold text-red-600">{formatCurrency(totals.expense)}</span>
                   </div>
+                  {totals.pendingCount > 0 && (
+                    <div className="flex justify-between items-center py-2 border-b bg-orange-50 px-2 rounded">
+                      <span className="text-xs sm:text-sm text-orange-600">
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        Pendiente ({totals.pendingCount}):
+                      </span>
+                      <span className="text-sm sm:text-base font-semibold text-orange-600">{formatCurrency(totals.pendingTotal)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center py-3 bg-primary-50 px-3 rounded-lg mt-3">
                     <span className="text-sm sm:text-base font-semibold text-primary-900">Efectivo Esperado:</span>
                     <span className="text-lg sm:text-xl font-bold text-primary-600">
