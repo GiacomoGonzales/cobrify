@@ -71,8 +71,22 @@ const getDateFromTimestamp = (timestamp) => {
 /**
  * Helper para formatear los métodos de pago de una factura
  * Si hay múltiples pagos, muestra el detalle de cada uno
+ * Prioriza paymentHistory para ventas al crédito/parciales pagadas
  */
 const formatPaymentMethods = (invoice) => {
+  // Priorizar paymentHistory (ventas al crédito o parciales que fueron pagadas)
+  if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+    if (invoice.paymentHistory.length === 1) {
+      return invoice.paymentHistory[0].method || 'Efectivo';
+    } else {
+      // Múltiples pagos en el historial - mostrar detalle
+      return invoice.paymentHistory
+        .map(p => `${p.method}: S/${(p.amount || 0).toFixed(2)}`)
+        .join(' + ');
+    }
+  }
+
+  // Usar payments array para ventas normales
   if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
     if (invoice.payments.length === 1) {
       // Un solo método de pago
