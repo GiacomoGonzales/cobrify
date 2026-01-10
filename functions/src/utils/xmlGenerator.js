@@ -1936,6 +1936,15 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
 
+  // Campo cbc:HandlingInstructions - Descripción del motivo de traslado
+  // Obligatorio cuando el motivo es "13" (Otros), opcional para los demás
+  // Error 3457: Si falta la descripción del motivo de traslado
+  if (guideData.transferReason === '13') {
+    // Para motivo "Otros", usar descripción personalizada o valor por defecto
+    const otherReasonDescription = guideData.transferReasonDescription || 'OTROS MOTIVOS DE TRASLADO'
+    shipment.ele('cbc:HandlingInstructions').txt(otherReasonDescription)
+  }
+
   // Campo cbc:Information - Sustento de diferencia de peso bruto
   // SOLO para motivos 08 (Importación), 09 (Exportación), 19 (Traslado mercancía extranjera)
   // Error 3418: Si el motivo NO es 08, 09 o 19, NO debe consignar este campo
@@ -2308,6 +2317,13 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'listName': 'Motivo de traslado',
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
+
+  // Campo cbc:HandlingInstructions - Descripción del motivo de traslado
+  // Obligatorio cuando el motivo es "13" (Otros), opcional para los demás
+  if (guideData.transferReason === '13') {
+    const otherReasonDescriptionCarrier = guideData.transferReasonDescription || 'OTROS MOTIVOS DE TRASLADO'
+    shipment.ele('cbc:HandlingInstructions').txt(otherReasonDescriptionCarrier)
+  }
 
   // Campo cbc:Information - Sustento de diferencia de peso bruto
   // SOLO para motivos 08 (Importación), 09 (Exportación), 19 (Traslado mercancía extranjera)
