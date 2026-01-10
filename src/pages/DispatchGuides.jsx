@@ -877,6 +877,7 @@ export default function DispatchGuides() {
       <CreateDispatchGuideModal
         isOpen={showCreateModal}
         onClose={handleCloseModal}
+        selectedBranch={filterBranch !== 'all' && filterBranch !== 'main' ? branches.find(b => b.id === filterBranch) : null}
       />
 
       {/* Edit Guide Modal */}

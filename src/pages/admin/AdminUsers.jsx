@@ -54,6 +54,7 @@ import {
   deleteBranch
 } from '@/services/branchService'
 import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/warehouseService'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-800',
@@ -152,7 +153,11 @@ export default function AdminUsers() {
     phone: '',
     email: '',
     location: '',
-    isDefault: false
+    isDefault: false,
+    department: '',
+    province: '',
+    district: '',
+    ubigeo: ''
   })
   // Estados para editar límite de sucursales
   const [showEditLimitModal, setShowEditLimitModal] = useState(false)
@@ -889,7 +894,11 @@ export default function AdminUsers() {
       phone: '',
       email: '',
       location: '',
-      isDefault: false
+      isDefault: false,
+      department: '',
+      province: '',
+      district: '',
+      ubigeo: ''
     })
 
     try {
@@ -1005,7 +1014,11 @@ export default function AdminUsers() {
         phone: '',
         email: '',
         location: '',
-        isDefault: false
+        isDefault: false,
+        department: '',
+        province: '',
+        district: '',
+        ubigeo: ''
       })
     } catch (error) {
       console.error('Error saving branch:', error)
@@ -1024,7 +1037,11 @@ export default function AdminUsers() {
       phone: branch.phone || '',
       email: branch.email || '',
       location: branch.location || '',
-      isDefault: branch.isDefault || false
+      isDefault: branch.isDefault || false,
+      department: branch.department || '',
+      province: branch.province || '',
+      district: branch.district || '',
+      ubigeo: branch.ubigeo || ''
     })
   }
 
@@ -1067,8 +1084,45 @@ export default function AdminUsers() {
       phone: '',
       email: '',
       location: '',
-      isDefault: false
+      isDefault: false,
+      department: '',
+      province: '',
+      district: '',
+      ubigeo: ''
     })
+  }
+
+  // Helper para obtener provincias según departamento
+  const getProvincias = (deptCode) => {
+    return PROVINCIAS[deptCode] || []
+  }
+
+  // Helper para obtener distritos según departamento y provincia
+  const getDistritos = (deptCode, provCode) => {
+    const key = `${deptCode}${provCode}`
+    return DISTRITOS[key] || []
+  }
+
+  // Calcular ubigeo cuando cambian departamento/provincia/distrito
+  const handleUbigeoChange = (field, value) => {
+    const newForm = { ...branchForm, [field]: value }
+
+    // Resetear campos dependientes
+    if (field === 'department') {
+      newForm.province = ''
+      newForm.district = ''
+      newForm.ubigeo = ''
+    } else if (field === 'province') {
+      newForm.district = ''
+      newForm.ubigeo = ''
+    } else if (field === 'district') {
+      // Calcular ubigeo completo
+      if (newForm.department && newForm.province && value) {
+        newForm.ubigeo = `${newForm.department}${newForm.province}${value}`
+      }
+    }
+
+    setBranchForm(newForm)
   }
 
   // Abrir modal para editar límite de sucursales
@@ -2806,6 +2860,67 @@ export default function AdminUsers() {
                       placeholder="Lima, Arequipa, etc."
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                     />
+                  </div>
+
+                  {/* Ubigeo - Departamento/Provincia/Distrito */}
+                  <div className="pt-2 border-t border-gray-200">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ubigeo (para guías de remisión)
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Departamento</label>
+                        <select
+                          value={branchForm.department}
+                          onChange={e => handleUbigeoChange('department', e.target.value)}
+                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                        >
+                          <option value="">Seleccione</option>
+                          {DEPARTAMENTOS.map(dept => (
+                            <option key={dept.code} value={dept.code}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Provincia</label>
+                        <select
+                          value={branchForm.province}
+                          onChange={e => handleUbigeoChange('province', e.target.value)}
+                          disabled={!branchForm.department}
+                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:bg-gray-100"
+                        >
+                          <option value="">Seleccione</option>
+                          {getProvincias(branchForm.department).map(prov => (
+                            <option key={prov.code} value={prov.code}>
+                              {prov.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Distrito</label>
+                        <select
+                          value={branchForm.district}
+                          onChange={e => handleUbigeoChange('district', e.target.value)}
+                          disabled={!branchForm.province}
+                          className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 disabled:bg-gray-100"
+                        >
+                          <option value="">Seleccione</option>
+                          {getDistritos(branchForm.department, branchForm.province).map(dist => (
+                            <option key={dist.code} value={dist.code}>
+                              {dist.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    {branchForm.ubigeo && (
+                      <p className="text-xs text-cyan-600 mt-1">
+                        Ubigeo: {branchForm.ubigeo}
+                      </p>
+                    )}
                   </div>
 
                   {!editingBranch && branches.length > 0 && (

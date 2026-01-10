@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -7,7 +7,7 @@ import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { createDispatchGuide, getCompanySettings } from '@/services/firestoreService'
-import { getBranch } from '@/services/branchService'
+import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const TRANSFER_REASONS = [
@@ -73,9 +73,13 @@ const getYesterdayDateString = () => {
   return getLocalDateString(yesterday)
 }
 
-export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null }) {
+export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null }) {
   const toast = useToast()
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, user } = useAppContext()
+
+  // Sucursales disponibles
+  const [branches, setBranches] = useState([])
+  const [selectedBranchId, setSelectedBranchId] = useState('')
 
   // Datos básicos de la guía
   const [transferReason, setTransferReason] = useState('01')
@@ -141,6 +145,35 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [showAdditionalData, setShowAdditionalData] = useState(false)
 
   const [isSaving, setIsSaving] = useState(false)
+
+  // Cargar sucursales disponibles
+  useEffect(() => {
+    const loadBranches = async () => {
+      if (!user?.uid || !isOpen) return
+      try {
+        const businessId = getBusinessId()
+        const result = await getActiveBranches(businessId)
+        if (result.success) {
+          const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data || []) : (result.data || [])
+          setBranches(branchList)
+        }
+      } catch (error) {
+        console.error('Error al cargar sucursales:', error)
+      }
+    }
+    loadBranches()
+  }, [isOpen, user?.uid, getBusinessId, filterBranchesByAccess])
+
+  // Inicializar sucursal seleccionada
+  useEffect(() => {
+    if (referenceInvoice?.branchId) {
+      setSelectedBranchId(referenceInvoice.branchId)
+    } else if (selectedBranch?.id) {
+      setSelectedBranchId(selectedBranch.id)
+    } else {
+      setSelectedBranchId('')
+    }
+  }, [referenceInvoice?.branchId, selectedBranch?.id, isOpen])
 
   // Pre-llenar datos si hay factura de referencia
   useEffect(() => {
@@ -210,55 +243,57 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [referenceInvoice])
 
-  // Cargar dirección de origen desde el negocio o sucursal
+  // Cargar dirección de origen desde el negocio (solo una vez al abrir)
   useEffect(() => {
-    const loadOriginAddress = async () => {
+    const loadBusinessAddress = async () => {
       const businessId = getBusinessId()
       if (!businessId) return
 
       try {
-        // Obtener configuración del negocio (dirección principal)
         const companyResult = await getCompanySettings(businessId)
         if (!companyResult.success || !companyResult.data) return
 
         const businessData = companyResult.data
 
-        // Si la factura tiene branchId, obtener dirección de esa sucursal
-        if (referenceInvoice?.branchId) {
-          const branchResult = await getBranch(businessId, referenceInvoice.branchId)
-          if (branchResult.success && branchResult.data?.address) {
-            // Usar dirección de la sucursal
-            setOriginAddress(branchResult.data.address)
-            // Las sucursales no tienen ubigeo separado, usar el del negocio si está disponible
-            if (businessData.ubigeo && businessData.ubigeo.length === 6) {
-              setOriginDepartment(businessData.ubigeo.substring(0, 2))
-              setOriginProvince(businessData.ubigeo.substring(2, 4))
-              setOriginDistrict(businessData.ubigeo.substring(4, 6))
-            }
-            return
+        // Si no hay sucursal seleccionada, usar dirección del negocio principal
+        if (!selectedBranchId) {
+          if (businessData.address) {
+            setOriginAddress(businessData.address)
+          }
+          if (businessData.ubigeo && businessData.ubigeo.length === 6) {
+            setOriginDepartment(businessData.ubigeo.substring(0, 2))
+            setOriginProvince(businessData.ubigeo.substring(2, 4))
+            setOriginDistrict(businessData.ubigeo.substring(4, 6))
           }
         }
-
-        // Usar dirección del negocio principal
-        if (businessData.address) {
-          setOriginAddress(businessData.address)
-        }
-
-        // Usar ubigeo del negocio para auto-llenar departamento/provincia/distrito
-        if (businessData.ubigeo && businessData.ubigeo.length === 6) {
-          setOriginDepartment(businessData.ubigeo.substring(0, 2))
-          setOriginProvince(businessData.ubigeo.substring(2, 4))
-          setOriginDistrict(businessData.ubigeo.substring(4, 6))
-        }
       } catch (error) {
-        console.error('Error al cargar dirección de origen:', error)
+        console.error('Error al cargar dirección del negocio:', error)
       }
     }
 
-    if (isOpen) {
-      loadOriginAddress()
+    if (isOpen && !selectedBranchId) {
+      loadBusinessAddress()
     }
-  }, [isOpen, getBusinessId, referenceInvoice?.branchId])
+  }, [isOpen, getBusinessId, selectedBranchId])
+
+  // Actualizar dirección de origen cuando cambia la sucursal seleccionada
+  useEffect(() => {
+    if (selectedBranchId && branches.length > 0) {
+      const selectedBranchData = branches.find(b => b.id === selectedBranchId)
+      if (selectedBranchData) {
+        // Usar dirección de la sucursal
+        if (selectedBranchData.address) {
+          setOriginAddress(selectedBranchData.address)
+        }
+        // Usar ubigeo de la sucursal si existe
+        if (selectedBranchData.ubigeo && selectedBranchData.ubigeo.length === 6) {
+          setOriginDepartment(selectedBranchData.ubigeo.substring(0, 2))
+          setOriginProvince(selectedBranchData.ubigeo.substring(2, 4))
+          setOriginDistrict(selectedBranchData.ubigeo.substring(4, 6))
+        }
+      }
+    }
+  }, [selectedBranchId, branches])
 
   // Sincronizar ubigeo y dirección del destinatario con el punto de llegada
   // (generalmente el punto de llegada es la dirección del destinatario)
@@ -470,6 +505,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         })),
 
         additionalInfo,
+
+        // Sucursal seleccionada
+        branchId: selectedBranchId || null,
+        branchName: selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name || null : null,
       }
 
       console.log('Creando guía de remisión:', dispatchGuide)
@@ -531,6 +570,35 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)]">
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+
+          {/* Selector de Sucursal (solo si hay múltiples sucursales) */}
+          {branches.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Store className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-blue-800 mb-1">
+                    Sucursal de origen
+                  </label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full md:w-auto min-w-[250px] px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="">Sucursal Principal</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Selecciona desde qué sucursal se genera esta guía de remisión
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Sección: Destinatario */}
           <div className="space-y-4">
