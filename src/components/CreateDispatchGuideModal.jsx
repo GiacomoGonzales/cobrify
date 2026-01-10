@@ -408,6 +408,14 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           return
         }
       }
+      // Validar formato de placa si se ingresó
+      if (vehiclePlate) {
+        const plateRegex = /^[A-Z0-9]{3}-?[A-Z0-9]{3}$/i
+        if (!plateRegex.test(vehiclePlate.trim())) {
+          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use formato ABC123 o ABC-123`)
+          return
+        }
+      }
     } else {
       if (!carrierRuc || !carrierName) {
         toast.error('Debe completar los datos del transportista para transporte público')

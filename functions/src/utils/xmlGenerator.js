@@ -1936,17 +1936,22 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
 
-  // Descripción del motivo - Solo para importación/exportación (08, 09, 19) según SUNAT
-  // Error 3418: "Si el motivo de traslado no es 08-Importacion ni 09-Exportacion ni 19-Traslado
-  // de mercancia extranjera, no debe consignar el campo 'Sustento de la diferencia del Peso bruto'"
+  // Descripción del motivo de traslado (obligatorio según SUNAT)
   const transferReasonNames = {
+    '01': 'VENTA',
+    '02': 'COMPRA',
+    '04': 'TRASLADO ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA',
     '08': 'IMPORTACION',
     '09': 'EXPORTACION',
-    '19': 'TRASLADO DE MERCANCIA EXTRANJERA'
+    '13': 'OTROS',
+    '14': 'VENTA SUJETA A CONFIRMACION DEL COMPRADOR',
+    '17': 'TRASLADO DE BIENES PARA TRANSFORMACION',
+    '18': 'TRASLADO EMISOR ITINERANTE CP',
+    '19': 'TRASLADO A ZONA PRIMARIA'
   }
-  if (['08', '09', '19'].includes(guideData.transferReason)) {
-    shipment.ele('cbc:Information').txt(transferReasonNames[guideData.transferReason])
-  }
+  // Siempre incluir descripción del motivo
+  const reasonDescription = transferReasonNames[guideData.transferReason] || 'VENTA'
+  shipment.ele('cbc:Information').txt(reasonDescription)
 
   // Peso bruto total
   shipment.ele('cbc:GrossWeightMeasure', {
@@ -1973,7 +1978,9 @@ export function generateDispatchGuideXML(guideData, businessData) {
     if (guideData.transport.vehicle) {
       const transportMeans = shipmentStage.ele('cac:TransportMeans')
       const roadTransport = transportMeans.ele('cac:RoadTransport')
-      roadTransport.ele('cbc:LicensePlateID').txt(guideData.transport.vehicle.plate)
+      // Normalizar placa: quitar guiones, espacios y convertir a mayúsculas (SUNAT no acepta guiones)
+      const normalizedPlate = (guideData.transport.vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
+      roadTransport.ele('cbc:LicensePlateID').txt(normalizedPlate)
     }
 
     // Datos del conductor (DriverPerson debe ir DESPUÉS de TransportMeans)
@@ -2049,14 +2056,17 @@ export function generateDispatchGuideXML(guideData, businessData) {
   if (guideData.transportMode === '02' && guideData.transport?.vehicle?.plate) {
     const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
     // Vehículo principal dentro de TransportEquipment
+    // Normalizar placa: quitar guiones, espacios y convertir a mayúsculas (SUNAT no acepta guiones)
+    const normalizedMainPlate = (guideData.transport.vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
     const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
-    transportEquipment.ele('cbc:ID').txt(guideData.transport.vehicle.plate)
+    transportEquipment.ele('cbc:ID').txt(normalizedMainPlate)
 
     // Vehículos secundarios (si existen)
     if (guideData.transport.additionalVehicles?.length > 0) {
       guideData.transport.additionalVehicles.forEach(vehicle => {
+        const normalizedAdditionalPlate = (vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
         const additionalEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
-        additionalEquipment.ele('cbc:ID').txt(vehicle.plate)
+        additionalEquipment.ele('cbc:ID').txt(normalizedAdditionalPlate)
       })
     }
   }
@@ -2304,18 +2314,22 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
 
-  // Descripción del motivo
-  const transferReasonNames = {
+  // Descripción del motivo de traslado (obligatorio según SUNAT)
+  const transferReasonNamesCarrier = {
     '01': 'VENTA',
     '02': 'COMPRA',
     '04': 'TRASLADO ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA',
     '08': 'IMPORTACION',
     '09': 'EXPORTACION',
-    '13': 'OTROS'
+    '13': 'OTROS',
+    '14': 'VENTA SUJETA A CONFIRMACION DEL COMPRADOR',
+    '17': 'TRASLADO DE BIENES PARA TRANSFORMACION',
+    '18': 'TRASLADO EMISOR ITINERANTE CP',
+    '19': 'TRASLADO A ZONA PRIMARIA'
   }
-  if (transferReasonNames[guideData.transferReason]) {
-    shipment.ele('cbc:Information').txt(transferReasonNames[guideData.transferReason])
-  }
+  // Siempre incluir descripción del motivo
+  const reasonDescriptionCarrier = transferReasonNamesCarrier[guideData.transferReason] || 'VENTA'
+  shipment.ele('cbc:Information').txt(reasonDescriptionCarrier)
 
   // Peso bruto total
   shipment.ele('cbc:GrossWeightMeasure', {
@@ -2396,13 +2410,16 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // === VEHÍCULO - TransportHandlingUnit (DEBE ir DESPUÉS de Delivery según UBL 2.1) ===
   // XPath: /DespatchAdvice/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID
   const vehicleData = guideData.vehicle || guideData.transport?.vehicle || {}
-  const vehiclePlate = vehicleData.plate || vehicleData.licensePlate || ''
+  const rawVehiclePlate = vehicleData.plate || vehicleData.licensePlate || ''
+  // Normalizar placa: quitar guiones, espacios y convertir a mayúsculas (SUNAT no acepta guiones)
+  const vehiclePlate = rawVehiclePlate.replace(/[-\s]/g, '').toUpperCase()
   console.log('🚛 [GRE-T XML] Datos del vehículo:', JSON.stringify(vehicleData))
-  console.log('🚛 [GRE-T XML] Placa del vehículo:', vehiclePlate)
+  console.log('🚛 [GRE-T XML] Placa del vehículo (original):', rawVehiclePlate)
+  console.log('🚛 [GRE-T XML] Placa del vehículo (normalizada):', vehiclePlate)
 
   const transportHandlingUnit = shipment.ele('cac:TransportHandlingUnit')
   const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
-  transportEquipment.ele('cbc:ID').txt(vehiclePlate || 'AAA-000')
+  transportEquipment.ele('cbc:ID').txt(vehiclePlate || 'AAA000')
 
   // === LÍNEAS DE LA GUÍA (Items a transportar) ===
   if (guideData.items && guideData.items.length > 0) {

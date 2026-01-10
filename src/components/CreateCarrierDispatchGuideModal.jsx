@@ -406,6 +406,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       return
     }
 
+    // Validar formato de placa (6 caracteres alfanuméricos sin guion)
+    const plateRegex = /^[A-Z0-9]{3}-?[A-Z0-9]{3}$/i
+    const invalidPlate = validVehicles.find(v => !plateRegex.test(v.plate.trim()))
+    if (invalidPlate) {
+      toast.error(`Formato de placa inválido: ${invalidPlate.plate}. Use formato ABC123 o ABC-123`)
+      return
+    }
+
     // Validar al menos un conductor completo
     const validDrivers = drivers.filter(d => d.documentNumber && d.name && d.lastName && d.license)
     if (validDrivers.length === 0) {

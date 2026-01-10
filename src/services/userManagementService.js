@@ -102,6 +102,11 @@ export const REAL_ESTATE_PAGES = [
   { id: 'commissions', name: 'Comisiones', path: '/comisiones', category: 'finanzas' },
 ]
 
+// ============ PÁGINAS MODO TRANSPORTE ============
+export const TRANSPORT_PAGES = [
+  // Por ahora vacío, se agregarán páginas específicas después
+]
+
 // Nombres de categorías para mostrar en la UI
 export const CATEGORY_NAMES = {
   principal: 'Principal',
@@ -124,11 +129,12 @@ export const AVAILABLE_PAGES = [
   ...RESTAURANT_PAGES,
   ...PHARMACY_PAGES,
   ...REAL_ESTATE_PAGES,
+  ...TRANSPORT_PAGES,
 ]
 
 /**
  * Obtener páginas disponibles según el modo del negocio
- * @param {string} businessMode - 'retail', 'restaurant', 'pharmacy' o 'real_estate'
+ * @param {string} businessMode - 'retail', 'restaurant', 'pharmacy', 'real_estate' o 'transport'
  * @returns {array} - Array de páginas disponibles
  */
 export const getAvailablePagesByMode = (businessMode) => {
@@ -138,6 +144,8 @@ export const getAvailablePagesByMode = (businessMode) => {
     return [...COMMON_PAGES, ...PHARMACY_PAGES]
   } else if (businessMode === 'real_estate') {
     return [...COMMON_PAGES, ...REAL_ESTATE_PAGES]
+  } else if (businessMode === 'transport') {
+    return [...COMMON_PAGES, ...TRANSPORT_PAGES]
   } else {
     // Modo retail o por defecto
     return [...COMMON_PAGES, ...RETAIL_PAGES]

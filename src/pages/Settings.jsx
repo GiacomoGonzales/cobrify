@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -2030,6 +2030,33 @@ export default function Settings() {
                       <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
                         Para agencias inmobiliarias y corredores de bienes raíces.
                         Incluye: propiedades, clientes interesados, propietarios, operaciones de venta/alquiler, comisiones.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-lg transition-colors ${
+                    businessMode === 'transport'
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/30'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="businessMode"
+                      value="transport"
+                      checked={businessMode === 'transport'}
+                      onChange={(e) => setBusinessMode(e.target.value)}
+                      className="mt-1 w-4 h-4 text-amber-600 border-gray-300 focus:ring-amber-500"
+                    />
+                    <Truck className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
+                      businessMode === 'transport' ? 'text-amber-600' : 'text-gray-400 group-hover:text-amber-600'
+                    }`} />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-amber-900">
+                        Modo Transporte
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Para empresas de transporte de carga y pasajeros.
+                        Incluye: campos adicionales para vehículos, rutas y servicios de transporte.
                       </p>
                     </div>
                   </label>

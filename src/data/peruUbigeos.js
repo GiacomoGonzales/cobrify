@@ -384,6 +384,22 @@ export const DISTRITOS = {
     { code: '10', name: 'SIMBAL' },
     { code: '11', name: 'VÍCTOR LARCO HERRERA' },
   ],
+  // LA LIBERTAD - PATAZ (1308)
+  '1308': [
+    { code: '01', name: 'TAYABAMBA' },
+    { code: '02', name: 'BULDIBUYO' },
+    { code: '03', name: 'CHILLIA' },
+    { code: '04', name: 'HUANCASPATA' },
+    { code: '05', name: 'HUAYLILLAS' },
+    { code: '06', name: 'HUAYO' },
+    { code: '07', name: 'ONGÓN' },
+    { code: '08', name: 'PARCOY' },
+    { code: '09', name: 'PATAZ' },
+    { code: '10', name: 'PÍAS' },
+    { code: '11', name: 'SANTIAGO DE CHALLAS' },
+    { code: '12', name: 'TAURIJA' },
+    { code: '13', name: 'URPAY' },
+  ],
   // LAMBAYEQUE - CHICLAYO (1401)
   '1401': [
     { code: '01', name: 'CHICLAYO' },
