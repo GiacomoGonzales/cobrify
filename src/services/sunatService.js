@@ -403,15 +403,18 @@ export const canVoidInvoice = (invoice) => {
   if (!validStatuses.includes(invoice.sunatStatus)) {
     return {
       canVoid: false,
-      reason: 'Solo se pueden anular facturas aceptadas por SUNAT'
+      reason: 'Solo se pueden anular documentos aceptados por SUNAT'
     }
   }
 
   // No debe haber sido entregada
   if (invoice.delivered === true) {
+    const alternativa = invoice.documentType === 'nota_credito'
+      ? 'Debe emitir una Nota de Débito para revertirla.'
+      : 'Debe emitir una Nota de Crédito.'
     return {
       canVoid: false,
-      reason: 'La factura ya fue entregada al cliente. Debe emitir una Nota de Crédito.'
+      reason: `El documento ya fue entregado al cliente. ${alternativa}`
     }
   }
 
@@ -422,9 +425,12 @@ export const canVoidInvoice = (invoice) => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
   if (diffDays > 7) {
+    const alternativa = invoice.documentType === 'nota_credito'
+      ? 'Debe emitir una Nota de Débito para revertirla.'
+      : 'Debe emitir una Nota de Crédito.'
     return {
       canVoid: false,
-      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. Debe emitir una Nota de Crédito.`
+      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. ${alternativa}`
     }
   }
 
@@ -432,7 +438,7 @@ export const canVoidInvoice = (invoice) => {
   if (invoice.sunatStatus === 'voiding') {
     return {
       canVoid: true,
-      reason: 'La factura está en proceso de anulación. Puede reintentar.',
+      reason: 'El documento está en proceso de anulación. Puede reintentar.',
       isRetry: true,
       daysRemaining: 7 - diffDays
     }
@@ -442,13 +448,13 @@ export const canVoidInvoice = (invoice) => {
   if (invoice.sunatStatus === 'voided') {
     return {
       canVoid: false,
-      reason: 'La factura ya fue anulada'
+      reason: 'El documento ya fue anulado'
     }
   }
 
   return {
     canVoid: true,
-    reason: 'La factura puede ser anulada',
+    reason: 'El documento puede ser anulado',
     daysRemaining: 7 - diffDays
   }
 }

@@ -1906,10 +1906,11 @@ Gracias por tu preferencia.`
                     </>
                   )}
 
-                  {/* Anular en SUNAT - Para facturas y boletas aceptadas dentro del plazo */}
-                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                  {/* Anular en SUNAT - Para facturas, boletas y notas de crédito/débito aceptadas dentro del plazo */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
                    invoice.sunatStatus === 'accepted' &&
                    invoice.status !== 'cancelled' &&
+                   invoice.status !== 'voided' &&
                    (() => {
                      const validation = canVoidDocument(invoice)
                      return validation.canVoid
@@ -2599,7 +2600,7 @@ Gracias por tu preferencia.`
       <Modal
         isOpen={!!voidingSunatInvoice}
         onClose={() => !isVoidingSunat && setVoidingSunatInvoice(null)}
-        title="Anular Factura en SUNAT"
+        title={`Anular ${voidingSunatInvoice?.documentType === 'nota_credito' ? 'Nota de Crédito' : voidingSunatInvoice?.documentType === 'nota_debito' ? 'Nota de Débito' : voidingSunatInvoice?.documentType === 'boleta' ? 'Boleta' : 'Factura'} en SUNAT`}
         size="md"
       >
         <div className="space-y-4">
@@ -2609,7 +2610,7 @@ Gracias por tu preferencia.`
             </div>
             <div className="flex-1">
               <p className="text-sm text-gray-700">
-                ¿Estás seguro de que deseas anular la factura{' '}
+                ¿Estás seguro de que deseas anular {voidingSunatInvoice?.documentType === 'nota_credito' ? 'la nota de crédito' : voidingSunatInvoice?.documentType === 'nota_debito' ? 'la nota de débito' : voidingSunatInvoice?.documentType === 'boleta' ? 'la boleta' : 'la factura'}{' '}
                 <strong>{voidingSunatInvoice?.number || `${voidingSunatInvoice?.series}-${voidingSunatInvoice?.correlativeNumber}`}</strong> en SUNAT?
               </p>
             </div>
@@ -2619,15 +2620,16 @@ Gracias por tu preferencia.`
             <p className="text-sm text-blue-800 font-medium mb-2">Comunicación de Baja</p>
             <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
               <li>Se enviará una Comunicación de Baja a SUNAT</li>
-              <li>La factura quedará anulada en el sistema de SUNAT</li>
+              <li>El documento quedará anulado en el sistema de SUNAT</li>
               <li>Este proceso puede tomar unos segundos</li>
             </ul>
           </div>
 
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-sm text-yellow-800">
-              <strong>Importante:</strong> Solo puede anular facturas que NO hayan sido entregadas al cliente.
-              Si el cliente ya recibió la factura, debe emitir una Nota de Crédito.
+              <strong>Importante:</strong> Solo puede anular documentos que NO hayan sido entregados al cliente.
+              {voidingSunatInvoice?.documentType === 'nota_credito' && ' Si ya fue entregada, debe emitir una Nota de Débito para revertirla.'}
+              {(voidingSunatInvoice?.documentType === 'factura' || voidingSunatInvoice?.documentType === 'boleta') && ' Si el cliente ya recibió el documento, debe emitir una Nota de Crédito.'}
             </p>
           </div>
 
