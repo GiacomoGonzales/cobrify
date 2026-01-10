@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, getCompanySettings } from '@/services/firestoreService'
+import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo } from '@/data/peruUbigeos'
 
@@ -139,6 +139,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isLookingUpShipper, setIsLookingUpShipper] = useState(false)
   const [isLookingUpRecipient, setIsLookingUpRecipient] = useState(false)
+  const [autoSendToSunat, setAutoSendToSunat] = useState(false)
 
   // Cargar datos de la empresa transportista
   useEffect(() => {
@@ -150,6 +151,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           setCarrierRuc(result.data.ruc || '')
           setCarrierName(result.data.businessName || result.data.name || '')
           setMtcRegistration(result.data.mtcRegistration || '')
+          // Cargar configuración de envío automático a SUNAT
+          setAutoSendToSunat(result.data.autoSendToSunat === true)
         }
       } catch (error) {
         console.error('Error al cargar datos del transportista:', error)
@@ -505,6 +508,29 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
 
       if (result.success) {
         toast.success(`GRE Transportista ${result.number} creada exitosamente`)
+
+        // Envío automático a SUNAT si está configurado (fire & forget)
+        if (autoSendToSunat && result.id) {
+          console.log('🚀 Enviando GRE Transportista automáticamente a SUNAT...')
+          toast.info('Enviando a SUNAT en segundo plano...', 3000)
+
+          // Fire & forget - no esperamos el resultado
+          sendCarrierDispatchGuideToSunat(businessId, result.id)
+            .then((sunatResult) => {
+              if (sunatResult.success && sunatResult.accepted) {
+                toast.success(`GRE ${result.number} aceptada por SUNAT`)
+              } else if (sunatResult.success && !sunatResult.accepted) {
+                toast.warning(`GRE ${result.number}: ${sunatResult.message || 'Pendiente de validación SUNAT'}`)
+              } else {
+                toast.error(`Error al enviar GRE a SUNAT: ${sunatResult.error || 'Error desconocido'}`)
+              }
+            })
+            .catch((err) => {
+              console.error('Error en envío automático a SUNAT:', err)
+              toast.error(`Error al enviar GRE a SUNAT: ${err.message}`)
+            })
+        }
+
         onClose()
       } else {
         throw new Error(result.error || 'Error al crear la guía')

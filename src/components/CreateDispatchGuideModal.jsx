@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createDispatchGuide, getCompanySettings } from '@/services/firestoreService'
+import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
@@ -145,6 +145,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [showAdditionalData, setShowAdditionalData] = useState(false)
 
   const [isSaving, setIsSaving] = useState(false)
+  const [autoSendToSunat, setAutoSendToSunat] = useState(false)
 
   // Cargar sucursales disponibles
   useEffect(() => {
@@ -255,6 +256,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
         const businessData = companyResult.data
 
+        // Cargar configuración de envío automático a SUNAT
+        setAutoSendToSunat(businessData.autoSendToSunat === true)
+
         // Si no hay sucursal seleccionada, usar dirección del negocio principal
         if (!selectedBranchId) {
           if (businessData.address) {
@@ -271,10 +275,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       }
     }
 
-    if (isOpen && !selectedBranchId) {
+    if (isOpen) {
       loadBusinessAddress()
     }
-  }, [isOpen, getBusinessId, selectedBranchId])
+  }, [isOpen, getBusinessId])
 
   // Actualizar dirección de origen cuando cambia la sucursal seleccionada
   useEffect(() => {
@@ -525,6 +529,29 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       if (result.success) {
         toast.success(`Guía de remisión ${result.number} creada exitosamente`)
+
+        // Envío automático a SUNAT si está configurado (fire & forget)
+        if (autoSendToSunat && result.id) {
+          console.log('🚀 Enviando guía de remisión automáticamente a SUNAT...')
+          toast.info('Enviando a SUNAT en segundo plano...', 3000)
+
+          // Fire & forget - no esperamos el resultado
+          sendDispatchGuideToSunat(businessId, result.id)
+            .then((sunatResult) => {
+              if (sunatResult.success && sunatResult.accepted) {
+                toast.success(`Guía ${result.number} aceptada por SUNAT`)
+              } else if (sunatResult.success && !sunatResult.accepted) {
+                toast.warning(`Guía ${result.number}: ${sunatResult.message || 'Pendiente de validación SUNAT'}`)
+              } else {
+                toast.error(`Error al enviar guía a SUNAT: ${sunatResult.error || 'Error desconocido'}`)
+              }
+            })
+            .catch((err) => {
+              console.error('Error en envío automático a SUNAT:', err)
+              toast.error(`Error al enviar guía a SUNAT: ${err.message}`)
+            })
+        }
+
         onClose()
       } else {
         throw new Error(result.error || 'Error al crear la guía')
