@@ -578,12 +578,20 @@ Gracias por tu preferencia.`
           }
         }
 
-        toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
+        // Mensaje específico según tipo de documento
+        if (voidingSunatInvoice.documentType === 'nota_credito') {
+          toast.success(`Nota de Crédito anulada exitosamente. La factura ${voidingSunatInvoice.referencedDocumentId || 'original'} ha sido restaurada.`)
+        } else {
+          toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
+        }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
         loadInvoices()
       } else if (result.status === 'pending') {
-        toast.info('La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos.')
+        const pendingMsg = voidingSunatInvoice.documentType === 'nota_credito'
+          ? 'La anulación está siendo procesada. La factura original será restaurada cuando SUNAT confirme.'
+          : 'La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos.'
+        toast.info(pendingMsg)
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
         loadInvoices()

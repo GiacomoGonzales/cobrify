@@ -4074,24 +4074,93 @@ export const voidInvoice = onRequest(
           voidCdrData: statusResult.cdrData || null
         })
 
-        // Devolver stock de los productos
-        if (invoiceData.items && invoiceData.items.length > 0) {
-          console.log('📦 Devolviendo stock de productos...')
-          for (const item of invoiceData.items) {
-            if (item.productId && !item.productId.startsWith('custom-')) {
-              try {
-                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                const productDoc = await productRef.get()
-                if (productDoc.exists) {
-                  const currentStock = productDoc.data().stock || 0
-                  await productRef.update({
-                    stock: currentStock + (item.quantity || 0),
-                    updatedAt: FieldValue.serverTimestamp()
-                  })
-                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+        // Si es una Nota de Crédito, restaurar la factura/boleta original
+        if (invoiceData.documentType === 'nota_credito' && invoiceData.referencedDocumentId) {
+          console.log(`🔄 Restaurando documento original: ${invoiceData.referencedDocumentId}`)
+          try {
+            // Buscar la factura/boleta original por su número
+            const invoicesRef = db.collection('businesses').doc(userId).collection('invoices')
+            const originalQuery = await invoicesRef
+              .where('number', '==', invoiceData.referencedDocumentId)
+              .limit(1)
+              .get()
+
+            if (!originalQuery.empty) {
+              const originalDoc = originalQuery.docs[0]
+              const originalData = originalDoc.data()
+
+              // Determinar el nuevo estado de la factura original
+              // Si tenía un estado de pago antes de la NC, restaurarlo
+              let newStatus = 'paid' // Por defecto, asumimos que estaba pagada
+              if (originalData.previousStatus) {
+                newStatus = originalData.previousStatus
+              } else if (originalData.paymentStatus === 'pending' || originalData.status === 'pending') {
+                newStatus = 'pending'
+              }
+
+              // Restaurar la factura original
+              await originalDoc.ref.update({
+                status: newStatus,
+                pendingCreditNoteId: FieldValue.delete(),
+                pendingCreditNoteNumber: FieldValue.delete(),
+                pendingCreditNoteTotal: FieldValue.delete(),
+                creditNoteVoidedAt: FieldValue.serverTimestamp(),
+                creditNoteVoidedId: invoiceId,
+                creditNoteVoidedNumber: invoiceData.number,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+
+              console.log(`✅ Factura ${invoiceData.referencedDocumentId} restaurada a estado: ${newStatus}`)
+
+              // Descontar stock (reversar la devolución que hizo la NC)
+              if (invoiceData.items && invoiceData.items.length > 0) {
+                console.log('📦 Revirtiendo devolución de stock de la NC...')
+                for (const item of invoiceData.items) {
+                  if (item.productId && !item.productId.startsWith('custom-')) {
+                    try {
+                      const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                      const productDoc = await productRef.get()
+                      if (productDoc.exists) {
+                        const currentStock = productDoc.data().stock || 0
+                        const newStock = Math.max(0, currentStock - (item.quantity || 0))
+                        await productRef.update({
+                          stock: newStock,
+                          updatedAt: FieldValue.serverTimestamp()
+                        })
+                        console.log(`  ✅ Stock descontado (reversión NC): ${item.name} -${item.quantity}`)
+                      }
+                    } catch (stockError) {
+                      console.error(`  ❌ Error descontando stock de ${item.name}:`, stockError.message)
+                    }
+                  }
                 }
-              } catch (stockError) {
-                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+              }
+            } else {
+              console.log(`⚠️ No se encontró el documento original: ${invoiceData.referencedDocumentId}`)
+            }
+          } catch (restoreError) {
+            console.error('❌ Error al restaurar documento original:', restoreError.message)
+          }
+        } else {
+          // Es factura/boleta: Devolver stock de los productos
+          if (invoiceData.items && invoiceData.items.length > 0) {
+            console.log('📦 Devolviendo stock de productos...')
+            for (const item of invoiceData.items) {
+              if (item.productId && !item.productId.startsWith('custom-')) {
+                try {
+                  const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                  const productDoc = await productRef.get()
+                  if (productDoc.exists) {
+                    const currentStock = productDoc.data().stock || 0
+                    await productRef.update({
+                      stock: currentStock + (item.quantity || 0),
+                      updatedAt: FieldValue.serverTimestamp()
+                    })
+                    console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+                  }
+                } catch (stockError) {
+                  console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+                }
               }
             }
           }
@@ -5514,24 +5583,92 @@ export const voidInvoiceQPse = onRequest(
           voidedDocumentId: voidedDocRef.id
         })
 
-        // Devolver stock de los productos
-        if (invoiceData.items && invoiceData.items.length > 0) {
-          console.log('📦 Devolviendo stock de productos...')
-          for (const item of invoiceData.items) {
-            if (item.productId && !item.productId.startsWith('custom-')) {
-              try {
-                const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
-                const productDoc = await productRef.get()
-                if (productDoc.exists) {
-                  const currentStock = productDoc.data().stock || 0
-                  await productRef.update({
-                    stock: currentStock + (item.quantity || 0),
-                    updatedAt: FieldValue.serverTimestamp()
-                  })
-                  console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+        // Si es una Nota de Crédito, restaurar la factura/boleta original
+        if (invoiceData.documentType === 'nota_credito' && invoiceData.referencedDocumentId) {
+          console.log(`🔄 [QPse] Restaurando documento original: ${invoiceData.referencedDocumentId}`)
+          try {
+            // Buscar la factura/boleta original por su número
+            const invoicesRef = db.collection('businesses').doc(userId).collection('invoices')
+            const originalQuery = await invoicesRef
+              .where('number', '==', invoiceData.referencedDocumentId)
+              .limit(1)
+              .get()
+
+            if (!originalQuery.empty) {
+              const originalDoc = originalQuery.docs[0]
+              const originalData = originalDoc.data()
+
+              // Determinar el nuevo estado de la factura original
+              let newStatus = 'paid'
+              if (originalData.previousStatus) {
+                newStatus = originalData.previousStatus
+              } else if (originalData.paymentStatus === 'pending' || originalData.status === 'pending') {
+                newStatus = 'pending'
+              }
+
+              // Restaurar la factura original
+              await originalDoc.ref.update({
+                status: newStatus,
+                pendingCreditNoteId: FieldValue.delete(),
+                pendingCreditNoteNumber: FieldValue.delete(),
+                pendingCreditNoteTotal: FieldValue.delete(),
+                creditNoteVoidedAt: FieldValue.serverTimestamp(),
+                creditNoteVoidedId: invoiceId,
+                creditNoteVoidedNumber: invoiceData.number,
+                updatedAt: FieldValue.serverTimestamp()
+              })
+
+              console.log(`✅ [QPse] Factura ${invoiceData.referencedDocumentId} restaurada a estado: ${newStatus}`)
+
+              // Descontar stock (reversar la devolución que hizo la NC)
+              if (invoiceData.items && invoiceData.items.length > 0) {
+                console.log('📦 [QPse] Revirtiendo devolución de stock de la NC...')
+                for (const item of invoiceData.items) {
+                  if (item.productId && !item.productId.startsWith('custom-')) {
+                    try {
+                      const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                      const productDoc = await productRef.get()
+                      if (productDoc.exists) {
+                        const currentStock = productDoc.data().stock || 0
+                        const newStock = Math.max(0, currentStock - (item.quantity || 0))
+                        await productRef.update({
+                          stock: newStock,
+                          updatedAt: FieldValue.serverTimestamp()
+                        })
+                        console.log(`  ✅ Stock descontado (reversión NC): ${item.name} -${item.quantity}`)
+                      }
+                    } catch (stockError) {
+                      console.error(`  ❌ Error descontando stock de ${item.name}:`, stockError.message)
+                    }
+                  }
                 }
-              } catch (stockError) {
-                console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+              }
+            } else {
+              console.log(`⚠️ [QPse] No se encontró el documento original: ${invoiceData.referencedDocumentId}`)
+            }
+          } catch (restoreError) {
+            console.error('❌ [QPse] Error al restaurar documento original:', restoreError.message)
+          }
+        } else {
+          // Es factura/boleta: Devolver stock de los productos
+          if (invoiceData.items && invoiceData.items.length > 0) {
+            console.log('📦 Devolviendo stock de productos...')
+            for (const item of invoiceData.items) {
+              if (item.productId && !item.productId.startsWith('custom-')) {
+                try {
+                  const productRef = db.collection('businesses').doc(userId).collection('products').doc(item.productId)
+                  const productDoc = await productRef.get()
+                  if (productDoc.exists) {
+                    const currentStock = productDoc.data().stock || 0
+                    await productRef.update({
+                      stock: currentStock + (item.quantity || 0),
+                      updatedAt: FieldValue.serverTimestamp()
+                    })
+                    console.log(`  ✅ Stock devuelto: ${item.name} +${item.quantity}`)
+                  }
+                } catch (stockError) {
+                  console.error(`  ❌ Error devolviendo stock de ${item.name}:`, stockError.message)
+                }
               }
             }
           }
