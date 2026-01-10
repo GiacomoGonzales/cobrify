@@ -1936,22 +1936,17 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
 
-  // Descripción del motivo de traslado (obligatorio según SUNAT)
-  const transferReasonNames = {
-    '01': 'VENTA',
-    '02': 'COMPRA',
-    '04': 'TRASLADO ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA',
-    '08': 'IMPORTACION',
-    '09': 'EXPORTACION',
-    '13': 'OTROS',
-    '14': 'VENTA SUJETA A CONFIRMACION DEL COMPRADOR',
-    '17': 'TRASLADO DE BIENES PARA TRANSFORMACION',
-    '18': 'TRASLADO EMISOR ITINERANTE CP',
-    '19': 'TRASLADO A ZONA PRIMARIA'
+  // Campo cbc:Information - Sustento de diferencia de peso bruto
+  // SOLO para motivos 08 (Importación), 09 (Exportación), 19 (Traslado mercancía extranjera)
+  // Error 3418: Si el motivo NO es 08, 09 o 19, NO debe consignar este campo
+  if (['08', '09', '19'].includes(guideData.transferReason)) {
+    const transferReasonNames = {
+      '08': 'IMPORTACION',
+      '09': 'EXPORTACION',
+      '19': 'TRASLADO A ZONA PRIMARIA'
+    }
+    shipment.ele('cbc:Information').txt(transferReasonNames[guideData.transferReason])
   }
-  // Siempre incluir descripción del motivo
-  const reasonDescription = transferReasonNames[guideData.transferReason] || 'VENTA'
-  shipment.ele('cbc:Information').txt(reasonDescription)
 
   // Peso bruto total
   shipment.ele('cbc:GrossWeightMeasure', {
@@ -2314,22 +2309,17 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
   }).txt(guideData.transferReason || '01')
 
-  // Descripción del motivo de traslado (obligatorio según SUNAT)
-  const transferReasonNamesCarrier = {
-    '01': 'VENTA',
-    '02': 'COMPRA',
-    '04': 'TRASLADO ENTRE ESTABLECIMIENTOS DE LA MISMA EMPRESA',
-    '08': 'IMPORTACION',
-    '09': 'EXPORTACION',
-    '13': 'OTROS',
-    '14': 'VENTA SUJETA A CONFIRMACION DEL COMPRADOR',
-    '17': 'TRASLADO DE BIENES PARA TRANSFORMACION',
-    '18': 'TRASLADO EMISOR ITINERANTE CP',
-    '19': 'TRASLADO A ZONA PRIMARIA'
+  // Campo cbc:Information - Sustento de diferencia de peso bruto
+  // SOLO para motivos 08 (Importación), 09 (Exportación), 19 (Traslado mercancía extranjera)
+  // Error 3418: Si el motivo NO es 08, 09 o 19, NO debe consignar este campo
+  if (['08', '09', '19'].includes(guideData.transferReason)) {
+    const transferReasonNamesCarrier = {
+      '08': 'IMPORTACION',
+      '09': 'EXPORTACION',
+      '19': 'TRASLADO A ZONA PRIMARIA'
+    }
+    shipment.ele('cbc:Information').txt(transferReasonNamesCarrier[guideData.transferReason])
   }
-  // Siempre incluir descripción del motivo
-  const reasonDescriptionCarrier = transferReasonNamesCarrier[guideData.transferReason] || 'VENTA'
-  shipment.ele('cbc:Information').txt(reasonDescriptionCarrier)
 
   // Peso bruto total
   shipment.ele('cbc:GrossWeightMeasure', {
