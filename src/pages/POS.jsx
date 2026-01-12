@@ -340,7 +340,18 @@ export default function POS() {
     phone: '',
     studentName: '', // Campo libre para nombre de alumno
     studentSchedule: '', // Horario/turno del alumno
-    vehiclePlate: '' // Placa de vehículo
+    vehiclePlate: '', // Placa de vehículo
+    // Campos para transporte de carga
+    originAddress: '', // Dirección de origen
+    destinationAddress: '', // Dirección de destino
+    tripDetail: '', // Detalle del viaje
+    serviceReferenceValue: '', // Valor referencial del servicio
+    effectiveLoadValue: '', // Valor referencial carga efectiva
+    usefulLoadValue: '', // Valor referencial carga útil
+    bankAccount: '', // Cta. Cte. Banco de la Nación
+    detractionPercentage: '', // Porcentaje de detracción
+    detractionAmount: '', // Monto de detracción
+    goodsServiceCode: '', // Código de bien o servicio SUNAT
   })
 
   // Estados para pagos parciales (solo notas de venta)
@@ -1274,7 +1285,18 @@ export default function POS() {
       phone: '',
       studentName: '',
       studentSchedule: '',
-      vehiclePlate: ''
+      vehiclePlate: '',
+      // Campos de transporte de carga
+      originAddress: '',
+      destinationAddress: '',
+      tripDetail: '',
+      serviceReferenceValue: '',
+      effectiveLoadValue: '',
+      usefulLoadValue: '',
+      bankAccount: '',
+      detractionPercentage: '',
+      detractionAmount: '',
+      goodsServiceCode: '',
     })
     setPayments([{ method: '', amount: '' }])
     setLastInvoiceData(null)
@@ -1693,6 +1715,20 @@ export default function POS() {
                 email: customerData.email || '',
                 phone: customerData.phone || '',
                 address: customerData.address || '',
+                studentName: customerData.studentName || '',
+                studentSchedule: customerData.studentSchedule || '',
+                vehiclePlate: customerData.vehiclePlate || '',
+                // Campos de transporte de carga
+                originAddress: customerData.originAddress || '',
+                destinationAddress: customerData.destinationAddress || '',
+                tripDetail: customerData.tripDetail || '',
+                serviceReferenceValue: customerData.serviceReferenceValue || '',
+                effectiveLoadValue: customerData.effectiveLoadValue || '',
+                usefulLoadValue: customerData.usefulLoadValue || '',
+                bankAccount: customerData.bankAccount || '',
+                detractionPercentage: customerData.detractionPercentage || '',
+                detractionAmount: customerData.detractionAmount || '',
+                goodsServiceCode: customerData.goodsServiceCode || '',
               }
             : {
                 documentType: ID_TYPES.DNI,
@@ -1702,6 +1738,20 @@ export default function POS() {
                 email: '',
                 phone: '',
                 address: '',
+                studentName: customerData.studentName || '',
+                studentSchedule: customerData.studentSchedule || '',
+                vehiclePlate: customerData.vehiclePlate || '',
+                // Campos de transporte de carga
+                originAddress: customerData.originAddress || '',
+                destinationAddress: customerData.destinationAddress || '',
+                tripDetail: customerData.tripDetail || '',
+                serviceReferenceValue: customerData.serviceReferenceValue || '',
+                effectiveLoadValue: customerData.effectiveLoadValue || '',
+                usefulLoadValue: customerData.usefulLoadValue || '',
+                bankAccount: customerData.bankAccount || '',
+                detractionPercentage: customerData.detractionPercentage || '',
+                detractionAmount: customerData.detractionAmount || '',
+                goodsServiceCode: customerData.goodsServiceCode || '',
               },
           items: items,
           subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
@@ -1743,7 +1793,18 @@ export default function POS() {
           address: '',
           studentName: '',
           studentSchedule: '',
-          vehiclePlate: ''
+          vehiclePlate: '',
+          // Campos de transporte de carga
+          originAddress: '',
+          destinationAddress: '',
+          tripDetail: '',
+          serviceReferenceValue: '',
+          effectiveLoadValue: '',
+          usefulLoadValue: '',
+          bankAccount: '',
+          detractionPercentage: '',
+          detractionAmount: '',
+          goodsServiceCode: '',
         })
         setPayments([{ id: Date.now(), method: '', amount: '' }])
         setSelectedCustomer(null)
@@ -1810,6 +1871,17 @@ export default function POS() {
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
               vehiclePlate: customerData.vehiclePlate || '',
+              // Campos de transporte de carga
+              originAddress: customerData.originAddress || '',
+              destinationAddress: customerData.destinationAddress || '',
+              tripDetail: customerData.tripDetail || '',
+              serviceReferenceValue: customerData.serviceReferenceValue || '',
+              effectiveLoadValue: customerData.effectiveLoadValue || '',
+              usefulLoadValue: customerData.usefulLoadValue || '',
+              bankAccount: customerData.bankAccount || '',
+              detractionPercentage: customerData.detractionPercentage || '',
+              detractionAmount: customerData.detractionAmount || '',
+              goodsServiceCode: customerData.goodsServiceCode || '',
             }
           : {
               documentType: ID_TYPES.DNI,
@@ -1822,6 +1894,17 @@ export default function POS() {
               studentName: customerData.studentName || '',
               studentSchedule: customerData.studentSchedule || '',
               vehiclePlate: customerData.vehiclePlate || '',
+              // Campos de transporte de carga
+              originAddress: customerData.originAddress || '',
+              destinationAddress: customerData.destinationAddress || '',
+              tripDetail: customerData.tripDetail || '',
+              serviceReferenceValue: customerData.serviceReferenceValue || '',
+              effectiveLoadValue: customerData.effectiveLoadValue || '',
+              usefulLoadValue: customerData.usefulLoadValue || '',
+              bankAccount: customerData.bankAccount || '',
+              detractionPercentage: customerData.detractionPercentage || '',
+              detractionAmount: customerData.detractionAmount || '',
+              goodsServiceCode: customerData.goodsServiceCode || '',
             },
         items: items,
         subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
@@ -3151,6 +3234,129 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       />
                     )}
 
+                    {/* Campos de Transporte de Carga */}
+                    {(companySettings?.posCustomFields?.showOriginAddressField ||
+                      companySettings?.posCustomFields?.showDestinationAddressField ||
+                      companySettings?.posCustomFields?.showTripDetailField ||
+                      companySettings?.posCustomFields?.showServiceReferenceValueField ||
+                      companySettings?.posCustomFields?.showEffectiveLoadValueField ||
+                      companySettings?.posCustomFields?.showUsefulLoadValueField ||
+                      companySettings?.posCustomFields?.showBankAccountField ||
+                      companySettings?.posCustomFields?.showDetractionField ||
+                      companySettings?.posCustomFields?.showGoodsServiceCodeField) && (
+                      <div className="mt-2 pt-2 border-t border-amber-200 space-y-2">
+                        <p className="text-xs font-medium text-amber-600">Datos de Transporte</p>
+
+                        {companySettings?.posCustomFields?.showOriginAddressField && (
+                          <input
+                            type="text"
+                            value={customerData.originAddress}
+                            onChange={e => setCustomerData({ ...customerData, originAddress: e.target.value })}
+                            placeholder="Dirección de Origen"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showDestinationAddressField && (
+                          <input
+                            type="text"
+                            value={customerData.destinationAddress}
+                            onChange={e => setCustomerData({ ...customerData, destinationAddress: e.target.value })}
+                            placeholder="Dirección de Destino"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showTripDetailField && (
+                          <input
+                            type="text"
+                            value={customerData.tripDetail}
+                            onChange={e => setCustomerData({ ...customerData, tripDetail: e.target.value })}
+                            placeholder="Detalle del Viaje (ej: Transporte de contenedor)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {(companySettings?.posCustomFields?.showServiceReferenceValueField ||
+                          companySettings?.posCustomFields?.showEffectiveLoadValueField ||
+                          companySettings?.posCustomFields?.showUsefulLoadValueField) && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {companySettings?.posCustomFields?.showServiceReferenceValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.serviceReferenceValue}
+                                onChange={e => setCustomerData({ ...customerData, serviceReferenceValue: e.target.value })}
+                                placeholder="Val. Ref. Servicio"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                            {companySettings?.posCustomFields?.showEffectiveLoadValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.effectiveLoadValue}
+                                onChange={e => setCustomerData({ ...customerData, effectiveLoadValue: e.target.value })}
+                                placeholder="Val. Carga Efect."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                            {companySettings?.posCustomFields?.showUsefulLoadValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.usefulLoadValue}
+                                onChange={e => setCustomerData({ ...customerData, usefulLoadValue: e.target.value })}
+                                placeholder="Val. Carga Útil"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {companySettings?.posCustomFields?.showBankAccountField && (
+                          <input
+                            type="text"
+                            value={customerData.bankAccount}
+                            onChange={e => setCustomerData({ ...customerData, bankAccount: e.target.value })}
+                            placeholder="Cta. Cte. Banco de la Nación"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showDetractionField && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customerData.detractionPercentage}
+                              onChange={e => setCustomerData({ ...customerData, detractionPercentage: e.target.value })}
+                              placeholder="Detracción %"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customerData.detractionAmount}
+                              onChange={e => setCustomerData({ ...customerData, detractionAmount: e.target.value })}
+                              placeholder="Monto Detracción"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        )}
+
+                        {companySettings?.posCustomFields?.showGoodsServiceCodeField && (
+                          <input
+                            type="text"
+                            value={customerData.goodsServiceCode}
+                            onChange={e => setCustomerData({ ...customerData, goodsServiceCode: e.target.value })}
+                            placeholder="Bien o Servicio (ej: 027 - Transporte de carga)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+                      </div>
+                    )}
+
                     {/* Forma de Pago - Solo Facturas */}
                     <div className="mt-2 pt-2 border-t border-gray-200">
                       <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1.5">
@@ -3505,6 +3711,130 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
                       />
                     )}
+
+                    {/* Campos de Transporte de Carga - Boleta */}
+                    {(companySettings?.posCustomFields?.showOriginAddressField ||
+                      companySettings?.posCustomFields?.showDestinationAddressField ||
+                      companySettings?.posCustomFields?.showTripDetailField ||
+                      companySettings?.posCustomFields?.showServiceReferenceValueField ||
+                      companySettings?.posCustomFields?.showEffectiveLoadValueField ||
+                      companySettings?.posCustomFields?.showUsefulLoadValueField ||
+                      companySettings?.posCustomFields?.showBankAccountField ||
+                      companySettings?.posCustomFields?.showDetractionField ||
+                      companySettings?.posCustomFields?.showGoodsServiceCodeField) && (
+                      <div className="mt-2 pt-2 border-t border-amber-200 space-y-2">
+                        <p className="text-xs font-medium text-amber-600">Datos de Transporte</p>
+
+                        {companySettings?.posCustomFields?.showOriginAddressField && (
+                          <input
+                            type="text"
+                            value={customerData.originAddress}
+                            onChange={e => setCustomerData({ ...customerData, originAddress: e.target.value })}
+                            placeholder="Dirección de Origen"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showDestinationAddressField && (
+                          <input
+                            type="text"
+                            value={customerData.destinationAddress}
+                            onChange={e => setCustomerData({ ...customerData, destinationAddress: e.target.value })}
+                            placeholder="Dirección de Destino"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showTripDetailField && (
+                          <input
+                            type="text"
+                            value={customerData.tripDetail}
+                            onChange={e => setCustomerData({ ...customerData, tripDetail: e.target.value })}
+                            placeholder="Detalle del Viaje (ej: Transporte de contenedor)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {(companySettings?.posCustomFields?.showServiceReferenceValueField ||
+                          companySettings?.posCustomFields?.showEffectiveLoadValueField ||
+                          companySettings?.posCustomFields?.showUsefulLoadValueField) && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {companySettings?.posCustomFields?.showServiceReferenceValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.serviceReferenceValue}
+                                onChange={e => setCustomerData({ ...customerData, serviceReferenceValue: e.target.value })}
+                                placeholder="Val. Ref. Servicio"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                            {companySettings?.posCustomFields?.showEffectiveLoadValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.effectiveLoadValue}
+                                onChange={e => setCustomerData({ ...customerData, effectiveLoadValue: e.target.value })}
+                                placeholder="Val. Carga Efect."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                            {companySettings?.posCustomFields?.showUsefulLoadValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.usefulLoadValue}
+                                onChange={e => setCustomerData({ ...customerData, usefulLoadValue: e.target.value })}
+                                placeholder="Val. Carga Útil"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {companySettings?.posCustomFields?.showBankAccountField && (
+                          <input
+                            type="text"
+                            value={customerData.bankAccount}
+                            onChange={e => setCustomerData({ ...customerData, bankAccount: e.target.value })}
+                            placeholder="Cta. Cte. Banco de la Nación"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showDetractionField && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customerData.detractionPercentage}
+                              onChange={e => setCustomerData({ ...customerData, detractionPercentage: e.target.value })}
+                              placeholder="Detracción %"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customerData.detractionAmount}
+                              onChange={e => setCustomerData({ ...customerData, detractionAmount: e.target.value })}
+                              placeholder="Monto Detracción"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        )}
+
+                        {companySettings?.posCustomFields?.showGoodsServiceCodeField && (
+                          <input
+                            type="text"
+                            value={customerData.goodsServiceCode}
+                            onChange={e => setCustomerData({ ...customerData, goodsServiceCode: e.target.value })}
+                            placeholder="Bien o Servicio (ej: 027 - Transporte de carga)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+                      </div>
+                    )}
+
                     <input
                       type="text"
                       value={customerData.address}
@@ -3615,6 +3945,130 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
                       />
                     )}
+
+                    {/* Campos de Transporte de Carga - Nota de Venta */}
+                    {(companySettings?.posCustomFields?.showOriginAddressField ||
+                      companySettings?.posCustomFields?.showDestinationAddressField ||
+                      companySettings?.posCustomFields?.showTripDetailField ||
+                      companySettings?.posCustomFields?.showServiceReferenceValueField ||
+                      companySettings?.posCustomFields?.showEffectiveLoadValueField ||
+                      companySettings?.posCustomFields?.showUsefulLoadValueField ||
+                      companySettings?.posCustomFields?.showBankAccountField ||
+                      companySettings?.posCustomFields?.showDetractionField ||
+                      companySettings?.posCustomFields?.showGoodsServiceCodeField) && (
+                      <div className="mt-2 pt-2 border-t border-amber-200 space-y-2">
+                        <p className="text-xs font-medium text-amber-600">Datos de Transporte</p>
+
+                        {companySettings?.posCustomFields?.showOriginAddressField && (
+                          <input
+                            type="text"
+                            value={customerData.originAddress}
+                            onChange={e => setCustomerData({ ...customerData, originAddress: e.target.value })}
+                            placeholder="Dirección de Origen (opcional)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showDestinationAddressField && (
+                          <input
+                            type="text"
+                            value={customerData.destinationAddress}
+                            onChange={e => setCustomerData({ ...customerData, destinationAddress: e.target.value })}
+                            placeholder="Dirección de Destino (opcional)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showTripDetailField && (
+                          <input
+                            type="text"
+                            value={customerData.tripDetail}
+                            onChange={e => setCustomerData({ ...customerData, tripDetail: e.target.value })}
+                            placeholder="Detalle del Viaje (opcional)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {(companySettings?.posCustomFields?.showServiceReferenceValueField ||
+                          companySettings?.posCustomFields?.showEffectiveLoadValueField ||
+                          companySettings?.posCustomFields?.showUsefulLoadValueField) && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {companySettings?.posCustomFields?.showServiceReferenceValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.serviceReferenceValue}
+                                onChange={e => setCustomerData({ ...customerData, serviceReferenceValue: e.target.value })}
+                                placeholder="Val. Ref. Servicio"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                            {companySettings?.posCustomFields?.showEffectiveLoadValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.effectiveLoadValue}
+                                onChange={e => setCustomerData({ ...customerData, effectiveLoadValue: e.target.value })}
+                                placeholder="Val. Carga Efect."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                            {companySettings?.posCustomFields?.showUsefulLoadValueField && (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={customerData.usefulLoadValue}
+                                onChange={e => setCustomerData({ ...customerData, usefulLoadValue: e.target.value })}
+                                placeholder="Val. Carga Útil"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {companySettings?.posCustomFields?.showBankAccountField && (
+                          <input
+                            type="text"
+                            value={customerData.bankAccount}
+                            onChange={e => setCustomerData({ ...customerData, bankAccount: e.target.value })}
+                            placeholder="Cta. Cte. Banco de la Nación (opcional)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+
+                        {companySettings?.posCustomFields?.showDetractionField && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customerData.detractionPercentage}
+                              onChange={e => setCustomerData({ ...customerData, detractionPercentage: e.target.value })}
+                              placeholder="Detracción %"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customerData.detractionAmount}
+                              onChange={e => setCustomerData({ ...customerData, detractionAmount: e.target.value })}
+                              placeholder="Monto Detracción"
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        )}
+
+                        {companySettings?.posCustomFields?.showGoodsServiceCodeField && (
+                          <input
+                            type="text"
+                            value={customerData.goodsServiceCode}
+                            onChange={e => setCustomerData({ ...customerData, goodsServiceCode: e.target.value })}
+                            placeholder="Bien o Servicio (opcional)"
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        )}
+                      </div>
+                    )}
+
                     <input
                       type="tel"
                       value={customerData.phone}

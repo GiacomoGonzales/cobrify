@@ -574,7 +574,7 @@ function Sidebar() {
       ? pharmacyMenuItems
       : businessMode === 'real_estate'
         ? realEstateMenuItems
-        : businessMode === 'retail'
+        : (businessMode === 'retail' || businessMode === 'transport')
           ? retailMenuItems
           : [] // Si es null, array vacío mientras carga
 

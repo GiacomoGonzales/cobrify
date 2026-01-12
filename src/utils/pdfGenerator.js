@@ -1318,10 +1318,23 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // --- CUENTAS BANCARIAS (izquierda) con borde ---
   doc.setTextColor(...BLACK)
 
+  // Calcular si hay datos de transporte para mostrar el cuadro debajo de bancos
+  const hasTransportData = (
+    (companySettings?.posCustomFields?.showOriginAddressField && invoice.customer?.originAddress) ||
+    (companySettings?.posCustomFields?.showDestinationAddressField && invoice.customer?.destinationAddress) ||
+    (companySettings?.posCustomFields?.showTripDetailField && invoice.customer?.tripDetail) ||
+    (companySettings?.posCustomFields?.showServiceReferenceValueField && invoice.customer?.serviceReferenceValue) ||
+    (companySettings?.posCustomFields?.showEffectiveLoadValueField && invoice.customer?.effectiveLoadValue) ||
+    (companySettings?.posCustomFields?.showUsefulLoadValueField && invoice.customer?.usefulLoadValue) ||
+    (companySettings?.posCustomFields?.showDetractionField && (invoice.customer?.detractionPercentage || invoice.customer?.detractionAmount)) ||
+    (companySettings?.posCustomFields?.showGoodsServiceCodeField && invoice.customer?.goodsServiceCode)
+  )
+
   // --- SECCIÓN DE DETRACCIÓN (si aplica) ---
   // Se muestra debajo de la tabla de bancos o en su lugar
   let detractionSectionEndY = totalsStartY // Para saber dónde terminó la sección
 
+  // Mostrar tabla de bancos siempre que haya cuentas configuradas
   if (bankAccountsArray.length > 0) {
     const bankTableX = MARGIN_LEFT
     const bankTableWidth = bankSectionWidth
@@ -1485,6 +1498,186 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Calcular posición Y: usar el máximo entre totales (derecha) y sección izquierda (bancos + detracción)
   const totalsEndY = totalsStartY + totalsRowHeight * totalsSectionRows + 15
   footerY = Math.max(totalsEndY, detractionSectionEndY + 5)
+
+  // ===== SECCIÓN DE DATOS DE TRANSPORTE (CUADRO) - Al lado izquierdo =====
+  // (hasTransportData ya fue calculado arriba, antes de la tabla de bancos)
+  let transportSectionEndY = footerY
+
+  if (hasTransportData) {
+    // El cuadro de transporte va en el lado izquierdo, DEBAJO de las cuentas bancarias
+    const transportBoxX = MARGIN_LEFT
+    const transportBoxWidth = bankSectionWidth
+    let transportY = detractionSectionEndY + 5 // Empieza debajo de bancos/detracción
+    const transportRowHeight = 18
+    const transportLabelHeight = 9
+    const halfWidth = transportBoxWidth / 2
+
+    doc.setDrawColor(...BORDER_COLOR)
+    doc.setLineWidth(0.5)
+
+    // Fila 1: Dirección de Origen (ancho completo)
+    if (companySettings?.posCustomFields?.showOriginAddressField && invoice.customer?.originAddress) {
+      doc.setFillColor(245, 245, 245)
+      doc.rect(transportBoxX, transportY, transportBoxWidth, transportLabelHeight, 'F')
+      doc.rect(transportBoxX, transportY, transportBoxWidth, transportRowHeight)
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Dirección detallada del origen:', transportBoxX + 2, transportY + 6)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      const originText = doc.splitTextToSize(invoice.customer.originAddress, transportBoxWidth - 4)
+      doc.text(originText[0] || '', transportBoxX + 2, transportY + 14)
+      transportY += transportRowHeight
+    }
+
+    // Fila 2: Dirección de Destino (ancho completo)
+    if (companySettings?.posCustomFields?.showDestinationAddressField && invoice.customer?.destinationAddress) {
+      doc.setFillColor(245, 245, 245)
+      doc.rect(transportBoxX, transportY, transportBoxWidth, transportLabelHeight, 'F')
+      doc.rect(transportBoxX, transportY, transportBoxWidth, transportRowHeight)
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Dirección detallada del destino:', transportBoxX + 2, transportY + 6)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      const destText = doc.splitTextToSize(invoice.customer.destinationAddress, transportBoxWidth - 4)
+      doc.text(destText[0] || '', transportBoxX + 2, transportY + 14)
+      transportY += transportRowHeight
+    }
+
+    // Fila 3: Detalle del Viaje | Valor Referencial del Servicio (dos columnas)
+    const showTripDetail = companySettings?.posCustomFields?.showTripDetailField && invoice.customer?.tripDetail
+    const showServiceValue = companySettings?.posCustomFields?.showServiceReferenceValueField && invoice.customer?.serviceReferenceValue
+    if (showTripDetail || showServiceValue) {
+      doc.setFillColor(245, 245, 245)
+      doc.rect(transportBoxX, transportY, halfWidth, transportLabelHeight, 'F')
+      doc.rect(transportBoxX + halfWidth, transportY, halfWidth, transportLabelHeight, 'F')
+      doc.rect(transportBoxX, transportY, halfWidth, transportRowHeight)
+      doc.rect(transportBoxX + halfWidth, transportY, halfWidth, transportRowHeight)
+
+      // Columna izquierda: Detalle del Viaje
+      doc.setFontSize(6)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Detalle del Viaje:', transportBoxX + 2, transportY + 6)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      const tripText = doc.splitTextToSize(invoice.customer?.tripDetail || '', halfWidth - 4)
+      doc.text(tripText[0] || '', transportBoxX + 2, transportY + 14)
+
+      // Columna derecha: Valor Referencial del Servicio
+      doc.setFontSize(6)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Valor Referencial del servicio de', transportBoxX + halfWidth + 2, transportY + 6)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      const serviceVal = invoice.customer?.serviceReferenceValue ? `PEN ${parseFloat(invoice.customer.serviceReferenceValue).toFixed(2)}` : ''
+      doc.text(serviceVal, transportBoxX + halfWidth + 2, transportY + 14)
+      transportY += transportRowHeight
+    }
+
+    // Fila 4: Valor Carga Efectiva | Valor Carga Útil (dos columnas)
+    const showEffectiveLoad = companySettings?.posCustomFields?.showEffectiveLoadValueField && invoice.customer?.effectiveLoadValue
+    const showUsefulLoad = companySettings?.posCustomFields?.showUsefulLoadValueField && invoice.customer?.usefulLoadValue
+    if (showEffectiveLoad || showUsefulLoad) {
+      doc.setFillColor(245, 245, 245)
+      doc.rect(transportBoxX, transportY, halfWidth, transportLabelHeight, 'F')
+      doc.rect(transportBoxX + halfWidth, transportY, halfWidth, transportLabelHeight, 'F')
+      doc.rect(transportBoxX, transportY, halfWidth, transportRowHeight)
+      doc.rect(transportBoxX + halfWidth, transportY, halfWidth, transportRowHeight)
+
+      // Columna izquierda: Valor Ref. Carga Efectiva
+      doc.setFontSize(6)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Valor Referencial sobre la carga efectiva:', transportBoxX + 2, transportY + 6)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      const effectiveVal = invoice.customer?.effectiveLoadValue ? `PEN ${parseFloat(invoice.customer.effectiveLoadValue).toFixed(2)}` : ''
+      doc.text(effectiveVal, transportBoxX + 2, transportY + 14)
+
+      // Columna derecha: Valor Ref. Carga Útil
+      doc.setFontSize(6)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...DARK_GRAY)
+      doc.text('Valor Referencial sobre la carga útil', transportBoxX + halfWidth + 2, transportY + 6)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...BLACK)
+      const usefulVal = invoice.customer?.usefulLoadValue ? `PEN ${parseFloat(invoice.customer.usefulLoadValue).toFixed(2)}` : ''
+      doc.text(usefulVal, transportBoxX + halfWidth + 2, transportY + 14)
+      transportY += transportRowHeight
+    }
+
+    // Fila 5: Sección con Detracción, Bien o Servicio, Neto a Pagar
+    // (Cta. Banco ya se muestra en la tabla de cuentas bancarias)
+    const showDetraction = companySettings?.posCustomFields?.showDetractionField && (invoice.customer?.detractionPercentage || invoice.customer?.detractionAmount)
+    const showGoodsService = companySettings?.posCustomFields?.showGoodsServiceCodeField && invoice.customer?.goodsServiceCode
+    if (showDetraction || showGoodsService) {
+      // Contar cuántas filas hay para calcular altura dinámica
+      let rowCount = 0
+      if (showDetraction) rowCount++
+      if (showGoodsService) rowCount++
+      // Agregar fila para Neto a Pagar si hay detracción
+      if (showDetraction && invoice.customer?.detractionAmount) rowCount++
+      const infoRowHeight = 6 + (rowCount * 10)
+
+      doc.setDrawColor(...BORDER_COLOR)
+      doc.rect(transportBoxX, transportY, transportBoxWidth, infoRowHeight)
+
+      doc.setFontSize(7)
+      let infoY = transportY + 8
+      const labelX = transportBoxX + 3
+      const valueX = transportBoxX + 75
+
+      if (showDetraction) {
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...DARK_GRAY)
+        const detractionLabel = invoice.customer.detractionPercentage ? `Detracción (${invoice.customer.detractionPercentage}%)` : 'Detracción'
+        doc.text(detractionLabel, labelX, infoY)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...BLACK)
+        const detractionVal = invoice.customer.detractionAmount ? `S/ ${parseFloat(invoice.customer.detractionAmount).toFixed(2)}` : ''
+        doc.text(detractionVal, valueX, infoY)
+        infoY += 10
+      }
+
+      if (showGoodsService) {
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...DARK_GRAY)
+        doc.text('Bien o Servicio', labelX, infoY)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...BLACK)
+        doc.text(invoice.customer.goodsServiceCode, valueX, infoY)
+        infoY += 10
+      }
+
+      // Neto a Pagar (Total - Detracción)
+      if (showDetraction && invoice.customer?.detractionAmount) {
+        const netoAPagar = invoice.total - parseFloat(invoice.customer.detractionAmount || 0)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(...DARK_GRAY)
+        doc.text('Neto a Pagar', labelX, infoY)
+        doc.setTextColor(...BLACK)
+        doc.text(`S/ ${netoAPagar.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, valueX, infoY)
+      }
+
+      transportY += infoRowHeight
+    }
+
+    transportSectionEndY = transportY + 5
+  }
+
+  // Usar el máximo entre totales y sección de transporte para el footerY
+  footerY = Math.max(footerY, transportSectionEndY)
 
   // Verificar si hay cuotas para mostrar
   const hasCuotas = invoice.documentType === 'factura' &&

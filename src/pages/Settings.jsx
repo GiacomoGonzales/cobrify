@@ -190,6 +190,16 @@ export default function Settings() {
   const [posCustomFields, setPosCustomFields] = useState({
     showStudentField: false, // Mostrar campo "Alumno" en el POS
     showVehiclePlateField: false, // Mostrar campo "Placa de Vehículo" en el POS
+    // Campos para transporte de carga
+    showOriginAddressField: false, // Dirección de origen
+    showDestinationAddressField: false, // Dirección de destino
+    showTripDetailField: false, // Detalle del viaje
+    showServiceReferenceValueField: false, // Valor referencial del servicio
+    showEffectiveLoadValueField: false, // Valor referencial carga efectiva
+    showUsefulLoadValueField: false, // Valor referencial carga útil
+    showBankAccountField: false, // Cta. Cte. Banco de la Nación
+    showDetractionField: false, // Detracción
+    showGoodsServiceCodeField: false, // Bien o Servicio (código SUNAT)
   })
 
   // Estados para cambio de contraseña
@@ -2200,6 +2210,148 @@ export default function Settings() {
                       className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
                   </label>
+
+                  {/* Campos para Transporte de Carga */}
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-xs font-medium text-amber-600 uppercase tracking-wide mb-3">Transporte de Carga</p>
+
+                    <div className="space-y-3">
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showOriginAddressField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Dirección de Origen</span>
+                          <span className="text-xs text-gray-500">Dirección detallada del punto de origen del servicio</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showOriginAddressField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showOriginAddressField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showDestinationAddressField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Dirección de Destino</span>
+                          <span className="text-xs text-gray-500">Dirección detallada del punto de destino del servicio</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showDestinationAddressField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showDestinationAddressField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showTripDetailField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Detalle del Viaje</span>
+                          <span className="text-xs text-gray-500">Descripción del tipo de servicio (ej: Transporte de contenedor)</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showTripDetailField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showTripDetailField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showServiceReferenceValueField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Valor Referencial del Servicio</span>
+                          <span className="text-xs text-gray-500">Valor referencial del servicio de transporte</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showServiceReferenceValueField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showServiceReferenceValueField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showEffectiveLoadValueField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Valor Ref. Carga Efectiva</span>
+                          <span className="text-xs text-gray-500">Valor referencial sobre la carga efectiva</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showEffectiveLoadValueField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showEffectiveLoadValueField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showUsefulLoadValueField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Valor Ref. Carga Útil</span>
+                          <span className="text-xs text-gray-500">Valor referencial sobre la carga útil</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showUsefulLoadValueField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showUsefulLoadValueField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showBankAccountField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Cta. Cte. Banco de la Nación</span>
+                          <span className="text-xs text-gray-500">Número de cuenta para detracciones</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showBankAccountField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showBankAccountField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showDetractionField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Detracción</span>
+                          <span className="text-xs text-gray-500">Porcentaje y monto de detracción SUNAT</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showDetractionField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showDetractionField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+
+                      <label className={`flex items-center justify-between cursor-pointer p-3 border rounded-lg transition-colors ${
+                        posCustomFields.showGoodsServiceCodeField ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 hover:border-gray-300'
+                      }`}>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 block">Bien o Servicio (Código)</span>
+                          <span className="text-xs text-gray-500">Código SUNAT del bien o servicio (ej: 027 - Transporte de carga)</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={posCustomFields.showGoodsServiceCodeField}
+                          onChange={(e) => setPosCustomFields({ ...posCustomFields, showGoodsServiceCodeField: e.target.checked })}
+                          className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                        />
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2423,6 +2575,55 @@ export default function Settings() {
                               }
                             }}
                             className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'transport' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                        { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
+                        { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
+                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
+                        { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-amber-200 bg-amber-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-sm font-medium text-gray-900 block">{item.label}</span>

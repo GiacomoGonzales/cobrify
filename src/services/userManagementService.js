@@ -103,8 +103,27 @@ export const REAL_ESTATE_PAGES = [
 ]
 
 // ============ PÁGINAS MODO TRANSPORTE ============
+// Hereda las mismas páginas que retail
 export const TRANSPORT_PAGES = [
-  // Por ahora vacío, se agregarán páginas específicas después
+  // Documentos
+  { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
+  { id: 'dispatch-guides', name: 'Guías de Remisión', path: '/guias-remision', category: 'documentos' },
+  { id: 'carrier-dispatch-guides', name: 'GRE Transportista', path: '/guias-transportista', category: 'documentos' },
+  // Inventario
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
+  { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
+  // Compras y Proveedores
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
+  // Ventas
+  { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
+  // Producción
+  { id: 'ingredients', name: 'Insumos', path: '/insumos', category: 'produccion' },
+  { id: 'recipes', name: 'Composición de Productos', path: '/recetas', category: 'produccion' },
+  // Otros
+  { id: 'loans', name: 'Préstamos', path: '/prestamos', category: 'otros' },
 ]
 
 // Nombres de categorías para mostrar en la UI

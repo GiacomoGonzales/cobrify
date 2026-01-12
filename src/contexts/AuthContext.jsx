@@ -259,7 +259,7 @@ export const AuthProvider = ({ children }) => {
               console.log('🏢 dispatchGuidesEnabled:', businessData.dispatchGuidesEnabled)
 
               // Validar que el modo sea uno de los permitidos
-              const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate']
+              const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport']
               const mode = validModes.includes(businessData.businessMode)
                 ? businessData.businessMode
                 : 'retail'
