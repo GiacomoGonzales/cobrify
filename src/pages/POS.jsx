@@ -1956,14 +1956,28 @@ export default function POS() {
       }
 
       const businessId = getBusinessId()
+      const isEditMode = !!editingInvoiceId
 
-      // 1. Obtener siguiente número de documento (priorizando series de sucursal, luego almacén)
-      const numberResult = await getNextDocumentNumber(businessId, documentType, selectedWarehouse?.id, selectedBranch?.id)
-      if (!numberResult.success) {
-        console.error('❌ Error detallado al generar número:', numberResult.error)
-        throw new Error(numberResult.error || 'Error al generar número de comprobante')
+      // 1. Obtener número de documento
+      let numberResult
+      if (isEditMode) {
+        // MODO EDICIÓN: Usar el número original del documento
+        numberResult = {
+          success: true,
+          number: editingInvoiceData.number,
+          series: editingInvoiceData.series,
+          correlativeNumber: editingInvoiceData.correlativeNumber,
+        }
+        console.log('📝 Modo edición - Usando número original:', numberResult.number)
+      } else {
+        // MODO NORMAL: Obtener siguiente número (priorizando series de sucursal, luego almacén)
+        numberResult = await getNextDocumentNumber(businessId, documentType, selectedWarehouse?.id, selectedBranch?.id)
+        if (!numberResult.success) {
+          console.error('❌ Error detallado al generar número:', numberResult.error)
+          throw new Error(numberResult.error || 'Error al generar número de comprobante')
+        }
+        console.log('✅ Número generado:', numberResult.number, 'Sucursal:', selectedBranch?.name || 'N/A', 'Almacén:', selectedWarehouse?.name || 'Global')
       }
-      console.log('✅ Número generado:', numberResult.number, 'Sucursal:', selectedBranch?.name || 'N/A', 'Almacén:', selectedWarehouse?.name || 'Global')
 
       // 2. Preparar items de la factura
       const items = cart.map(item => ({
@@ -2177,7 +2191,7 @@ export default function POS() {
       }
 
       let invoiceId
-      let isEditMode = !!editingInvoiceId
+      // isEditMode ya está definido arriba
 
       if (isEditMode) {
         // MODO EDICIÓN: Actualizar documento existente
