@@ -55,6 +55,8 @@ import Demo from './pages/Demo'
 import DemoLayout from './layouts/DemoLayout'
 import DemoRestaurant from './pages/DemoRestaurant'
 import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
+import DemoPharmacy from './pages/DemoPharmacy'
+import DemoPharmacyLayout from './layouts/DemoPharmacyLayout'
 // Restaurant pages
 import Tables from './pages/Tables'
 import Waiters from './pages/Waiters'
@@ -210,6 +212,29 @@ function App() {
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
+            </Route>
+
+            {/* Rutas de demo farmacia (sin autenticación, con datos de ejemplo de farmacia) */}
+            <Route path="/demopharmacy" element={<DemoPharmacy />} />
+            <Route path="/demopharmacy" element={<DemoPharmacyLayout />}>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="pos" element={<POS />} />
+              <Route path="facturas" element={<InvoiceList />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="productos" element={<Products />} />
+              <Route path="inventario" element={<Inventory />} />
+              <Route path="control-lotes" element={<BatchControl />} />
+              <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
+              <Route path="laboratorios" element={<Laboratories />} />
+              <Route path="compras" element={<Purchases />} />
+              <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="proveedores" element={<Suppliers />} />
+              <Route path="caja" element={<CashRegister />} />
+              <Route path="reportes" element={<Reports />} />
+              <Route path="gastos" element={<Expenses />} />
+              <Route path="prestamos" element={<Loans />} />
+              <Route path="certificados" element={<Certificates />} />
+              <Route path="configuracion" element={<Settings />} />
             </Route>
 
             {/* Ruta de cuenta suspendida (sin layout) */}

@@ -89,6 +89,12 @@ export default function CashRegister() {
 
   // Cargar sucursales
   const loadBranches = async () => {
+    // En modo demo, no hay sucursales adicionales
+    if (isDemoMode) {
+      setBranches([])
+      return
+    }
+
     try {
       const result = await getActiveBranches(getBusinessId())
       if (result.success && result.data.length > 0) {

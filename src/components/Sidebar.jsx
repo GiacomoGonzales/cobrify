@@ -54,13 +54,18 @@ function Sidebar() {
   const { branding } = useBranding()
   const location = useLocation()
 
-  // Si estamos en modo demo, añadir prefijo /demo o /demorestaurant a las rutas
+  // Si estamos en modo demo, añadir prefijo /demo, /demorestaurant o /demopharmacy a las rutas
   // Si no, añadir prefijo /app para rutas protegidas
   const getPath = (path) => {
     if (isDemoMode) {
-      // Detectar si estamos en demo de restaurante
-      const isRestaurantDemo = location.pathname.startsWith('/demorestaurant')
-      return isRestaurantDemo ? `/demorestaurant${path}` : `/demo${path}`
+      // Detectar qué tipo de demo estamos usando
+      if (location.pathname.startsWith('/demorestaurant')) {
+        return `/demorestaurant${path}`
+      }
+      if (location.pathname.startsWith('/demopharmacy')) {
+        return `/demopharmacy${path}`
+      }
+      return `/demo${path}`
     }
     // Para rutas normales (no demo), agregar prefijo /app
     return `/app${path}`

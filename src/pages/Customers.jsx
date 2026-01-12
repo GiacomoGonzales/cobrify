@@ -201,10 +201,17 @@ export default function Customers() {
         return;
       }
 
-      // Obtener datos del negocio
-      const { getCompanySettings } = await import('@/services/firestoreService');
-      const settingsResult = await getCompanySettings(user.uid);
-      const businessData = settingsResult.success ? settingsResult.data : null;
+      let businessData = null;
+
+      // En modo demo, usar datos del demo
+      if (isDemoMode && demoData) {
+        businessData = demoData.business;
+      } else {
+        // Obtener datos del negocio
+        const { getCompanySettings } = await import('@/services/firestoreService');
+        const settingsResult = await getCompanySettings(user.uid);
+        businessData = settingsResult.success ? settingsResult.data : null;
+      }
 
       // Generar Excel
       await generateCustomersExcel(customers, businessData);

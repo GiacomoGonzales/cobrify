@@ -9,7 +9,7 @@ import { db } from '@/lib/firebase'
 import { formatCurrency } from '@/lib/utils'
 
 function ExpiryAlerts() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -21,10 +21,47 @@ function ExpiryAlerts() {
   const businessId = getBusinessId()
 
   useEffect(() => {
-    if (businessId) {
+    if (isDemoMode) {
+      loadDemoProducts()
+    } else if (businessId) {
       loadProducts()
     }
-  }, [businessId])
+  }, [businessId, isDemoMode])
+
+  // Cargar productos del demo
+  const loadDemoProducts = () => {
+    setLoading(true)
+    try {
+      const productsData = demoData?.products || []
+      const allItems = []
+
+      productsData.forEach(product => {
+        // Si tiene múltiples lotes, crear una entrada por cada lote con stock
+        if (product.batches && product.batches.length > 0) {
+          product.batches.forEach(batch => {
+            if (batch.quantity > 0 && (batch.expiryDate || batch.expirationDate)) {
+              allItems.push({
+                ...product,
+                batchId: batch.id,
+                batchNumber: batch.lotNumber || batch.batchNumber,
+                expirationDate: batch.expiryDate || batch.expirationDate,
+                batchQuantity: batch.quantity,
+                batchCost: batch.costPrice,
+                isBatch: true,
+                stock: batch.quantity
+              })
+            }
+          })
+        }
+      })
+
+      setProducts(allItems)
+    } catch (error) {
+      console.error('Error al cargar productos demo:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const loadProducts = async () => {
     if (!businessId) return

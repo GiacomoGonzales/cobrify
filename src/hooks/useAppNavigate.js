@@ -3,7 +3,7 @@ import { useAppContext } from './useAppContext'
 
 /**
  * Hook personalizado para navegación que agrega automáticamente
- * el prefijo /app, /demo o /demorestaurant según el contexto
+ * el prefijo /app, /demo, /demorestaurant o /demopharmacy según el contexto
  */
 export function useAppNavigate() {
   const navigate = useNavigate()
@@ -21,9 +21,14 @@ export function useAppNavigate() {
     let prefix = '/app'
 
     if (isDemoMode) {
-      // Detectar si estamos en demo de restaurante
-      const isRestaurantDemo = location.pathname.startsWith('/demorestaurant')
-      prefix = isRestaurantDemo ? '/demorestaurant' : '/demo'
+      // Detectar qué tipo de demo estamos usando
+      if (location.pathname.startsWith('/demorestaurant')) {
+        prefix = '/demorestaurant'
+      } else if (location.pathname.startsWith('/demopharmacy')) {
+        prefix = '/demopharmacy'
+      } else {
+        prefix = '/demo'
+      }
     }
 
     // Asegurar que la ruta comience con /

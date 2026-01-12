@@ -7,7 +7,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from '@/lib/firebase'
 
 function Laboratories() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [laboratories, setLaboratories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -31,10 +31,36 @@ function Laboratories() {
   const businessId = getBusinessId()
 
   useEffect(() => {
-    if (businessId) {
+    if (isDemoMode) {
+      loadDemoLaboratories()
+    } else if (businessId) {
       loadLaboratories()
     }
-  }, [businessId])
+  }, [businessId, isDemoMode])
+
+  // Cargar laboratorios del demo
+  const loadDemoLaboratories = () => {
+    setLoading(true)
+    try {
+      // Usar datos del contexto demo
+      const labsData = demoData?.laboratories || []
+      setLaboratories(labsData)
+
+      // Contar productos por laboratorio
+      const products = demoData?.products || []
+      const counts = {}
+      products.forEach(product => {
+        if (product.laboratoryId) {
+          counts[product.laboratoryId] = (counts[product.laboratoryId] || 0) + 1
+        }
+      })
+      setProductCounts(counts)
+    } catch (error) {
+      console.error('Error al cargar laboratorios demo:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const loadLaboratories = async () => {
     if (!businessId) return
@@ -73,6 +99,15 @@ function Laboratories() {
 
     if (!formData.name.trim()) {
       toast.error('El nombre del laboratorio es requerido')
+      return
+    }
+
+    // En modo demo, mostrar mensaje y cerrar modal
+    if (isDemoMode) {
+      toast.info('En modo demo no se pueden guardar cambios')
+      setShowModal(false)
+      setEditingLab(null)
+      resetForm()
       return
     }
 
@@ -127,6 +162,12 @@ function Laboratories() {
   }
 
   const handleDelete = async (lab) => {
+    // En modo demo, mostrar mensaje
+    if (isDemoMode) {
+      toast.info('En modo demo no se pueden eliminar laboratorios')
+      return
+    }
+
     // Verificar si tiene productos asociados
     if (productCounts[lab.id] > 0) {
       toast.error(`No se puede eliminar. Este laboratorio tiene ${productCounts[lab.id]} producto(s) asociado(s)`)

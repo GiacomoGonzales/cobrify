@@ -11,7 +11,7 @@ import { db } from '@/lib/firebase'
 import { formatCurrency } from '@/lib/utils'
 
 function BatchControl() {
-  const { user, getBusinessId } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -32,10 +32,34 @@ function BatchControl() {
   const businessId = getBusinessId()
 
   useEffect(() => {
-    if (businessId) {
+    if (isDemoMode) {
+      loadDemoProducts()
+    } else if (businessId) {
       loadProducts()
     }
-  }, [businessId])
+  }, [businessId, isDemoMode])
+
+  // Cargar productos del demo
+  const loadDemoProducts = () => {
+    setLoading(true)
+    try {
+      const productsData = demoData?.products || []
+      // Transformar lotes para usar nombres de campos consistentes
+      const transformedProducts = productsData.map(product => ({
+        ...product,
+        batches: product.batches?.map(batch => ({
+          ...batch,
+          batchNumber: batch.lotNumber || batch.batchNumber,
+          expirationDate: batch.expiryDate || batch.expirationDate
+        })) || []
+      }))
+      setProducts(transformedProducts)
+    } catch (error) {
+      console.error('Error al cargar productos demo:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const loadProducts = async () => {
     if (!businessId) return
@@ -152,6 +176,15 @@ function BatchControl() {
   const saveBatchChanges = async () => {
     if (!editingProductId || !editingBatch) return
 
+    // En modo demo, mostrar mensaje
+    if (isDemoMode) {
+      toast.info('En modo demo no se pueden guardar cambios')
+      setShowEditModal(false)
+      setEditingBatch(null)
+      setEditingProductId(null)
+      return
+    }
+
     try {
       const product = products.find(p => p.id === editingProductId)
       if (!product) return
@@ -214,6 +247,12 @@ function BatchControl() {
 
   // Eliminar lote
   const deleteBatch = async (productId, batchId) => {
+    // En modo demo, mostrar mensaje
+    if (isDemoMode) {
+      toast.info('En modo demo no se pueden eliminar lotes')
+      return
+    }
+
     if (!confirm('¿Estás seguro de eliminar este lote?')) return
 
     try {
