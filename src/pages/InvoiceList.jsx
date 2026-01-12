@@ -1616,6 +1616,21 @@ Gracias por tu preferencia.`
 
               return (
                 <>
+                  {/* Editar documento (solo si no fue aceptado por SUNAT) */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
+                   invoice.sunatStatus !== 'accepted' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        navigate(`/app/pos?editInvoiceId=${invoice.id}`)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3"
+                    >
+                      <Edit className="w-4 h-4 text-blue-600" />
+                      <span className="text-blue-600 font-medium">Editar documento</span>
+                    </button>
+                  )}
+
                   {/* Enviar a SUNAT */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
                    invoice.sunatStatus === 'pending' && (
