@@ -173,6 +173,7 @@ export default function Settings() {
   const [catalogColor, setCatalogColor] = useState('#10B981')
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
+  const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const qrCanvasRef = useRef(null)
 
@@ -563,6 +564,7 @@ export default function Settings() {
         setCatalogColor(businessData.catalogColor || '#10B981')
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
+        setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -3204,6 +3206,22 @@ export default function Settings() {
                     </div>
                   </div>
 
+                  {/* Opciones adicionales */}
+                  <div className="space-y-3">
+                    <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 block">Mostrar precios</span>
+                        <span className="text-xs text-gray-500">Si desactivas esta opción, los productos se mostrarán sin precio</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={catalogShowPrices}
+                        onChange={(e) => setCatalogShowPrices(e.target.checked)}
+                        className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                    </label>
+                  </div>
+
                   <div className="border-t border-gray-200"></div>
 
                   {/* Productos en el catálogo */}
@@ -3247,6 +3265,7 @@ export default function Settings() {
                       catalogColor,
                       catalogWelcome,
                       catalogTagline,
+                      catalogShowPrices,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')

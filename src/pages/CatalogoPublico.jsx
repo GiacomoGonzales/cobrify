@@ -37,7 +37,7 @@ function ProductSkeleton() {
 }
 
 // Modal de producto
-function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity }) {
+function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true }) {
   const [quantity, setQuantity] = useState(1)
 
   useEffect(() => {
@@ -94,9 +94,13 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity }) {
           </div>
 
           <div className="flex items-center justify-between mb-6">
-            <div className="text-3xl font-bold text-gray-900">
-              S/ {product.price?.toFixed(2)}
-            </div>
+            {showPrices ? (
+              <div className="text-3xl font-bold text-gray-900">
+                S/ {product.price?.toFixed(2)}
+              </div>
+            ) : (
+              <div className="text-lg text-gray-500">Consultar precio</div>
+            )}
             {product.stock !== undefined && product.stock > 0 && (
               <span className="text-sm text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
                 {product.stock} disponibles
@@ -133,7 +137,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity }) {
             className="w-full py-4 bg-gray-900 text-white rounded-2xl font-semibold text-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
           >
             <ShoppingBag className="w-5 h-5" />
-            Agregar al carrito - S/ {(product.price * quantity).toFixed(2)}
+            {showPrices ? `Agregar al carrito - S/ ${(product.price * quantity).toFixed(2)}` : 'Agregar al carrito'}
           </button>
         </div>
       </div>
@@ -142,7 +146,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity }) {
 }
 
 // Carrito lateral
-function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, business, onCheckout }) {
+function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, business, onCheckout, showPrices = true }) {
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
   useEffect(() => {
@@ -213,7 +217,7 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
                     )}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-900 truncate">{item.name}</h3>
-                      <p className="text-gray-600">S/ {item.price?.toFixed(2)}</p>
+                      {showPrices && <p className="text-gray-600">S/ {item.price?.toFixed(2)}</p>}
                       <div className="flex items-center gap-2 mt-2">
                         <button
                           onClick={() => onUpdateQuantity(item.id, Math.max(0, item.quantity - 1))}
@@ -245,10 +249,12 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
           {/* Footer */}
           {cart.length > 0 && (
             <div className="border-t p-6 space-y-4">
-              <div className="flex items-center justify-between text-lg">
-                <span className="text-gray-600">Total</span>
-                <span className="text-2xl font-bold">S/ {total.toFixed(2)}</span>
-              </div>
+              {showPrices && (
+                <div className="flex items-center justify-between text-lg">
+                  <span className="text-gray-600">Total</span>
+                  <span className="text-2xl font-bold">S/ {total.toFixed(2)}</span>
+                </div>
+              )}
               <button
                 onClick={onCheckout}
                 className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
@@ -401,6 +407,9 @@ export default function CatalogoPublico({ isDemo = false }) {
       return matchesSearch && matchesCategory
     })
   }, [products, searchQuery, selectedCategory])
+
+  // Configuración de visibilidad de precios
+  const showPrices = business?.catalogShowPrices !== false
 
   // Funciones del carrito
   const addToCart = (product, quantity = 1) => {
@@ -674,9 +683,13 @@ export default function CatalogoPublico({ isDemo = false }) {
                       <p className="text-sm text-gray-500 mb-2 line-clamp-1">{product.description}</p>
                     )}
                     <div className="flex items-center justify-between">
-                      <span className="text-lg font-bold text-gray-900">
-                        S/ {product.price?.toFixed(2)}
-                      </span>
+                      {showPrices ? (
+                        <span className="text-lg font-bold text-gray-900">
+                          S/ {product.price?.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-500">Consultar</span>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -729,9 +742,13 @@ export default function CatalogoPublico({ isDemo = false }) {
                       )}
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-xl font-bold text-gray-900">
-                        S/ {product.price?.toFixed(2)}
-                      </span>
+                      {showPrices ? (
+                        <span className="text-xl font-bold text-gray-900">
+                          S/ {product.price?.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-500">Consultar precio</span>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -822,9 +839,11 @@ export default function CatalogoPublico({ isDemo = false }) {
           >
             <ShoppingBag className="w-5 h-5" />
             Ver carrito ({cartItemsCount})
-            <span className="bg-white/20 px-3 py-1 rounded-full">
-              S/ {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
-            </span>
+            {showPrices && (
+              <span className="bg-white/20 px-3 py-1 rounded-full">
+                S/ {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+              </span>
+            )}
           </button>
         </div>
       )}
@@ -836,6 +855,7 @@ export default function CatalogoPublico({ isDemo = false }) {
         onClose={() => setSelectedProduct(null)}
         onAddToCart={addToCart}
         cartQuantity={selectedProduct ? getCartQuantity(selectedProduct.id) : 0}
+        showPrices={showPrices}
       />
 
       {/* Cart Drawer */}
@@ -847,6 +867,7 @@ export default function CatalogoPublico({ isDemo = false }) {
         onRemove={removeFromCart}
         business={business}
         onCheckout={handleCheckout}
+        showPrices={showPrices}
       />
     </div>
   )
