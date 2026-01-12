@@ -24,6 +24,8 @@ import {
   Store,
   Tag,
   Activity,
+  Check,
+  X,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -107,10 +109,24 @@ export default function Inventory() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isScanning, setIsScanning] = useState(false)
-  const [filterCategory, setFilterCategory] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterCategories, setFilterCategories] = useState([]) // Array vacío = todas las categorías
+  const [filterStatuses, setFilterStatuses] = useState([]) // Array vacío = todos los estados
   const [filterType, setFilterType] = useState('all') // 'all', 'products', 'ingredients'
   const [expandedProduct, setExpandedProduct] = useState(null)
+
+  // Estado para controlar qué dropdown multi-select está abierto
+  const [openDropdown, setOpenDropdown] = useState(null) // 'categories', 'statuses', 'warehouses', or null
+
+  // Cerrar dropdown al hacer clic fuera
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (openDropdown && !event.target.closest('.relative')) {
+        setOpenDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [openDropdown])
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -125,7 +141,7 @@ export default function Inventory() {
   const [allWarehouses, setAllWarehouses] = useState([]) // Todos los almacenes (para transferencias entre sucursales)
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
-  const [filterWarehouse, setFilterWarehouse] = useState('all')
+  const [filterWarehouses, setFilterWarehouses] = useState([]) // Array vacío = todos los almacenes
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [transferProduct, setTransferProduct] = useState(null)
   const [transferData, setTransferData] = useState({
@@ -180,11 +196,11 @@ export default function Inventory() {
   // Resetear página cuando cambia el filtro de sucursal o almacén
   useEffect(() => {
     setCurrentPage(1)
-  }, [filterBranch, filterWarehouse])
+  }, [filterBranch, filterWarehouses])
 
   // Resetear filtro de almacén cuando cambia el filtro de sucursal
   useEffect(() => {
-    setFilterWarehouse('all')
+    setFilterWarehouses([])
   }, [filterBranch])
 
   // Obtener almacenes filtrados por sucursal seleccionada
@@ -209,18 +225,21 @@ export default function Inventory() {
 
     const warehouseStocks = item.warehouseStocks || []
     if (warehouseStocks.length === 0) {
-      // Si no tiene warehouseStocks y estamos viendo todas las sucursales, usar stock general
-      if (filterBranch === 'all' && filterWarehouse === 'all') {
+      // Si no tiene warehouseStocks y estamos viendo todas las sucursales/almacenes, usar stock general
+      if (filterBranch === 'all' && filterWarehouses.length === 0) {
         return item.stock || 0
       }
       // Si hay filtro pero no hay warehouseStocks, es 0
       return 0
     }
 
-    // Si hay un almacén específico seleccionado
-    if (filterWarehouse !== 'all') {
-      const ws = warehouseStocks.find(ws => ws.warehouseId === filterWarehouse)
-      return ws ? (ws.stock || 0) : 0
+    // Si hay almacenes específicos seleccionados
+    if (filterWarehouses.length > 0) {
+      // Sumar stock de los almacenes seleccionados
+      const selectedStock = warehouseStocks
+        .filter(ws => filterWarehouses.includes(ws.warehouseId))
+        .reduce((sum, ws) => sum + (ws.stock || 0), 0)
+      return selectedStock
     }
 
     // Obtener IDs de almacenes filtrados por sucursal
@@ -237,7 +256,7 @@ export default function Inventory() {
       .reduce((sum, ws) => sum + (ws.stock || 0), 0)
 
     return branchStock
-  }, [filterBranch, filterWarehouse, filteredWarehouses])
+  }, [filterBranch, filterWarehouses, filteredWarehouses])
 
   const loadProducts = async () => {
     if (!user?.uid) return
@@ -855,21 +874,27 @@ export default function Inventory() {
         item.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.category?.toLowerCase().includes(searchTerm.toLowerCase())
 
+      // Multi-select: array vacío = todas las categorías
       const matchesCategory =
-        filterCategory === 'all' || item.category === filterCategory
+        filterCategories.length === 0 || filterCategories.includes(item.category)
 
       // Usar stock filtrado por sucursal
       const branchStock = getStockForBranch(item)
+
+      // Multi-select: array vacío = todos los estados
       let matchesStatus = true
-      if (filterStatus === 'low') {
-        // Stock bajo: entre 1 y 3 (no incluye agotados)
-        matchesStatus = branchStock !== null && branchStock > 0 && branchStock < 4
-      } else if (filterStatus === 'out') {
-        // Agotados: stock = 0
-        matchesStatus = branchStock === 0
-      } else if (filterStatus === 'normal') {
-        // Normal: sin control de stock o stock >= 4
-        matchesStatus = branchStock === null || branchStock >= 4
+      if (filterStatuses.length > 0) {
+        const itemStatuses = []
+        if (branchStock !== null && branchStock > 0 && branchStock < 4) {
+          itemStatuses.push('low')
+        }
+        if (branchStock === 0) {
+          itemStatuses.push('out')
+        }
+        if (branchStock === null || branchStock >= 4) {
+          itemStatuses.push('normal')
+        }
+        matchesStatus = filterStatuses.some(status => itemStatuses.includes(status))
       }
 
       return matchesSearch && matchesCategory && matchesStatus
@@ -917,7 +942,7 @@ export default function Inventory() {
 
     console.log(`🔍 [Inventory] filteredProducts resultado: ${sorted.length} items`)
     return sorted
-  }, [allItems, searchTerm, filterCategory, filterStatus, productCategories, sortField, sortDirection, getStockForBranch])
+  }, [allItems, searchTerm, filterCategories, filterStatuses, productCategories, sortField, sortDirection, getStockForBranch])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -941,7 +966,7 @@ export default function Inventory() {
   // Resetear a página 1 cuando cambian los filtros
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, filterCategory, filterStatus, filterBranch, filterWarehouse])
+  }, [searchTerm, filterCategories, filterStatuses, filterBranch, filterWarehouses])
 
   // Obtener categorías únicas (productos + ingredientes en retail)
   const categories = React.useMemo(() => {
@@ -983,12 +1008,12 @@ export default function Inventory() {
     return allCategories
   }, [products, ingredients, productCategories, isRetailMode])
 
-  // Calcular estadísticas (optimizado con useMemo, filtradas por sucursal)
+  // Calcular estadísticas (basadas en productos filtrados para reflejar todos los filtros)
   const statistics = React.useMemo(() => {
-    const itemsWithStock = allItems.filter(i => getStockForBranch(i) !== null)
+    const itemsWithStock = filteredProducts.filter(i => getStockForBranch(i) !== null)
     const lowStockItems = itemsWithStock.filter(i => {
       const branchStock = getStockForBranch(i)
-      return branchStock !== null && branchStock < 4
+      return branchStock !== null && branchStock > 0 && branchStock < 4
     })
     const outOfStockItems = itemsWithStock.filter(i => getStockForBranch(i) === 0)
     const totalValue = itemsWithStock.reduce((sum, i) => {
@@ -1005,7 +1030,7 @@ export default function Inventory() {
       totalValue,
       totalUnits
     }
-  }, [allItems, getStockForBranch])
+  }, [filteredProducts, getStockForBranch])
 
   const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
 
@@ -1358,39 +1383,111 @@ export default function Inventory() {
 
             {/* Filters Group */}
             <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 flex-wrap">
-              {/* Category Filter */}
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-                <Tag className="w-4 h-4 text-gray-500" />
-                <select
-                  value={filterCategory}
-                  onChange={e => setFilterCategory(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+              {/* Category Multi-Select Filter */}
+              <div className="relative">
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}
+                  className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterCategories.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
                 >
-                  <option value="all">Todas las categorías</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                  <Tag className="w-4 h-4 text-gray-500" />
+                  <span className="max-w-[150px] truncate">
+                    {filterCategories.length === 0
+                      ? 'Todas las categorías'
+                      : filterCategories.length === 1
+                        ? categories.find(c => c.id === filterCategories[0])?.name || 'Categoría'
+                        : `${filterCategories.length} categorías`}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openDropdown === 'categories' ? 'rotate-180' : ''}`} />
+                  {filterCategories.length > 0 && (
+                    <X
+                      className="w-4 h-4 text-gray-400 hover:text-gray-600"
+                      onClick={(e) => { e.stopPropagation(); setFilterCategories([]); }}
+                    />
+                  )}
+                </button>
+                {openDropdown === 'categories' && (
+                  <div className="absolute z-50 mt-1 w-64 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {categories.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">No hay categorías</div>
+                    ) : (
+                      categories.map(category => (
+                        <label
+                          key={category.id}
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={filterCategories.includes(category.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFilterCategories([...filterCategories, category.id])
+                              } else {
+                                setFilterCategories(filterCategories.filter(id => id !== category.id))
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-gray-700">{category.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Status Filter */}
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-                <Activity className="w-4 h-4 text-gray-500" />
-                <select
-                  value={filterStatus}
-                  onChange={e => setFilterStatus(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+              {/* Status Multi-Select Filter */}
+              <div className="relative">
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === 'statuses' ? null : 'statuses')}
+                  className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterStatuses.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
                 >
-                  <option value="all">Todos los estados</option>
-                  <option value="normal">Stock Normal</option>
-                  <option value="low">Stock Bajo</option>
-                  <option value="out">Agotados</option>
-                </select>
+                  <Activity className="w-4 h-4 text-gray-500" />
+                  <span className="max-w-[150px] truncate">
+                    {filterStatuses.length === 0
+                      ? 'Todos los estados'
+                      : filterStatuses.length === 1
+                        ? { normal: 'Stock Normal', low: 'Stock Bajo', out: 'Agotados' }[filterStatuses[0]]
+                        : `${filterStatuses.length} estados`}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openDropdown === 'statuses' ? 'rotate-180' : ''}`} />
+                  {filterStatuses.length > 0 && (
+                    <X
+                      className="w-4 h-4 text-gray-400 hover:text-gray-600"
+                      onClick={(e) => { e.stopPropagation(); setFilterStatuses([]); }}
+                    />
+                  )}
+                </button>
+                {openDropdown === 'statuses' && (
+                  <div className="absolute z-50 mt-1 w-48 bg-white border border-gray-300 rounded-lg shadow-lg">
+                    {[
+                      { id: 'normal', name: 'Stock Normal' },
+                      { id: 'low', name: 'Stock Bajo' },
+                      { id: 'out', name: 'Agotados' }
+                    ].map(status => (
+                      <label
+                        key={status.id}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={filterStatuses.includes(status.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFilterStatuses([...filterStatuses, status.id])
+                            } else {
+                              setFilterStatuses(filterStatuses.filter(id => id !== status.id))
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">{status.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Branch Filter */}
+              {/* Branch Filter (single select - stays the same) */}
               {branches.length > 0 && (
                 <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
                   <Store className="w-4 h-4 text-gray-500" />
@@ -1408,20 +1505,53 @@ export default function Inventory() {
                 </div>
               )}
 
-              {/* Warehouse Filter */}
+              {/* Warehouse Multi-Select Filter */}
               {filteredWarehouses.length > 0 && (
-                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-                  <Warehouse className="w-4 h-4 text-gray-500" />
-                  <select
-                    value={filterWarehouse}
-                    onChange={e => setFilterWarehouse(e.target.value)}
-                    className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === 'warehouses' ? null : 'warehouses')}
+                    className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterWarehouses.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
                   >
-                    <option value="all">Todos los almacenes</option>
-                    {filteredWarehouses.map(warehouse => (
-                      <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
-                    ))}
-                  </select>
+                    <Warehouse className="w-4 h-4 text-gray-500" />
+                    <span className="max-w-[150px] truncate">
+                      {filterWarehouses.length === 0
+                        ? 'Todos los almacenes'
+                        : filterWarehouses.length === 1
+                          ? filteredWarehouses.find(w => w.id === filterWarehouses[0])?.name || 'Almacén'
+                          : `${filterWarehouses.length} almacenes`}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${openDropdown === 'warehouses' ? 'rotate-180' : ''}`} />
+                    {filterWarehouses.length > 0 && (
+                      <X
+                        className="w-4 h-4 text-gray-400 hover:text-gray-600"
+                        onClick={(e) => { e.stopPropagation(); setFilterWarehouses([]); }}
+                      />
+                    )}
+                  </button>
+                  {openDropdown === 'warehouses' && (
+                    <div className="absolute z-50 mt-1 w-56 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredWarehouses.map(warehouse => (
+                        <label
+                          key={warehouse.id}
+                          className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={filterWarehouses.includes(warehouse.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFilterWarehouses([...filterWarehouses, warehouse.id])
+                              } else {
+                                setFilterWarehouses(filterWarehouses.filter(id => id !== warehouse.id))
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-gray-700">{warehouse.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1444,12 +1574,12 @@ export default function Inventory() {
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchTerm || filterCategory !== 'all' || filterStatus !== 'all'
+                {searchTerm || filterCategories.length > 0 || filterStatuses.length > 0
                   ? 'No se encontraron productos'
                   : 'No hay productos en inventario'}
               </h3>
               <p className="text-gray-600 mb-4">
-                {searchTerm || filterCategory !== 'all' || filterStatus !== 'all'
+                {searchTerm || filterCategories.length > 0 || filterStatuses.length > 0
                   ? 'Intenta con otros filtros de búsqueda'
                   : 'Ve a la página de Productos para agregar productos a tu catálogo'}
               </p>
