@@ -885,9 +885,15 @@ export function generateInvoiceXML(invoiceData, businessData) {
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio unitario SIN IGV (valor base para SUNAT)
+    // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
+    // Para precios pequeños usamos más decimales (SUNAT acepta hasta 10 decimales)
+    const exactUnitPrice = lineTotal / item.quantity
+    const unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : 2
+    const unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
     const price = invoiceLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(priceWithoutIGV.toFixed(2))
+      .txt(unitPriceForXML.toString())
   })
 
   return root.end({ prettyPrint: true })
@@ -1301,9 +1307,16 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio unitario SIN IGV (valor base para SUNAT)
+    // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
+    // Para precios pequeños usamos más decimales (SUNAT acepta hasta 10 decimales)
+    const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
+    const exactUnitPrice = roundedLineTotal / item.quantity
+    const unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : 2
+    const unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
     const price = creditNoteLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(priceWithoutIGV.toFixed(2))
+      .txt(unitPriceForXML.toString())
   })
 
   return root.end({ prettyPrint: true })
@@ -1716,9 +1729,16 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio unitario SIN IGV (valor base para SUNAT)
+    // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
+    // Para precios pequeños usamos más decimales (SUNAT acepta hasta 10 decimales)
+    const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
+    const exactUnitPrice = roundedLineTotal / item.quantity
+    const unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : 2
+    const unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
     const price = debitNoteLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
-      .txt(priceWithoutIGV.toFixed(2))
+      .txt(unitPriceForXML.toString())
   })
 
   return root.end({ prettyPrint: true })
