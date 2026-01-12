@@ -1801,19 +1801,25 @@ export default function Products() {
   // Filtrar y ordenar productos por búsqueda y categoría (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
     const filtered = products.filter(product => {
-      const search = searchTerm.toLowerCase()
+      // Dividir búsqueda en palabras individuales para búsqueda flexible
+      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
 
       // Get category name for search (backward compatible)
       const categoryName = product.category
         ? (getCategoryById(categories, product.category)?.name || product.category)
         : ''
 
-      const matchesSearch =
-        product.code?.toLowerCase().includes(search) ||
-        product.sku?.toLowerCase().includes(search) ||
-        product.name?.toLowerCase().includes(search) ||
-        categoryName.toLowerCase().includes(search) ||
-        product.description?.toLowerCase().includes(search)
+      // Concatenar todos los campos buscables
+      const searchableText = [
+        product.code || '',
+        product.sku || '',
+        product.name || '',
+        categoryName,
+        product.description || ''
+      ].join(' ').toLowerCase()
+
+      // Verificar que TODAS las palabras de búsqueda estén presentes (en cualquier orden)
+      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
 
       // Check category filter (backward compatible with old string-based categories)
       let matchesCategory = false

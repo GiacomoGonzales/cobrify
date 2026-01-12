@@ -849,11 +849,18 @@ export default function POS() {
   // Optimizar filtrado de productos con useMemo
   const filteredProducts = React.useMemo(() => {
     return products.filter(p => {
-      const search = searchTerm.toLowerCase()
-      const matchesSearch =
-        p.name?.toLowerCase().includes(search) ||
-        p.code?.toLowerCase().includes(search) ||
-        p.sku?.toLowerCase().includes(search)
+      // Dividir búsqueda en palabras individuales para búsqueda flexible
+      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
+
+      // Concatenar campos buscables
+      const searchableText = [
+        p.name || '',
+        p.code || '',
+        p.sku || ''
+      ].join(' ').toLowerCase()
+
+      // Verificar que TODAS las palabras estén presentes (en cualquier orden)
+      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
 
       // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
       let matchesCategory = false
