@@ -3123,6 +3123,33 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </div>
+                    {companySettings?.posCustomFields?.showStudentField && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={customerData.studentName}
+                          onChange={e => setCustomerData({ ...customerData, studentName: e.target.value })}
+                          placeholder="Alumno"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                        <input
+                          type="text"
+                          value={customerData.studentSchedule}
+                          onChange={e => setCustomerData({ ...customerData, studentSchedule: e.target.value })}
+                          placeholder="Horario"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                    )}
+                    {companySettings?.posCustomFields?.showVehiclePlateField && (
+                      <input
+                        type="text"
+                        value={customerData.vehiclePlate}
+                        onChange={e => setCustomerData({ ...customerData, vehiclePlate: e.target.value.toUpperCase() })}
+                        placeholder="Placa de Vehículo"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 uppercase"
+                      />
+                    )}
 
                     {/* Forma de Pago - Solo Facturas */}
                     <div className="mt-2 pt-2 border-t border-gray-200">
