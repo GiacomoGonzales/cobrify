@@ -627,6 +627,181 @@ export const DISTRITOS = {
     { code: '11', name: 'PIRA' },
     { code: '12', name: 'TARICA' },
   ],
+  // ÁNCASH - AIJA (0202)
+  '0202': [
+    { code: '01', name: 'AIJA' },
+    { code: '02', name: 'CORIS' },
+    { code: '03', name: 'HUACLLAN' },
+    { code: '04', name: 'LA MERCED' },
+    { code: '05', name: 'SUCCHA' },
+  ],
+  // ÁNCASH - ANTONIO RAYMONDI (0203)
+  '0203': [
+    { code: '01', name: 'LLAMELLÍN' },
+    { code: '02', name: 'ACZO' },
+    { code: '03', name: 'CHACCHO' },
+    { code: '04', name: 'CHINGAS' },
+    { code: '05', name: 'MIRGAS' },
+    { code: '06', name: 'SAN JUAN DE RONTOY' },
+  ],
+  // ÁNCASH - ASUNCIÓN (0204)
+  '0204': [
+    { code: '01', name: 'CHACAS' },
+    { code: '02', name: 'ACOCHACA' },
+  ],
+  // ÁNCASH - BOLOGNESI (0205)
+  '0205': [
+    { code: '01', name: 'CHIQUIÁN' },
+    { code: '02', name: 'ABELARDO PARDO LEZAMETA' },
+    { code: '03', name: 'ANTONIO RAYMONDI' },
+    { code: '04', name: 'AQUIA' },
+    { code: '05', name: 'CAJACAY' },
+    { code: '06', name: 'CANIS' },
+    { code: '07', name: 'COLQUIOC' },
+    { code: '08', name: 'HUALLANCA' },
+    { code: '09', name: 'HUASTA' },
+    { code: '10', name: 'HUAYLLACAYAN' },
+    { code: '11', name: 'LA PRIMAVERA' },
+    { code: '12', name: 'MANGAS' },
+    { code: '13', name: 'PACLLON' },
+    { code: '14', name: 'SAN MIGUEL DE CORPANQUI' },
+    { code: '15', name: 'TICLLOS' },
+  ],
+  // ÁNCASH - CARHUAZ (0206)
+  '0206': [
+    { code: '01', name: 'CARHUAZ' },
+    { code: '02', name: 'ACOPAMPA' },
+    { code: '03', name: 'AMASHCA' },
+    { code: '04', name: 'ANTA' },
+    { code: '05', name: 'ATAQUERO' },
+    { code: '06', name: 'MARCARA' },
+    { code: '07', name: 'PARIAHUANCA' },
+    { code: '08', name: 'SAN MIGUEL DE ACO' },
+    { code: '09', name: 'SHILLA' },
+    { code: '10', name: 'TINCO' },
+    { code: '11', name: 'YUNGAR' },
+  ],
+  // ÁNCASH - CARLOS FERMÍN FITZCARRALD (0207)
+  '0207': [
+    { code: '01', name: 'SAN LUIS' },
+    { code: '02', name: 'SAN NICOLÁS' },
+    { code: '03', name: 'YAUYA' },
+  ],
+  // ÁNCASH - CASMA (0208)
+  '0208': [
+    { code: '01', name: 'CASMA' },
+    { code: '02', name: 'BUENA VISTA ALTA' },
+    { code: '03', name: 'COMANDANTE NOEL' },
+    { code: '04', name: 'YAUTAN' },
+  ],
+  // ÁNCASH - CORONGO (0209)
+  '0209': [
+    { code: '01', name: 'CORONGO' },
+    { code: '02', name: 'ACO' },
+    { code: '03', name: 'BAMBAS' },
+    { code: '04', name: 'CUSCA' },
+    { code: '05', name: 'LA PAMPA' },
+    { code: '06', name: 'YANAC' },
+    { code: '07', name: 'YUPAN' },
+  ],
+  // ÁNCASH - HUARI (0210)
+  '0210': [
+    { code: '01', name: 'HUARI' },
+    { code: '02', name: 'ANRA' },
+    { code: '03', name: 'CAJAY' },
+    { code: '04', name: 'CHAVÍN DE HUÁNTAR' },
+    { code: '05', name: 'HUACACHI' },
+    { code: '06', name: 'HUACCHIS' },
+    { code: '07', name: 'HUACHIS' },
+    { code: '08', name: 'HUANTAR' },
+    { code: '09', name: 'MASIN' },
+    { code: '10', name: 'PAUCAS' },
+    { code: '11', name: 'PONTO' },
+    { code: '12', name: 'RAHUAPAMPA' },
+    { code: '13', name: 'RAPAYAN' },
+    { code: '14', name: 'SAN MARCOS' },
+    { code: '15', name: 'SAN PEDRO DE CHANA' },
+    { code: '16', name: 'UCO' },
+  ],
+  // ÁNCASH - HUARMEY (0211)
+  '0211': [
+    { code: '01', name: 'HUARMEY' },
+    { code: '02', name: 'COCHAPETI' },
+    { code: '03', name: 'CULEBRAS' },
+    { code: '04', name: 'HUAYAN' },
+    { code: '05', name: 'MALVAS' },
+  ],
+  // ÁNCASH - HUAYLAS (0212)
+  '0212': [
+    { code: '01', name: 'CARAZ' },
+    { code: '02', name: 'HUALLANCA' },
+    { code: '03', name: 'HUATA' },
+    { code: '04', name: 'HUAYLAS' },
+    { code: '05', name: 'MATO' },
+    { code: '06', name: 'PAMPAROMAS' },
+    { code: '07', name: 'PUEBLO LIBRE' },
+    { code: '08', name: 'SANTA CRUZ' },
+    { code: '09', name: 'SANTO TORIBIO' },
+    { code: '10', name: 'YURACMARCA' },
+  ],
+  // ÁNCASH - MARISCAL LUZURIAGA (0213)
+  '0213': [
+    { code: '01', name: 'PISCOBAMBA' },
+    { code: '02', name: 'CASCA' },
+    { code: '03', name: 'ELEAZAR GUZMÁN BARRÓN' },
+    { code: '04', name: 'FIDEL OLIVAS ESCUDERO' },
+    { code: '05', name: 'LLAMA' },
+    { code: '06', name: 'LLUMPA' },
+    { code: '07', name: 'LUCMA' },
+    { code: '08', name: 'MUSGA' },
+  ],
+  // ÁNCASH - OCROS (0214)
+  '0214': [
+    { code: '01', name: 'OCROS' },
+    { code: '02', name: 'ACAS' },
+    { code: '03', name: 'CAJAMARQUILLA' },
+    { code: '04', name: 'CARHUAPAMPA' },
+    { code: '05', name: 'COCHAS' },
+    { code: '06', name: 'CONGAS' },
+    { code: '07', name: 'LLIPA' },
+    { code: '08', name: 'SAN CRISTÓBAL DE RAJÁN' },
+    { code: '09', name: 'SAN PEDRO' },
+    { code: '10', name: 'SANTIAGO DE CHILCAS' },
+  ],
+  // ÁNCASH - PALLASCA (0215)
+  '0215': [
+    { code: '01', name: 'CABANA' },
+    { code: '02', name: 'BOLOGNESI' },
+    { code: '03', name: 'CONCHUCOS' },
+    { code: '04', name: 'HUACASCHUQUE' },
+    { code: '05', name: 'HUANDOVAL' },
+    { code: '06', name: 'LACABAMBA' },
+    { code: '07', name: 'LLAPO' },
+    { code: '08', name: 'PALLASCA' },
+    { code: '09', name: 'PAMPAS' },
+    { code: '10', name: 'SANTA ROSA' },
+    { code: '11', name: 'TAUCA' },
+  ],
+  // ÁNCASH - POMABAMBA (0216)
+  '0216': [
+    { code: '01', name: 'POMABAMBA' },
+    { code: '02', name: 'HUAYLLÁN' },
+    { code: '03', name: 'PAROBAMBA' },
+    { code: '04', name: 'QUINUABAMBA' },
+  ],
+  // ÁNCASH - RECUAY (0217)
+  '0217': [
+    { code: '01', name: 'RECUAY' },
+    { code: '02', name: 'CATAC' },
+    { code: '03', name: 'COTAPARACO' },
+    { code: '04', name: 'HUAYLLAPAMPA' },
+    { code: '05', name: 'LLACLLIN' },
+    { code: '06', name: 'MARCA' },
+    { code: '07', name: 'PAMPAS CHICO' },
+    { code: '08', name: 'PARARIN' },
+    { code: '09', name: 'TAPACOCHA' },
+    { code: '10', name: 'TICAPAMPA' },
+  ],
   // ÁNCASH - SANTA (0218)
   '0218': [
     { code: '01', name: 'CHIMBOTE' },
@@ -638,6 +813,30 @@ export const DISTRITOS = {
     { code: '07', name: 'SAMANCO' },
     { code: '08', name: 'SANTA' },
     { code: '09', name: 'NUEVO CHIMBOTE' },
+  ],
+  // ÁNCASH - SIHUAS (0219)
+  '0219': [
+    { code: '01', name: 'SIHUAS' },
+    { code: '02', name: 'ACOBAMBA' },
+    { code: '03', name: 'ALFONSO UGARTE' },
+    { code: '04', name: 'CASHAPAMPA' },
+    { code: '05', name: 'CHINGALPO' },
+    { code: '06', name: 'HUAYLLABAMBA' },
+    { code: '07', name: 'QUICHES' },
+    { code: '08', name: 'RAGASH' },
+    { code: '09', name: 'SAN JUAN' },
+    { code: '10', name: 'SICSIBAMBA' },
+  ],
+  // ÁNCASH - YUNGAY (0220)
+  '0220': [
+    { code: '01', name: 'YUNGAY' },
+    { code: '02', name: 'CASCAPARA' },
+    { code: '03', name: 'MANCOS' },
+    { code: '04', name: 'MATACOTO' },
+    { code: '05', name: 'QUILLO' },
+    { code: '06', name: 'RANRAHIRCA' },
+    { code: '07', name: 'SHUPLUY' },
+    { code: '08', name: 'YANAMA' },
   ],
   // TACNA - TACNA (2301)
   '2301': [
