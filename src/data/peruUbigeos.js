@@ -282,6 +282,117 @@ export const PROVINCIAS = {
 }
 
 export const DISTRITOS = {
+  // ========================================
+  // AMAZONAS (01)
+  // ========================================
+  // AMAZONAS - CHACHAPOYAS (0101)
+  '0101': [
+    { code: '01', name: 'CHACHAPOYAS' },
+    { code: '02', name: 'ASUNCIÓN' },
+    { code: '03', name: 'BALSAS' },
+    { code: '04', name: 'CHETO' },
+    { code: '05', name: 'CHILIQUÍN' },
+    { code: '06', name: 'CHUQUIBAMBA' },
+    { code: '07', name: 'GRANADA' },
+    { code: '08', name: 'HUANCAS' },
+    { code: '09', name: 'LA JALCA' },
+    { code: '10', name: 'LEIMEBAMBA' },
+    { code: '11', name: 'LEVANTO' },
+    { code: '12', name: 'MAGDALENA' },
+    { code: '13', name: 'MARISCAL CASTILLA' },
+    { code: '14', name: 'MOLINOPAMPA' },
+    { code: '15', name: 'MONTEVIDEO' },
+    { code: '16', name: 'OLLEROS' },
+    { code: '17', name: 'QUINJALCA' },
+    { code: '18', name: 'SAN FRANCISCO DE DAGUAS' },
+    { code: '19', name: 'SAN ISIDRO DE MAINO' },
+    { code: '20', name: 'SOLOCO' },
+    { code: '21', name: 'SONCHE' },
+  ],
+  // AMAZONAS - BAGUA (0102)
+  '0102': [
+    { code: '01', name: 'BAGUA' },
+    { code: '02', name: 'ARAMANGO' },
+    { code: '03', name: 'COPALLÍN' },
+    { code: '04', name: 'EL PARCO' },
+    { code: '05', name: 'IMAZA' },
+    { code: '06', name: 'LA PECA' },
+  ],
+  // AMAZONAS - BONGARÁ (0103)
+  '0103': [
+    { code: '01', name: 'JUMBILLA' },
+    { code: '02', name: 'CHISQUILLA' },
+    { code: '03', name: 'CHURUJA' },
+    { code: '04', name: 'COROSHA' },
+    { code: '05', name: 'CUISPES' },
+    { code: '06', name: 'FLORIDA' },
+    { code: '07', name: 'JAZAN' },
+    { code: '08', name: 'RECTA' },
+    { code: '09', name: 'SAN CARLOS' },
+    { code: '10', name: 'SHIPASBAMBA' },
+    { code: '11', name: 'VALERA' },
+    { code: '12', name: 'YAMBRASBAMBA' },
+  ],
+  // AMAZONAS - CONDORCANQUI (0104)
+  '0104': [
+    { code: '01', name: 'NIEVA' },
+    { code: '02', name: 'EL CENEPA' },
+    { code: '03', name: 'RÍO SANTIAGO' },
+  ],
+  // AMAZONAS - LUYA (0105)
+  '0105': [
+    { code: '01', name: 'LAMUD' },
+    { code: '02', name: 'CAMPORREDONDO' },
+    { code: '03', name: 'COCABAMBA' },
+    { code: '04', name: 'COLCAMAR' },
+    { code: '05', name: 'CONILA' },
+    { code: '06', name: 'INGUILPATA' },
+    { code: '07', name: 'LONGUITA' },
+    { code: '08', name: 'LONYA CHICO' },
+    { code: '09', name: 'LUYA' },
+    { code: '10', name: 'LUYA VIEJO' },
+    { code: '11', name: 'MARÍA' },
+    { code: '12', name: 'OCALLI' },
+    { code: '13', name: 'OCUMAL' },
+    { code: '14', name: 'PISUQUIA' },
+    { code: '15', name: 'PROVIDENCIA' },
+    { code: '16', name: 'SAN CRISTÓBAL' },
+    { code: '17', name: 'SAN FRANCISCO DEL YESO' },
+    { code: '18', name: 'SAN JERÓNIMO' },
+    { code: '19', name: 'SAN JUAN DE LOPECANCHA' },
+    { code: '20', name: 'SANTA CATALINA' },
+    { code: '21', name: 'SANTO TOMÁS' },
+    { code: '22', name: 'TINGO' },
+    { code: '23', name: 'TRITA' },
+  ],
+  // AMAZONAS - RODRÍGUEZ DE MENDOZA (0106)
+  '0106': [
+    { code: '01', name: 'SAN NICOLÁS' },
+    { code: '02', name: 'CHIRIMOTO' },
+    { code: '03', name: 'COCHAMAL' },
+    { code: '04', name: 'HUAMBO' },
+    { code: '05', name: 'LIMABAMBA' },
+    { code: '06', name: 'LONGAR' },
+    { code: '07', name: 'MARISCAL BENAVIDES' },
+    { code: '08', name: 'MILPUC' },
+    { code: '09', name: 'OMIA' },
+    { code: '10', name: 'SANTA ROSA' },
+    { code: '11', name: 'TOTORA' },
+    { code: '12', name: 'VISTA ALEGRE' },
+  ],
+  // AMAZONAS - UTCUBAMBA (0107)
+  '0107': [
+    { code: '01', name: 'BAGUA GRANDE' },
+    { code: '02', name: 'CAJARURO' },
+    { code: '03', name: 'CUMBA' },
+    { code: '04', name: 'EL MILAGRO' },
+    { code: '05', name: 'JAMALCA' },
+    { code: '06', name: 'LONYA GRANDE' },
+    { code: '07', name: 'YAMÓN' },
+  ],
+  // ========================================
+  // LIMA (15)
+  // ========================================
   // LIMA - LIMA (1501)
   '1501': [
     { code: '01', name: 'LIMA' },
