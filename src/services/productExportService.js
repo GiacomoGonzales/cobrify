@@ -6,7 +6,166 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
 /**
- * Generar reporte de productos en Excel
+ * Exportar productos en formato compatible con importación
+ * Este formato permite reimportar los productos después de editarlos
+ */
+export const exportProductsForImport = async (products, categories, businessMode = 'retail') => {
+  const workbook = XLSX.utils.book_new();
+
+  // Helper para obtener nombre de categoría por ID
+  const getCategoryName = (categoryId) => {
+    if (!categoryId) return '';
+    const category = categories.find(cat => cat.id === categoryId);
+    return category ? category.name : '';
+  };
+
+  // Mapear afectación IGV a texto
+  const getTaxAffectationText = (taxAffectation) => {
+    switch (taxAffectation) {
+      case '20': return 'EXONERADO';
+      case '30': return 'INAFECTO';
+      default: return 'GRAVADO';
+    }
+  };
+
+  // Preparar datos según el modo de negocio
+  let productData = [];
+
+  if (businessMode === 'pharmacy') {
+    // Formato farmacia con campos específicos
+    productData = products.map(product => ({
+      sku: product.sku || '',
+      codigo_barras: product.code || '',
+      nombre: product.name || '',
+      descripcion: product.description || '',
+      nombre_generico: product.genericName || '',
+      concentracion: product.concentration || '',
+      presentacion: product.presentation || '',
+      laboratorio: product.laboratoryName || '',
+      principio_activo: product.activeIngredient || '',
+      accion_terapeutica: product.therapeuticAction || '',
+      condicion_venta: product.saleCondition || '',
+      registro_sanitario: product.sanitaryRegistry || '',
+      ubicacion: product.location || '',
+      costo: product.cost || '',
+      precio: product.price || 0,
+      precio2: product.price2 || '',
+      precio3: product.price3 || '',
+      precio4: product.price4 || '',
+      stock: product.stock ?? '',
+      trackStock: product.trackStock === false ? 'NO' : 'SI',
+      unidad: product.unit || 'UNIDAD',
+      categoria: getCategoryName(product.category),
+      afectacion_igv: getTaxAffectationText(product.taxAffectation),
+    }));
+  } else {
+    // Formato retail estándar
+    productData = products.map(product => ({
+      sku: product.sku || '',
+      codigo_barras: product.code || '',
+      nombre: product.name || '',
+      descripcion: product.description || '',
+      costo: product.cost || '',
+      precio: product.price || 0,
+      precio2: product.price2 || '',
+      precio3: product.price3 || '',
+      precio4: product.price4 || '',
+      stock: product.stock ?? '',
+      trackStock: product.trackStock === false ? 'NO' : 'SI',
+      unidad: product.unit || 'UNIDAD',
+      categoria: getCategoryName(product.category),
+      afectacion_igv: getTaxAffectationText(product.taxAffectation),
+    }));
+  }
+
+  // Crear hoja de cálculo
+  const worksheet = XLSX.utils.json_to_sheet(productData);
+
+  // Configurar anchos de columna
+  if (businessMode === 'pharmacy') {
+    worksheet['!cols'] = [
+      { wch: 12 }, // sku
+      { wch: 16 }, // codigo_barras
+      { wch: 30 }, // nombre
+      { wch: 30 }, // descripcion
+      { wch: 18 }, // nombre_generico
+      { wch: 12 }, // concentracion
+      { wch: 12 }, // presentacion
+      { wch: 15 }, // laboratorio
+      { wch: 20 }, // principio_activo
+      { wch: 15 }, // accion_terapeutica
+      { wch: 15 }, // condicion_venta
+      { wch: 15 }, // registro_sanitario
+      { wch: 12 }, // ubicacion
+      { wch: 10 }, // costo
+      { wch: 10 }, // precio
+      { wch: 10 }, // precio2
+      { wch: 10 }, // precio3
+      { wch: 10 }, // precio4
+      { wch: 10 }, // stock
+      { wch: 12 }, // trackStock
+      { wch: 12 }, // unidad
+      { wch: 20 }, // categoria
+      { wch: 15 }, // afectacion_igv
+    ];
+  } else {
+    worksheet['!cols'] = [
+      { wch: 15 }, // sku
+      { wch: 18 }, // codigo_barras
+      { wch: 35 }, // nombre
+      { wch: 40 }, // descripcion
+      { wch: 10 }, // costo
+      { wch: 10 }, // precio
+      { wch: 10 }, // precio2
+      { wch: 10 }, // precio3
+      { wch: 10 }, // precio4
+      { wch: 10 }, // stock
+      { wch: 12 }, // trackStock
+      { wch: 12 }, // unidad
+      { wch: 20 }, // categoria
+      { wch: 15 }, // afectacion_igv
+    ];
+  }
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, businessMode === 'pharmacy' ? 'Medicamentos' : 'Productos');
+
+  // Generar nombre de archivo
+  const fileName = `Productos_Exportados_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
+
+  // Descargar/compartir archivo
+  const isNativePlatform = Capacitor.isNativePlatform();
+
+  if (isNativePlatform) {
+    try {
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: excelBuffer,
+        directory: Directory.Documents,
+        recursive: true
+      });
+
+      await Share.share({
+        title: fileName,
+        text: 'Productos exportados (compatible con importación)',
+        url: result.uri,
+        dialogTitle: 'Compartir productos'
+      });
+
+      return { success: true, uri: result.uri };
+    } catch (error) {
+      console.error('Error al exportar Excel en móvil:', error);
+      throw error;
+    }
+  } else {
+    XLSX.writeFile(workbook, fileName);
+    return { success: true };
+  }
+};
+
+/**
+ * Generar reporte de productos en Excel (formato detallado con estadísticas)
  */
 export const generateProductsExcel = async (products, categories, businessData) => {
   const workbook = XLSX.utils.book_new();

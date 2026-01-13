@@ -24,7 +24,7 @@ import {
   getProductCategories,
   saveProductCategories,
 } from '@/services/firestoreService'
-import { generateProductsExcel } from '@/services/productExportService'
+import { exportProductsForImport } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
 import { getWarehouses, updateWarehouseStock, getDefaultWarehouse, createWarehouse, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
@@ -987,14 +987,9 @@ export default function Products() {
         return;
       }
 
-      // Obtener datos del negocio
-      const { getCompanySettings } = await import('@/services/firestoreService');
-      const settingsResult = await getCompanySettings(getBusinessId());
-      const businessData = settingsResult.success ? settingsResult.data : null;
-
-      // Generar Excel
-      await generateProductsExcel(products, categories, businessData);
-      toast.success(`${products.length} producto(s) exportado(s) exitosamente`);
+      // Exportar en formato compatible con importación
+      await exportProductsForImport(products, categories, businessMode);
+      toast.success(`${products.length} producto(s) exportado(s) exitosamente. El archivo es compatible con la función de importar.`);
     } catch (error) {
       console.error('Error al exportar productos:', error);
       toast.error('Error al generar el archivo Excel');
