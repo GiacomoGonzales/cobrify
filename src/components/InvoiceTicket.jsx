@@ -699,6 +699,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {item.code && (
                   <div className="item-code">Código: {item.code}</div>
                 )}
+                {item.batchNumber && (
+                  <div className="item-code" style={{ color: '#6b21a8' }}>
+                    Lote: {item.batchNumber}
+                    {item.batchExpiryDate && (() => {
+                      const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
+                      const expiryStr = d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                      return ` (Venc: ${expiryStr})`;
+                    })()}
+                  </div>
+                )}
                 {itemObservations && (
                   <div className="item-code">{itemObservations}</div>
                 )}

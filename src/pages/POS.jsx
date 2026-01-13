@@ -305,6 +305,10 @@ export default function POS() {
   const [showPresentationModal, setShowPresentationModal] = useState(false)
   const [productForPresentationSelection, setProductForPresentationSelection] = useState(null)
 
+  // Modal de selección de lote (modo farmacia)
+  const [showBatchModal, setShowBatchModal] = useState(false)
+  const [productForBatchSelection, setProductForBatchSelection] = useState(null)
+
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
   const [discountPercentage, setDiscountPercentage] = useState('')
@@ -1010,7 +1014,31 @@ export default function POS() {
     }
   }
 
-  const addToCart = (product, selectedPrice = null, selectedPresentation = null) => {
+  // Helper: obtener lotes disponibles ordenados por FEFO
+  const getAvailableBatches = (product) => {
+    if (!product.batches || !Array.isArray(product.batches)) return []
+    return product.batches
+      .filter(b => b.quantity > 0 && !b.isExpired)
+      .map(b => ({
+        ...b,
+        lotNumber: b.lotNumber || b.batchNumber || 'S/N',
+        expiryDate: b.expiryDate || b.expirationDate || null
+      }))
+      .sort((a, b) => {
+        const dA = a.expiryDate?.toDate?.() || new Date(a.expiryDate || '2099-12-31')
+        const dB = b.expiryDate?.toDate?.() || new Date(b.expiryDate || '2099-12-31')
+        return dA - dB
+      })
+  }
+
+  // Helper: formatear fecha de vencimiento
+  const formatBatchExpiry = (date) => {
+    if (!date) return 'Sin fecha'
+    const d = date.toDate ? date.toDate() : new Date(date)
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  const addToCart = (product, selectedPrice = null, selectedPresentation = null, selectedBatch = null) => {
     // Bloquear si ya se completó una venta
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
@@ -1035,55 +1063,82 @@ export default function POS() {
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
     const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4)
     if (hasMultiplePrices && selectedPrice === null && selectedPresentation === null) {
-      // Verificar si el cliente seleccionado tiene un nivel de precio asignado
       if (selectedCustomer?.priceLevel) {
-        // Usar el precio automáticamente según el nivel del cliente
-        const priceKey = selectedCustomer.priceLevel // 'price1', 'price2', 'price3', o 'price4'
+        const priceKey = selectedCustomer.priceLevel
         const autoPrice = priceKey === 'price1' ? product.price : (product[priceKey] || product.price)
-        return addToCart({ ...product, price: autoPrice }, autoPrice)
+        return addToCart({ ...product, price: autoPrice }, autoPrice, null, selectedBatch)
       }
-      // Mostrar modal para seleccionar precio
       setProductForPriceSelection(product)
       setShowPriceModal(true)
       return
     }
 
-    // FEFO: Verificar si el producto está vencido (solo en modo farmacia o si tiene control de vencimiento)
+    // FARMACIA: Verificar si tiene múltiples lotes y no viene con lote seleccionado
+    const availableBatches = getAvailableBatches(product)
+    if (availableBatches.length > 1 && selectedBatch === null) {
+      setProductForBatchSelection(product)
+      setShowBatchModal(true)
+      return
+    }
+
+    // Usar el lote seleccionado o el único disponible (FEFO)
+    const batchToUse = selectedBatch || (availableBatches.length === 1 ? availableBatches[0] : null)
+
+    // FEFO: Verificar si el producto está vencido
     const expirationStatus = getProductExpirationStatus(product)
     if (expirationStatus && !expirationStatus.canSell) {
       toast.error(`No se puede vender: ${product.name} - ${expirationStatus.message}`)
       return
     }
 
-    // Mostrar advertencia si está próximo a vencer (pero permitir la venta)
     if (expirationStatus && ['today', 'critical'].includes(expirationStatus.status)) {
       toast.warning(`Atención: ${product.name} - ${expirationStatus.message}`)
     }
 
-    // Verificar stock del almacén seleccionado solo si allowNegativeStock es false
-    const warehouseStock = getCurrentWarehouseStock(product)
+    // Verificar stock del almacén/lote
+    const warehouseStock = batchToUse ? batchToUse.quantity : getCurrentWarehouseStock(product)
     if (product.stock !== null && warehouseStock <= 0 && !companySettings?.allowNegativeStock) {
       toast.error(`Producto sin stock en ${selectedWarehouse?.name || 'este almacén'}`)
       return
     }
 
-    const existingItem = cart.find(item => item.id === product.id)
+    // ID único para el item en carrito (diferente por lote)
+    const cartItemId = batchToUse ? `${product.id}-batch-${batchToUse.lotNumber}` : product.id
+    const existingItem = cart.find(item => (item.cartId || item.id) === cartItemId)
 
     if (existingItem) {
-      // Verificar si hay suficiente stock en el almacén solo si allowNegativeStock es false
       if (product.stock !== null && existingItem.quantity >= warehouseStock && !companySettings?.allowNegativeStock) {
-        toast.error(`Stock insuficiente en ${selectedWarehouse?.name || 'este almacén'}. Disponible: ${warehouseStock}`)
+        const stockMsg = batchToUse ? `lote ${batchToUse.lotNumber}` : (selectedWarehouse?.name || 'este almacén')
+        toast.warning(`Stock agotado en ${stockMsg}. Agrega el producto de nuevo para usar otro lote.`)
         return
       }
 
       setCart(
         cart.map(item =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          (item.cartId || item.id) === cartItemId ? { ...item, quantity: item.quantity + 1 } : item
         )
       )
     } else {
-      setCart([...cart, { ...product, quantity: 1 }])
+      const cartItem = {
+        ...product,
+        quantity: 1,
+        ...(batchToUse && {
+          cartId: cartItemId,
+          batchNumber: batchToUse.lotNumber,
+          batchExpiryDate: batchToUse.expiryDate,
+          batchQuantity: batchToUse.quantity
+        })
+      }
+      setCart([...cart, cartItem])
     }
+  }
+
+  // Manejar selección de lote desde el modal
+  const handleBatchSelection = (batch) => {
+    if (!productForBatchSelection) return
+    addToCart(productForBatchSelection, null, null, batch)
+    setShowBatchModal(false)
+    setProductForBatchSelection(null)
   }
 
   // Manejar selección de precio desde el modal
@@ -1830,6 +1885,8 @@ export default function POS() {
           taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
           ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
+          ...(item.batchNumber && { batchNumber: item.batchNumber }),
+          ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
         }))
 
         // Crear datos simulados de factura
@@ -1992,6 +2049,8 @@ export default function POS() {
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
+        ...(item.batchNumber && { batchNumber: item.batchNumber }),
+        ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
       }))
 
       // 3. Crear factura
@@ -4995,6 +5054,63 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 </button>
               )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal de Selección de Lote (Modo Farmacia) */}
+      <Modal
+        isOpen={showBatchModal}
+        onClose={() => {
+          setShowBatchModal(false)
+          setProductForBatchSelection(null)
+        }}
+        title={`Seleccionar lote - ${productForBatchSelection?.name || ''}`}
+        size="sm"
+      >
+        {productForBatchSelection && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Este producto tiene múltiples lotes. Selecciona el lote a vender (FEFO recomendado):
+            </p>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {getAvailableBatches(productForBatchSelection).map((batch, idx) => (
+                <button
+                  key={batch.lotNumber + idx}
+                  onClick={() => handleBatchSelection(batch)}
+                  className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
+                    idx === 0
+                      ? 'border-green-500 bg-green-50 hover:bg-green-100'
+                      : 'border-gray-200 hover:border-primary-500 hover:bg-primary-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{batch.lotNumber}</p>
+                        {idx === 0 && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                            FEFO
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Vence: {formatBatchExpiry(batch.expiryDate)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-primary-600">{batch.quantity}</p>
+                      <p className="text-xs text-gray-400">disponibles</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-xs text-blue-700">
+                <strong>FEFO:</strong> First Expire, First Out - Se recomienda vender primero el lote que vence más pronto.
+              </p>
             </div>
           </div>
         )}

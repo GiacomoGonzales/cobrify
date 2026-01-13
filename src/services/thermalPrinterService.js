@@ -543,12 +543,23 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
 
-        // Línea 4: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
+        // Línea 4: Información del lote si existe (modo farmacia)
+        if (item.batchNumber) {
+          let batchLine = `Lote: ${item.batchNumber}`;
+          if (item.batchExpiryDate) {
+            const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
+            const expiryStr = d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            batchLine += ` Venc: ${expiryStr}`;
+          }
+          itemsText += `${batchLine}\n`;
+        }
+
+        // Línea 5: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
         if (itemObservations) {
           itemsText += `  ${itemObservations}\n`;
         }
 
-        // Línea 5: Separación entre items (línea vacía)
+        // Línea 6: Separación entre items (línea vacía)
         itemsText += '\n';
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
@@ -571,7 +582,18 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           itemsText += `Codigo: ${convertSpanishText(item.code)}\n`;
         }
 
-        // Línea 4: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
+        // Línea 4: Información del lote si existe (modo farmacia)
+        if (item.batchNumber) {
+          let batchLine = `Lote: ${item.batchNumber}`;
+          if (item.batchExpiryDate) {
+            const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
+            const expiryStr = d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            batchLine += ` V:${expiryStr}`;
+          }
+          itemsText += `${batchLine}\n`;
+        }
+
+        // Línea 5: Observaciones adicionales si existen (IMEI, placa, serie, etc.)
         if (itemObservations) {
           itemsText += `  ${itemObservations}\n`;
         }
@@ -1817,6 +1839,17 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
         .text(`${qtyFormatted}${unitSuffix} x S/ ${unitPrice.toFixed(2)}`)
         .text(`  S/ ${itemTotal.toFixed(2)}`)
         .newLine();
+
+      // Información del lote si existe (modo farmacia)
+      if (item.batchNumber) {
+        let batchLine = `Lote: ${item.batchNumber}`;
+        if (item.batchExpiryDate) {
+          const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
+          const expiryStr = d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+          batchLine += ` Venc: ${expiryStr}`;
+        }
+        builder.text(batchLine).newLine();
+      }
 
       // Observaciones adicionales si existen (IMEI, placa, serie, etc.)
       if (itemObservations) {

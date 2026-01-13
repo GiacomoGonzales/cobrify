@@ -674,11 +674,14 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     if (loc.address) line += loc.address
     if (loc.phone) line += (loc.address ? ' - ' : '') + 'Tel: ' + loc.phone
     if (line) {
-      // Truncar si es muy largo
+      // Permitir múltiples líneas para direcciones largas
       const maxWidth = infoColumnWidth - 10
-      const truncatedLines = doc.splitTextToSize(line, maxWidth)
-      doc.text(truncatedLines[0], infoCenterX, infoY, { align: 'center' })
-      infoY += 9
+      const addressLines = doc.splitTextToSize(line, maxWidth)
+      const linesToShow = addressLines.slice(0, 3) // Máximo 3 líneas
+      linesToShow.forEach((addrLine) => {
+        doc.text(addrLine, infoCenterX, infoY, { align: 'center' })
+        infoY += 9
+      })
     }
   })
 
@@ -1113,6 +1116,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     let itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    // Concatenar información del lote si existe (modo farmacia)
+    if (item.batchNumber) {
+      const expiryStr = item.batchExpiryDate
+        ? (() => {
+          const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate)
+          return d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        })()
+        : ''
+      itemDesc += ` | Lote: ${item.batchNumber}${expiryStr ? ` (Venc: ${expiryStr})` : ''}`
+    }
     // Concatenar observaciones adicionales si existen (IMEI, placa, serie, etc.)
     if (item.observations) {
       itemDesc += ` - ${item.observations}`
