@@ -400,6 +400,12 @@ export const DISTRITOS = {
     { code: '12', name: 'TAURIJA' },
     { code: '13', name: 'URPAY' },
   ],
+  // LA LIBERTAD - VIRÚ (1312)
+  '1312': [
+    { code: '01', name: 'VIRÚ' },
+    { code: '02', name: 'CHAO' },
+    { code: '03', name: 'GUADALUPITO' },
+  ],
   // LAMBAYEQUE - CHICLAYO (1401)
   '1401': [
     { code: '01', name: 'CHICLAYO' },
