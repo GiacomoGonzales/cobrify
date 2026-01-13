@@ -30,6 +30,8 @@ import {
   FileCheck,
   Archive,
   Store,
+  User,
+  ShoppingCart,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -1992,206 +1994,89 @@ Gracias por tu preferencia.`
         size="lg"
       >
         {viewingInvoice && (
-          <div className="space-y-6" data-web-print-legible={webPrintLegible}>
-            {/* CSS para impresión web legible */}
-            {console.log('🖨️ Renderizando modal de invoice - webPrintLegible:', webPrintLegible)}
-            <style>{`
-              @media print {
-                /* Aplicar a TODOS los elementos dentro del contenedor */
-                [data-web-print-legible="true"] * {
-                  font-size: 12pt !important;
-                  font-weight: 600 !important;
-                  line-height: 1.4 !important;
-                }
-                /* Tamaños específicos para clases de texto */
-                [data-web-print-legible="true"] .text-sm,
-                [data-web-print-legible="true"] .text-xs {
-                  font-size: 10pt !important;
-                }
-                [data-web-print-legible="true"] .text-lg {
-                  font-size: 14pt !important;
-                }
-                [data-web-print-legible="true"] .text-xl {
-                  font-size: 16pt !important;
-                  font-weight: bold !important;
-                }
-                [data-web-print-legible="true"] .text-2xl {
-                  font-size: 18pt !important;
-                  font-weight: bold !important;
-                }
-                [data-web-print-legible="true"] .font-semibold,
-                [data-web-print-legible="true"] .font-bold {
-                  font-weight: 700 !important;
-                }
-              }
-            `}</style>
-            {/* Header Info */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-              <div>
-                <p className="text-sm text-gray-600">Número</p>
-                <p className="font-semibold text-primary-600">{viewingInvoice.number}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Tipo</p>
-                <p className="font-semibold">{getDocumentTypeName(viewingInvoice.documentType)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Fecha</p>
-                <p className="font-semibold">
-                  {getInvoiceDate(viewingInvoice)
-                    ? formatDate(getInvoiceDate(viewingInvoice))
-                    : 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Estado</p>
-                <div className="mt-1">{getStatusBadge(viewingInvoice.status)}</div>
-              </div>
-              <div className="col-span-2">
-                <p className="text-sm text-gray-600">Estado SUNAT</p>
-                <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus)}</div>
+          <div className="space-y-5">
+            {/* ========== HEADER ========== */}
+            <div className="bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl p-5 -mx-1">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-primary-100 text-sm">{getDocumentTypeName(viewingInvoice.documentType)}</p>
+                  <p className="text-2xl font-bold mt-1">{viewingInvoice.number}</p>
+                  <p className="text-primary-100 text-sm mt-2">
+                    {getInvoiceDate(viewingInvoice) ? formatDate(getInvoiceDate(viewingInvoice)) : 'Sin fecha'}
+                  </p>
+                </div>
+                <div className="text-right space-y-2">
+                  {getStatusBadge(viewingInvoice.status)}
+                  <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus)}</div>
+                </div>
               </div>
             </div>
 
-            {/* Mostrar error de SUNAT si está rechazado */}
+            {/* ========== ERROR SUNAT ========== */}
             {viewingInvoice.sunatStatus === 'rejected' && viewingInvoice.sunatResponse && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h4 className="font-semibold text-red-900 mb-1">Factura Rechazada por SUNAT</h4>
-                    <p className="text-sm text-red-800 mb-2">
-                      {viewingInvoice.sunatResponse.description || 'Error desconocido'}
-                    </p>
-                    {viewingInvoice.sunatResponse.observations && viewingInvoice.sunatResponse.observations.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-xs font-semibold text-red-900 mb-1">Observaciones:</p>
-                        <ul className="text-xs text-red-800 list-disc list-inside space-y-1">
-                          {viewingInvoice.sunatResponse.observations.map((obs, idx) => (
-                            <li key={idx}>{obs}</li>
-                          ))}
-                        </ul>
-                      </div>
+                    <p className="font-semibold text-red-800">Rechazado por SUNAT</p>
+                    <p className="text-sm text-red-700 mt-1">{viewingInvoice.sunatResponse.description || 'Error desconocido'}</p>
+                    {viewingInvoice.sunatResponse.observations?.length > 0 && (
+                      <ul className="mt-2 text-sm text-red-600 list-disc list-inside">
+                        {viewingInvoice.sunatResponse.observations.map((obs, i) => <li key={i}>{obs}</li>)}
+                      </ul>
                     )}
-                    <div className="mt-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setViewingInvoice(null)
-                          handleSendToSunat(viewingInvoice.id)
-                        }}
-                        disabled={sendingToSunat === viewingInvoice.id}
-                        className="border-red-300 text-red-700 hover:bg-red-100"
-                      >
-                        {sendingToSunat === viewingInvoice.id ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Reenviando...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4 mr-2" />
-                            Reintentar envío a SUNAT
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 border-red-300 text-red-700 hover:bg-red-100"
+                      onClick={() => { setViewingInvoice(null); handleSendToSunat(viewingInvoice.id); }}
+                      disabled={sendingToSunat === viewingInvoice.id}
+                    >
+                      {sendingToSunat === viewingInvoice.id ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Reenviando...</>
+                      ) : (
+                        <><Send className="w-4 h-4 mr-2" />Reintentar envío</>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Customer Info */}
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Cliente</h4>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-gray-600">Nombre</p>
-                  <p className="font-medium">{viewingInvoice.customer?.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Documento</p>
-                  <p className="font-medium">{viewingInvoice.customer?.documentNumber}</p>
-                </div>
-                {viewingInvoice.customer?.email && (
-                  <div>
-                    <p className="text-gray-600">Email</p>
-                    <p className="font-medium">{viewingInvoice.customer?.email}</p>
-                  </div>
-                )}
-                {viewingInvoice.customer?.phone && (
-                  <div>
-                    <p className="text-gray-600">Teléfono</p>
-                    <p className="font-medium">{viewingInvoice.customer?.phone}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Items */}
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Items</h4>
-              <div className="space-y-2">
-                {viewingInvoice.items?.map((item, index) => (
-                  <div key={index} className="flex justify-between items-start p-3 bg-gray-50 rounded-lg text-sm">
-                    <div className="flex-1">
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {item.quantity} x {formatCurrency(item.unitPrice)}
-                      </p>
-                    </div>
-                    <p className="font-semibold">{formatCurrency(item.subtotal)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Totals */}
-            <div className="border-t pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium">{formatCurrency(viewingInvoice.subtotal)}</span>
-              </div>
-              {/* Mostrar IGV solo si hay monto */}
-              {viewingInvoice.igv > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IGV ({viewingInvoice.taxConfig?.igvRate || 18}%):</span>
-                  <span className="font-medium">{formatCurrency(viewingInvoice.igv)}</span>
+            {/* ========== INFO VENTA ========== */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {viewingInvoice.sellerName && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Vendedor</p>
+                  <p className="font-medium text-gray-900 mt-1">{viewingInvoice.sellerName}</p>
                 </div>
               )}
-              {/* Mostrar operaciones exoneradas si hay */}
-              {viewingInvoice.opExoneradas > 0 && (
-                <div className="flex justify-between text-sm text-amber-700">
-                  <span>Op. Exoneradas:</span>
-                  <span className="font-medium">{formatCurrency(viewingInvoice.opExoneradas)}</span>
+              {viewingInvoice.branchName && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Sucursal</p>
+                  <p className="font-medium text-gray-900 mt-1">{viewingInvoice.branchName}</p>
                 </div>
               )}
-              {/* Mostrar operaciones inafectas si hay */}
-              {viewingInvoice.opInafectas > 0 && (
-                <div className="flex justify-between text-sm text-blue-700">
-                  <span>Op. Inafectas:</span>
-                  <span className="font-medium">{formatCurrency(viewingInvoice.opInafectas)}</span>
+              {viewingInvoice.warehouseName && (
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 uppercase">Almacén</p>
+                  <p className="font-medium text-gray-900 mt-1">{viewingInvoice.warehouseName}</p>
                 </div>
               )}
-              <div className="flex justify-between text-xl font-bold border-t pt-2">
-                <span>Total:</span>
-                <span className="text-primary-600">{formatCurrency(viewingInvoice.total)}</span>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500 uppercase">Forma de Pago</p>
+                <p className="font-medium text-gray-900 mt-1">{viewingInvoice.paymentType === 'credito' ? 'Crédito' : 'Contado'}</p>
               </div>
-            </div>
-
-            {/* Payment Info */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
-              <div>
-                <p className="text-sm text-gray-600">Método de Pago</p>
-                <p className="font-semibold">{viewingInvoice.paymentMethod}</p>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500 uppercase">Método</p>
+                <p className="font-medium text-gray-900 mt-1">{viewingInvoice.paymentMethod || 'Efectivo'}</p>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Estado de Pago</p>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500 uppercase">Estado Pago</p>
                 <Select
                   value={viewingInvoice.status}
                   onChange={e => handleUpdateStatus(viewingInvoice.id, e.target.value)}
-                  className="text-sm"
+                  className="mt-1 text-sm"
                 >
                   <option value="pending">Pendiente</option>
                   <option value="paid">Pagada</option>
@@ -2201,198 +2086,245 @@ Gracias por tu preferencia.`
               </div>
             </div>
 
-            {/* Notes */}
+            {/* ========== CLIENTE ========== */}
+            <div className="border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <User className="w-4 h-4 text-gray-400" />
+                <h4 className="font-semibold text-gray-700">Cliente</h4>
+              </div>
+              <div className="space-y-2">
+                <p className="font-semibold text-gray-900 text-lg">
+                  {viewingInvoice.customer?.name || viewingInvoice.customer?.businessName || 'Cliente General'}
+                </p>
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
+                  <span>{viewingInvoice.customer?.documentType === '6' ? 'RUC' : 'DNI'}: {viewingInvoice.customer?.documentNumber || '-'}</span>
+                  {viewingInvoice.customer?.phone && <span>Tel: {viewingInvoice.customer.phone}</span>}
+                  {viewingInvoice.customer?.email && <span>{viewingInvoice.customer.email}</span>}
+                </div>
+                {viewingInvoice.customer?.address && (
+                  <p className="text-sm text-gray-500">{viewingInvoice.customer.address}</p>
+                )}
+                {(viewingInvoice.customer?.vehiclePlate || viewingInvoice.customer?.studentName) && (
+                  <div className="flex gap-4 pt-2 border-t border-gray-100 text-sm">
+                    {viewingInvoice.customer?.vehiclePlate && (
+                      <span className="text-gray-600"><strong>Placa:</strong> {viewingInvoice.customer.vehiclePlate}</span>
+                    )}
+                    {viewingInvoice.customer?.studentName && (
+                      <span className="text-gray-600"><strong>Alumno:</strong> {viewingInvoice.customer.studentName}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ========== ITEMS ========== */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-gray-400" />
+                  <h4 className="font-semibold text-gray-700">Items ({viewingInvoice.items?.length || 0})</h4>
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                {viewingInvoice.items?.map((item, idx) => (
+                  <div key={idx} className="px-4 py-3 hover:bg-gray-50">
+                    <div className="flex justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900">{item.name}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
+                          <span>{item.quantity} x {formatCurrency(item.unitPrice)}</span>
+                          {item.code && <span className="text-gray-400">• Cód: {item.code}</span>}
+                          {item.unit && <span className="text-gray-400">• {item.unit}</span>}
+                          {item.taxAffectation === '20' && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Exonerado</span>}
+                          {item.taxAffectation === '30' && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Inafecto</span>}
+                        </div>
+                        {item.batchNumber && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            Lote: {item.batchNumber}
+                            {item.batchExpiryDate && ` • Venc: ${item.batchExpiryDate?.toDate ? item.batchExpiryDate.toDate().toLocaleDateString('es-PE') : new Date(item.batchExpiryDate).toLocaleDateString('es-PE')}`}
+                          </p>
+                        )}
+                        {item.observations && <p className="text-xs text-gray-500 mt-1 italic">{item.observations}</p>}
+                      </div>
+                      <p className="font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(item.subtotal)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ========== TOTALES ========== */}
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="space-y-2 text-sm">
+                {viewingInvoice.discount > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span>Descuento{viewingInvoice.discountPercentage ? ` (${viewingInvoice.discountPercentage}%)` : ''}</span>
+                    <span>-{formatCurrency(viewingInvoice.discount)}</span>
+                  </div>
+                )}
+                {viewingInvoice.opGravadas > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(viewingInvoice.opGravadas)}</span></div>
+                )}
+                {viewingInvoice.opExoneradas > 0 && (
+                  <div className="flex justify-between text-amber-600"><span>Op. Exoneradas</span><span>{formatCurrency(viewingInvoice.opExoneradas)}</span></div>
+                )}
+                {viewingInvoice.opInafectas > 0 && (
+                  <div className="flex justify-between text-blue-600"><span>Op. Inafectas</span><span>{formatCurrency(viewingInvoice.opInafectas)}</span></div>
+                )}
+                <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{formatCurrency(viewingInvoice.subtotal)}</span></div>
+                {viewingInvoice.igv > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">IGV ({viewingInvoice.taxConfig?.igvRate || 18}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
+                )}
+                {viewingInvoice.detractionAmount > 0 && (
+                  <div className="flex justify-between text-orange-600 pt-2 border-t"><span>Detracción ({viewingInvoice.detractionPercentage}%)</span><span>-{formatCurrency(viewingInvoice.detractionAmount)}</span></div>
+                )}
+                <div className="flex justify-between text-xl font-bold pt-3 border-t border-gray-300">
+                  <span>Total</span>
+                  <span className="text-primary-600">{formatCurrency(viewingInvoice.total)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ========== CUOTAS CRÉDITO ========== */}
+            {viewingInvoice.paymentType === 'credito' && viewingInvoice.creditTerms?.installments?.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <h4 className="font-semibold text-amber-800 mb-3">Cuotas de Pago</h4>
+                <div className="space-y-2">
+                  {viewingInvoice.creditTerms.installments.map((cuota, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-amber-700">Cuota {i + 1} - Vence: {cuota.dueDate}</span>
+                      <span className="font-semibold text-amber-900">{formatCurrency(cuota.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ========== PAGOS MÚLTIPLES ========== */}
+            {viewingInvoice.payments?.length > 1 && (
+              <div className="border border-gray-200 rounded-xl p-4">
+                <h4 className="font-semibold text-gray-700 mb-3">Métodos de Pago Usados</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {viewingInvoice.payments.map((pago, i) => (
+                    <div key={i} className="bg-gray-50 rounded-lg p-2 flex justify-between text-sm">
+                      <span className="text-gray-600">{pago.method}</span>
+                      <span className="font-medium">{formatCurrency(pago.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ========== NOTAS ========== */}
             {viewingInvoice.notes && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Observaciones</p>
-                <p className="text-sm">{viewingInvoice.notes}</p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <p className="text-xs font-semibold text-yellow-800 uppercase mb-1">Observaciones</p>
+                <p className="text-sm text-yellow-900">{viewingInvoice.notes}</p>
               </div>
             )}
 
-            {/* Mostrar info de conversión si ya fue convertida */}
+            {/* ========== CONVERSIONES ========== */}
             {viewingInvoice.convertedTo && (
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-green-900">
-                      Esta nota fue convertida a Boleta
-                    </p>
-                    <p className="text-sm text-green-800">
-                      Boleta: <strong>{viewingInvoice.convertedTo.number}</strong>
-                    </p>
-                  </div>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <div>
+                  <p className="font-medium text-green-800">Nota convertida a Boleta</p>
+                  <p className="text-sm text-green-700">Boleta: <strong>{viewingInvoice.convertedTo.number}</strong></p>
                 </div>
               </div>
             )}
-
-            {/* Mostrar info de origen si es una boleta convertida desde nota */}
             {viewingInvoice.convertedFrom && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <ArrowRightCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-blue-900">
-                      Este comprobante fue generado desde una Nota de Venta
-                    </p>
-                    <p className="text-sm text-blue-800">
-                      Nota de Venta: <strong>{viewingInvoice.convertedFrom.number}</strong>
-                    </p>
-                  </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+                <ArrowRightCircle className="w-5 h-5 text-blue-600" />
+                <div>
+                  <p className="font-medium text-blue-800">Generada desde Nota de Venta</p>
+                  <p className="text-sm text-blue-700">Nota: <strong>{viewingInvoice.convertedFrom.number}</strong></p>
                 </div>
               </div>
             )}
 
-            {/* Archivos SUNAT - Solo si fue aceptado */}
+            {/* ========== ARCHIVOS SUNAT ========== */}
             {viewingInvoice.sunatStatus === 'accepted' && (viewingInvoice.sunatResponse?.xmlStorageUrl || viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData) && (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <h4 className="font-semibold text-emerald-900 mb-3 flex items-center gap-2">
-                  <FileCheck className="w-4 h-4" />
-                  Archivos SUNAT
-                </h4>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileCheck className="w-4 h-4 text-emerald-600" />
+                  <h4 className="font-semibold text-emerald-800">Archivos SUNAT</h4>
+                </div>
+                {viewingInvoice.sunatResponse?.hash && (
+                  <p className="text-xs text-emerald-700 font-mono mb-3 break-all bg-emerald-100 p-2 rounded">
+                    Hash: {viewingInvoice.sunatResponse.hash}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {viewingInvoice.sunatResponse?.xmlStorageUrl && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => window.open(viewingInvoice.sunatResponse.xmlStorageUrl, '_blank')}
-                    >
-                      <Code className="w-4 h-4 mr-1" />
-                      Descargar XML
+                    <Button size="sm" variant="outline" onClick={() => window.open(viewingInvoice.sunatResponse.xmlStorageUrl, '_blank')}>
+                      <Code className="w-4 h-4 mr-2" />Descargar XML
                     </Button>
                   )}
-                  {(viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData || viewingInvoice.sunatResponse?.cdrUrl) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (viewingInvoice.sunatResponse.cdrStorageUrl) {
-                          window.open(viewingInvoice.sunatResponse.cdrStorageUrl, '_blank')
-                        } else if (viewingInvoice.sunatResponse.cdrUrl) {
-                          window.open(viewingInvoice.sunatResponse.cdrUrl, '_blank')
-                        } else if (viewingInvoice.sunatResponse.cdrData) {
-                          const blob = new Blob([viewingInvoice.sunatResponse.cdrData], { type: 'application/xml' })
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `CDR-${viewingInvoice.series}-${viewingInvoice.correlativeNumber}.xml`
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          URL.revokeObjectURL(url)
-                        }
-                        toast.success('Descargando CDR')
-                      }}
-                    >
-                      <FileCheck className="w-4 h-4 mr-1" />
-                      Descargar CDR
+                  {(viewingInvoice.sunatResponse?.cdrStorageUrl || viewingInvoice.sunatResponse?.cdrData) && (
+                    <Button size="sm" variant="outline" onClick={() => {
+                      if (viewingInvoice.sunatResponse.cdrStorageUrl) {
+                        window.open(viewingInvoice.sunatResponse.cdrStorageUrl, '_blank')
+                      } else if (viewingInvoice.sunatResponse.cdrData) {
+                        const blob = new Blob([viewingInvoice.sunatResponse.cdrData], { type: 'application/xml' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a'); a.href = url; a.download = `CDR-${viewingInvoice.number}.xml`; a.click()
+                        URL.revokeObjectURL(url)
+                      }
+                    }}>
+                      <FileCheck className="w-4 h-4 mr-2" />Descargar CDR
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-emerald-700 mt-2">
-                  El CDR es la Constancia de Recepción que prueba que SUNAT aceptó este comprobante.
-                </p>
               </div>
             )}
 
-            {/* Actions */}
-            <div className="flex flex-wrap justify-end gap-2 pt-4 border-t">
-              <Button size="sm" variant="outline" onClick={() => setViewingInvoice(null)}>
-                Cerrar
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleSendWhatsApp(viewingInvoice)}
-                disabled={sendingWhatsApp}
-              >
-                {sendingWhatsApp ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="w-4 h-4 mr-1" />
-                    WhatsApp
-                  </>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
-                    toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
-                    return
-                  }
-                  handlePrintTicket()
-                }}
-              >
-                <Printer className="w-4 h-4 mr-1" />
-                Imprimir
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
-                    toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
-                    return
-                  }
-                  try {
-                    await previewInvoicePDF(viewingInvoice, companySettings, branding)
-                  } catch (error) {
-                    console.error('Error al generar vista previa:', error)
-                    toast.error('Error al generar la vista previa')
-                  }
-                }}
-              >
-                <Eye className="w-4 h-4 mr-1" />
-                Vista Previa
-              </Button>
-              <Button
-                size="sm"
-                onClick={async () => {
-                  if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
-                    toast.error('Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa', 5000)
-                    return
-                  }
-                  try {
-                    const result = await generateInvoicePDF(viewingInvoice, companySettings, true, branding, branches)
-                    if (result?.fileName) {
-                      toast.success(`PDF guardado: ${result.fileName}`)
-                    } else {
-                      toast.success('PDF descargado exitosamente')
-                    }
-                  } catch (error) {
-                    console.error('Error al generar PDF:', error)
-                    toast.error('Error al generar el PDF')
-                  }
-                }}
-              >
-                <Download className="w-4 h-4 mr-1" />
-                PDF
-              </Button>
-              {/* Botón Convertir a Boleta - Solo para Notas de Venta no convertidas y no anuladas */}
-              {viewingInvoice.documentType === 'nota_venta' &&
-               !viewingInvoice.convertedTo &&
-               viewingInvoice.status !== 'voided' && (
-                <Button
-                  size="sm"
-                  variant="success"
-                  onClick={() => handleOpenConvertModal(viewingInvoice)}
-                >
-                  <Receipt className="w-4 h-4 mr-1" />
-                  Convertir
+            {/* ========== ACCIONES ========== */}
+            <div className="border-t border-gray-200 pt-4 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Button size="sm" variant="outline" onClick={() => handleSendWhatsApp(viewingInvoice)} disabled={sendingWhatsApp}>
+                  {sendingWhatsApp ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Share2 className="w-4 h-4 mr-1" />}
+                  WhatsApp
                 </Button>
-              )}
+                <Button size="sm" variant="outline" onClick={() => {
+                  if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                  handlePrintTicket()
+                }}>
+                  <Printer className="w-4 h-4 mr-1" />
+                  Ticket
+                </Button>
+                <Button size="sm" variant="outline" onClick={async () => {
+                  if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                  try { await previewInvoicePDF(viewingInvoice, companySettings, branding) } catch (e) { toast.error('Error al generar vista previa') }
+                }}>
+                  <Eye className="w-4 h-4 mr-1" />
+                  Vista Previa
+                </Button>
+                <Button size="sm" onClick={async () => {
+                  if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                  try { await generateInvoicePDF(viewingInvoice, companySettings, true, branding, branches); toast.success('PDF descargado') } catch (e) { toast.error('Error') }
+                }}>
+                  <Download className="w-4 h-4 mr-1" />
+                  PDF
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => setViewingInvoice(null)}>
+                  Cerrar
+                </Button>
+                {viewingInvoice.documentType === 'nota_venta' && !viewingInvoice.convertedTo && viewingInvoice.status !== 'voided' && (
+                  <Button size="sm" variant="success" className="flex-1" onClick={() => handleOpenConvertModal(viewingInvoice)}>
+                    <Receipt className="w-4 h-4 mr-1" />
+                    Convertir a Boleta
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Modal de Conversión de Nota de Venta a Boleta */}
+            {/* Modal de Conversión de Nota de Venta a Boleta */}
       <Modal
         isOpen={!!convertingInvoice}
         onClose={() => !isConverting && setConvertingInvoice(null)}
