@@ -722,7 +722,8 @@ export default function CreatePurchase() {
 
     for (let i = 0; i < purchaseItems.length; i++) {
       const item = purchaseItems[i]
-      if (!item.productId || !item.productName || !item.quantity || !item.cost) {
+      // Validar campos obligatorios (cost puede ser 0 para bonificaciones)
+      if (!item.productId || !item.productName || !item.quantity) {
         setMessage({
           type: 'error',
           text: `Complete todos los campos del producto ${i + 1}`,
@@ -738,10 +739,11 @@ export default function CreatePurchase() {
         return false
       }
 
-      if (parseFloat(item.cost) <= 0) {
+      // Permitir costo 0 para bonificaciones, solo validar que no sea negativo
+      if (parseFloat(item.cost) < 0) {
         setMessage({
           type: 'error',
-          text: `El costo unitario del producto ${i + 1} debe ser mayor a 0`,
+          text: `El costo unitario del producto ${i + 1} no puede ser negativo`,
         })
         return false
       }
