@@ -351,7 +351,14 @@ export default function CreatePurchase() {
 
   const updateItem = (index, field, value) => {
     const newItems = [...purchaseItems]
-    newItems[index][field] = value
+    // Normalizar quantity para mantener el valor numérico actual si el input está vacío
+    if (field === 'quantity' && value === '') {
+      // Si se borra el campo, mantener el valor actual para evitar pérdida de datos
+      // El usuario puede escribir un nuevo valor
+      newItems[index][field] = newItems[index][field] || 1
+    } else {
+      newItems[index][field] = value
+    }
     setPurchaseItems(newItems)
   }
 
@@ -681,7 +688,10 @@ export default function CreatePurchase() {
     setIsCreatingProduct(false)
   }
 
-  const validateForm = () => {
+  const validateForm = (itemsToValidate = null) => {
+    // Usar items proporcionados o los del estado
+    const items = itemsToValidate || purchaseItems
+
     // Validar crédito con pago único
     if (paymentType === 'credito' && creditType === 'unico' && !dueDate) {
       setMessage({
@@ -712,7 +722,7 @@ export default function CreatePurchase() {
       }
     }
 
-    if (purchaseItems.length === 0) {
+    if (items.length === 0) {
       setMessage({
         type: 'error',
         text: 'Debe agregar al menos un producto',
@@ -720,10 +730,10 @@ export default function CreatePurchase() {
       return false
     }
 
-    for (let i = 0; i < purchaseItems.length; i++) {
-      const item = purchaseItems[i]
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
       // Validar campos obligatorios (cost puede ser 0 para bonificaciones)
-      if (!item.productId || !item.productName || !item.quantity) {
+      if (!item.productId || !item.productName) {
         setMessage({
           type: 'error',
           text: `Complete todos los campos del producto ${i + 1}`,
@@ -731,7 +741,9 @@ export default function CreatePurchase() {
         return false
       }
 
-      if (parseFloat(item.quantity) <= 0) {
+      // Validar cantidad - debe ser un número mayor a 0
+      const qty = Number(item.quantity)
+      if (isNaN(qty) || qty <= 0) {
         setMessage({
           type: 'error',
           text: `La cantidad del producto ${i + 1} debe ser mayor a 0`,
@@ -740,7 +752,8 @@ export default function CreatePurchase() {
       }
 
       // Permitir costo 0 para bonificaciones, solo validar que no sea negativo
-      if (parseFloat(item.cost) < 0) {
+      const cost = Number(item.cost) || 0
+      if (cost < 0) {
         setMessage({
           type: 'error',
           text: `El costo unitario del producto ${i + 1} no puede ser negativo`,
@@ -762,14 +775,17 @@ export default function CreatePurchase() {
       return
     }
 
-    // Asegurar que todos los items tengan costWithoutIGV calculado
-    const itemsWithCostWithoutIGV = purchaseItems.map(item => ({
+    // Normalizar items: asegurar que quantity y cost sean números válidos
+    const normalizedItems = purchaseItems.map(item => ({
       ...item,
-      costWithoutIGV: item.costWithoutIGV || (item.cost > 0 ? Math.round((item.cost / 1.18) * 100) / 100 : 0)
+      quantity: Number(item.quantity) || 1, // Default a 1 si está vacío o inválido
+      cost: Number(item.cost) || 0,
+      costWithoutIGV: item.costWithoutIGV || (Number(item.cost) > 0 ? Math.round((Number(item.cost) / 1.18) * 100) / 100 : 0)
     }))
-    setPurchaseItems(itemsWithCostWithoutIGV)
+    setPurchaseItems(normalizedItems)
 
-    if (!validateForm()) return
+    // Validar usando los items normalizados (no el estado que puede estar desactualizado)
+    if (!validateForm(normalizedItems)) return
 
     setIsSaving(true)
     setMessage(null)
