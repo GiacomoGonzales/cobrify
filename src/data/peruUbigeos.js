@@ -1840,6 +1840,14 @@ export const DISTRITOS = {
     { code: '04', name: 'MARCONA' },
     { code: '05', name: 'VISTA ALEGRE' },
   ],
+  // ICA - PALPA (1104)
+  '1104': [
+    { code: '01', name: 'PALPA' },
+    { code: '02', name: 'LLIPATA' },
+    { code: '03', name: 'RÍO GRANDE' },
+    { code: '04', name: 'SANTA CRUZ' },
+    { code: '05', name: 'TIBILLO' },
+  ],
   // PIURA - SULLANA (2006)
   '2006': [
     { code: '01', name: 'SULLANA' },
