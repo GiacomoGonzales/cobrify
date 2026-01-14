@@ -175,6 +175,7 @@ export default function Settings() {
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
+  const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
 
   // Estados para modo de negocio
@@ -270,7 +271,11 @@ export default function Settings() {
   // Generar QR del catálogo cuando cambie el slug
   useEffect(() => {
     if (catalogSlug && catalogEnabled) {
-      const catalogUrl = `${PRODUCTION_URL}/catalogo/${catalogSlug}`
+      // Usar dominio personalizado del reseller si está disponible
+      const baseUrl = resellerCustomDomain
+        ? `https://${resellerCustomDomain}`
+        : PRODUCTION_URL
+      const catalogUrl = `${baseUrl}/catalogo/${catalogSlug}`
       QRCode.toDataURL(catalogUrl, {
         width: 300,
         margin: 2,
@@ -286,7 +291,32 @@ export default function Settings() {
     } else {
       setCatalogQrDataUrl('')
     }
-  }, [catalogSlug, catalogEnabled])
+  }, [catalogSlug, catalogEnabled, resellerCustomDomain])
+
+  // Obtener dominio personalizado del reseller cuando hay suscripción
+  useEffect(() => {
+    const fetchResellerDomain = async () => {
+      if (!subscription?.resellerId) {
+        setResellerCustomDomain(null)
+        return
+      }
+
+      try {
+        const resellerDoc = await getDoc(doc(db, 'resellers', subscription.resellerId))
+        if (resellerDoc.exists()) {
+          const resellerData = resellerDoc.data()
+          if (resellerData.customDomain) {
+            setResellerCustomDomain(resellerData.customDomain)
+            console.log('✅ Reseller custom domain loaded:', resellerData.customDomain)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching reseller domain:', error)
+      }
+    }
+
+    fetchResellerDomain()
+  }, [subscription?.resellerId])
 
   // Cargar configuración de Yape cuando se activa el tab
   useEffect(() => {
@@ -3041,7 +3071,7 @@ export default function Settings() {
                       {catalogSlug && (
                         <button
                           type="button"
-                          onClick={() => window.open(`${PRODUCTION_URL}/catalogo/${catalogSlug}`, '_blank')}
+                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/catalogo/${catalogSlug}`, '_blank')}
                           className="p-2.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
                           title="Ver catálogo"
                         >
@@ -3061,12 +3091,12 @@ export default function Settings() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-gray-500 mb-1">Enlace de tu catálogo:</p>
                           <p className="text-sm font-medium text-emerald-600 truncate">
-                            {PRODUCTION_URL}/catalogo/{catalogSlug}
+                            {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/catalogo/{catalogSlug}
                           </p>
                         </div>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(`${PRODUCTION_URL}/catalogo/${catalogSlug}`)
+                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/catalogo/${catalogSlug}`)
                             toast.success('Enlace copiado al portapapeles')
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
