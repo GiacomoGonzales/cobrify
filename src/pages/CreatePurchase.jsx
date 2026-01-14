@@ -903,14 +903,35 @@ export default function CreatePurchase() {
       }
 
       // 3. Actualizar stock y costo promedio de PRODUCTOS
-      const productUpdates = productItems.map(async item => {
-        const product = products.find(p => p.id === item.productId)
+      // IMPORTANTE: Agrupar items por productId para manejar múltiples líneas del mismo producto
+      // (ej: 2 unidades @ S/3 + 1 unidad gratis @ S/0 = 3 unidades con costo promedio correcto)
+      const groupedProducts = {}
+      productItems.forEach(item => {
+        const productId = item.productId
+        if (!groupedProducts[productId]) {
+          groupedProducts[productId] = {
+            productId,
+            totalQuantity: 0,
+            totalCost: 0, // Suma de (cantidad * costo) para calcular promedio ponderado
+            items: [] // Guardar items originales para lotes
+          }
+        }
+        const qty = parseFloat(item.quantity) || 0
+        const cost = parseFloat(item.cost) || 0
+        groupedProducts[productId].totalQuantity += qty
+        groupedProducts[productId].totalCost += qty * cost
+        groupedProducts[productId].items.push(item)
+      })
+
+      const productUpdates = Object.values(groupedProducts).map(async grouped => {
+        const product = products.find(p => p.id === grouped.productId)
         if (product) {
           // Solo actualizar si el producto maneja stock (trackStock !== false)
           if (product.trackStock === false) return
 
-          const newQuantity = parseFloat(item.quantity)
-          const newCost = parseFloat(item.cost)
+          const newQuantity = grouped.totalQuantity
+          // Costo promedio ponderado de todas las líneas del mismo producto
+          const newCost = newQuantity > 0 ? grouped.totalCost / newQuantity : 0
 
           // Actualizar stock usando el helper de almacén
           const updatedProduct = updateWarehouseStock(
@@ -919,14 +940,23 @@ export default function CreatePurchase() {
             newQuantity // Positivo porque es una entrada
           )
 
-          // Calcular costo promedio ponderado
+          // Calcular costo promedio ponderado con el stock existente
           const currentStock = product.stock || 0
           const currentCost = product.cost || 0
           const totalStock = currentStock + newQuantity
 
           let averageCost = newCost
           if (currentStock > 0 && currentCost > 0) {
-            averageCost = ((currentStock * currentCost) + (newQuantity * newCost)) / totalStock
+            // Solo considerar el costo nuevo si es mayor a 0 (bonificaciones no afectan el costo)
+            if (newCost > 0) {
+              averageCost = ((currentStock * currentCost) + (newQuantity * newCost)) / totalStock
+            } else {
+              // Si todo es bonificación (costo 0), mantener el costo actual
+              averageCost = currentCost
+            }
+          } else if (newCost === 0 && currentCost > 0) {
+            // Si la nueva compra es gratis pero ya había costo, mantener el costo anterior
+            averageCost = currentCost
           }
 
           const updates = {
@@ -942,22 +972,22 @@ export default function CreatePurchase() {
             })
           }
 
-          // Sistema de múltiples lotes para farmacia
-          if (item.batchNumber || item.expirationDate) {
+          // Sistema de múltiples lotes para farmacia (procesar cada item original)
+          const itemsWithBatch = grouped.items.filter(item => item.batchNumber || item.expirationDate)
+          if (itemsWithBatch.length > 0) {
             const currentBatches = product.batches || []
-
-            const newBatch = {
+            const newBatches = itemsWithBatch.map(item => ({
               id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
               batchNumber: item.batchNumber || '',
-              quantity: newQuantity,
+              quantity: parseFloat(item.quantity),
               expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
               purchaseId: resultId || null,
               purchaseDate: new Date(invoiceDate),
-              costPrice: newCost,
+              costPrice: parseFloat(item.cost),
               createdAt: new Date()
-            }
+            }))
 
-            const updatedBatches = [...currentBatches, newBatch]
+            const updatedBatches = [...currentBatches, ...newBatches]
             updates.batches = updatedBatches
             updates.trackExpiration = true
 
@@ -974,7 +1004,7 @@ export default function CreatePurchase() {
             }
           }
 
-          return updateProduct(businessId, item.productId, updates)
+          return updateProduct(businessId, grouped.productId, updates)
         }
       })
 
@@ -1004,15 +1034,36 @@ export default function CreatePurchase() {
       })
 
       // 4. Actualizar stock de INGREDIENTES (solo en creación, no en edición por complejidad)
+      // IMPORTANTE: Agrupar items por ingredientId para manejar múltiples líneas del mismo ingrediente
       if (!isEditMode) {
-        const ingredientUpdates = ingredientItems.map(async item => {
+        const groupedIngredients = {}
+        ingredientItems.forEach(item => {
+          const ingredientId = item.productId
+          if (!groupedIngredients[ingredientId]) {
+            groupedIngredients[ingredientId] = {
+              ingredientId,
+              ingredientName: item.productName,
+              unit: item.unit || 'NIU',
+              totalQuantity: 0,
+              totalCost: 0
+            }
+          }
+          const qty = parseFloat(item.quantity) || 0
+          const cost = parseFloat(item.cost) || 0
+          groupedIngredients[ingredientId].totalQuantity += qty
+          groupedIngredients[ingredientId].totalCost += qty * cost
+        })
+
+        const ingredientUpdates = Object.values(groupedIngredients).map(async grouped => {
+          // Costo unitario promedio ponderado
+          const avgUnitPrice = grouped.totalQuantity > 0 ? grouped.totalCost / grouped.totalQuantity : 0
           return registerIngredientPurchase(businessId, {
-            ingredientId: item.productId,
-            ingredientName: item.productName,
-            quantity: parseFloat(item.quantity),
-            unit: item.unit || 'NIU',
-            unitPrice: parseFloat(item.cost),
-            totalCost: parseFloat(item.quantity) * parseFloat(item.cost),
+            ingredientId: grouped.ingredientId,
+            ingredientName: grouped.ingredientName,
+            quantity: grouped.totalQuantity,
+            unit: grouped.unit,
+            unitPrice: avgUnitPrice,
+            totalCost: grouped.totalCost,
             supplier: selectedSupplier?.businessName || '',
             invoiceNumber: invoiceNumber.trim() || ''
           })
