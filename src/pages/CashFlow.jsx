@@ -439,8 +439,9 @@ export default function CashFlow() {
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
     // 3. Préstamos recibidos (monto del préstamo cuando se recibió en el período)
+    // IMPORTANTE: Usar issueDate (fecha del préstamo) en lugar de createdAt (fecha de registro)
     const loansReceived = loans.filter(loan =>
-      isInDateRange(loan.createdAt || loan.issueDate, dateRange.startDate, dateRange.endDate) && filterByBranch(loan, 'loan')
+      isInDateRange(loan.issueDate || loan.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(loan, 'loan')
     )
     const loansIncome = loansReceived.reduce((sum, loan) => sum + (loan.amount || 0), 0)
 

@@ -372,9 +372,11 @@ export default function Purchases() {
     const dateRange = getDateRange()
     if (!dateRange) return true // 'all' o custom sin fechas
 
-    const purchaseDate = purchase.createdAt?.toDate
-      ? purchase.createdAt.toDate()
-      : new Date(purchase.createdAt || 0)
+    // Usar invoiceDate (fecha de factura) en lugar de createdAt (fecha de registro)
+    const dateField = purchase.invoiceDate || purchase.createdAt
+    const purchaseDate = dateField?.toDate
+      ? dateField.toDate()
+      : new Date(dateField || 0)
 
     return purchaseDate >= dateRange.start && purchaseDate <= dateRange.end
   }
@@ -804,11 +806,12 @@ export default function Purchases() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {purchase.createdAt
+                      {/* Mostrar invoiceDate (fecha de factura) en lugar de createdAt (fecha de registro) */}
+                      {(purchase.invoiceDate || purchase.createdAt)
                         ? formatDate(
-                            purchase.createdAt.toDate
-                              ? purchase.createdAt.toDate()
-                              : purchase.createdAt
+                            (purchase.invoiceDate || purchase.createdAt).toDate
+                              ? (purchase.invoiceDate || purchase.createdAt).toDate()
+                              : (purchase.invoiceDate || purchase.createdAt)
                           )
                         : '-'}
                     </TableCell>
