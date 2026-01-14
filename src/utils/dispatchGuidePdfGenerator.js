@@ -214,7 +214,20 @@ const drawCheckbox = (doc, x, y, size, checked) => {
 }
 
 /**
+ * Convierte color hex a RGB
+ */
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16)
+  ] : [70, 70, 70] // Color por defecto gris oscuro
+}
+
+/**
  * Genera un PDF para Guía de Remisión Electrónica - Diseño Profesional
+ * Basado en el estilo visual de la Guía de Remisión Transportista
  */
 export const generateDispatchGuidePDF = async (guide, companySettings, download = true) => {
   const doc = new jsPDF({
@@ -223,12 +236,12 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     format: 'a4'
   })
 
-  // Colores
+  // Colores (mismo estilo que GRE Transportista)
   const BLACK = [0, 0, 0]
   const DARK_GRAY = [60, 60, 60]
   const MEDIUM_GRAY = [100, 100, 100]
   const LIGHT_GRAY = [200, 200, 200]
-  const ORANGE = [230, 126, 34]
+  const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
   // Márgenes y dimensiones
   const MARGIN_LEFT = 30
@@ -356,43 +369,51 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       doc.text('AQUÍ', logoX + logoWidth/2, logoY + 54, { align: 'center' })
     }
   } else {
-    // Dibujar placeholder de logo
-    doc.setDrawColor(...ORANGE)
+    // Placeholder de logo con color accent (mismo estilo que GRE Transportista)
+    doc.setDrawColor(...ACCENT_COLOR)
     doc.setLineWidth(2)
     doc.roundedRect(logoX, logoY + 10, logoWidth, 60, 3, 3, 'S')
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...ORANGE)
+    doc.setTextColor(...ACCENT_COLOR)
     doc.text('TU', logoX + logoWidth/2, logoY + 32, { align: 'center' })
     doc.text('LOGO', logoX + logoWidth/2, logoY + 44, { align: 'center' })
     doc.text('AQUÍ', logoX + logoWidth/2, logoY + 56, { align: 'center' })
   }
 
-  // Datos de la empresa (centro)
+  // Datos de la empresa (centro) - mismo estilo que GRE Transportista y facturas
   const centerX = logoX + logoWidth + 10
 
   const commercialName = (companySettings?.name || 'EMPRESA SAC').toUpperCase()
   const legalName = (companySettings?.businessName || '').toUpperCase()
-  const address = companySettings?.address || ''
+  const phone = companySettings?.phone || ''
+  const email = companySettings?.email || ''
 
-  // Calcular altura total del contenido para centrarlo verticalmente
+  // Construir dirección completa con ubicación (igual que facturas y transportista)
+  let fullAddress = companySettings?.address || ''
+  if (companySettings?.district || companySettings?.province || companySettings?.department) {
+    const locationParts = [companySettings?.district, companySettings?.province, companySettings?.department].filter(Boolean)
+    if (locationParts.length > 0) {
+      fullAddress += ' - ' + locationParts.join(', ')
+    }
+  }
+
+  // Calcular altura total del texto para centrarlo verticalmente
   let totalTextHeight = 14 // Nombre comercial
-  if (legalName && legalName !== commercialName) {
-    totalTextHeight += 12 // Razón social
-  }
-  if (address) {
-    totalTextHeight += 20 // Dirección (aprox 2 líneas)
-  }
+  if (legalName && legalName !== commercialName) totalTextHeight += 12
+  if (fullAddress || phone) totalTextHeight += 18
+  if (email) totalTextHeight += 10
 
-  // Centrar verticalmente respecto al header (alineado con el logo)
   let centerY = currentY + (headerHeight - totalTextHeight) / 2 + 10
 
+  // Nombre comercial
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
   doc.text(commercialName, centerX + centerWidth/2, centerY, { align: 'center' })
   centerY += 14
 
+  // Razón social (si es diferente)
   if (legalName && legalName !== commercialName) {
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
@@ -401,33 +422,53 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     centerY += 12
   }
 
-  if (address) {
+  // Dirección y teléfono (mismo formato que facturas)
+  if (fullAddress || phone) {
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...MEDIUM_GRAY)
-    const addressLines = doc.splitTextToSize(`Dirección fiscal: ${address}`, centerWidth - 10)
+    let addressLine = fullAddress
+    if (phone) addressLine += (fullAddress ? ' - ' : '') + 'Tel: ' + phone
+    const addressLines = doc.splitTextToSize(addressLine, centerWidth - 10)
     addressLines.slice(0, 2).forEach((line, i) => {
       doc.text(line, centerX + centerWidth/2, centerY + (i * 9), { align: 'center' })
     })
+    centerY += addressLines.slice(0, 2).length * 9
+  }
+
+  // Email
+  if (email) {
+    doc.setFontSize(7)
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text(`Email: ${email}`, centerX + centerWidth/2, centerY + 2, { align: 'center' })
   }
 
   // Recuadro del documento (derecha)
   const docBoxX = PAGE_WIDTH - MARGIN_RIGHT - docBoxWidth
   const docBoxY = currentY
 
+  // Altura de la sección del RUC (parte superior con fondo de color)
+  const rucSectionHeight = 26
+
+  // Fondo de color para la sección del RUC
+  doc.setFillColor(...ACCENT_COLOR)
+  doc.rect(docBoxX, docBoxY, docBoxWidth, rucSectionHeight, 'F')
+
+  // Recuadro completo con borde
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(1.5)
   doc.rect(docBoxX, docBoxY, docBoxWidth, headerHeight)
 
-  // RUC
+  // Línea separadora después del RUC
+  doc.setLineWidth(0.5)
+  doc.line(docBoxX, docBoxY + rucSectionHeight, docBoxX + docBoxWidth, docBoxY + rucSectionHeight)
+
+  // RUC (texto blanco sobre fondo de color)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
-  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docBoxWidth/2, docBoxY + 18, { align: 'center' })
-
-  // Línea divisoria
-  doc.setLineWidth(0.5)
-  doc.line(docBoxX, docBoxY + 25, docBoxX + docBoxWidth, docBoxY + 25)
+  doc.setTextColor(255, 255, 255)
+  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docBoxWidth/2, docBoxY + 17, { align: 'center' })
+  doc.setTextColor(...BLACK) // Restaurar color negro
 
   // Título
   doc.setFontSize(9)
@@ -583,17 +624,17 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     unit: 70
   }
 
-  // Fondo del encabezado
-  doc.setFillColor(245, 245, 245)
+  // Fondo del encabezado con color accent (mismo estilo que GRE Transportista)
+  doc.setFillColor(...ACCENT_COLOR)
   doc.rect(tableX, currentY, tableWidth, 18, 'F')
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(0.5)
   doc.rect(tableX, currentY, tableWidth, 18)
 
-  // Textos del encabezado
+  // Textos del encabezado (texto blanco sobre fondo de color)
   doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
+  doc.setTextColor(255, 255, 255)
 
   let colX = tableX
   doc.text('N°', colX + colWidths.num/2, currentY + 12, { align: 'center' })
@@ -616,6 +657,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.text('DESPACHO', colX + colWidths.unit/2, currentY + 14, { align: 'center' })
 
   currentY += 18
+  doc.setTextColor(...BLACK) // Restaurar color negro para el contenido
 
   // Filas de datos con altura dinámica
   const items = guide.items || []
@@ -833,67 +875,60 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text('QR', MARGIN_LEFT + qrSize/2, footerY + qrSize/2, { align: 'center' })
   }
 
-  // Sección de firma (centro-derecha)
-  const signatureX = MARGIN_LEFT + qrSize + 40
-  const signatureWidth = CONTENT_WIDTH - qrSize - 60
+  // ===== SELLO DE VERIFICACIÓN SUNAT (derecha) =====
+  const sealWidth = 100
+  const sealHeight = 50
+  const sealX = PAGE_WIDTH - MARGIN_RIGHT - sealWidth
+  const sealY = footerY + 10
 
-  // Recuadro para firma
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(0.5)
-  doc.rect(signatureX, footerY, signatureWidth, qrSize)
+  // Borde del sello con color accent
+  doc.setDrawColor(...ACCENT_COLOR)
+  doc.setLineWidth(1.5)
+  doc.roundedRect(sealX, sealY, sealWidth, sealHeight, 3, 3, 'S')
 
-  // Línea para firma
-  doc.line(signatureX + 20, footerY + 45, signatureX + signatureWidth - 20, footerY + 45)
-
-  // Textos de firma (alineados a la izquierda para dejar espacio para escribir)
+  // Texto del sello
   doc.setFontSize(7)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...ACCENT_COLOR)
+  doc.text('VERIFICACIÓN SUNAT', sealX + sealWidth/2, sealY + 12, { align: 'center' })
+
+  doc.setFontSize(6)
   doc.setFont('helvetica', 'normal')
-  doc.text('Conformidad del cliente:', signatureX + 5, footerY + 52)
-  doc.text('Nombre:', signatureX + 5, footerY + 60)
-  doc.text('DNI:', signatureX + 5, footerY + 68)
+  doc.setTextColor(...DARK_GRAY)
+  doc.text('Consulte en:', sealX + sealWidth/2, sealY + 24, { align: 'center' })
+  doc.text('www.sunat.gob.pe', sealX + sealWidth/2, sealY + 34, { align: 'center' })
+
+  // Fecha de emisión en el sello
+  const emissionDate = formatDate(guide.createdAt || guide.transferDate)
+  doc.setFontSize(5)
+  doc.text(`Emitido: ${emissionDate}`, sealX + sealWidth/2, sealY + 44, { align: 'center' })
+
+  // Sección de texto legal (centro)
+  const legalX = MARGIN_LEFT + qrSize + 15
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  doc.setTextColor(...MEDIUM_GRAY)
+
+  doc.text('Representación impresa de la Guía de', legalX, footerY + 12)
+  doc.text('Remisión Electrónica Remitente', legalX, footerY + 22)
+  doc.text('Autorizado mediante Resolución de', legalX, footerY + 34)
+  doc.text('Superintendencia N° 000123-2023/SUNAT', legalX, footerY + 44)
+
+  if (guide.sunatHash) {
+    doc.setFontSize(6)
+    doc.text(`Hash: ${guide.sunatHash}`, legalX, footerY + 56)
+  }
 
   currentY = footerY + qrSize + 15
 
-  // Textos legales
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...BLACK)
-  doc.text('Representación Impresa de la GUÍA DE REMISIÓN', MARGIN_LEFT, currentY)
-  currentY += 9
-  doc.text('ELECTRÓNICA', MARGIN_LEFT, currentY)
-  currentY += 9
-
-  if (guide.sunatHash) {
-    doc.text(`Autorizado mediante Resolución ${guide.sunatHash}`, MARGIN_LEFT, currentY)
-    currentY += 12
-  }
-
-  // Mensaje de agradecimiento
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLACK)
-  doc.text('GRACIAS POR SU COMPRA!', PAGE_WIDTH/2, currentY, { align: 'center' })
-  currentY += 10
-
-  doc.setTextColor(200, 0, 0)
-  doc.text('** NOTA IMPORTANTE**', PAGE_WIDTH/2, currentY, { align: 'center' })
-  currentY += 10
-  doc.text('NO SE ACEPTAN DEVOLUCIONES', PAGE_WIDTH/2, currentY, { align: 'center' })
-  currentY += 15
-
   // Pie final
-  doc.setFontSize(6)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...MEDIUM_GRAY)
-  doc.text('LA MERCADERIA VIAJA POR CUENTA Y RIESGO DEL COMPRADOR NO ADMITIMOS RECLAMO POR ROBO O AVERIA', PAGE_WIDTH/2, currentY, { align: 'center' })
-  currentY += 10
-
   doc.setDrawColor(...LIGHT_GRAY)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 8
 
   doc.setFontSize(7)
-  doc.text('Documento generado por Cobrify - Sistema de Facturación Electrónica - www.cobrify.pe', PAGE_WIDTH/2, currentY, { align: 'center' })
+  doc.setTextColor(...MEDIUM_GRAY)
+  doc.text('Documento generado por Cobrify - Sistema de Facturación Electrónica - www.cobrifyperu.com', PAGE_WIDTH/2, currentY, { align: 'center' })
 
   // ========== GENERAR PDF ==========
 
