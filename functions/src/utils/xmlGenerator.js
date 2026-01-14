@@ -338,12 +338,27 @@ export function generateInvoiceXML(invoiceData, businessData) {
   root.ele('cbc:IssueDate').txt(issueDate)
 
   // Tipo de documento
+  // listID según catálogo 51 SUNAT:
+  // - 0101: Venta interna
+  // - 1001: Venta interna - Operación sujeta a detracción
+  const operationTypeCode = (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0)
+    ? '1001'  // Operación sujeta a detracción
+    : '0101'  // Venta interna normal
+
   root.ele('cbc:InvoiceTypeCode', {
-    'listID': '0101',
+    'listID': operationTypeCode,
     'listAgencyName': 'PE:SUNAT',
     'listName': 'Tipo de Documento',
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
   }).txt(documentTypeCode)
+
+  // Leyenda SPOT para operaciones con detracción (obligatoria según SUNAT)
+  // NOTA: Según UBL 2.1, cbc:Note debe ir ANTES de DocumentCurrencyCode
+  if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
+    root.ele('cbc:Note', {
+      'languageLocaleID': '2006'
+    }).txt('Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central')
+  }
 
   // Moneda
   root.ele('cbc:DocumentCurrencyCode', {
@@ -351,13 +366,6 @@ export function generateInvoiceXML(invoiceData, businessData) {
     'listName': 'Currency',
     'listAgencyName': 'United Nations Economic Commission for Europe'
   }).txt(invoiceData.currency || 'PEN')
-
-  // Leyenda SPOT para operaciones con detracción (obligatoria según SUNAT)
-  if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
-    root.ele('cbc:Note', {
-      'languageLocaleID': '2006'
-    }).txt('Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central')
-  }
 
   // === ELEMENTOS ESPECÍFICOS PARA NOTAS DE CRÉDITO/DÉBITO ===
   if (isNote) {
@@ -468,8 +476,43 @@ export function generateInvoiceXML(invoiceData, businessData) {
     invoiceData.customer.businessName || invoiceData.customer.name
   )
 
+  // === DETRACCIÓN - PaymentMeans ===
+  // IMPORTANTE: Según UBL 2.1, PaymentMeans DEBE ir ANTES de PaymentTerms
+  // Solo se agrega si la factura tiene detracción habilitada
+  if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
+    console.log(`📋 Agregando detracción al XML: tipo=${invoiceData.detractionType}, tasa=${invoiceData.detractionRate}%, monto=${invoiceData.detractionAmount}`)
+
+    // Buscar cuenta de detracciones:
+    // 1. Primero usar la cuenta de la factura (invoiceData.detractionBankAccount)
+    // 2. Si no existe, buscar en bankAccountsList del negocio (tipo "detracciones")
+    let detractionAccount = invoiceData.detractionBankAccount
+
+    if (!detractionAccount && businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
+      const detractionBankAccount = businessData.bankAccountsList.find(
+        acc => acc.accountType === 'detracciones'
+      )
+      if (detractionBankAccount) {
+        detractionAccount = detractionBankAccount.accountNumber
+        console.log(`📋 Usando cuenta de detracciones del negocio: ${detractionAccount}`)
+      }
+    }
+
+    // PaymentMeans - Medio de pago (cuenta del Banco de la Nación)
+    const paymentMeans = root.ele('cac:PaymentMeans')
+    paymentMeans.ele('cbc:ID').txt('Detraccion')
+    paymentMeans.ele('cbc:PaymentMeansCode').txt('001') // 001 = Transferencia bancaria
+
+    // La cuenta del Banco de la Nación es OBLIGATORIA para detracciones (error 3034)
+    if (detractionAccount) {
+      const payeeAccount = paymentMeans.ele('cac:PayeeFinancialAccount')
+      payeeAccount.ele('cbc:ID').txt(detractionAccount)
+    } else {
+      console.warn('⚠️ ADVERTENCIA: No se encontró cuenta de detracciones. SUNAT rechazará con error 3034.')
+    }
+  }
+
   // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
-  // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de AccountingCustomerParty y ANTES de AllowanceCharge
+  // IMPORTANTE: PaymentTerms DEBE ir DESPUÉS de PaymentMeans y ANTES de TaxTotal
   // Según ejemplos de Greenter y especificación SUNAT (Resolución Nº 000193-2020/SUNAT)
   // Vigente desde 01/04/2021
 
@@ -517,22 +560,9 @@ export function generateInvoiceXML(invoiceData, businessData) {
     paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
   }
 
-  // === DETRACCIÓN ===
-  // Solo se agrega si la factura tiene detracción habilitada
-  // Según UBL 2.1 SUNAT: PaymentMeans + PaymentTerms adicional
+  // === DETRACCIÓN - PaymentTerms ===
+  // PaymentTerms de detracción va después de los PaymentTerms de forma de pago
   if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
-    console.log(`📋 Agregando detracción al XML: tipo=${invoiceData.detractionType}, tasa=${invoiceData.detractionRate}%, monto=${invoiceData.detractionAmount}`)
-
-    // PaymentMeans - Medio de pago (cuenta del Banco de la Nación)
-    const paymentMeans = root.ele('cac:PaymentMeans')
-    paymentMeans.ele('cbc:ID').txt('Detraccion')
-    paymentMeans.ele('cbc:PaymentMeansCode').txt('001') // 001 = Transferencia bancaria
-    if (invoiceData.detractionBankAccount) {
-      const payeeAccount = paymentMeans.ele('cac:PayeeFinancialAccount')
-      payeeAccount.ele('cbc:ID').txt(invoiceData.detractionBankAccount)
-    }
-
-    // PaymentTerms - Datos de la detracción (código, porcentaje, monto)
     const detractionTerms = root.ele('cac:PaymentTerms')
     detractionTerms.ele('cbc:ID').txt('Detraccion')
     detractionTerms.ele('cbc:PaymentMeansID').txt(invoiceData.detractionType) // Código catálogo 54
