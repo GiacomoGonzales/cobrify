@@ -1618,6 +1618,107 @@ export const DISTRITOS = {
     { code: '12', name: 'YACUS' },
     { code: '13', name: 'SAN PABLO DE PILLAO' },
   ],
+  // HUÁNUCO - AMBO (1002)
+  '1002': [
+    { code: '01', name: 'AMBO' },
+    { code: '02', name: 'CAYNA' },
+    { code: '03', name: 'COLPAS' },
+    { code: '04', name: 'CONCHAMARCA' },
+    { code: '05', name: 'HUACAR' },
+    { code: '06', name: 'SAN FRANCISCO' },
+    { code: '07', name: 'SAN RAFAEL' },
+    { code: '08', name: 'TOMAY KICHWA' },
+  ],
+  // HUÁNUCO - DOS DE MAYO (1003)
+  '1003': [
+    { code: '01', name: 'LA UNIÓN' },
+    { code: '02', name: 'CHUQUIS' },
+    { code: '03', name: 'MARÍAS' },
+    { code: '04', name: 'PACHAS' },
+    { code: '05', name: 'QUIVILLA' },
+    { code: '06', name: 'RIPÁN' },
+    { code: '07', name: 'SHUNQUI' },
+    { code: '08', name: 'SILLAPATA' },
+    { code: '09', name: 'YANAS' },
+  ],
+  // HUÁNUCO - HUACAYBAMBA (1004)
+  '1004': [
+    { code: '01', name: 'HUACAYBAMBA' },
+    { code: '02', name: 'CANCHABAMBA' },
+    { code: '03', name: 'COCHABAMBA' },
+    { code: '04', name: 'PINRA' },
+  ],
+  // HUÁNUCO - HUAMALÍES (1005)
+  '1005': [
+    { code: '01', name: 'LLATA' },
+    { code: '02', name: 'ARANCAY' },
+    { code: '03', name: 'CHAVÍN DE PARIARCA' },
+    { code: '04', name: 'JACAS GRANDE' },
+    { code: '05', name: 'JIRCAN' },
+    { code: '06', name: 'MIRAFLORES' },
+    { code: '07', name: 'MONZÓN' },
+    { code: '08', name: 'PUNCHAO' },
+    { code: '09', name: 'PUÑOS' },
+    { code: '10', name: 'SINGA' },
+    { code: '11', name: 'TANTAMAYO' },
+  ],
+  // HUÁNUCO - LEONCIO PRADO (1006)
+  '1006': [
+    { code: '01', name: 'RUPA-RUPA' },
+    { code: '02', name: 'DANIEL ALOMÍA ROBLES' },
+    { code: '03', name: 'HERMILIO VALDIZÁN' },
+    { code: '04', name: 'JOSÉ CRESPO Y CASTILLO' },
+    { code: '05', name: 'LUYANDO' },
+    { code: '06', name: 'MARIANO DÁMASO BERAÚN' },
+    { code: '07', name: 'PUCAYACU' },
+    { code: '08', name: 'CASTILLO GRANDE' },
+    { code: '09', name: 'PUEBLO NUEVO' },
+    { code: '10', name: 'SANTO DOMINGO DE ANDA' },
+  ],
+  // HUÁNUCO - MARAÑÓN (1007)
+  '1007': [
+    { code: '01', name: 'HUACRACHUCO' },
+    { code: '02', name: 'CHOLON' },
+    { code: '03', name: 'SAN BUENAVENTURA' },
+    { code: '04', name: 'LA MORADA' },
+    { code: '05', name: 'SANTA ROSA DE ALTO YANAJANCA' },
+  ],
+  // HUÁNUCO - PACHITEA (1008)
+  '1008': [
+    { code: '01', name: 'PANAO' },
+    { code: '02', name: 'CHAGLLA' },
+    { code: '03', name: 'MOLINO' },
+    { code: '04', name: 'UMARI' },
+  ],
+  // HUÁNUCO - PUERTO INCA (1009)
+  '1009': [
+    { code: '01', name: 'PUERTO INCA' },
+    { code: '02', name: 'CODO DEL POZUZO' },
+    { code: '03', name: 'HONORIA' },
+    { code: '04', name: 'TOURNAVISTA' },
+    { code: '05', name: 'YUYAPICHIS' },
+  ],
+  // HUÁNUCO - LAURICOCHA (1010)
+  '1010': [
+    { code: '01', name: 'JESÚS' },
+    { code: '02', name: 'BAÑOS' },
+    { code: '03', name: 'JIVIA' },
+    { code: '04', name: 'QUEROPALCA' },
+    { code: '05', name: 'RONDOS' },
+    { code: '06', name: 'SAN FRANCISCO DE ASÍS' },
+    { code: '07', name: 'SAN MIGUEL DE CAURI' },
+  ],
+  // HUÁNUCO - YAROWILCA (1011)
+  '1011': [
+    { code: '01', name: 'CHAVINILLO' },
+    { code: '02', name: 'CAHUAC' },
+    { code: '03', name: 'CHACABAMBA' },
+    { code: '04', name: 'APARICIO POMARES' },
+    { code: '05', name: 'JACAS CHICO' },
+    { code: '06', name: 'OBAS' },
+    { code: '07', name: 'PAMPAMARCA' },
+    { code: '08', name: 'CHORAS' },
+  ],
   // MADRE DE DIOS - TAMBOPATA (1701)
   '1701': [
     { code: '01', name: 'TAMBOPATA' },
