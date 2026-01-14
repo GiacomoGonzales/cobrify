@@ -34,6 +34,19 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct } from '@/services/firestoreService'
 
+/**
+ * Parsea fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
+ * "2024-01-12" con new Date() se interpreta como UTC, causando día incorrecto en Perú
+ */
+const parseLocalDate = (dateValue) => {
+  if (dateValue instanceof Date) return dateValue
+  if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    const [year, month, day] = dateValue.split('-').map(Number)
+    return new Date(year, month - 1, day, 12, 0, 0)
+  }
+  return new Date(dateValue)
+}
+
 export default function Purchases() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
@@ -341,9 +354,10 @@ export default function Purchases() {
         return { start: thirtyDaysAgo, end: endOfDay }
       case 'custom':
         if (customStartDate && customEndDate) {
-          const start = new Date(customStartDate)
+          // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
+          const start = parseLocalDate(customStartDate)
           start.setHours(0, 0, 0, 0)
-          const end = new Date(customEndDate)
+          const end = parseLocalDate(customEndDate)
           end.setHours(23, 59, 59, 999)
           return { start, end }
         }

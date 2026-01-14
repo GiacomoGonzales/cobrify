@@ -110,6 +110,17 @@ const getLocalDateString = (date = new Date()) => {
   return `${year}-${month}-${day}`
 }
 
+// Parsear fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
+// "2024-01-12" con new Date() se interpreta como UTC, causando día incorrecto en Perú (UTC-5)
+const parseLocalDate = (dateValue) => {
+  if (dateValue instanceof Date) return dateValue
+  if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    const [year, month, day] = dateValue.split('-').map(Number)
+    return new Date(year, month - 1, day, 12, 0, 0) // Mediodía para evitar problemas
+  }
+  return new Date(dateValue)
+}
+
 // Convertir Timestamp de Firestore a Date
 const toDate = (timestamp) => {
   if (!timestamp) return null
@@ -124,9 +135,11 @@ const isInDateRange = (date, startDate, endDate) => {
   if (!date) return false
   const d = toDate(date)
   if (!d) return false
-  // Usar 'T00:00:00' para forzar interpretación en hora local, no UTC
-  const start = new Date(startDate + 'T00:00:00')
-  const end = new Date(endDate + 'T23:59:59')
+  // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
+  const start = parseLocalDate(startDate)
+  start.setHours(0, 0, 0, 0)
+  const end = parseLocalDate(endDate)
+  end.setHours(23, 59, 59, 999)
   return d >= start && d <= end
 }
 
@@ -647,7 +660,7 @@ export default function CashFlow() {
         amount: parseFloat(newMovement.amount),
         description: newMovement.description,
         paymentMethod: newMovement.paymentMethod,
-        date: new Date(newMovement.date + 'T12:00:00'),
+        date: parseLocalDate(newMovement.date), // Usar parseLocalDate para evitar problema de timezone
         dateString: newMovement.date, // YYYY-MM-DD para filtros sin problema de zona horaria
         branchId: newMovement.branchId || '',
       }

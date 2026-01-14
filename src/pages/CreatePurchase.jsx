@@ -73,6 +73,18 @@ export default function CreatePurchase() {
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
+
+  // Parsear fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
+  // "2024-01-12" con new Date() se interpreta como UTC, causando día incorrecto en Perú
+  const parseLocalDate = (dateValue) => {
+    if (dateValue instanceof Date) return dateValue
+    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      const [year, month, day] = dateValue.split('-').map(Number)
+      return new Date(year, month - 1, day, 12, 0, 0) // Mediodía para evitar problemas
+    }
+    return new Date(dateValue)
+  }
+
   const [invoiceDate, setInvoiceDate] = useState(getLocalDateString())
   const [notes, setNotes] = useState('')
 
@@ -775,7 +787,7 @@ export default function CreatePurchase() {
           phone: selectedSupplier.phone || '',
         } : null,
         invoiceNumber: invoiceNumber.trim() || null,
-        invoiceDate: new Date(invoiceDate),
+        invoiceDate: parseLocalDate(invoiceDate), // Usar parseLocalDate para evitar problema de timezone
         // Almacén donde ingresa la mercadería
         warehouseId: selectedWarehouse?.id || null,
         warehouseName: selectedWarehouse?.name || null,
@@ -788,7 +800,7 @@ export default function CreatePurchase() {
           unitPrice: parseFloat(item.cost), // Precio unitario de compra (costo)
           // Campos de farmacia (lote y vencimiento)
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
-          ...(item.expirationDate && { expirationDate: new Date(item.expirationDate) }),
+          ...(item.expirationDate && { expirationDate: parseLocalDate(item.expirationDate) }),
         })),
         subtotal: amounts.subtotal,
         igv: amounts.igv,
@@ -801,11 +813,11 @@ export default function CreatePurchase() {
         // Campos para crédito
         ...(paymentType === 'credito' && {
           creditType: creditType, // 'unico' o 'cuotas'
-          ...(creditType === 'unico' && dueDate && { dueDate: new Date(dueDate) }),
+          ...(creditType === 'unico' && dueDate && { dueDate: parseLocalDate(dueDate) }),
           ...(creditType === 'cuotas' && {
             installments: installments.map(inst => ({
               ...inst,
-              dueDate: new Date(inst.dueDate)
+              dueDate: parseLocalDate(inst.dueDate)
             })),
             totalInstallments: installments.length,
             paidInstallments: 0,

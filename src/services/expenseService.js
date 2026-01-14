@@ -12,6 +12,23 @@ import {
   Timestamp
 } from 'firebase/firestore'
 
+/**
+ * Parsea una fecha string YYYY-MM-DD a Date en hora LOCAL (no UTC)
+ * Esto evita el problema de timezone donde "2024-01-12" se interpreta como
+ * medianoche UTC y en Perú (UTC-5) se muestra como 2024-01-11
+ */
+function parseLocalDate(dateValue) {
+  if (dateValue instanceof Date) {
+    return dateValue
+  }
+  if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    const [year, month, day] = dateValue.split('-').map(Number)
+    return new Date(year, month - 1, day, 12, 0, 0) // Mediodía para evitar problemas
+  }
+  // Fallback para otros formatos
+  return new Date(dateValue)
+}
+
 // Categorías de gastos predefinidas
 export const EXPENSE_CATEGORIES = [
   { id: 'servicios', name: 'Servicios Básicos', description: 'Luz, agua, internet, teléfono', icon: 'Zap' },
@@ -53,14 +70,15 @@ export async function getExpenses(userId, filters = {}) {
     }))
 
     // Filtrar por rango de fechas si se especifica
+    // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
     if (filters.startDate) {
-      const start = new Date(filters.startDate)
+      const start = parseLocalDate(filters.startDate)
       start.setHours(0, 0, 0, 0)
       expenses = expenses.filter(e => e.date >= start)
     }
 
     if (filters.endDate) {
-      const end = new Date(filters.endDate)
+      const end = parseLocalDate(filters.endDate)
       end.setHours(23, 59, 59, 999)
       expenses = expenses.filter(e => e.date <= end)
     }
@@ -93,9 +111,8 @@ export async function createExpense(userId, expenseData) {
       amount: parseFloat(expenseData.amount),
       description: expenseData.description?.trim() || '',
       category: expenseData.category,
-      date: expenseData.date instanceof Date
-        ? Timestamp.fromDate(expenseData.date)
-        : Timestamp.fromDate(new Date(expenseData.date)),
+      // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
+      date: Timestamp.fromDate(parseLocalDate(expenseData.date)),
       paymentMethod: expenseData.paymentMethod || 'efectivo',
       reference: expenseData.reference?.trim() || '',
       supplier: expenseData.supplier?.trim() || '',
@@ -129,9 +146,8 @@ export async function updateExpense(userId, expenseId, expenseData) {
       amount: parseFloat(expenseData.amount),
       description: expenseData.description?.trim() || '',
       category: expenseData.category,
-      date: expenseData.date instanceof Date
-        ? Timestamp.fromDate(expenseData.date)
-        : Timestamp.fromDate(new Date(expenseData.date)),
+      // Usar parseLocalDate para evitar problemas de timezone con fechas YYYY-MM-DD
+      date: Timestamp.fromDate(parseLocalDate(expenseData.date)),
       paymentMethod: expenseData.paymentMethod || 'efectivo',
       reference: expenseData.reference?.trim() || '',
       supplier: expenseData.supplier?.trim() || '',
