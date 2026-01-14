@@ -844,14 +844,15 @@ export default function Tables() {
                             {getStatusText(table.status)}
                           </Badge>
 
+                          {/* Mostrar nombre del mozo de forma prominente cuando la mesa está ocupada */}
+                          {table.status === 'occupied' && table.waiter && (
+                            <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-center mb-2">
+                              <span className="text-xs font-semibold">👤 {table.waiter}</span>
+                            </div>
+                          )}
+
                           {table.status === 'occupied' && (
                             <div className="space-y-1 text-xs text-gray-700 mt-2 pt-2 border-t border-gray-300">
-                              {table.waiter && (
-                                <div className="flex justify-between">
-                                  <span>Mozo:</span>
-                                  <span className="font-medium">{table.waiter}</span>
-                                </div>
-                              )}
                               {table.startTime && (
                                 <div className="flex justify-between">
                                   <span>Inicio:</span>
