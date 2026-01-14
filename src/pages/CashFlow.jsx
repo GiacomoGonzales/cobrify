@@ -433,8 +433,9 @@ export default function CashFlow() {
     }, 0)
 
     // 2. Otros ingresos (movimientos de caja tipo income)
+    // IMPORTANTE: Excluir movimientos con sessionId (son del Control de Caja diario, no del Flujo de Caja)
     const otherIncome = cashMovements
-      .filter(m => m.type === 'income' && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
+      .filter(m => m.type === 'income' && !m.sessionId && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
     // 3. Préstamos recibidos (monto del préstamo cuando se recibió en el período)
@@ -475,8 +476,9 @@ export default function CashFlow() {
     const purchasesTotal = paidPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
 
     // 3. Otros egresos (movimientos de caja tipo expense)
+    // IMPORTANTE: Excluir movimientos con sessionId (son del Control de Caja diario, no del Flujo de Caja)
     const otherExpenses = cashMovements
-      .filter(m => m.type === 'expense' && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
+      .filter(m => m.type === 'expense' && !m.sessionId && isInDateRange(m.createdAt, dateRange.startDate, dateRange.endDate) && filterByBranch(m, 'cashMovement'))
       .reduce((sum, m) => sum + (m.amount || 0), 0)
 
     // 4. Cuotas de préstamos pagadas (filtradas por sucursal)
