@@ -58,19 +58,34 @@ const RELATED_DOC_TYPES = [
   { value: '52', label: 'Liquidación de Compra' },
 ]
 
-// Obtener fecha local en formato YYYY-MM-DD
-const getLocalDateString = (date = new Date()) => {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+// Obtener fecha actual en Perú como objeto Date
+const getPeruDate = () => {
+  // Crear fecha en zona horaria de Perú
+  const now = new Date()
+  const peruTimeString = now.toLocaleString('en-US', { timeZone: 'America/Lima' })
+  return new Date(peruTimeString)
+}
+
+// Obtener fecha local en formato YYYY-MM-DD (zona horaria Perú UTC-5)
+const getLocalDateString = (daysOffset = 0) => {
+  const peruDate = getPeruDate()
+  if (daysOffset !== 0) {
+    peruDate.setDate(peruDate.getDate() + daysOffset)
+  }
+  const year = peruDate.getFullYear()
+  const month = String(peruDate.getMonth() + 1).padStart(2, '0')
+  const day = String(peruDate.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
-// Obtener fecha de ayer
+// Obtener fecha de ayer (zona horaria Perú UTC-5)
 const getYesterdayDateString = () => {
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  return getLocalDateString(yesterday)
+  return getLocalDateString(-1)
+}
+
+// Obtener fecha de mañana (zona horaria Perú UTC-5)
+const getTomorrowDateString = () => {
+  return getLocalDateString(1)
 }
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInvoice = null, selectedBranch = null }) {
@@ -147,6 +162,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [isSaving, setIsSaving] = useState(false)
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
 
+  // Inicializar fechas cuando se abre el modal (sin referenceInvoice)
+  useEffect(() => {
+    if (isOpen && !referenceInvoice) {
+      // Inicializar fecha de emisión con la fecha actual de Perú (hoy)
+      setIssueDate(getLocalDateString(0))
+      // Inicializar fecha de traslado para mañana (+1 día)
+      setTransferDate(getTomorrowDateString())
+    }
+  }, [isOpen, referenceInvoice])
+
   // Cargar sucursales disponibles
   useEffect(() => {
     const loadBranches = async () => {
@@ -198,11 +223,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const estimatedWeight = invoiceItems.reduce((sum, item) => sum + (item.quantity * 1), 0)
       setTotalWeight(estimatedWeight.toString())
 
-      // Pre-llenar fechas
-      setIssueDate(getLocalDateString())
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      setTransferDate(getLocalDateString(tomorrow))
+      // Pre-llenar fechas (usando hora de Perú)
+      setIssueDate(getLocalDateString(0))  // Hoy
+      setTransferDate(getTomorrowDateString())  // Mañana
 
       // Pre-llenar datos del destinatario desde el cliente de la factura
       if (referenceInvoice.customer) {

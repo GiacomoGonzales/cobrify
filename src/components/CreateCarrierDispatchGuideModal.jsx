@@ -36,19 +36,33 @@ const UNIT_TYPES = [
   { value: 'TNE', label: 'Tonelada (TNE)' },
 ]
 
-// Obtener fecha local en formato YYYY-MM-DD
-const getLocalDateString = (date = new Date()) => {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+// Obtener fecha actual en Perú como objeto Date
+const getPeruDate = () => {
+  const now = new Date()
+  const peruTimeString = now.toLocaleString('en-US', { timeZone: 'America/Lima' })
+  return new Date(peruTimeString)
+}
+
+// Obtener fecha local en formato YYYY-MM-DD (zona horaria Perú UTC-5)
+const getLocalDateString = (daysOffset = 0) => {
+  const peruDate = getPeruDate()
+  if (daysOffset !== 0) {
+    peruDate.setDate(peruDate.getDate() + daysOffset)
+  }
+  const year = peruDate.getFullYear()
+  const month = String(peruDate.getMonth() + 1).padStart(2, '0')
+  const day = String(peruDate.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
-// Obtener fecha de ayer en formato YYYY-MM-DD
+// Obtener fecha de ayer (zona horaria Perú UTC-5)
 const getYesterdayDateString = () => {
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  return getLocalDateString(yesterday)
+  return getLocalDateString(-1)
+}
+
+// Obtener fecha de mañana (zona horaria Perú UTC-5)
+const getTomorrowDateString = () => {
+  return getLocalDateString(1)
 }
 
 export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {

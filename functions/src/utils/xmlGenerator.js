@@ -1982,6 +1982,16 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'unitCode': 'KGM'
   }).txt((guideData.totalWeight || 0).toFixed(2))
 
+  // === INDICADOR DE VEHÍCULO M1/L ===
+  // Si el traslado se realiza en vehículos de categoría M1 o L, agregar el indicador
+  // Esto hace que la placa y datos del conductor sean OPCIONALES
+  // Tag: /DespatchAdvice/cac:Shipment/cbc:SpecialInstructions
+  // Valor: SUNAT_Envio_IndicadorTrasladoVehiculoM1L
+  if (guideData.isM1LVehicle === true) {
+    shipment.ele('cbc:SpecialInstructions').txt('SUNAT_Envio_IndicadorTrasladoVehiculoM1L')
+    console.log(`🏍️ [GRE XML] Indicador M1/L agregado: vehículo categoría M1 o L`)
+  }
+
   // === DATOS DE TRANSPORTE (ShipmentStage debe ir ANTES de Delivery según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
   // Nota: No incluir cbc:ID en ShipmentStage según ejemplos EFACT
@@ -1994,33 +2004,55 @@ export function generateDispatchGuideXML(guideData, businessData) {
   }).txt(guideData.transportMode || '02')
 
   // === TRANSPORTE PRIVADO ===
-  if (guideData.transportMode === '02' && guideData.transport?.driver) {
+  if (guideData.transportMode === '02') {
     const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
     transitPeriod.ele('cbc:StartDate').txt(transferDate)
 
+    // Verificar si es vehículo M1/L (moto, taxi, auto particular hasta 8 asientos)
+    // Para vehículos M1/L, los datos de conductor y placa son OPCIONALES según SUNAT
+    const isM1LVehicle = guideData.isM1LVehicle === true
+    const hasVehiclePlate = guideData.transport?.vehicle?.plate?.trim()
+    const hasDriverData = guideData.transport?.driver?.documentNumber?.trim()
+
+    console.log(`🚗 [GRE XML] Transporte privado - M1/L: ${isM1LVehicle}, Placa: ${hasVehiclePlate || 'NO'}, Conductor: ${hasDriverData || 'NO'}`)
+
     // Datos del vehículo (TransportMeans debe ir ANTES de DriverPerson según UBL 2.1)
-    if (guideData.transport.vehicle) {
+    // Solo incluir si hay placa O si NO es vehículo M1/L (obligatorio)
+    if (hasVehiclePlate) {
       const transportMeans = shipmentStage.ele('cac:TransportMeans')
       const roadTransport = transportMeans.ele('cac:RoadTransport')
       // Normalizar placa: quitar guiones, espacios y convertir a mayúsculas (SUNAT no acepta guiones)
-      const normalizedPlate = (guideData.transport.vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
+      const normalizedPlate = hasVehiclePlate.replace(/[-\s]/g, '').toUpperCase()
       roadTransport.ele('cbc:LicensePlateID').txt(normalizedPlate)
+      console.log(`📋 [GRE XML] Placa incluida: ${normalizedPlate}`)
+    } else if (!isM1LVehicle) {
+      // Si NO es M1/L y NO hay placa, es un error - pero dejamos que SUNAT lo valide
+      console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin placa y NO es vehículo M1/L`)
     }
 
     // Datos del conductor (DriverPerson debe ir DESPUÉS de TransportMeans)
-    const driverPerson = shipmentStage.ele('cac:DriverPerson')
-    // Solo schemeID según ejemplos EFACT
-    driverPerson.ele('cbc:ID', {
-      'schemeID': guideData.transport.driver.documentType || '1'
-    }).txt(guideData.transport.driver.documentNumber)
+    // Solo incluir si hay datos del conductor O si NO es vehículo M1/L (obligatorio)
+    if (hasDriverData && guideData.transport?.driver) {
+      const driverPerson = shipmentStage.ele('cac:DriverPerson')
+      // Solo schemeID según ejemplos EFACT
+      driverPerson.ele('cbc:ID', {
+        'schemeID': guideData.transport.driver.documentType || '1'
+      }).txt(guideData.transport.driver.documentNumber)
 
-    driverPerson.ele('cbc:FirstName').txt(guideData.transport.driver.name)
-    driverPerson.ele('cbc:FamilyName').txt(guideData.transport.driver.lastName)
-    driverPerson.ele('cbc:JobTitle').txt('Principal')
+      driverPerson.ele('cbc:FirstName').txt(guideData.transport.driver.name || '')
+      driverPerson.ele('cbc:FamilyName').txt(guideData.transport.driver.lastName || '')
+      driverPerson.ele('cbc:JobTitle').txt('Principal')
 
-    // Licencia de conducir
-    const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
-    driverLicense.ele('cbc:ID').txt(guideData.transport.driver.license)
+      // Licencia de conducir
+      if (guideData.transport.driver.license) {
+        const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
+        driverLicense.ele('cbc:ID').txt(guideData.transport.driver.license)
+      }
+      console.log(`👤 [GRE XML] Conductor incluido: ${guideData.transport.driver.name} ${guideData.transport.driver.lastName}`)
+    } else if (!isM1LVehicle) {
+      // Si NO es M1/L y NO hay conductor, es un error - pero dejamos que SUNAT lo valide
+      console.log(`⚠️ [GRE XML] ADVERTENCIA: Transporte privado sin conductor y NO es vehículo M1/L`)
+    }
   }
 
   // === TRANSPORTE PÚBLICO ===
