@@ -464,6 +464,17 @@ export default function Reports() {
     const productSales = {}
 
     filteredInvoices.forEach(invoice => {
+      // Calcular factor de descuento para distribuir proporcionalmente a cada item
+      // Si la factura tiene descuento, lo distribuimos entre los productos
+      const invoiceSubtotal = invoice.items?.reduce((sum, item) => {
+        const itemPrice = item.unitPrice || item.price || 0
+        const quantity = item.quantity || 0
+        return sum + (item.subtotal || (quantity * itemPrice))
+      }, 0) || 0
+
+      const invoiceTotal = invoice.total || invoiceSubtotal
+      const discountFactor = invoiceSubtotal > 0 ? invoiceTotal / invoiceSubtotal : 1
+
       invoice.items?.forEach(item => {
         // Soportar tanto 'name' como 'description' y tanto 'unitPrice' como 'price'
         const itemName = item.name || item.description
@@ -482,7 +493,9 @@ export default function Reports() {
           }
         }
         productSales[key].quantity += quantity
-        const itemRevenue = item.subtotal || (quantity * itemPrice)
+        // Aplicar descuento proporcional al revenue del item
+        const itemSubtotal = item.subtotal || (quantity * itemPrice)
+        const itemRevenue = itemSubtotal * discountFactor
         // Redondear a 2 decimales para evitar errores de punto flotante
         productSales[key].revenue = Number((productSales[key].revenue + itemRevenue).toFixed(2))
 
@@ -524,11 +537,23 @@ export default function Reports() {
     }
 
     filteredInvoices.forEach(invoice => {
+      // Calcular factor de descuento para distribuir proporcionalmente a cada item
+      const invoiceSubtotal = invoice.items?.reduce((sum, item) => {
+        const itemPrice = item.unitPrice || item.price || 0
+        const quantity = item.quantity || 0
+        return sum + (item.subtotal || (quantity * itemPrice))
+      }, 0) || 0
+
+      const invoiceTotal = invoice.total || invoiceSubtotal
+      const discountFactor = invoiceSubtotal > 0 ? invoiceTotal / invoiceSubtotal : 1
+
       invoice.items?.forEach(item => {
         const productId = item.productId || item.id
         const quantity = item.quantity || 0
         const itemPrice = item.unitPrice || item.price || 0
-        const itemRevenue = item.subtotal || (quantity * itemPrice)
+        // Aplicar descuento proporcional
+        const itemSubtotal = item.subtotal || (quantity * itemPrice)
+        const itemRevenue = itemSubtotal * discountFactor
 
         // Buscar el producto para obtener su categoría
         const product = products.find(p => p.id === productId)
