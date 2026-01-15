@@ -22,6 +22,7 @@ import {
 } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
 import { generateCustomersExcel } from '@/services/customerExportService'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
@@ -33,6 +34,7 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [deletingCustomer, setDeletingCustomer] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isLookingUp, setIsLookingUp] = useState(false)
   const [sortBy, setSortBy] = useState('name') // name, orders, spent
 
   const {
@@ -41,6 +43,8 @@ export default function Customers() {
     formState: { errors },
     reset,
     watch,
+    setValue,
+    getValues,
   } = useForm({
     resolver: zodResolver(customerSchema),
     defaultValues: {
@@ -133,6 +137,67 @@ export default function Customers() {
     setIsModalOpen(false)
     setEditingCustomer(null)
     reset()
+  }
+
+  // Buscar datos de DNI o RUC automáticamente
+  const handleLookupDocument = async () => {
+    const docNumber = getValues('documentNumber')
+    const docType = getValues('documentType')
+
+    if (!docNumber) {
+      toast.error('Ingrese un número de documento para buscar')
+      return
+    }
+
+    setIsLookingUp(true)
+
+    try {
+      let result
+
+      // Determinar si es DNI o RUC según el tipo seleccionado o la longitud
+      if (docType === ID_TYPES.DNI || docNumber.length === 8) {
+        if (docNumber.length !== 8) {
+          toast.error('El DNI debe tener 8 dígitos')
+          setIsLookingUp(false)
+          return
+        }
+        result = await consultarDNI(docNumber)
+
+        if (result.success) {
+          setValue('name', result.data.nombreCompleto || '')
+          setValue('documentType', ID_TYPES.DNI)
+          toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
+        }
+      } else if (docType === ID_TYPES.RUC || docNumber.length === 11) {
+        if (docNumber.length !== 11) {
+          toast.error('El RUC debe tener 11 dígitos')
+          setIsLookingUp(false)
+          return
+        }
+        result = await consultarRUC(docNumber)
+
+        if (result.success) {
+          setValue('businessName', result.data.razonSocial || '')
+          setValue('name', result.data.nombreComercial || result.data.razonSocial || '')
+          setValue('address', result.data.direccion || '')
+          setValue('documentType', ID_TYPES.RUC)
+          toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+        }
+      } else {
+        toast.error('Seleccione un tipo de documento o ingrese 8 dígitos (DNI) u 11 dígitos (RUC)')
+        setIsLookingUp(false)
+        return
+      }
+
+      if (result && !result.success) {
+        toast.error(result.error || 'No se encontraron datos para este documento')
+      }
+    } catch (error) {
+      console.error('Error al buscar documento:', error)
+      toast.error('Error al consultar el documento. Verifique su conexión.')
+    } finally {
+      setIsLookingUp(false)
+    }
   }
 
   const onSubmit = async data => {
@@ -545,12 +610,36 @@ export default function Customers() {
               <option value={ID_TYPES.PASSPORT}>Pasaporte</option>
             </Select>
 
-            <Input
-              label="Número de Documento (opcional)"
-              placeholder={documentType === ID_TYPES.RUC ? '20123456789' : documentType === ID_TYPES.DNI ? '12345678' : 'Número de documento'}
-              error={errors.documentNumber?.message}
-              {...register('documentNumber')}
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Número de Documento (opcional)
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder={documentType === ID_TYPES.RUC ? '20123456789' : documentType === ID_TYPES.DNI ? '12345678' : 'Número de documento'}
+                  error={errors.documentNumber?.message}
+                  {...register('documentNumber')}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleLookupDocument}
+                  disabled={isLookingUp}
+                  className="px-3"
+                  title="Buscar datos en SUNAT/RENIEC"
+                >
+                  {isLookingUp ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              {errors.documentNumber?.message && (
+                <p className="text-sm text-red-500 mt-1">{errors.documentNumber.message}</p>
+              )}
+            </div>
           </div>
 
           {documentType === ID_TYPES.RUC && (
