@@ -3101,8 +3101,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </Badge>
                           )}
                         </div>
-                        {product.code && !product.hasVariants && (
-                          <p className="text-xs text-gray-500">{product.code}</p>
+                        {/* SKU o Código debajo del nombre */}
+                        {(product.sku || product.code) && !product.hasVariants && (
+                          <p className="text-xs text-gray-500">
+                            {product.sku || product.code}
+                          </p>
                         )}
                         {/* Mostrar info de farmacia si existe */}
                         {product.genericName && (
