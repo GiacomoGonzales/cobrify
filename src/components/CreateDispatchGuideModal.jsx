@@ -162,6 +162,39 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [isSaving, setIsSaving] = useState(false)
   const [autoSendToSunat, setAutoSendToSunat] = useState(false)
 
+  // Resetear campos cuando se cierra el modal
+  useEffect(() => {
+    if (!isOpen) {
+      // Limpiar campos del destinatario
+      setRecipientDocType('6')
+      setRecipientDocNumber('')
+      setRecipientName('')
+      setRecipientAddress('')
+      setRecipientDepartment('')
+      setRecipientProvince('')
+      setRecipientDistrict('')
+      setRecipientEmail('')
+
+      // Limpiar punto de llegada
+      setDestinationAddress('')
+      setDestinationDepartment('')
+      setDestinationProvince('')
+      setDestinationDistrict('')
+
+      // Limpiar otros campos
+      setItems([])
+      setRelatedDocuments([])
+      setTransferDescription('')
+      setTotalWeight('')
+      setDriverDocType('1')
+      setDriverDocNumber('')
+      setDriverName('')
+      setDriverLicense('')
+      setVehiclePlate('')
+      setIsM1LVehicle(false)
+    }
+  }, [isOpen])
+
   // Inicializar fechas cuando se abre el modal (sin referenceInvoice)
   useEffect(() => {
     if (isOpen && !referenceInvoice) {
@@ -248,10 +281,33 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         setRecipientDocNumber(customer.documentNumber || '')
         setRecipientName(customer.name || '')
 
-        if (customer.address) {
-          setDestinationAddress(customer.address)
-          setRecipientAddress(customer.address)
-        }
+        // Limpiar y setear dirección del destinatario
+        setRecipientAddress(customer.address || '')
+        setDestinationAddress(customer.address || '')
+
+        // Limpiar campos de ubicación del destinatario (departamento, provincia, distrito)
+        // para evitar que queden datos del cliente anterior
+        setRecipientDepartment(customer.department || '')
+        setRecipientProvince(customer.province || '')
+        setRecipientDistrict(customer.district || '')
+
+        // Limpiar campos de punto de llegada
+        setDestinationDepartment(customer.department || '')
+        setDestinationProvince(customer.province || '')
+        setDestinationDistrict(customer.district || '')
+      } else {
+        // Si no hay cliente, limpiar todos los campos del destinatario
+        setRecipientDocType('6')
+        setRecipientDocNumber('')
+        setRecipientName('')
+        setRecipientAddress('')
+        setRecipientDepartment('')
+        setRecipientProvince('')
+        setRecipientDistrict('')
+        setDestinationAddress('')
+        setDestinationDepartment('')
+        setDestinationProvince('')
+        setDestinationDistrict('')
       }
 
       // Agregar factura como documento relacionado
