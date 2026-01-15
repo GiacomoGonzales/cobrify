@@ -869,10 +869,19 @@ export default function Inventory() {
     console.log(`🔍 [Inventory] filteredProducts recalculando. allItems.length=${allItems.length}`)
 
     const filtered = allItems.filter(item => {
-      const matchesSearch =
-        item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.category?.toLowerCase().includes(searchTerm.toLowerCase())
+      // Búsqueda flexible: dividir en palabras y verificar que TODAS estén presentes
+      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
+
+      // Concatenar campos buscables
+      const searchableText = [
+        item.name || '',
+        item.code || '',
+        item.sku || '',
+        item.category || ''
+      ].join(' ').toLowerCase()
+
+      // Verificar que TODAS las palabras estén presentes (en cualquier orden)
+      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
 
       // Multi-select: array vacío = todas las categorías
       const matchesCategory =
