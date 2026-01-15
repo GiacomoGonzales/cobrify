@@ -28,7 +28,7 @@ import {
   getConnectionType
 } from '@/services/thermalPrinterService'
 import { getWarehouses } from '@/services/warehouseService'
-import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS } from '@/services/firestoreService'
+import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 
@@ -186,7 +186,12 @@ export default function Settings() {
     kitchenEnabled: true,
     deliveryEnabled: false,
     itemStatusTracking: false, // Seguimiento de estado por item (false = por orden completa)
+    enableKitchenStations: false, // Modo multi-estación de cocina
+    kitchenStations: [], // Configuración de estaciones de cocina
   })
+
+  // Categorías de productos (para asignar a estaciones)
+  const [productCategories, setProductCategories] = useState([])
 
   // Campos personalizados del POS
   const [posCustomFields, setPosCustomFields] = useState({
@@ -599,10 +604,21 @@ export default function Settings() {
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
         if (businessData.restaurantConfig) {
-          setRestaurantConfig(businessData.restaurantConfig)
+          setRestaurantConfig(prev => ({
+            ...prev,
+            ...businessData.restaurantConfig
+          }))
         }
         if (businessData.posCustomFields) {
           setPosCustomFields(businessData.posCustomFields)
+        }
+
+        // Cargar categorías de productos (para estaciones de cocina)
+        if (businessData.businessMode === 'restaurant') {
+          const categoriesResult = await getProductCategories(getBusinessId())
+          if (categoriesResult.success) {
+            setProductCategories(categoriesResult.data || [])
+          }
         }
 
         // Cargar configuración de impresora desde localStorage (por dispositivo)
@@ -2621,6 +2637,202 @@ export default function Settings() {
                           </p>
                         </div>
                       </label>
+
+                      {/* Modo Multi-Estación de Cocina */}
+                      <label className={`flex items-start space-x-3 cursor-pointer group p-4 border rounded-lg transition-colors ${
+                        restaurantConfig.enableKitchenStations
+                          ? 'border-orange-500 bg-orange-50'
+                          : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/30'
+                      }`}>
+                        <input
+                          type="checkbox"
+                          checked={restaurantConfig.enableKitchenStations || false}
+                          onChange={(e) => setRestaurantConfig({...restaurantConfig, enableKitchenStations: e.target.checked})}
+                          className="mt-1 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900">
+                            Modo Multi-Estación de Cocina
+                          </span>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                            {restaurantConfig.enableKitchenStations
+                              ? '✓ Habilitado: Los pedidos se dividen automáticamente por estaciones (Cocina caliente, Cocina fría, Bebidas, etc.). Cada estación ve solo los items que le corresponden.'
+                              : '✗ Deshabilitado: Todos los items del pedido se muestran juntos en una sola vista de cocina.'}
+                          </p>
+                        </div>
+                      </label>
+
+                      {/* Configuración de Estaciones (solo si está habilitado) */}
+                      {restaurantConfig.enableKitchenStations && (
+                        <div className="ml-7 mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-4">
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900">Estaciones de Cocina</h4>
+                              <p className="text-xs text-gray-600">Define las estaciones y asigna categorías de productos a cada una</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newStation = {
+                                  id: `station_${Date.now()}`,
+                                  name: '',
+                                  categories: [],
+                                  color: '#EF4444',
+                                  order: (restaurantConfig.kitchenStations?.length || 0) + 1,
+                                  isPase: false
+                                }
+                                setRestaurantConfig({
+                                  ...restaurantConfig,
+                                  kitchenStations: [...(restaurantConfig.kitchenStations || []), newStation]
+                                })
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Agregar Estación
+                            </button>
+                          </div>
+
+                          {/* Lista de estaciones */}
+                          <div className="space-y-3">
+                            {(restaurantConfig.kitchenStations || []).length === 0 ? (
+                              <div className="text-center py-6 text-gray-500 text-sm">
+                                <UtensilsCrossed className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                                <p>No hay estaciones configuradas</p>
+                                <p className="text-xs">Agrega estaciones como "Cocina Caliente", "Bebidas", etc.</p>
+                              </div>
+                            ) : (
+                              (restaurantConfig.kitchenStations || []).map((station, index) => (
+                                <div key={station.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                  <div className="flex items-start gap-3">
+                                    {/* Color picker */}
+                                    <input
+                                      type="color"
+                                      value={station.color || '#EF4444'}
+                                      onChange={(e) => {
+                                        const updated = [...restaurantConfig.kitchenStations]
+                                        updated[index] = { ...station, color: e.target.value }
+                                        setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                      }}
+                                      className="w-8 h-8 rounded cursor-pointer border-0"
+                                      title="Color de la estación"
+                                    />
+
+                                    <div className="flex-1 space-y-3">
+                                      {/* Nombre de la estación */}
+                                      <input
+                                        type="text"
+                                        value={station.name}
+                                        onChange={(e) => {
+                                          const updated = [...restaurantConfig.kitchenStations]
+                                          updated[index] = { ...station, name: e.target.value }
+                                          setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                        }}
+                                        placeholder="Nombre de la estación (ej: Cocina Caliente)"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                      />
+
+                                      {/* Selector de categorías */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                          Categorías asignadas:
+                                        </label>
+                                        {productCategories.length === 0 ? (
+                                          <p className="text-xs text-gray-500 italic">
+                                            No hay categorías de productos. Crea categorías en la sección de Productos.
+                                          </p>
+                                        ) : (
+                                          <div className="flex flex-wrap gap-2">
+                                            {productCategories.map((category) => {
+                                              const isSelected = (station.categories || []).includes(category)
+                                              return (
+                                                <button
+                                                  key={category}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const updated = [...restaurantConfig.kitchenStations]
+                                                    const currentCategories = station.categories || []
+                                                    if (isSelected) {
+                                                      updated[index] = {
+                                                        ...station,
+                                                        categories: currentCategories.filter(c => c !== category)
+                                                      }
+                                                    } else {
+                                                      updated[index] = {
+                                                        ...station,
+                                                        categories: [...currentCategories, category]
+                                                      }
+                                                    }
+                                                    setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                                  }}
+                                                  className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                                                    isSelected
+                                                      ? 'bg-orange-600 text-white'
+                                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                  }`}
+                                                >
+                                                  {category}
+                                                </button>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Checkbox para estación de pase */}
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={station.isPase || false}
+                                          onChange={(e) => {
+                                            const updated = [...restaurantConfig.kitchenStations]
+                                            updated[index] = { ...station, isPase: e.target.checked }
+                                            setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                          }}
+                                          className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                                        />
+                                        <span className="text-xs text-gray-700">
+                                          Estación de Pase/Despacho (ve todos los items para consolidar)
+                                        </span>
+                                      </label>
+                                    </div>
+
+                                    {/* Botón eliminar */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = restaurantConfig.kitchenStations.filter((_, i) => i !== index)
+                                        setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="Eliminar estación"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          {/* Ayuda */}
+                          {(restaurantConfig.kitchenStations || []).length > 0 && (
+                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="text-xs text-blue-800">
+                                  <p className="font-medium mb-1">¿Cómo funciona?</p>
+                                  <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+                                    <li>Cada estación verá solo los items de las categorías asignadas</li>
+                                    <li>En la pantalla de Cocina podrás filtrar por estación</li>
+                                    <li>La estación de "Pase" ve todos los items para coordinar la entrega</li>
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

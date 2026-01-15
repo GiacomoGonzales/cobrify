@@ -201,6 +201,7 @@ export default function OrderItemsModal({
           quantity: 1,
           total: product.price || 0,
           notes: '', // Inicializar campo de notas vacío
+          category: getCategoryName(product.category), // Categoría para filtrado por estación
         },
       ])
     }
@@ -246,6 +247,7 @@ export default function OrderItemsModal({
           notes: '',
           modifiers: selectedModifiers, // Guardar modificadores seleccionados
           modifierKey: modifierKey, // Para identificar items únicos
+          category: getCategoryName(productForModifiers.category), // Categoría para filtrado por estación
         },
       ])
     }

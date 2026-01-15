@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChefHat, Clock, CheckCircle, AlertTriangle, Flame, Loader2 } from 'lucide-react'
+import { ChefHat, Clock, CheckCircle, AlertTriangle, Flame, Loader2, LayoutGrid } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -19,6 +19,11 @@ export default function Kitchen() {
   const [updatingItemId, setUpdatingItemId] = useState(null)
   const [itemStatusTracking, setItemStatusTracking] = useState(false) // Config para modo de seguimiento
 
+  // Estados para modo multi-estación
+  const [enableKitchenStations, setEnableKitchenStations] = useState(false)
+  const [kitchenStations, setKitchenStations] = useState([])
+  const [selectedStation, setSelectedStation] = useState('all') // 'all' o el ID de una estación
+
   // Listener para la configuración del negocio
   useEffect(() => {
     if (!user?.uid || isDemoMode) return
@@ -31,6 +36,9 @@ export default function Kitchen() {
           const businessData = docSnap.data()
           const config = businessData.restaurantConfig || {}
           setItemStatusTracking(config.itemStatusTracking || false)
+          // Cargar configuración de estaciones
+          setEnableKitchenStations(config.enableKitchenStations || false)
+          setKitchenStations(config.kitchenStations || [])
         }
       },
       (error) => {
@@ -170,6 +178,68 @@ export default function Kitchen() {
 
   // Para modo item-tracking: todas las órdenes activas ordenadas por tiempo
   const allActiveOrders = itemStatusTracking ? orders : []
+
+  // Función para filtrar items de una orden según la estación seleccionada
+  const filterItemsByStation = (items) => {
+    if (!enableKitchenStations || selectedStation === 'all') {
+      return items
+    }
+
+    const station = kitchenStations.find(s => s.id === selectedStation)
+    if (!station) return items
+
+    // Si es estación de pase, mostrar todos los items
+    if (station.isPase) {
+      return items
+    }
+
+    // Filtrar items cuya categoría esté en las categorías de la estación
+    return items.filter(item => {
+      const itemCategory = item.category || ''
+      return station.categories.includes(itemCategory)
+    })
+  }
+
+  // Función para obtener órdenes con items filtrados por estación
+  const getFilteredOrders = (ordersToFilter) => {
+    if (!enableKitchenStations || selectedStation === 'all') {
+      return ordersToFilter
+    }
+
+    return ordersToFilter
+      .map(order => ({
+        ...order,
+        items: filterItemsByStation(order.items || [])
+      }))
+      .filter(order => order.items.length > 0) // Solo mostrar órdenes que tengan items para esta estación
+  }
+
+  // Aplicar filtro de estación a las órdenes
+  const filteredPendingOrders = getFilteredOrders(pendingOrders)
+  const filteredPreparingOrders = getFilteredOrders(preparingOrders)
+  const filteredReadyOrders = getFilteredOrders(readyOrders)
+  const filteredAllActiveOrders = getFilteredOrders(allActiveOrders)
+
+  // Contar items por estación (para mostrar badges en tabs)
+  const countItemsForStation = (stationId) => {
+    const station = kitchenStations.find(s => s.id === stationId)
+    if (!station) return 0
+
+    let count = 0
+    orders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const itemCategory = item.category || ''
+        if (station.isPase || station.categories.includes(itemCategory)) {
+          // Solo contar items pendientes o en preparación
+          const itemStatus = item.status || 'pending'
+          if (itemStatus === 'pending' || itemStatus === 'preparing') {
+            count++
+          }
+        }
+      })
+    })
+    return count
+  }
 
   const calculateElapsedTime = (createdAt) => {
     if (!createdAt) return '0 min'
@@ -429,6 +499,77 @@ export default function Kitchen() {
         </div>
       </div>
 
+      {/* Tabs de Estaciones - Solo si está habilitado el modo multi-estación */}
+      {enableKitchenStations && kitchenStations.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setSelectedStation('all')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                selectedStation === 'all'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Todas las Estaciones
+              <span className={`px-2 py-0.5 rounded-full text-xs ${
+                selectedStation === 'all' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+              }`}>
+                {orders.reduce((acc, order) => acc + (order.items?.length || 0), 0)}
+              </span>
+            </button>
+
+            {kitchenStations.map((station) => {
+              const itemCount = countItemsForStation(station.id)
+              const isSelected = selectedStation === station.id
+
+              return (
+                <button
+                  key={station.id}
+                  onClick={() => setSelectedStation(station.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap transition-colors ${
+                    isSelected
+                      ? 'text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  style={isSelected ? { backgroundColor: station.color } : {}}
+                >
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: isSelected ? 'white' : station.color }}
+                  />
+                  {station.name || 'Sin nombre'}
+                  {station.isPase && (
+                    <span className="text-xs opacity-75">(Pase)</span>
+                  )}
+                  {itemCount > 0 && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                      isSelected ? 'bg-white/30 text-white' : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {itemCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Indicador de estación seleccionada */}
+          {selectedStation !== 'all' && (
+            <div className="mt-2 px-3 py-1.5 bg-gray-50 rounded text-xs text-gray-600">
+              <span className="font-medium">Filtro activo:</span> Mostrando solo items de{' '}
+              <span className="font-semibold" style={{ color: kitchenStations.find(s => s.id === selectedStation)?.color }}>
+                {kitchenStations.find(s => s.id === selectedStation)?.name}
+              </span>
+              {kitchenStations.find(s => s.id === selectedStation)?.isPase && (
+                <span className="ml-1">(ve todos los items para coordinar entrega)</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Estadísticas - Solo en modo legacy (orden completa) */}
       {!itemStatusTracking && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -437,7 +578,7 @@ export default function Kitchen() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-yellow-700">Pendientes</p>
-                  <p className="text-3xl font-bold text-yellow-600 mt-2">{pendingOrders.length}</p>
+                  <p className="text-3xl font-bold text-yellow-600 mt-2">{filteredPendingOrders.length}</p>
                 </div>
                 <Clock className="w-12 h-12 text-yellow-500" />
               </div>
@@ -449,7 +590,7 @@ export default function Kitchen() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-blue-700">En Preparación</p>
-                  <p className="text-3xl font-bold text-blue-600 mt-2">{preparingOrders.length}</p>
+                  <p className="text-3xl font-bold text-blue-600 mt-2">{filteredPreparingOrders.length}</p>
                 </div>
                 <Flame className="w-12 h-12 text-blue-500" />
               </div>
@@ -461,7 +602,7 @@ export default function Kitchen() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-green-700">Listas</p>
-                  <p className="text-3xl font-bold text-green-600 mt-2">{readyOrders.length}</p>
+                  <p className="text-3xl font-bold text-green-600 mt-2">{filteredReadyOrders.length}</p>
                 </div>
                 <CheckCircle className="w-12 h-12 text-green-500" />
               </div>
@@ -477,7 +618,7 @@ export default function Kitchen() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-primary-700">Órdenes Activas</p>
-                <p className="text-3xl font-bold text-primary-600 mt-2">{allActiveOrders.length}</p>
+                <p className="text-3xl font-bold text-primary-600 mt-2">{filteredAllActiveOrders.length}</p>
                 <p className="text-xs text-primary-600 mt-1">Ordenadas por tiempo de llegada</p>
               </div>
               <ChefHat className="w-12 h-12 text-primary-500" />
@@ -494,12 +635,12 @@ export default function Kitchen() {
             <div className="flex items-center gap-2 pb-2 border-b-2 border-yellow-300">
               <Clock className="w-5 h-5 text-yellow-600" />
               <h2 className="text-lg font-bold text-yellow-700">
-                Pendientes ({pendingOrders.length})
+                Pendientes ({filteredPendingOrders.length})
               </h2>
             </div>
             <div className="space-y-4">
-              {pendingOrders.map(order => renderOrderCard(order))}
-              {pendingOrders.length === 0 && (
+              {filteredPendingOrders.map(order => renderOrderCard(order))}
+              {filteredPendingOrders.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                   <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No hay órdenes pendientes</p>
@@ -513,12 +654,12 @@ export default function Kitchen() {
             <div className="flex items-center gap-2 pb-2 border-b-2 border-blue-300">
               <Flame className="w-5 h-5 text-blue-600" />
               <h2 className="text-lg font-bold text-blue-700">
-                En Preparación ({preparingOrders.length})
+                En Preparación ({filteredPreparingOrders.length})
               </h2>
             </div>
             <div className="space-y-4">
-              {preparingOrders.map(order => renderOrderCard(order))}
-              {preparingOrders.length === 0 && (
+              {filteredPreparingOrders.map(order => renderOrderCard(order))}
+              {filteredPreparingOrders.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                   <Flame className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No hay órdenes en preparación</p>
@@ -532,12 +673,12 @@ export default function Kitchen() {
             <div className="flex items-center gap-2 pb-2 border-b-2 border-green-300">
               <CheckCircle className="w-5 h-5 text-green-600" />
               <h2 className="text-lg font-bold text-green-700">
-                Listas ({readyOrders.length})
+                Listas ({filteredReadyOrders.length})
               </h2>
             </div>
             <div className="space-y-4">
-              {readyOrders.map(order => renderOrderCard(order))}
-              {readyOrders.length === 0 && (
+              {filteredReadyOrders.map(order => renderOrderCard(order))}
+              {filteredReadyOrders.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                   <CheckCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No hay órdenes listas</p>
@@ -554,15 +695,15 @@ export default function Kitchen() {
           <div className="flex items-center gap-2 pb-4 border-b-2 border-primary-300 mb-4">
             <ChefHat className="w-6 h-6 text-primary-600" />
             <h2 className="text-xl font-bold text-primary-700">
-              Órdenes Activas ({allActiveOrders.length})
+              Órdenes Activas ({filteredAllActiveOrders.length})
             </h2>
             <span className="text-sm text-gray-500 ml-2">
               • Ordenadas por tiempo de llegada
             </span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {allActiveOrders.map(order => renderOrderCard(order))}
-            {allActiveOrders.length === 0 && (
+            {filteredAllActiveOrders.map(order => renderOrderCard(order))}
+            {filteredAllActiveOrders.length === 0 && (
               <div className="col-span-full text-center py-16 text-gray-400">
                 <ChefHat className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg">No hay órdenes activas</p>
