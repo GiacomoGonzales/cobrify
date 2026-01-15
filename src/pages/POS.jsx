@@ -603,6 +603,9 @@ export default function POS() {
       setEditingInvoiceId(invoiceId)
       setEditingInvoiceData(invoice)
 
+      // Desbloquear UI para edición (por si venía de una venta completada)
+      setSaleCompleted(false)
+
       // Cargar datos en el formulario
       setDocumentType(invoice.documentType)
 
@@ -1765,6 +1768,14 @@ export default function POS() {
     // Validar carrito no vacío
     if (cart.length === 0) {
       toast.error('El carrito está vacío')
+      return
+    }
+
+    // Validar consistencia del modo edición
+    // Si editingInvoiceId está definido pero editingInvoiceData no, hay un problema de estado
+    if (editingInvoiceId && !editingInvoiceData) {
+      console.error('⚠️ Estado inconsistente: editingInvoiceId definido pero editingInvoiceData es null')
+      toast.error('Error de estado. Por favor, recarga la página e intenta nuevamente.')
       return
     }
 
@@ -4562,13 +4573,18 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               {/* Checkout Button */}
               <button
                 onClick={handleCheckout}
-                disabled={cart.length === 0 || isProcessing || saleCompleted}
+                disabled={cart.length === 0 || isProcessing || saleCompleted || isLoading}
                 className="w-full mt-4 h-12 sm:h-14 text-base sm:text-lg flex items-center justify-center gap-2 bg-primary-600 border border-primary-700 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
                     Procesando...
+                  </>
+                ) : isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Cargando...
                   </>
                 ) : saleCompleted ? (
                   <>
