@@ -53,7 +53,6 @@ export const DETRACTION_TYPES = [
   { code: '025', name: 'Fabricación de bienes por encargo', rate: 10, category: 'servicios' },
   { code: '026', name: 'Servicio de transporte de personas', rate: 10, category: 'servicios' },
   { code: '027', name: 'Servicio de transporte de carga', rate: 4, category: 'servicios', minAmount: 400 },
-  { code: '028', name: 'Transporte de pasajeros', rate: 10, category: 'servicios' },
   { code: '030', name: 'Contratos de construcción', rate: 4, category: 'servicios' },
   { code: '037', name: 'Demás servicios gravados con el IGV', rate: 12, category: 'servicios' },
 ]
