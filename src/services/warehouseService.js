@@ -423,6 +423,31 @@ export const updateWarehouseStock = (product, warehouseId, quantity) => {
       stock: newStock,
       warehouseStocks: []
     }
+  } else if (quantity < 0) {
+    // Almacén no encontrado pero hay otros almacenes configurados
+    // Esto ocurre al editar compras antiguas o cuando el almacén original fue eliminado
+    // Restar del primer almacén que tenga stock suficiente, o del stock general como fallback
+    let remainingToDeduct = Math.abs(quantity)
+
+    // Intentar restar de los almacenes existentes
+    for (let i = 0; i < warehouseStocks.length && remainingToDeduct > 0; i++) {
+      const currentWsStock = warehouseStocks[i].stock || 0
+      const deductFromThis = Math.min(currentWsStock, remainingToDeduct)
+      if (deductFromThis > 0) {
+        warehouseStocks[i] = {
+          ...warehouseStocks[i],
+          stock: currentWsStock - deductFromThis
+        }
+        remainingToDeduct -= deductFromThis
+      }
+    }
+
+    // Recalcular stock total
+    return {
+      ...product,
+      warehouseStocks,
+      stock: calculateTotalStock(warehouseStocks)
+    }
   }
 
   return {
