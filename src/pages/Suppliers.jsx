@@ -19,6 +19,7 @@ import {
   updateSupplier,
   deleteSupplier,
 } from '@/services/firestoreService'
+import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 
 // Schema de validación para proveedores
 const supplierSchema = z.object({
@@ -41,12 +42,16 @@ export default function Suppliers() {
   const [editingSupplier, setEditingSupplier] = useState(null)
   const [deletingSupplier, setDeletingSupplier] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isLookingUp, setIsLookingUp] = useState(false)
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    setValue,
+    getValues,
+    watch,
   } = useForm({
     resolver: zodResolver(supplierSchema),
     defaultValues: {
@@ -121,6 +126,66 @@ export default function Suppliers() {
     setIsModalOpen(false)
     setEditingSupplier(null)
     reset()
+  }
+
+  // Buscar datos de DNI o RUC automáticamente
+  const handleLookupDocument = async () => {
+    const docNumber = getValues('documentNumber')
+    const docType = getValues('documentType')
+
+    if (!docNumber) {
+      toast.error('Ingrese un número de documento para buscar')
+      return
+    }
+
+    setIsLookingUp(true)
+
+    try {
+      let result
+
+      // Determinar si es DNI o RUC según el tipo seleccionado o la longitud
+      if (docType === ID_TYPES.DNI || docNumber.length === 8) {
+        if (docNumber.length !== 8) {
+          toast.error('El DNI debe tener 8 dígitos')
+          setIsLookingUp(false)
+          return
+        }
+        result = await consultarDNI(docNumber)
+
+        if (result.success) {
+          setValue('businessName', result.data.nombreCompleto || '')
+          setValue('documentType', ID_TYPES.DNI)
+          toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
+        }
+      } else if (docType === ID_TYPES.RUC || docNumber.length === 11) {
+        if (docNumber.length !== 11) {
+          toast.error('El RUC debe tener 11 dígitos')
+          setIsLookingUp(false)
+          return
+        }
+        result = await consultarRUC(docNumber)
+
+        if (result.success) {
+          setValue('businessName', result.data.razonSocial || '')
+          setValue('address', result.data.direccion || '')
+          setValue('documentType', ID_TYPES.RUC)
+          toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+        }
+      } else {
+        toast.error('Seleccione un tipo de documento o ingrese 8 dígitos (DNI) u 11 dígitos (RUC)')
+        setIsLookingUp(false)
+        return
+      }
+
+      if (result && !result.success) {
+        toast.error(result.error || 'No se encontraron datos para este documento')
+      }
+    } catch (error) {
+      console.error('Error al buscar documento:', error)
+      toast.error('Error al consultar el documento. Verifique su conexión.')
+    } finally {
+      setIsLookingUp(false)
+    }
   }
 
   const onSubmit = async data => {
@@ -381,12 +446,35 @@ export default function Suppliers() {
               <option value={ID_TYPES.CE}>Carnet de Extranjería</option>
             </Select>
 
-            <Input
-              label="Número de Documento"
-              placeholder="20123456789"
-              error={errors.documentNumber?.message}
-              {...register('documentNumber')}
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Número de Documento
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="20123456789"
+                  {...register('documentNumber')}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleLookupDocument}
+                  disabled={isLookingUp}
+                  className="px-3"
+                  title="Buscar datos en SUNAT/RENIEC"
+                >
+                  {isLookingUp ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+              {errors.documentNumber?.message && (
+                <p className="text-sm text-red-500 mt-1">{errors.documentNumber.message}</p>
+              )}
+            </div>
           </div>
 
           <Input
