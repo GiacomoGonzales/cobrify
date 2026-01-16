@@ -22,8 +22,8 @@ import {
 
 // Schema de validación para proveedores
 const supplierSchema = z.object({
-  documentType: z.string().min(1, 'Tipo de documento es requerido'),
-  documentNumber: z.string().min(8, 'Número de documento inválido'),
+  documentType: z.string().optional(),
+  documentNumber: z.string().optional(),
   businessName: z.string().min(1, 'Razón social es requerida'),
   contactName: z.string().optional(),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
@@ -50,7 +50,7 @@ export default function Suppliers() {
   } = useForm({
     resolver: zodResolver(supplierSchema),
     defaultValues: {
-      documentType: ID_TYPES.RUC,
+      documentType: '',
       documentNumber: '',
       businessName: '',
       contactName: '',
@@ -92,7 +92,7 @@ export default function Suppliers() {
   const openCreateModal = () => {
     setEditingSupplier(null)
     reset({
-      documentType: ID_TYPES.RUC,
+      documentType: '',
       documentNumber: '',
       businessName: '',
       contactName: '',
@@ -106,8 +106,8 @@ export default function Suppliers() {
   const openEditModal = supplier => {
     setEditingSupplier(supplier)
     reset({
-      documentType: supplier.documentType,
-      documentNumber: supplier.documentNumber,
+      documentType: supplier.documentType || '',
+      documentNumber: supplier.documentNumber || '',
       businessName: supplier.businessName || '',
       contactName: supplier.contactName || '',
       email: supplier.email || '',
@@ -314,10 +314,14 @@ export default function Suppliers() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center space-x-2">
-                        {getDocumentBadge(supplier.documentType)}
-                        <span className="text-sm">{supplier.documentNumber}</span>
-                      </div>
+                      {supplier.documentType && supplier.documentNumber ? (
+                        <div className="flex items-center space-x-2">
+                          {getDocumentBadge(supplier.documentType)}
+                          <span className="text-sm">{supplier.documentNumber}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div>
@@ -368,10 +372,10 @@ export default function Suppliers() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               label="Tipo de Documento"
-              required
               error={errors.documentType?.message}
               {...register('documentType')}
             >
+              <option value="">Sin documento</option>
               <option value={ID_TYPES.RUC}>RUC</option>
               <option value={ID_TYPES.DNI}>DNI</option>
               <option value={ID_TYPES.CE}>Carnet de Extranjería</option>
@@ -379,7 +383,6 @@ export default function Suppliers() {
 
             <Input
               label="Número de Documento"
-              required
               placeholder="20123456789"
               error={errors.documentNumber?.message}
               {...register('documentNumber')}
