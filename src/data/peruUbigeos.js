@@ -1387,6 +1387,18 @@ export const DISTRITOS = {
     { code: '04', name: 'CARACOTO' },
     { code: '05', name: 'SAN MIGUEL' },
   ],
+  // SAN MARTÍN - RIOJA (2208)
+  '2208': [
+    { code: '01', name: 'RIOJA' },
+    { code: '02', name: 'AWAJÚN' },
+    { code: '03', name: 'ELÍAS SOPLÍN VARGAS' },
+    { code: '04', name: 'NUEVA CAJAMARCA' },
+    { code: '05', name: 'PARDO MIGUEL' },
+    { code: '06', name: 'POSIC' },
+    { code: '07', name: 'SAN FERNANDO' },
+    { code: '08', name: 'YORONGOS' },
+    { code: '09', name: 'YURACYACU' },
+  ],
   // SAN MARTÍN - SAN MARTÍN (2209)
   '2209': [
     { code: '01', name: 'TARAPOTO' },
