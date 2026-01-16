@@ -495,6 +495,60 @@ export const DISTRITOS = {
     { code: '10', name: 'SIMBAL' },
     { code: '11', name: 'VÍCTOR LARCO HERRERA' },
   ],
+  // LA LIBERTAD - ASCOPE (1302)
+  '1302': [
+    { code: '01', name: 'ASCOPE' },
+    { code: '02', name: 'CHICAMA' },
+    { code: '03', name: 'CHOCOPE' },
+    { code: '04', name: 'MAGDALENA DE CAO' },
+    { code: '05', name: 'PAIJÁN' },
+    { code: '06', name: 'RÁZURI' },
+    { code: '07', name: 'SANTIAGO DE CAO' },
+    { code: '08', name: 'CASA GRANDE' },
+  ],
+  // LA LIBERTAD - BOLÍVAR (1303)
+  '1303': [
+    { code: '01', name: 'BOLÍVAR' },
+    { code: '02', name: 'BAMBAMARCA' },
+    { code: '03', name: 'CONDORMARCA' },
+    { code: '04', name: 'LONGOTEA' },
+    { code: '05', name: 'UCHUMARCA' },
+    { code: '06', name: 'UCUNCHA' },
+  ],
+  // LA LIBERTAD - CHEPÉN (1304)
+  '1304': [
+    { code: '01', name: 'CHEPÉN' },
+    { code: '02', name: 'PACANGA' },
+    { code: '03', name: 'PUEBLO NUEVO' },
+  ],
+  // LA LIBERTAD - JULCÁN (1305)
+  '1305': [
+    { code: '01', name: 'JULCÁN' },
+    { code: '02', name: 'CALAMARCA' },
+    { code: '03', name: 'CARABAMBA' },
+    { code: '04', name: 'HUASO' },
+  ],
+  // LA LIBERTAD - OTUZCO (1306)
+  '1306': [
+    { code: '01', name: 'OTUZCO' },
+    { code: '02', name: 'AGALLPAMPA' },
+    { code: '03', name: 'CHARAT' },
+    { code: '04', name: 'HUARANCHAL' },
+    { code: '05', name: 'LA CUESTA' },
+    { code: '06', name: 'MACHE' },
+    { code: '07', name: 'PARANDAY' },
+    { code: '08', name: 'SALPO' },
+    { code: '09', name: 'SINSICAP' },
+    { code: '10', name: 'USQUIL' },
+  ],
+  // LA LIBERTAD - PACASMAYO (1307)
+  '1307': [
+    { code: '01', name: 'SAN PEDRO DE LLOC' },
+    { code: '02', name: 'GUADALUPE' },
+    { code: '03', name: 'JEQUETEPEQUE' },
+    { code: '04', name: 'PACASMAYO' },
+    { code: '05', name: 'SAN JOSÉ' },
+  ],
   // LA LIBERTAD - PATAZ (1308)
   '1308': [
     { code: '01', name: 'TAYABAMBA' },
@@ -510,6 +564,35 @@ export const DISTRITOS = {
     { code: '11', name: 'SANTIAGO DE CHALLAS' },
     { code: '12', name: 'TAURIJA' },
     { code: '13', name: 'URPAY' },
+  ],
+  // LA LIBERTAD - SÁNCHEZ CARRIÓN (1309)
+  '1309': [
+    { code: '01', name: 'HUAMACHUCO' },
+    { code: '02', name: 'CHUGAY' },
+    { code: '03', name: 'COCHORCO' },
+    { code: '04', name: 'CURGOS' },
+    { code: '05', name: 'MARCABAL' },
+    { code: '06', name: 'SANAGORAN' },
+    { code: '07', name: 'SARÍN' },
+    { code: '08', name: 'SARTIMBAMBA' },
+  ],
+  // LA LIBERTAD - SANTIAGO DE CHUCO (1310)
+  '1310': [
+    { code: '01', name: 'SANTIAGO DE CHUCO' },
+    { code: '02', name: 'ANGASMARCA' },
+    { code: '03', name: 'CACHICADÁN' },
+    { code: '04', name: 'MOLLEBAMBA' },
+    { code: '05', name: 'MOLLEPATA' },
+    { code: '06', name: 'QUIRUVILCA' },
+    { code: '07', name: 'SANTA CRUZ DE CHUCA' },
+    { code: '08', name: 'SITABAMBA' },
+  ],
+  // LA LIBERTAD - GRAN CHIMÚ (1311)
+  '1311': [
+    { code: '01', name: 'CASCAS' },
+    { code: '02', name: 'LUCMA' },
+    { code: '03', name: 'MARMOT' },
+    { code: '04', name: 'SAYAPULLO' },
   ],
   // LA LIBERTAD - VIRÚ (1312)
   '1312': [
@@ -540,6 +623,53 @@ export const DISTRITOS = {
     { code: '19', name: 'PÚCALA' },
     { code: '20', name: 'TUMÁN' },
   ],
+  // LAMBAYEQUE - FERREÑAFE (1402)
+  '1402': [
+    { code: '01', name: 'FERREÑAFE' },
+    { code: '02', name: 'CAÑARIS' },
+    { code: '03', name: 'INCAHUASI' },
+    { code: '04', name: 'MANUEL ANTONIO MESONES MURO' },
+    { code: '05', name: 'PÍTIPO' },
+    { code: '06', name: 'PUEBLO NUEVO' },
+  ],
+  // PASCO - PASCO (1901)
+  '1901': [
+    { code: '01', name: 'CHAUPIMARCA' },
+    { code: '02', name: 'HUACHÓN' },
+    { code: '03', name: 'HUARIACA' },
+    { code: '04', name: 'HUAYLLAY' },
+    { code: '05', name: 'NINACACA' },
+    { code: '06', name: 'PALLANCHACRA' },
+    { code: '07', name: 'PAUCARTAMBO' },
+    { code: '08', name: 'SAN FRANCISCO DE ASÍS DE YARUSYACÁN' },
+    { code: '09', name: 'SIMÓN BOLÍVAR' },
+    { code: '10', name: 'TICLACAYÁN' },
+    { code: '11', name: 'TINYAHUARCO' },
+    { code: '12', name: 'VICCO' },
+    { code: '13', name: 'YANACANCHA' },
+  ],
+  // PASCO - DANIEL ALCIDES CARRIÓN (1902)
+  '1902': [
+    { code: '01', name: 'YANAHUANCA' },
+    { code: '02', name: 'CHACAYÁN' },
+    { code: '03', name: 'GOYLLARISQUIZGA' },
+    { code: '04', name: 'PAUCAR' },
+    { code: '05', name: 'SAN PEDRO DE PILLAO' },
+    { code: '06', name: 'SANTA ANA DE TUSI' },
+    { code: '07', name: 'TAPUC' },
+    { code: '08', name: 'VILCABAMBA' },
+  ],
+  // PASCO - OXAPAMPA (1903)
+  '1903': [
+    { code: '01', name: 'OXAPAMPA' },
+    { code: '02', name: 'CHONTABAMBA' },
+    { code: '03', name: 'HUANCABAMBA' },
+    { code: '04', name: 'PALCAZÚ' },
+    { code: '05', name: 'POZUZO' },
+    { code: '06', name: 'PUERTO BERMÚDEZ' },
+    { code: '07', name: 'VILLA RICA' },
+    { code: '08', name: 'CONSTITUCIÓN' },
+  ],
   // PIURA - PIURA (2001)
   '2001': [
     { code: '01', name: 'PIURA' },
@@ -552,6 +682,43 @@ export const DISTRITOS = {
     { code: '13', name: 'LAS LOMAS' },
     { code: '14', name: 'TAMBO GRANDE' },
     { code: '15', name: 'VEINTISÉIS DE OCTUBRE' },
+  ],
+  // PIURA - AYABACA (2002)
+  '2002': [
+    { code: '01', name: 'AYABACA' },
+    { code: '02', name: 'FRÍAS' },
+    { code: '03', name: 'JILILÍ' },
+    { code: '04', name: 'LAGUNAS' },
+    { code: '05', name: 'MONTERO' },
+    { code: '06', name: 'PACAIPAMPA' },
+    { code: '07', name: 'PAIMAS' },
+    { code: '08', name: 'SAPILLICA' },
+    { code: '09', name: 'SICCHEZ' },
+    { code: '10', name: 'SUYO' },
+  ],
+  // PIURA - HUANCABAMBA (2003)
+  '2003': [
+    { code: '01', name: 'HUANCABAMBA' },
+    { code: '02', name: 'CANCHAQUE' },
+    { code: '03', name: 'EL CARMEN DE LA FRONTERA' },
+    { code: '04', name: 'HUARMACA' },
+    { code: '05', name: 'LALAQUIZ' },
+    { code: '06', name: 'SAN MIGUEL DE EL FAIQUE' },
+    { code: '07', name: 'SÓNDOR' },
+    { code: '08', name: 'SONDORILLO' },
+  ],
+  // PIURA - MORROPÓN (2004)
+  '2004': [
+    { code: '01', name: 'CHULUCANAS' },
+    { code: '02', name: 'BUENOS AIRES' },
+    { code: '03', name: 'CHALACO' },
+    { code: '04', name: 'LA MATANZA' },
+    { code: '05', name: 'MORROPÓN' },
+    { code: '06', name: 'SALITRAL' },
+    { code: '07', name: 'SAN JUAN DE BIGOTE' },
+    { code: '08', name: 'SANTA CATALINA DE MOSSA' },
+    { code: '09', name: 'SANTO DOMINGO' },
+    { code: '10', name: 'YAMANGO' },
   ],
   // CUSCO - CUSCO (0801)
   '0801': [
@@ -1335,6 +1502,32 @@ export const DISTRITOS = {
     { code: '10', name: 'CORONEL GREGORIO ALBARRACÍN LANCHIPA' },
     { code: '11', name: 'LA YARADA LOS PALOS' },
   ],
+  // TACNA - CANDARAVE (2302)
+  '2302': [
+    { code: '01', name: 'CANDARAVE' },
+    { code: '02', name: 'CAIRANI' },
+    { code: '03', name: 'CAMILACA' },
+    { code: '04', name: 'CURIBAYA' },
+    { code: '05', name: 'HUANUARA' },
+    { code: '06', name: 'QUILAHUANI' },
+  ],
+  // TACNA - JORGE BASADRE (2303)
+  '2303': [
+    { code: '01', name: 'LOCUMBA' },
+    { code: '02', name: 'ILABAYA' },
+    { code: '03', name: 'ITE' },
+  ],
+  // TACNA - TARATA (2304)
+  '2304': [
+    { code: '01', name: 'TARATA' },
+    { code: '02', name: 'HÉROES ALBARRACÍN' },
+    { code: '03', name: 'ESTIQUE' },
+    { code: '04', name: 'ESTIQUE-PAMPA' },
+    { code: '05', name: 'SITAJARA' },
+    { code: '06', name: 'SUSAPAYA' },
+    { code: '07', name: 'TARUCACHI' },
+    { code: '08', name: 'TICACO' },
+  ],
   // LORETO - MAYNAS (1601)
   '1601': [
     { code: '01', name: 'IQUITOS' },
@@ -1351,6 +1544,69 @@ export const DISTRITOS = {
     { code: '13', name: 'SAN JUAN BAUTISTA' },
     { code: '14', name: 'TENIENTE MANUEL CLAVERO' },
   ],
+  // LORETO - ALTO AMAZONAS (1602)
+  '1602': [
+    { code: '01', name: 'YURIMAGUAS' },
+    { code: '02', name: 'BALSAPUERTO' },
+    { code: '03', name: 'JEBEROS' },
+    { code: '04', name: 'LAGUNAS' },
+    { code: '05', name: 'SANTA CRUZ' },
+    { code: '06', name: 'TENIENTE CÉSAR LÓPEZ ROJAS' },
+  ],
+  // LORETO - LORETO (1603)
+  '1603': [
+    { code: '01', name: 'NAUTA' },
+    { code: '02', name: 'PARINARI' },
+    { code: '03', name: 'TIGRE' },
+    { code: '04', name: 'TROMPETEROS' },
+    { code: '05', name: 'URARINAS' },
+  ],
+  // LORETO - MARISCAL RAMÓN CASTILLA (1604)
+  '1604': [
+    { code: '01', name: 'RAMÓN CASTILLA' },
+    { code: '02', name: 'PEBAS' },
+    { code: '03', name: 'YAVARÍ' },
+    { code: '04', name: 'SAN PABLO' },
+  ],
+  // LORETO - REQUENA (1605)
+  '1605': [
+    { code: '01', name: 'REQUENA' },
+    { code: '02', name: 'ALTO TAPICHE' },
+    { code: '03', name: 'CAPELO' },
+    { code: '04', name: 'EMILIO SAN MARTÍN' },
+    { code: '05', name: 'MAQUIA' },
+    { code: '06', name: 'PUINAHUA' },
+    { code: '07', name: 'SAQUENA' },
+    { code: '08', name: 'SOPLIN' },
+    { code: '09', name: 'TAPICHE' },
+    { code: '10', name: 'JENARO HERRERA' },
+    { code: '11', name: 'YAQUERANA' },
+  ],
+  // LORETO - UCAYALI (1606)
+  '1606': [
+    { code: '01', name: 'CONTAMANA' },
+    { code: '02', name: 'INAHUAYA' },
+    { code: '03', name: 'PADRE MÁRQUEZ' },
+    { code: '04', name: 'PAMPA HERMOSA' },
+    { code: '05', name: 'SARAYACU' },
+    { code: '06', name: 'VARGAS GUERRA' },
+  ],
+  // LORETO - DATEM DEL MARAÑÓN (1607)
+  '1607': [
+    { code: '01', name: 'BARRANCA' },
+    { code: '02', name: 'CAHUAPANAS' },
+    { code: '03', name: 'MANSERICHE' },
+    { code: '04', name: 'MORONA' },
+    { code: '05', name: 'PASTAZA' },
+    { code: '06', name: 'ANDOAS' },
+  ],
+  // LORETO - PUTUMAYO (1608)
+  '1608': [
+    { code: '01', name: 'PUTUMAYO' },
+    { code: '02', name: 'ROSA PANDURO' },
+    { code: '03', name: 'TENIENTE MANUEL CLAVERO' },
+    { code: '04', name: 'YAGUAS' },
+  ],
   // UCAYALI - CORONEL PORTILLO (2501)
   '2501': [
     { code: '01', name: 'CALLERÍA' },
@@ -1360,6 +1616,25 @@ export const DISTRITOS = {
     { code: '05', name: 'YARINACOCHA' },
     { code: '06', name: 'NUEVA REQUENA' },
     { code: '07', name: 'MANANTAY' },
+  ],
+  // UCAYALI - ATALAYA (2502)
+  '2502': [
+    { code: '01', name: 'RAYMONDI' },
+    { code: '02', name: 'SEPAHUA' },
+    { code: '03', name: 'TAHUANÍA' },
+    { code: '04', name: 'YURÚA' },
+  ],
+  // UCAYALI - PADRE ABAD (2503)
+  '2503': [
+    { code: '01', name: 'PADRE ABAD' },
+    { code: '02', name: 'IRAZOLA' },
+    { code: '03', name: 'CURIMANÁ' },
+    { code: '04', name: 'NESHUYA' },
+    { code: '05', name: 'ALEXANDER VON HUMBOLDT' },
+  ],
+  // UCAYALI - PURÚS (2504)
+  '2504': [
+    { code: '01', name: 'PURÚS' },
   ],
   // PUNO - PUNO (2101)
   '2101': [
@@ -1379,6 +1654,106 @@ export const DISTRITOS = {
     { code: '14', name: 'TIQUILLACA' },
     { code: '15', name: 'VILQUE' },
   ],
+  // PUNO - AZÁNGARO (2102)
+  '2102': [
+    { code: '01', name: 'AZÁNGARO' },
+    { code: '02', name: 'ACHAYA' },
+    { code: '03', name: 'ARAPA' },
+    { code: '04', name: 'ASILLO' },
+    { code: '05', name: 'CAMINACA' },
+    { code: '06', name: 'CHUPA' },
+    { code: '07', name: 'JOSÉ DOMINGO CHOQUEHUANCA' },
+    { code: '08', name: 'MUÑANI' },
+    { code: '09', name: 'POTONI' },
+    { code: '10', name: 'SAMAN' },
+    { code: '11', name: 'SAN ANTÓN' },
+    { code: '12', name: 'SAN JOSÉ' },
+    { code: '13', name: 'SAN JUAN DE SALINAS' },
+    { code: '14', name: 'SANTIAGO DE PUPUJA' },
+    { code: '15', name: 'TIRAPATA' },
+  ],
+  // PUNO - CARABAYA (2103)
+  '2103': [
+    { code: '01', name: 'MACUSANI' },
+    { code: '02', name: 'AJOYANI' },
+    { code: '03', name: 'AYAPATA' },
+    { code: '04', name: 'COASA' },
+    { code: '05', name: 'CORANI' },
+    { code: '06', name: 'CRUCERO' },
+    { code: '07', name: 'ITUATA' },
+    { code: '08', name: 'OLLACHEA' },
+    { code: '09', name: 'SAN GABÁN' },
+    { code: '10', name: 'USICAYOS' },
+  ],
+  // PUNO - CHUCUITO (2104)
+  '2104': [
+    { code: '01', name: 'JULI' },
+    { code: '02', name: 'DESAGUADERO' },
+    { code: '03', name: 'HUACULLANI' },
+    { code: '04', name: 'KELLUYO' },
+    { code: '05', name: 'PISACOMA' },
+    { code: '06', name: 'POMATA' },
+    { code: '07', name: 'ZEPITA' },
+  ],
+  // PUNO - EL COLLAO (2105)
+  '2105': [
+    { code: '01', name: 'ILAVE' },
+    { code: '02', name: 'CAPAZO' },
+    { code: '03', name: 'PILCUYO' },
+    { code: '04', name: 'SANTA ROSA' },
+    { code: '05', name: 'CONDURIRI' },
+  ],
+  // PUNO - HUANCANÉ (2106)
+  '2106': [
+    { code: '01', name: 'HUANCANÉ' },
+    { code: '02', name: 'COJATA' },
+    { code: '03', name: 'HUATASANI' },
+    { code: '04', name: 'INCHUPALLA' },
+    { code: '05', name: 'PUSI' },
+    { code: '06', name: 'ROSASPATA' },
+    { code: '07', name: 'TARACO' },
+    { code: '08', name: 'VILQUE CHICO' },
+  ],
+  // PUNO - LAMPA (2107)
+  '2107': [
+    { code: '01', name: 'LAMPA' },
+    { code: '02', name: 'CABANILLA' },
+    { code: '03', name: 'CALAPUJA' },
+    { code: '04', name: 'NICASIO' },
+    { code: '05', name: 'OCUVIRI' },
+    { code: '06', name: 'PALCA' },
+    { code: '07', name: 'PARATÍA' },
+    { code: '08', name: 'PUCARÁ' },
+    { code: '09', name: 'SANTA LUCÍA' },
+    { code: '10', name: 'VILAVILA' },
+  ],
+  // PUNO - MELGAR (2108)
+  '2108': [
+    { code: '01', name: 'AYAVIRI' },
+    { code: '02', name: 'ANTAUTA' },
+    { code: '03', name: 'CUPI' },
+    { code: '04', name: 'LLALLI' },
+    { code: '05', name: 'MACARI' },
+    { code: '06', name: 'NUÑOA' },
+    { code: '07', name: 'ORURILLO' },
+    { code: '08', name: 'SANTA ROSA' },
+    { code: '09', name: 'UMACHIRI' },
+  ],
+  // PUNO - MOHO (2109)
+  '2109': [
+    { code: '01', name: 'MOHO' },
+    { code: '02', name: 'CONIMA' },
+    { code: '03', name: 'HUAYRAPATA' },
+    { code: '04', name: 'TILALI' },
+  ],
+  // PUNO - SAN ANTONIO DE PUTINA (2110)
+  '2110': [
+    { code: '01', name: 'PUTINA' },
+    { code: '02', name: 'ANANEA' },
+    { code: '03', name: 'PEDRO VILCA APAZA' },
+    { code: '04', name: 'QUILCAPUNCU' },
+    { code: '05', name: 'SINA' },
+  ],
   // PUNO - SAN ROMÁN (2111)
   '2111': [
     { code: '01', name: 'JULIACA' },
@@ -1386,6 +1761,99 @@ export const DISTRITOS = {
     { code: '03', name: 'CABANILLAS' },
     { code: '04', name: 'CARACOTO' },
     { code: '05', name: 'SAN MIGUEL' },
+  ],
+  // PUNO - SANDIA (2112)
+  '2112': [
+    { code: '01', name: 'SANDIA' },
+    { code: '02', name: 'CUYOCUYO' },
+    { code: '03', name: 'LIMBANI' },
+    { code: '04', name: 'PATAMBUCO' },
+    { code: '05', name: 'PHARA' },
+    { code: '06', name: 'QUIACA' },
+    { code: '07', name: 'SAN JUAN DEL ORO' },
+    { code: '08', name: 'YANAHUAYA' },
+    { code: '09', name: 'ALTO INAMBARI' },
+    { code: '10', name: 'SAN PEDRO DE PUTINA PUNCO' },
+  ],
+  // PUNO - YUNGUYO (2113)
+  '2113': [
+    { code: '01', name: 'YUNGUYO' },
+    { code: '02', name: 'ANAPIA' },
+    { code: '03', name: 'COPANI' },
+    { code: '04', name: 'CUTURAPI' },
+    { code: '05', name: 'OLLARAYA' },
+    { code: '06', name: 'TINICACHI' },
+    { code: '07', name: 'UNICACHI' },
+  ],
+  // SAN MARTÍN - MOYOBAMBA (2201)
+  '2201': [
+    { code: '01', name: 'MOYOBAMBA' },
+    { code: '02', name: 'CALZADA' },
+    { code: '03', name: 'HABANA' },
+    { code: '04', name: 'JEPELACIO' },
+    { code: '05', name: 'SORITOR' },
+    { code: '06', name: 'YANTALO' },
+  ],
+  // SAN MARTÍN - BELLAVISTA (2202)
+  '2202': [
+    { code: '01', name: 'BELLAVISTA' },
+    { code: '02', name: 'ALTO BIAVO' },
+    { code: '03', name: 'BAJO BIAVO' },
+    { code: '04', name: 'HUALLAGA' },
+    { code: '05', name: 'SAN PABLO' },
+    { code: '06', name: 'SAN RAFAEL' },
+  ],
+  // SAN MARTÍN - EL DORADO (2203)
+  '2203': [
+    { code: '01', name: 'SAN JOSÉ DE SISA' },
+    { code: '02', name: 'AGUA BLANCA' },
+    { code: '03', name: 'SAN MARTÍN' },
+    { code: '04', name: 'SANTA ROSA' },
+    { code: '05', name: 'SHATOJA' },
+  ],
+  // SAN MARTÍN - HUALLAGA (2204)
+  '2204': [
+    { code: '01', name: 'SAPOSOA' },
+    { code: '02', name: 'ALTO SAPOSOA' },
+    { code: '03', name: 'EL ESLABÓN' },
+    { code: '04', name: 'PISCOYACU' },
+    { code: '05', name: 'SACANCHE' },
+    { code: '06', name: 'TINGO DE SAPOSOA' },
+  ],
+  // SAN MARTÍN - LAMAS (2205)
+  '2205': [
+    { code: '01', name: 'LAMAS' },
+    { code: '02', name: 'ALONSO DE ALVARADO' },
+    { code: '03', name: 'BARRANQUITA' },
+    { code: '04', name: 'CAYNARACHI' },
+    { code: '05', name: 'CUÑUMBUQUI' },
+    { code: '06', name: 'PINTO RECODO' },
+    { code: '07', name: 'RUMISAPA' },
+    { code: '08', name: 'SAN ROQUE DE CUMBAZA' },
+    { code: '09', name: 'SHANAO' },
+    { code: '10', name: 'TABALOSOS' },
+    { code: '11', name: 'ZAPATERO' },
+  ],
+  // SAN MARTÍN - MARISCAL CÁCERES (2206)
+  '2206': [
+    { code: '01', name: 'JUANJUÍ' },
+    { code: '02', name: 'CAMPANILLA' },
+    { code: '03', name: 'HUICUNGO' },
+    { code: '04', name: 'PACHIZA' },
+    { code: '05', name: 'PAJARILLO' },
+  ],
+  // SAN MARTÍN - PICOTA (2207)
+  '2207': [
+    { code: '01', name: 'PICOTA' },
+    { code: '02', name: 'BUENOS AIRES' },
+    { code: '03', name: 'CASPISAPA' },
+    { code: '04', name: 'PILLUANA' },
+    { code: '05', name: 'PUCACACA' },
+    { code: '06', name: 'SAN CRISTÓBAL' },
+    { code: '07', name: 'SAN HILARIÓN' },
+    { code: '08', name: 'SHAMBOYACU' },
+    { code: '09', name: 'TINGO DE PONASA' },
+    { code: '10', name: 'TRES UNIDOS' },
   ],
   // SAN MARTÍN - RIOJA (2208)
   '2208': [
@@ -1415,6 +1883,14 @@ export const DISTRITOS = {
     { code: '12', name: 'SAN ANTONIO' },
     { code: '13', name: 'SAUCE' },
     { code: '14', name: 'SHAPAJA' },
+  ],
+  // SAN MARTÍN - TOCACHE (2210)
+  '2210': [
+    { code: '01', name: 'TOCACHE' },
+    { code: '02', name: 'NUEVO PROGRESO' },
+    { code: '03', name: 'PÓLVORA' },
+    { code: '04', name: 'SHUNTE' },
+    { code: '05', name: 'UCHIZA' },
   ],
   // CAJAMARCA - CAJAMARCA (0601)
   '0601': [
@@ -1858,6 +2334,19 @@ export const DISTRITOS = {
     { code: '03', name: 'LAS PIEDRAS' },
     { code: '04', name: 'LABERINTO' },
   ],
+  // MADRE DE DIOS - MANU (1702)
+  '1702': [
+    { code: '01', name: 'MANU' },
+    { code: '02', name: 'FITZCARRALD' },
+    { code: '03', name: 'MADRE DE DIOS' },
+    { code: '04', name: 'HUEPETUHE' },
+  ],
+  // MADRE DE DIOS - TAHUAMANU (1703)
+  '1703': [
+    { code: '01', name: 'IÑAPARI' },
+    { code: '02', name: 'IBERIA' },
+    { code: '03', name: 'TAHUAMANU' },
+  ],
   // TUMBES - TUMBES (2401)
   '2401': [
     { code: '01', name: 'TUMBES' },
@@ -1867,6 +2356,19 @@ export const DISTRITOS = {
     { code: '05', name: 'SAN JACINTO' },
     { code: '06', name: 'SAN JUAN DE LA VIRGEN' },
   ],
+  // TUMBES - CONTRALMIRANTE VILLAR (2402)
+  '2402': [
+    { code: '01', name: 'ZORRITOS' },
+    { code: '02', name: 'CASITAS' },
+    { code: '03', name: 'CANOAS DE PUNTA SAL' },
+  ],
+  // TUMBES - ZARUMILLA (2403)
+  '2403': [
+    { code: '01', name: 'ZARUMILLA' },
+    { code: '02', name: 'AGUAS VERDES' },
+    { code: '03', name: 'MATAPALO' },
+    { code: '04', name: 'PAPAYAL' },
+  ],
   // MOQUEGUA - MARISCAL NIETO (1801)
   '1801': [
     { code: '01', name: 'MOQUEGUA' },
@@ -1875,6 +2377,20 @@ export const DISTRITOS = {
     { code: '04', name: 'SAMEGUA' },
     { code: '05', name: 'SAN CRISTÓBAL' },
     { code: '06', name: 'TORATA' },
+  ],
+  // MOQUEGUA - GENERAL SÁNCHEZ CERRO (1802)
+  '1802': [
+    { code: '01', name: 'OMATE' },
+    { code: '02', name: 'CHOJATA' },
+    { code: '03', name: 'COALAQUE' },
+    { code: '04', name: 'ICHUÑA' },
+    { code: '05', name: 'LA CAPILLA' },
+    { code: '06', name: 'LLOQUE' },
+    { code: '07', name: 'MATALAQUE' },
+    { code: '08', name: 'PUQUINA' },
+    { code: '09', name: 'QUINISTAQUILLAS' },
+    { code: '10', name: 'UBINAS' },
+    { code: '11', name: 'YUNGA' },
   ],
   // MOQUEGUA - ILO (1803)
   '1803': [
@@ -1889,6 +2405,24 @@ export const DISTRITOS = {
     { code: '03', name: 'PATIVILCA' },
     { code: '04', name: 'SUPE' },
     { code: '05', name: 'SUPE PUERTO' },
+  ],
+  // LIMA - CAJATAMBO (1503)
+  '1503': [
+    { code: '01', name: 'CAJATAMBO' },
+    { code: '02', name: 'COPA' },
+    { code: '03', name: 'GORGOR' },
+    { code: '04', name: 'HUANCAPÓN' },
+    { code: '05', name: 'MANAS' },
+  ],
+  // LIMA - CANTA (1504)
+  '1504': [
+    { code: '01', name: 'CANTA' },
+    { code: '02', name: 'ARAHUAY' },
+    { code: '03', name: 'HUAMANTANGA' },
+    { code: '04', name: 'HUAROS' },
+    { code: '05', name: 'LACHAQUI' },
+    { code: '06', name: 'SAN BUENAVENTURA' },
+    { code: '07', name: 'SANTA ROSA DE QUIVES' },
   ],
   // LIMA - CAÑETE (1505)
   '1505': [
@@ -1924,6 +2458,41 @@ export const DISTRITOS = {
     { code: '11', name: 'SUMBILCA' },
     { code: '12', name: 'VEINTISIETE DE NOVIEMBRE' },
   ],
+  // LIMA - HUAROCHIRÍ (1507)
+  '1507': [
+    { code: '01', name: 'MATUCANA' },
+    { code: '02', name: 'ANTIOQUIA' },
+    { code: '03', name: 'CALLAHUANCA' },
+    { code: '04', name: 'CARAMPOMA' },
+    { code: '05', name: 'CHICLA' },
+    { code: '06', name: 'CUENCA' },
+    { code: '07', name: 'HUACHUPAMPA' },
+    { code: '08', name: 'HUANZA' },
+    { code: '09', name: 'HUAROCHIRÍ' },
+    { code: '10', name: 'LAHUAYTAMBO' },
+    { code: '11', name: 'LANGA' },
+    { code: '12', name: 'LARAOS' },
+    { code: '13', name: 'MARIATANA' },
+    { code: '14', name: 'RICARDO PALMA' },
+    { code: '15', name: 'SAN ANDRÉS DE TUPICOCHA' },
+    { code: '16', name: 'SAN ANTONIO' },
+    { code: '17', name: 'SAN BARTOLOMÉ' },
+    { code: '18', name: 'SAN DAMIÁN' },
+    { code: '19', name: 'SAN JUAN DE IRIS' },
+    { code: '20', name: 'SAN JUAN DE TANTARANCHE' },
+    { code: '21', name: 'SAN LORENZO DE QUINTI' },
+    { code: '22', name: 'SAN MATEO' },
+    { code: '23', name: 'SAN MATEO DE OTAO' },
+    { code: '24', name: 'SAN PEDRO DE CASTA' },
+    { code: '25', name: 'SAN PEDRO DE HUANCAYRE' },
+    { code: '26', name: 'SANGALLAYA' },
+    { code: '27', name: 'SANTA CRUZ DE COCACHACRA' },
+    { code: '28', name: 'SANTA EULALIA' },
+    { code: '29', name: 'SANTIAGO DE ANCHUCAYA' },
+    { code: '30', name: 'SANTIAGO DE TUNA' },
+    { code: '31', name: 'SANTO DOMINGO DE LOS OLLEROS' },
+    { code: '32', name: 'SURCO' },
+  ],
   // LIMA - HUAURA (1508)
   '1508': [
     { code: '01', name: 'HUACHO' },
@@ -1938,6 +2507,51 @@ export const DISTRITOS = {
     { code: '10', name: 'SANTA MARÍA' },
     { code: '11', name: 'SAYÁN' },
     { code: '12', name: 'VEGUETA' },
+  ],
+  // LIMA - OYÓN (1509)
+  '1509': [
+    { code: '01', name: 'OYÓN' },
+    { code: '02', name: 'ANDAJES' },
+    { code: '03', name: 'CAUJUL' },
+    { code: '04', name: 'COCHAMARCA' },
+    { code: '05', name: 'NAVÁN' },
+    { code: '06', name: 'PACHANGARA' },
+  ],
+  // LIMA - YAUYOS (1510)
+  '1510': [
+    { code: '01', name: 'YAUYOS' },
+    { code: '02', name: 'ALIS' },
+    { code: '03', name: 'ALLAUCA' },
+    { code: '04', name: 'AYAVIRI' },
+    { code: '05', name: 'AZÁNGARO' },
+    { code: '06', name: 'CACRA' },
+    { code: '07', name: 'CARANIA' },
+    { code: '08', name: 'CATAHUASI' },
+    { code: '09', name: 'CHOCOS' },
+    { code: '10', name: 'COCHAS' },
+    { code: '11', name: 'COLONIA' },
+    { code: '12', name: 'HONGOS' },
+    { code: '13', name: 'HUAMPARA' },
+    { code: '14', name: 'HUANCAYA' },
+    { code: '15', name: 'HUANGÁSCAR' },
+    { code: '16', name: 'HUANTÁN' },
+    { code: '17', name: 'HUAÑEC' },
+    { code: '18', name: 'LARAOS' },
+    { code: '19', name: 'LINCHA' },
+    { code: '20', name: 'MADEAN' },
+    { code: '21', name: 'MIRAFLORES' },
+    { code: '22', name: 'OMAS' },
+    { code: '23', name: 'PUTINZA' },
+    { code: '24', name: 'QUINCHES' },
+    { code: '25', name: 'QUINOCAY' },
+    { code: '26', name: 'SAN JOAQUÍN' },
+    { code: '27', name: 'SAN PEDRO DE PILAS' },
+    { code: '28', name: 'TANTA' },
+    { code: '29', name: 'TAURIPAMPA' },
+    { code: '30', name: 'TOMAS' },
+    { code: '31', name: 'TUPE' },
+    { code: '32', name: 'VIÑAC' },
+    { code: '33', name: 'VITIS' },
   ],
   // ICA - CHINCHA (1102)
   '1102': [
@@ -1999,6 +2613,15 @@ export const DISTRITOS = {
     { code: '04', name: 'LOBITOS' },
     { code: '05', name: 'LOS ÓRGANOS' },
     { code: '06', name: 'MÁNCORA' },
+  ],
+  // PIURA - SECHURA (2008)
+  '2008': [
+    { code: '01', name: 'SECHURA' },
+    { code: '02', name: 'BELLAVISTA DE LA UNIÓN' },
+    { code: '03', name: 'BERNAL' },
+    { code: '04', name: 'CRISTO NOS VALGA' },
+    { code: '05', name: 'VICE' },
+    { code: '06', name: 'RINCONADA LLICUAR' },
   ],
   // PIURA - PAITA (2005)
   '2005': [
