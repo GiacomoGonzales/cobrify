@@ -294,6 +294,63 @@ export default function StockMovements() {
 
   const hasActiveFilters = searchTerm || filterBranch !== 'all' || filterWarehouse !== 'all' || filterType !== 'all' || filterDateFrom || filterDateTo
 
+  // Calcular saldo después de cada movimiento
+  // Agrupa por producto+almacén, ordena cronológicamente y calcula saldo acumulativo
+  const movementsWithBalance = (() => {
+    // Agrupar movimientos por producto y almacén
+    const grouped = {}
+
+    // Primero ordenar todos los movimientos por fecha (más antiguo primero)
+    const sortedMovements = [...filteredMovements].sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt)
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt)
+      return dateA - dateB
+    })
+
+    // Procesar cada movimiento y calcular saldo
+    sortedMovements.forEach(mov => {
+      const key = `${mov.productId}_${mov.warehouseId}`
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          balance: 0,
+          movements: []
+        }
+      }
+
+      // Calcular el efecto de este movimiento en el saldo
+      let effect = 0
+      if (mov.type === 'entry' || mov.type === 'transfer_in') {
+        effect = Math.abs(mov.quantity)
+      } else if (mov.type === 'exit' || mov.type === 'sale' || mov.type === 'transfer_out' || mov.type === 'damage') {
+        effect = -Math.abs(mov.quantity)
+      } else if (mov.type === 'adjustment') {
+        // Los ajustes pueden ser positivos o negativos
+        effect = mov.quantity
+      }
+
+      grouped[key].balance += effect
+      grouped[key].movements.push({
+        ...mov,
+        stockAfter: grouped[key].balance
+      })
+    })
+
+    // Ahora crear un mapa de movimiento.id -> stockAfter
+    const balanceMap = {}
+    Object.values(grouped).forEach(group => {
+      group.movements.forEach(mov => {
+        balanceMap[mov.id] = mov.stockAfter
+      })
+    })
+
+    // Retornar los movimientos filtrados originales (ordenados por fecha desc) con el saldo calculado
+    return filteredMovements.map(mov => ({
+      ...mov,
+      stockAfter: balanceMap[mov.id] ?? null
+    }))
+  })()
+
   // Escanear código de barras
   const handleScanBarcode = async () => {
     // Solo disponible en plataformas nativas
@@ -556,11 +613,12 @@ export default function StockMovements() {
                     <TableHead>Producto</TableHead>
                     <TableHead>Almacén</TableHead>
                     <TableHead className="text-center">Cantidad</TableHead>
+                    <TableHead className="text-center">Saldo</TableHead>
                     <TableHead className="hidden md:table-cell">Motivo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredMovements.map(movement => {
+                  {movementsWithBalance.map(movement => {
                     const typeInfo = getMovementTypeInfo(movement.type)
                     const Icon = typeInfo.icon
                     return (
@@ -644,6 +702,11 @@ export default function StockMovements() {
                           >
                             {movement.quantity > 0 ? '+' : ''}
                             {movement.quantity}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-semibold text-gray-700">
+                            {movement.stockAfter !== null ? movement.stockAfter : '-'}
                           </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
