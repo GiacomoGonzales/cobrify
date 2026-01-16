@@ -5261,8 +5261,8 @@ export const voidBoletaQPse = onRequest(
         return
       }
 
-      // Si está pendiente (código 98)
-      if (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO') {
+      // Si está pendiente (código 98 o 99 - SUNAT aún procesando)
+      if (qpseResult.responseCode === '98' || qpseResult.responseCode === '99' || qpseResult.responseCode === 'PROCESANDO') {
         await boletaRef.update({
           sunatStatus: 'voiding',
           voidingTicket: qpseResult.ticket || null,
@@ -5505,9 +5505,15 @@ export const voidInvoiceQPse = onRequest(
         return
       }
 
-      const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
+      // IMPORTANTE: Convertir la fecha de emisión UTC a hora de Perú para obtener la fecha correcta
+      // Esto evita el error 2375 de SUNAT cuando la factura se emitió cerca de medianoche
+      const issueDatePeru = new Date(issueDate.getTime() + (peruOffset - issueDate.getTimezoneOffset()) * 60000)
+      console.log('📅 issueDate original (UTC):', issueDate.toISOString())
+      console.log('📅 issueDate en Perú:', issueDatePeru.toISOString())
+
+      const referenceDateStr = `${issueDatePeru.getFullYear()}-${String(issueDatePeru.getMonth() + 1).padStart(2, '0')}-${String(issueDatePeru.getDate()).padStart(2, '0')}`
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate (comunicación):', issueDateStr)
 
       // 7. Generar XML de Comunicación de Baja
       const voidedXmlData = {
@@ -5712,8 +5718,8 @@ export const voidInvoiceQPse = onRequest(
         return
       }
 
-      // Si está pendiente (código 98)
-      if (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO') {
+      // Si está pendiente (código 98 o 99 - SUNAT aún procesando)
+      if (qpseResult.responseCode === '98' || qpseResult.responseCode === '99' || qpseResult.responseCode === 'PROCESANDO') {
         await invoiceRef.update({
           sunatStatus: 'voiding',
           voidingTicket: qpseResult.ticket || null,

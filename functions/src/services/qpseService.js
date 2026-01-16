@@ -78,17 +78,23 @@ async function firmarXML(nombreArchivo, xmlContent, token, environment = 'demo')
     // Convertir XML a Base64
     const xmlBase64 = Buffer.from(xmlContent, 'utf-8').toString('base64')
 
-    console.log('🔏 Firmando XML con QPse...')
-    console.log(`Nombre archivo: ${nombreArchivo}`)
-    console.log(`Tamaño XML: ${xmlContent.length} caracteres`)
+    console.log('🔏 [FIRMAR] Firmando XML con QPse...')
+    console.log(`[FIRMAR] URL: ${baseUrl}/api/cpe/generar`)
+    console.log(`[FIRMAR] Nombre archivo: ${nombreArchivo}`)
+    console.log(`[FIRMAR] Tamaño XML: ${xmlContent.length} caracteres`)
+    console.log(`[FIRMAR] Tamaño Base64: ${xmlBase64.length} caracteres`)
+    console.log(`[FIRMAR] Token (primeros 20): ${token?.substring(0, 20)}...`)
+
+    const requestBody = {
+      tipo_integracion: 0,
+      xml_filename: nombreArchivo,
+      xml_content_base64: xmlBase64
+    }
+    console.log('[FIRMAR] Request body keys:', Object.keys(requestBody))
 
     const response = await axios.post(
       `${baseUrl}/api/cpe/generar`,
-      {
-        tipo_integracion: 0,
-        nombre_archivo: nombreArchivo,
-        contenido_archivo: xmlBase64
-      },
+      requestBody,
       {
         headers: {
           'Accept': 'application/json',
@@ -98,11 +104,15 @@ async function firmarXML(nombreArchivo, xmlContent, token, environment = 'demo')
       }
     )
 
+    console.log('[FIRMAR] Response status:', response.status)
+    console.log('[FIRMAR] Response data:', JSON.stringify(response.data, null, 2))
+
     if (!response.data) {
       throw new Error('QPse no devolvió respuesta al firmar XML')
     }
 
-    console.log('✅ XML firmado exitosamente')
+    console.log('✅ [FIRMAR] XML firmado exitosamente')
+    console.log('[FIRMAR] Campos en respuesta:', Object.keys(response.data))
     return response.data
 
   } catch (error) {
@@ -147,15 +157,21 @@ async function enviarASunat(nombreArchivo, xmlFirmadoBase64, token, environment 
   try {
     const baseUrl = QPSE_BASE_URL[environment]
 
-    console.log('📤 Enviando XML a SUNAT vía QPse...')
-    console.log(`Nombre archivo: ${nombreArchivo}`)
+    console.log('📤 [ENVIAR] Enviando XML a SUNAT vía QPse...')
+    console.log(`[ENVIAR] URL: ${baseUrl}/api/cpe/enviar`)
+    console.log(`[ENVIAR] Nombre archivo: ${nombreArchivo}`)
+    console.log(`[ENVIAR] Tamaño XML firmado Base64: ${xmlFirmadoBase64?.length} caracteres`)
+    console.log(`[ENVIAR] Token (primeros 20): ${token?.substring(0, 20)}...`)
+
+    const requestBody = {
+      xml_filename: nombreArchivo,
+      xml_signed_base64: xmlFirmadoBase64
+    }
+    console.log('[ENVIAR] Request body keys:', Object.keys(requestBody))
 
     const response = await axios.post(
       `${baseUrl}/api/cpe/enviar`,
-      {
-        nombre_xml_firmado: nombreArchivo,
-        contenido_xml_firmado: xmlFirmadoBase64
-      },
+      requestBody,
       {
         headers: {
           'Accept': 'application/json',
@@ -165,12 +181,15 @@ async function enviarASunat(nombreArchivo, xmlFirmadoBase64, token, environment 
       }
     )
 
+    console.log('[ENVIAR] Response status:', response.status)
+    console.log('[ENVIAR] Response data:', JSON.stringify(response.data, null, 2))
+
     if (!response.data) {
       throw new Error('QPse no devolvió respuesta al enviar a SUNAT')
     }
 
-    console.log('✅ Enviado a SUNAT exitosamente')
-    console.log('🔍 Respuesta de enviar a SUNAT:', JSON.stringify(response.data, null, 2))
+    console.log('✅ [ENVIAR] Enviado a SUNAT exitosamente')
+    console.log('[ENVIAR] Campos en respuesta:', Object.keys(response.data))
     return response.data
 
   } catch (error) {
@@ -609,12 +628,19 @@ export async function registrarEmpresa(ruc, razonSocial, token, environment = 'd
  */
 export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
   try {
-    console.log('🗑️ Iniciando anulación de factura vía QPse...')
+    console.log('==========================================')
+    console.log('🗑️ [QPSE VOID] INICIANDO ANULACIÓN DE FACTURA')
+    console.log('==========================================')
     console.log(`RUC: ${ruc}`)
     console.log(`Comunicación de Baja ID: ${voidedId}`)
+    console.log(`Ambiente: ${config.environment || 'demo'}`)
+    console.log(`Usuario QPse: ${config.usuario}`)
+    console.log('XML a firmar (primeros 500 chars):', voidedXml?.substring(0, 500))
 
     // 1. Obtener token
+    console.log('📡 [PASO 1] Obteniendo token de QPse...')
     const token = await obtenerToken(config)
+    console.log('✅ [PASO 1] Token obtenido:', token ? `${token.substring(0, 20)}...` : 'NULL')
 
     // 2. Construir nombre de archivo para la Comunicación de Baja
     // Formato: RUC-RA-YYYYMMDD-correlativo
@@ -623,6 +649,7 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
     console.log(`📄 Nombre archivo: ${nombreArchivo}`)
 
     // 3. Firmar XML de Comunicación de Baja
+    console.log('🔏 [PASO 2] Firmando XML con QPse...')
     const resultadoFirma = await firmarXML(
       nombreArchivo,
       voidedXml,
@@ -630,17 +657,21 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
       config.environment || 'demo'
     )
 
-    console.log('🔍 Respuesta de firmar XML:', JSON.stringify(resultadoFirma, null, 2))
+    console.log('✅ [PASO 2] Respuesta de firmar XML:', JSON.stringify(resultadoFirma, null, 2))
+    console.log('📋 [PASO 2] Campos disponibles:', Object.keys(resultadoFirma))
 
     // Validar que la firma fue exitosa
     if (!resultadoFirma.xml && !resultadoFirma.xml_firmado && !resultadoFirma.contenido_xml_firmado) {
-      console.error('❌ Campos en respuesta:', Object.keys(resultadoFirma))
+      console.error('❌ [PASO 2] QPse NO devolvió XML firmado!')
+      console.error('❌ [PASO 2] Campos en respuesta:', Object.keys(resultadoFirma))
       throw new Error('QPse no devolvió XML firmado')
     }
 
     const xmlFirmado = resultadoFirma.xml || resultadoFirma.xml_firmado || resultadoFirma.contenido_xml_firmado
+    console.log('✅ [PASO 2] XML firmado obtenido, longitud:', xmlFirmado?.length)
 
     // 4. Enviar a SUNAT (devuelve ticket porque es asíncrono)
+    console.log('📤 [PASO 3] Enviando Comunicación de Baja a SUNAT vía QPse...')
     let resultadoEnvio
     try {
       resultadoEnvio = await enviarASunat(
@@ -650,7 +681,7 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
         config.environment || 'demo'
       )
     } catch (errorEnvio) {
-      console.error('❌ Error al enviar Comunicación de Baja a SUNAT:', errorEnvio.message)
+      console.error('❌ [PASO 3] Error al enviar Comunicación de Baja a SUNAT:', errorEnvio.message)
       return {
         accepted: false,
         responseCode: 'ERROR_ENVIO',
@@ -661,28 +692,30 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
       }
     }
 
-    console.log('🔍 Respuesta de enviar a SUNAT:', JSON.stringify(resultadoEnvio, null, 2))
+    console.log('✅ [PASO 3] Respuesta de enviar a SUNAT:', JSON.stringify(resultadoEnvio, null, 2))
+    console.log('📋 [PASO 3] Campos en respuesta:', Object.keys(resultadoEnvio || {}))
 
     // 5. Obtener el ticket para consulta posterior
     const ticket = resultadoEnvio.ticket || resultadoEnvio.numero_ticket || resultadoEnvio.nroTicket || ''
+    console.log(`🎫 [PASO 3] Ticket extraído: "${ticket}"`)
 
     if (!ticket) {
-      console.warn('⚠️ No se recibió ticket de SUNAT')
+      console.warn('⚠️ [PASO 3] NO se recibió ticket de SUNAT - Campos disponibles:', Object.keys(resultadoEnvio || {}))
     }
 
     // 6. Esperar y consultar estado (la Comunicación de Baja es asíncrona)
     let estadoFinal = null
     if (ticket) {
-      console.log(`🎫 Ticket recibido: ${ticket}`)
+      console.log(`🎫 [PASO 4] Ticket recibido: ${ticket}`)
       console.log('⏳ Esperando respuesta de SUNAT...')
 
       // Esperar un poco antes de consultar (SUNAT necesita tiempo para procesar)
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Intentar consultar el estado hasta 5 veces
-      for (let intento = 1; intento <= 5; intento++) {
+      // Intentar consultar el estado hasta 3 veces (reducido para respuesta más rápida)
+      for (let intento = 1; intento <= 3; intento++) {
         try {
-          console.log(`🔍 Intento ${intento}/5 - Consultando estado del ticket...`)
+          console.log(`🔍 Intento ${intento}/3 - Consultando estado del ticket...`)
           estadoFinal = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
           console.log(`📋 Estado recibido:`, JSON.stringify(estadoFinal, null, 2))
 
@@ -691,28 +724,54 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
           if (codigo === '0' || codigo === '0000' || estadoFinal.sunat_success === true) {
             console.log('✅ SUNAT aceptó la anulación')
             break
-          } else if (codigo && codigo !== '98' && codigo !== 'PROCESANDO') {
-            // Si hay un código de error diferente a "procesando", salir
+          } else if (codigo && codigo !== '98' && codigo !== '99' && codigo !== 'PROCESANDO') {
+            // Si hay un código de error diferente a "procesando/pendiente", salir
             console.log(`❌ SUNAT rechazó con código: ${codigo}`)
             break
           }
 
           // Esperar antes del siguiente intento
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(resolve => setTimeout(resolve, 1000))
         } catch (errorConsulta) {
           console.warn(`⚠️ Error en consulta (intento ${intento}):`, errorConsulta.message)
-          if (intento < 5) {
-            await new Promise(resolve => setTimeout(resolve, 2000))
+          if (intento < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
           }
         }
       }
     }
 
     // 7. Parsear respuesta final
-    const responseCode = estadoFinal?.codigo || estadoFinal?.code || resultadoEnvio.codigo || '98'
+    console.log('📊 [PASO 5] Parseando respuesta final...')
+    console.log('📊 estadoFinal:', JSON.stringify(estadoFinal, null, 2))
+    console.log('📊 resultadoEnvio.codigo:', resultadoEnvio?.codigo)
+
+    // Determinar el código de respuesta real
+    let responseCode = estadoFinal?.codigo || estadoFinal?.code || resultadoEnvio?.codigo
+
+    // Si no hay código pero hay ticket, es que está pendiente (98)
+    // Si no hay código NI ticket, es un error
+    if (!responseCode) {
+      if (ticket) {
+        responseCode = '98' // Pendiente con ticket válido
+        console.log('📊 Usando código 98 porque hay ticket pero no hay código de respuesta')
+      } else {
+        responseCode = 'NO_RESPONSE'
+        console.log('📊 Usando código NO_RESPONSE porque no hay ticket ni código')
+      }
+    }
+
     const accepted = responseCode === '0' || responseCode === '0000' || estadoFinal?.sunat_success === true
-    const description = estadoFinal?.descripcion || estadoFinal?.description || resultadoEnvio.descripcion ||
-      (accepted ? 'Factura anulada correctamente' : 'Pendiente de confirmación de SUNAT')
+    const description = estadoFinal?.descripcion || estadoFinal?.description || resultadoEnvio?.descripcion ||
+      (accepted ? 'Factura anulada correctamente' : (responseCode === '98' ? 'Pendiente de confirmación de SUNAT' : 'Sin respuesta de SUNAT'))
+
+    console.log('==========================================')
+    console.log('📊 [RESULTADO FINAL]')
+    console.log('==========================================')
+    console.log(`Accepted: ${accepted}`)
+    console.log(`ResponseCode: ${responseCode}`)
+    console.log(`Ticket: ${ticket}`)
+    console.log(`Description: ${description}`)
 
     return {
       accepted: accepted,
@@ -731,7 +790,11 @@ export async function voidInvoiceViaQPse(voidedXml, ruc, voidedId, config) {
     }
 
   } catch (error) {
-    console.error('❌ Error en anulación de factura vía QPse:', error)
+    console.error('==========================================')
+    console.error('❌ [QPSE VOID] ERROR EN ANULACIÓN DE FACTURA')
+    console.error('==========================================')
+    console.error('Error:', error.message)
+    console.error('Stack:', error.stack)
     throw error
   }
 }
@@ -818,12 +881,12 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
       console.log('⏳ Esperando respuesta de SUNAT...')
 
       // Esperar un poco antes de consultar (SUNAT necesita tiempo para procesar)
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Intentar consultar el estado hasta 5 veces
-      for (let intento = 1; intento <= 5; intento++) {
+      // Intentar consultar el estado hasta 3 veces (reducido para respuesta más rápida)
+      for (let intento = 1; intento <= 3; intento++) {
         try {
-          console.log(`🔍 Intento ${intento}/5 - Consultando estado del ticket...`)
+          console.log(`🔍 Intento ${intento}/3 - Consultando estado del ticket...`)
           estadoFinal = await consultarEstado(nombreArchivo, token, config.environment || 'demo')
           console.log(`📋 Estado recibido:`, JSON.stringify(estadoFinal, null, 2))
 
@@ -832,18 +895,18 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
           if (codigo === '0' || codigo === '0000' || estadoFinal.sunat_success === true) {
             console.log('✅ SUNAT aceptó la anulación')
             break
-          } else if (codigo && codigo !== '98' && codigo !== 'PROCESANDO') {
-            // Si hay un código de error diferente a "procesando", salir
+          } else if (codigo && codigo !== '98' && codigo !== '99' && codigo !== 'PROCESANDO') {
+            // Si hay un código de error diferente a "procesando/pendiente", salir
             console.log(`❌ SUNAT rechazó con código: ${codigo}`)
             break
           }
 
           // Esperar antes del siguiente intento
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(resolve => setTimeout(resolve, 1000))
         } catch (errorConsulta) {
           console.warn(`⚠️ Error en consulta (intento ${intento}):`, errorConsulta.message)
-          if (intento < 5) {
-            await new Promise(resolve => setTimeout(resolve, 2000))
+          if (intento < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
           }
         }
       }
