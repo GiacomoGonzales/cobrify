@@ -468,13 +468,49 @@ export default function CashFlow() {
     }, {})
 
     // 2. Compras pagadas (filtradas por sucursal)
-    // Usar invoiceDate (fecha de factura) en lugar de createdAt (fecha de registro)
-    const paidPurchases = purchases.filter(p => {
+    // A) Compras al contado pagadas en el período
+    const paidCashPurchases = purchases.filter(p => {
       const purchaseDate = p.invoiceDate || p.createdAt
       const inRange = isInDateRange(purchaseDate, dateRange.startDate, dateRange.endDate)
-      return inRange && p.paymentStatus === 'paid' && filterByBranch(p, 'purchase')
+      return inRange && p.paymentType === 'contado' && p.paymentStatus === 'paid' && filterByBranch(p, 'purchase')
     })
-    const purchasesTotal = paidPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
+    const cashPurchasesTotal = paidCashPurchases.reduce((sum, p) => sum + (p.total || 0), 0)
+
+    // B) Pagos parciales (abonos) de compras a crédito realizados en el período
+    const purchasePayments = []
+    purchases.filter(p => p.paymentType === 'credito' && filterByBranch(p, 'purchase')).forEach(purchase => {
+      // Revisar el array de pagos parciales
+      (purchase.payments || []).forEach(payment => {
+        const paymentDate = toDate(payment.date)
+        if (paymentDate && isInDateRange(paymentDate, dateRange.startDate, dateRange.endDate)) {
+          purchasePayments.push({
+            ...payment,
+            purchaseId: purchase.id,
+            supplierName: purchase.supplier?.businessName || 'Proveedor',
+            invoiceNumber: purchase.invoiceNumber
+          })
+        }
+      })
+    })
+    const purchasePaymentsTotal = purchasePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+
+    // C) Compras a crédito pagadas completamente en el período (sin usar pagos parciales - legacy)
+    // Solo para compras antiguas que se marcaron como pagadas sin usar el array de payments
+    const paidCreditPurchasesLegacy = purchases.filter(p => {
+      if (p.paymentType !== 'credito' || p.paymentStatus !== 'paid') return false
+      if (!filterByBranch(p, 'purchase')) return false
+      // Si tiene payments array, ya se contó arriba
+      if (p.payments && p.payments.length > 0) return false
+      // Usar paidAt como fecha del pago
+      const paidDate = p.paidAt
+      if (!paidDate) return false
+      return isInDateRange(paidDate, dateRange.startDate, dateRange.endDate)
+    })
+    const creditPurchasesLegacyTotal = paidCreditPurchasesLegacy.reduce((sum, p) => sum + (p.total || 0), 0)
+
+    // Total compras pagadas
+    const paidPurchases = [...paidCashPurchases, ...paidCreditPurchasesLegacy]
+    const purchasesTotal = cashPurchasesTotal + purchasePaymentsTotal + creditPurchasesLegacyTotal
 
     // 3. Otros egresos (movimientos de caja tipo expense)
     // IMPORTANTE: Excluir movimientos con sessionId (son del Control de Caja diario, no del Flujo de Caja)
@@ -575,6 +611,9 @@ export default function CashFlow() {
       // Egresos
       expensesTotal,
       purchasesTotal,
+      purchasePayments, // Pagos parciales (abonos) de compras a crédito
+      purchasePaymentsTotal,
+      cashPurchasesTotal, // Compras al contado
       otherExpenses,
       loanInstallmentsTotal,
       paidLoanInstallments,
@@ -1203,19 +1242,35 @@ export default function CashFlow() {
                     )
                   })}
 
-                  {/* Compras */}
-                  {cashFlowData.purchasesTotal > 0 && (
+                  {/* Compras al contado */}
+                  {cashFlowData.cashPurchasesTotal > 0 && (
                     <div className="flex items-center justify-between py-3 border-b border-gray-100">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
                           <Package className="w-4 h-4 text-red-600" />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">Compras</p>
+                          <p className="font-medium text-gray-900">Compras Contado</p>
                           <p className="text-xs text-gray-500">{cashFlowData.paidPurchases.length} pagadas</p>
                         </div>
                       </div>
-                      <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.purchasesTotal)}</span>
+                      <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.cashPurchasesTotal)}</span>
+                    </div>
+                  )}
+
+                  {/* Abonos a compras a crédito */}
+                  {cashFlowData.purchasePaymentsTotal > 0 && (
+                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                          <DollarSign className="w-4 h-4 text-red-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">Abonos Compras</p>
+                          <p className="text-xs text-gray-500">{cashFlowData.purchasePayments.length} pago(s)</p>
+                        </div>
+                      </div>
+                      <span className="font-semibold text-red-600">{formatCurrency(cashFlowData.purchasePaymentsTotal)}</span>
                     </div>
                   )}
 
@@ -1311,17 +1366,31 @@ export default function CashFlow() {
                       )
                     })}
 
-                    {/* Compras */}
-                    {cashFlowData.purchasesTotal > 0 && (
+                    {/* Compras al contado */}
+                    {cashFlowData.cashPurchasesTotal > 0 && (
                       <tr className="border-b border-gray-100">
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <Package className="w-4 h-4 text-red-600" />
-                            <span className="font-medium">Compras</span>
+                            <span className="font-medium">Compras Contado</span>
                           </div>
                         </td>
-                        <td className="py-3 text-gray-600">{cashFlowData.paidPurchases.length} compras pagadas</td>
-                        <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.purchasesTotal)}</td>
+                        <td className="py-3 text-gray-600">{cashFlowData.paidPurchases.length} compras al contado</td>
+                        <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.cashPurchasesTotal)}</td>
+                      </tr>
+                    )}
+
+                    {/* Abonos a compras a crédito */}
+                    {cashFlowData.purchasePaymentsTotal > 0 && (
+                      <tr className="border-b border-gray-100">
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="w-4 h-4 text-red-600" />
+                            <span className="font-medium">Abonos a Compras</span>
+                          </div>
+                        </td>
+                        <td className="py-3 text-gray-600">{cashFlowData.purchasePayments.length} pago(s) a crédito</td>
+                        <td className="py-3 text-right font-semibold text-red-600">{formatCurrency(cashFlowData.purchasePaymentsTotal)}</td>
                       </tr>
                     )}
 
