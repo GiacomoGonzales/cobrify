@@ -90,12 +90,10 @@ export default function CreatePurchase() {
 
   // Tipo de pago
   const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
-  const [creditType, setCreditType] = useState('unico') // 'unico' o 'cuotas'
-  const [dueDate, setDueDate] = useState('') // Fecha de vencimiento para pago único
-  const [numInstallments, setNumInstallments] = useState(2) // Número de cuotas
-  const [installments, setInstallments] = useState([]) // Array de cuotas generadas
-  const [firstDueDate, setFirstDueDate] = useState('') // Fecha de primera cuota
-  const [installmentFrequency, setInstallmentFrequency] = useState(30) // Días entre cuotas
+  const [dueDate, setDueDate] = useState('') // Fecha de vencimiento (opcional)
+  // Legacy: mantener para compatibilidad con compras antiguas en modo edición
+  const [creditType, setCreditType] = useState('unico')
+  const [installments, setInstallments] = useState([]) // Solo para compras antiguas con cuotas
   const [purchaseItems, setPurchaseItems] = useState([
     { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
   ])
@@ -555,46 +553,8 @@ export default function CreatePurchase() {
     }
   }
 
-  // Generar cuotas automáticamente cuando cambian los parámetros
-  useEffect(() => {
-    if (paymentType !== 'credito' || creditType !== 'cuotas') {
-      return
-    }
-
-    const amounts = calculateAmounts()
-    if (amounts.total <= 0 || !firstDueDate || numInstallments < 2) {
-      setInstallments([])
-      return
-    }
-
-    const installmentAmount = Math.floor((amounts.total / numInstallments) * 100) / 100
-    const lastInstallmentAmount = Math.round((amounts.total - (installmentAmount * (numInstallments - 1))) * 100) / 100
-
-    const newInstallments = []
-    let currentDate = new Date(firstDueDate)
-
-    for (let i = 0; i < numInstallments; i++) {
-      newInstallments.push({
-        number: i + 1,
-        amount: i === numInstallments - 1 ? lastInstallmentAmount : installmentAmount,
-        dueDate: getLocalDateString(currentDate),
-        status: 'pending',
-        paidAt: null,
-        paidAmount: 0
-      })
-      currentDate = new Date(currentDate)
-      currentDate.setDate(currentDate.getDate() + installmentFrequency)
-    }
-
-    setInstallments(newInstallments)
-  }, [paymentType, creditType, numInstallments, firstDueDate, installmentFrequency, purchaseItems])
-
-  // Actualizar monto de una cuota manualmente
-  const updateInstallmentAmount = (index, newAmount) => {
-    const newInstallments = [...installments]
-    newInstallments[index].amount = parseFloat(newAmount) || 0
-    setInstallments(newInstallments)
-  }
+  // NOTA: El sistema de cuotas fijas ha sido reemplazado por pagos parciales flexibles
+  // Las funciones de generación de cuotas fueron removidas
 
   const openCreateProductModal = (itemIndex) => {
     setCurrentItemIndex(itemIndex)
@@ -692,35 +652,8 @@ export default function CreatePurchase() {
     // Usar items proporcionados o los del estado
     const items = itemsToValidate || purchaseItems
 
-    // Validar crédito con pago único
-    if (paymentType === 'credito' && creditType === 'unico' && !dueDate) {
-      setMessage({
-        type: 'error',
-        text: 'Debe seleccionar una fecha de vencimiento para compras al crédito',
-      })
-      return false
-    }
-
-    // Validar crédito con cuotas
-    if (paymentType === 'credito' && creditType === 'cuotas') {
-      if (installments.length === 0) {
-        setMessage({
-          type: 'error',
-          text: 'Debe generar las cuotas antes de guardar',
-        })
-        return false
-      }
-
-      const totalCuotas = installments.reduce((sum, c) => sum + c.amount, 0)
-      const totalCompra = calculateAmounts().total
-      if (Math.abs(totalCuotas - totalCompra) > 0.01) {
-        setMessage({
-          type: 'error',
-          text: `La suma de las cuotas (${formatCurrency(totalCuotas)}) no coincide con el total (${formatCurrency(totalCompra)})`,
-        })
-        return false
-      }
-    }
+    // NOTA: La fecha de vencimiento es opcional para créditos
+    // Los pagos parciales se pueden registrar en cualquier momento
 
     if (items.length === 0) {
       setMessage({
@@ -828,18 +761,10 @@ export default function CreatePurchase() {
         paymentType: paymentType, // 'contado' o 'credito'
         paymentStatus: paymentType === 'contado' ? 'paid' : 'pending', // 'paid' o 'pending'
         paidAmount: paymentType === 'contado' ? amounts.total : 0, // Monto pagado
-        // Campos para crédito
+        // Campos para crédito - Sistema de pagos parciales (abonos)
         ...(paymentType === 'credito' && {
-          creditType: creditType, // 'unico' o 'cuotas'
-          ...(creditType === 'unico' && dueDate && { dueDate: parseLocalDate(dueDate) }),
-          ...(creditType === 'cuotas' && {
-            installments: installments.map(inst => ({
-              ...inst,
-              dueDate: parseLocalDate(inst.dueDate)
-            })),
-            totalInstallments: installments.length,
-            paidInstallments: 0,
-          }),
+          ...(dueDate && { dueDate: parseLocalDate(dueDate) }), // Fecha de vencimiento opcional
+          payments: [], // Array de abonos parciales - se agregan desde Purchases.jsx
         }),
       }
 
@@ -906,6 +831,18 @@ export default function CreatePurchase() {
         if (originalPurchase?.paymentStatus === 'paid') {
           purchaseData.paymentStatus = 'paid'
           purchaseData.paidAmount = originalPurchase.paidAmount
+        }
+        // Preservar pagos parciales existentes
+        if (originalPurchase?.payments && originalPurchase.payments.length > 0) {
+          purchaseData.payments = originalPurchase.payments
+          purchaseData.paidAmount = originalPurchase.paidAmount || 0
+        }
+        // Compatibilidad con compras antiguas con cuotas
+        if (originalPurchase?.installments && originalPurchase.installments.length > 0) {
+          purchaseData.installments = originalPurchase.installments
+          purchaseData.creditType = originalPurchase.creditType
+          purchaseData.totalInstallments = originalPurchase.totalInstallments
+          purchaseData.paidInstallments = originalPurchase.paidInstallments
         }
         result = await updatePurchase(businessId, purchaseId, purchaseData)
         if (!result.success) {
@@ -1317,140 +1254,19 @@ export default function CreatePurchase() {
 
             {paymentType === 'credito' && (
               <div className="mt-4 space-y-4">
-                {/* Tipo de crédito */}
-                <div className="flex gap-4">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="creditType"
-                      value="unico"
-                      checked={creditType === 'unico'}
-                      onChange={e => {
-                        setCreditType(e.target.value)
-                        setInstallments([])
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Pago Único</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="creditType"
-                      value="cuotas"
-                      checked={creditType === 'cuotas'}
-                      onChange={e => {
-                        setCreditType(e.target.value)
-                        setDueDate('')
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">En Cuotas</span>
-                  </label>
+                {/* Fecha de vencimiento opcional */}
+                <div className="max-w-xs">
+                  <Input
+                    label="Fecha de Vencimiento (opcional)"
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    min={getLocalDateString()}
+                  />
                 </div>
-
-                {/* Pago único */}
-                {creditType === 'unico' && (
-                  <div className="max-w-xs">
-                    <Input
-                      label="Fecha de Vencimiento"
-                      type="date"
-                      required
-                      value={dueDate}
-                      onChange={e => setDueDate(e.target.value)}
-                      min={getLocalDateString()}
-                    />
-                  </div>
-                )}
-
-                {/* Pago en cuotas */}
-                {creditType === 'cuotas' && (
-                  <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          N° de Cuotas
-                        </label>
-                        <input
-                          type="number"
-                          min="2"
-                          max="36"
-                          value={numInstallments}
-                          onChange={e => setNumInstallments(parseInt(e.target.value) || 2)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Primera Cuota
-                        </label>
-                        <input
-                          type="date"
-                          value={firstDueDate}
-                          onChange={e => setFirstDueDate(e.target.value)}
-                          min={getLocalDateString()}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Frecuencia (días)
-                        </label>
-                        <select
-                          value={installmentFrequency}
-                          onChange={e => setInstallmentFrequency(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value={7}>Semanal (7 días)</option>
-                          <option value={15}>Quincenal (15 días)</option>
-                          <option value={30}>Mensual (30 días)</option>
-                          <option value={60}>Bimestral (60 días)</option>
-                          <option value={90}>Trimestral (90 días)</option>
-                          <option value={120}>Cuatrimestral (120 días)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Mensaje si falta fecha */}
-                    {!firstDueDate && (
-                      <p className="text-sm text-amber-600 mt-2">
-                        Selecciona la fecha de la primera cuota para generar el cronograma
-                      </p>
-                    )}
-
-                    {/* Lista de cuotas generadas */}
-                    {installments.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Cronograma de Cuotas</h4>
-                        <div className="space-y-2">
-                          {installments.map((inst, idx) => (
-                            <div key={idx} className="flex items-center gap-3 bg-white p-2 rounded border">
-                              <span className="text-sm font-medium text-gray-600 w-20">
-                                Cuota {inst.number}
-                              </span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={inst.amount}
-                                onChange={e => updateInstallmentAmount(idx, e.target.value)}
-                                className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                              />
-                              <span className="text-sm text-gray-500">
-                                Vence: {inst.dueDate}
-                              </span>
-                            </div>
-                          ))}
-                          <div className="flex justify-between items-center pt-2 border-t">
-                            <span className="text-sm font-medium text-gray-700">Total Cuotas:</span>
-                            <span className="text-lg font-bold text-primary-600">
-                              {formatCurrency(installments.reduce((sum, c) => sum + c.amount, 0))}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <p className="text-sm text-gray-500">
+                  Podrás registrar pagos parciales (abonos) desde la lista de compras hasta cancelar la deuda.
+                </p>
               </div>
             )}
           </div>

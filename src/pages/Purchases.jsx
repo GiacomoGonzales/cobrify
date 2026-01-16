@@ -62,10 +62,17 @@ export default function Purchases() {
   const [markingAsPaid, setMarkingAsPaid] = useState(null)
   const [isMarkingPaid, setIsMarkingPaid] = useState(false)
 
-  // Estado para ver/pagar cuotas
+  // Estado para ver/pagar cuotas (legacy - compras antiguas con cuotas fijas)
   const [viewingInstallments, setViewingInstallments] = useState(null)
   const [payingInstallment, setPayingInstallment] = useState(null) // {purchaseId, installmentIndex}
   const [isPayingInstallment, setIsPayingInstallment] = useState(false)
+
+  // Estado para registrar pagos parciales (abonos) - nuevo sistema
+  const [registeringPayment, setRegisteringPayment] = useState(null) // La compra a la que se registra el pago
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentNotes, setPaymentNotes] = useState('')
+  const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
+  const [viewingPayments, setViewingPayments] = useState(null) // Para ver historial de pagos
 
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
@@ -309,6 +316,82 @@ export default function Purchases() {
     } finally {
       setIsPayingInstallment(false)
     }
+  }
+
+  // Registrar un pago parcial (abono) - nuevo sistema
+  const handleRegisterPayment = async () => {
+    if (!registeringPayment || !user?.uid) return
+
+    const amount = parseFloat(paymentAmount)
+    if (!amount || amount <= 0) {
+      toast.error('Ingrese un monto válido mayor a 0')
+      return
+    }
+
+    const remaining = (registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)
+    if (amount > remaining) {
+      toast.error(`El monto no puede exceder el saldo pendiente (${formatCurrency(remaining)})`)
+      return
+    }
+
+    if (isDemoMode) {
+      toast.error('No se pueden registrar pagos en modo demo')
+      return
+    }
+
+    setIsRegisteringPayment(true)
+    try {
+      // Crear el nuevo pago
+      const newPayment = {
+        id: `payment-${Date.now()}`,
+        amount: amount,
+        date: new Date(),
+        notes: paymentNotes.trim() || '',
+        registeredBy: user.uid
+      }
+
+      // Obtener pagos existentes o inicializar array vacío
+      const existingPayments = registeringPayment.payments || []
+      const updatedPayments = [...existingPayments, newPayment]
+
+      // Calcular nuevo monto pagado total
+      const newPaidAmount = (registeringPayment.paidAmount || 0) + amount
+      const isPaidInFull = newPaidAmount >= registeringPayment.total
+
+      const result = await updatePurchase(getBusinessId(), registeringPayment.id, {
+        payments: updatedPayments,
+        paidAmount: newPaidAmount,
+        paymentStatus: isPaidInFull ? 'paid' : 'pending',
+        ...(isPaidInFull && { paidAt: new Date() }),
+      })
+
+      if (result.success) {
+        toast.success(isPaidInFull
+          ? 'Pago registrado. ¡Compra cancelada completamente!'
+          : `Abono de ${formatCurrency(amount)} registrado exitosamente`
+        )
+        // Limpiar y cerrar modal
+        setRegisteringPayment(null)
+        setPaymentAmount('')
+        setPaymentNotes('')
+        loadPurchases()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al registrar pago:', error)
+      toast.error('Error al registrar el pago')
+    } finally {
+      setIsRegisteringPayment(false)
+    }
+  }
+
+  // Abrir modal de registro de pago con monto sugerido
+  const openPaymentModal = (purchase) => {
+    const remaining = (purchase.total || 0) - (purchase.paidAmount || 0)
+    setRegisteringPayment(purchase)
+    setPaymentAmount(remaining.toFixed(2)) // Sugerir el saldo pendiente
+    setPaymentNotes('')
   }
 
   // Función para cambiar ordenamiento
@@ -824,7 +907,7 @@ export default function Purchases() {
                     <TableCell className="text-center">
                       {purchase.paymentType === 'credito' ? (
                         purchase.creditType === 'cuotas' ? (
-                          // Compra en cuotas
+                          // Compra en cuotas (legacy)
                           <div className="flex flex-col items-center">
                             {purchase.paymentStatus === 'paid' ? (
                               <Badge variant="success" className="text-xs">
@@ -839,18 +922,25 @@ export default function Purchases() {
                             )}
                           </div>
                         ) : (
-                          // Pago único
-                          purchase.paymentStatus === 'paid' ? (
-                            <Badge variant="success" className="text-xs">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Pagado
-                            </Badge>
-                          ) : (
-                            <Badge variant="danger" className="text-xs">
-                              <Clock className="w-3 h-3 mr-1" />
-                              Pendiente
-                            </Badge>
-                          )
+                          // Pagos parciales (nuevo sistema)
+                          <div className="flex flex-col items-center">
+                            {purchase.paymentStatus === 'paid' ? (
+                              <Badge variant="success" className="text-xs">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Pagado
+                              </Badge>
+                            ) : (
+                              <>
+                                <Badge variant="warning" className="text-xs">
+                                  <DollarSign className="w-3 h-3 mr-1" />
+                                  {Math.round(((purchase.paidAmount || 0) / purchase.total) * 100)}%
+                                </Badge>
+                                <span className="text-xs text-gray-500 mt-0.5">
+                                  {formatCurrency(purchase.paidAmount || 0)} / {formatCurrency(purchase.total)}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         )
                       ) : (
                         <Badge variant="default" className="text-xs bg-gray-100 text-gray-700">
@@ -860,7 +950,7 @@ export default function Purchases() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end space-x-1">
-                        {/* Botón ver cuotas (solo para compras en cuotas) */}
+                        {/* Botón ver cuotas (solo para compras antiguas en cuotas) */}
                         {purchase.creditType === 'cuotas' && purchase.installments?.length > 0 && (
                           <Button
                             variant="ghost"
@@ -872,18 +962,32 @@ export default function Purchases() {
                             <List className="w-4 h-4" />
                           </Button>
                         )}
-                        {/* Botón marcar como pagado (solo para crédito pendiente con pago único) */}
+                        {/* Botón registrar abono (para crédito pendiente sin cuotas) */}
                         {purchase.paymentType === 'credito' &&
                          purchase.paymentStatus === 'pending' &&
                          purchase.creditType !== 'cuotas' && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setMarkingAsPaid(purchase)}
+                            onClick={() => openPaymentModal(purchase)}
                             className="text-green-600 hover:bg-green-50"
-                            title="Marcar como pagado"
+                            title="Registrar abono"
                           >
-                            <CheckCircle className="w-4 h-4" />
+                            <DollarSign className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {/* Botón ver historial de pagos */}
+                        {purchase.paymentType === 'credito' &&
+                         purchase.creditType !== 'cuotas' &&
+                         (purchase.payments?.length > 0 || purchase.paidAmount > 0) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewingPayments(purchase)}
+                            className="text-blue-600 hover:bg-blue-50"
+                            title="Ver historial de pagos"
+                          >
+                            <List className="w-4 h-4" />
                           </Button>
                         )}
                         <Button
@@ -1228,6 +1332,226 @@ export default function Purchases() {
 
             <div className="flex justify-end pt-4">
               <Button variant="outline" onClick={() => setViewingInstallments(null)}>
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Registrar Abono (Pago Parcial) */}
+      <Modal
+        isOpen={!!registeringPayment}
+        onClose={() => {
+          setRegisteringPayment(null)
+          setPaymentAmount('')
+          setPaymentNotes('')
+        }}
+        title="Registrar Abono"
+        size="sm"
+      >
+        {registeringPayment && (
+          <div className="space-y-4">
+            {/* Resumen de la compra */}
+            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Proveedor:</span>
+                <span className="text-sm font-medium">{registeringPayment.supplier?.businessName || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Total de la compra:</span>
+                <span className="text-sm font-bold">{formatCurrency(registeringPayment.total)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Ya pagado:</span>
+                <span className="text-sm font-medium text-green-600">{formatCurrency(registeringPayment.paidAmount || 0)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-2">
+                <span className="text-sm text-gray-700 font-medium">Saldo pendiente:</span>
+                <span className="text-lg font-bold text-red-600">
+                  {formatCurrency((registeringPayment.total || 0) - (registeringPayment.paidAmount || 0))}
+                </span>
+              </div>
+            </div>
+
+            {/* Formulario de pago */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monto del abono *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">S/</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={(registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)}
+                    value={paymentAmount}
+                    onChange={e => setPaymentAmount(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notas (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={paymentNotes}
+                  onChange={e => setPaymentNotes(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Ej: Transferencia, efectivo, cheque..."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setRegisteringPayment(null)
+                  setPaymentAmount('')
+                  setPaymentNotes('')
+                }}
+                disabled={isRegisteringPayment}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleRegisterPayment} disabled={isRegisteringPayment}>
+                {isRegisteringPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Registrar Abono
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Ver Historial de Pagos */}
+      <Modal
+        isOpen={!!viewingPayments}
+        onClose={() => setViewingPayments(null)}
+        title="Historial de Pagos"
+        size="lg"
+      >
+        {viewingPayments && (
+          <div className="space-y-4">
+            {/* Resumen */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Proveedor</p>
+                  <p className="font-medium">{viewingPayments.supplier?.businessName || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total de la Compra</p>
+                  <p className="font-bold text-lg">{formatCurrency(viewingPayments.total)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Total Pagado</p>
+                  <p className="font-medium text-green-600">{formatCurrency(viewingPayments.paidAmount || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Saldo Pendiente</p>
+                  <p className="font-medium text-red-600">
+                    {formatCurrency((viewingPayments.total || 0) - (viewingPayments.paidAmount || 0))}
+                  </p>
+                </div>
+              </div>
+              {/* Barra de progreso */}
+              <div className="mt-4">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">Progreso de pago</span>
+                  <span className="font-medium">
+                    {Math.round(((viewingPayments.paidAmount || 0) / viewingPayments.total) * 100)}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className="bg-green-500 h-2.5 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((viewingPayments.paidAmount || 0) / viewingPayments.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de pagos */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-gray-900">Detalle de Abonos</h4>
+              {(!viewingPayments.payments || viewingPayments.payments.length === 0) ? (
+                <div className="text-center py-6 text-gray-500">
+                  <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  <p>No hay pagos registrados</p>
+                  {viewingPayments.paidAmount > 0 && (
+                    <p className="text-sm mt-1">
+                      (Pago registrado antes de la implementación del historial)
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {viewingPayments.payments.map((payment, idx) => {
+                    const paymentDate = payment.date?.toDate
+                      ? payment.date.toDate()
+                      : new Date(payment.date)
+
+                    return (
+                      <div
+                        key={payment.id || idx}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-white border-gray-200"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                            <CheckCircle className="w-4 h-4 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-medium">Abono #{idx + 1}</p>
+                            <p className="text-sm text-gray-500">
+                              {formatDate(paymentDate)}
+                            </p>
+                            {payment.notes && (
+                              <p className="text-xs text-gray-400 mt-0.5">{payment.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-bold text-green-600">+{formatCurrency(payment.amount)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Botón para agregar pago si aún hay saldo pendiente */}
+            {viewingPayments.paymentStatus === 'pending' && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  onClick={() => {
+                    setViewingPayments(null)
+                    openPaymentModal(viewingPayments)
+                  }}
+                  className="w-full"
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Registrar Nuevo Abono
+                </Button>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4 border-t">
+              <Button variant="outline" onClick={() => setViewingPayments(null)}>
                 Cerrar
               </Button>
             </div>
