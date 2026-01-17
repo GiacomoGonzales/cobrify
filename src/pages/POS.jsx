@@ -65,6 +65,7 @@ import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
+import { markOrderAsPaid } from '@/services/orderService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -275,6 +276,10 @@ export default function POS() {
   const [editingInvoiceId, setEditingInvoiceId] = useState(null)
   const [editingInvoiceData, setEditingInvoiceData] = useState(null)
   const editInvoiceLoadedRef = useRef(false)
+
+  // Estado para orden de restaurante (para marcar como pagada al completar)
+  const [pendingOrderId, setPendingOrderId] = useState(null)
+  const [markOrderPaidOnComplete, setMarkOrderPaidOnComplete] = useState(false)
 
   // Barcode Scanner
   const [isScanning, setIsScanning] = useState(false)
@@ -538,6 +543,12 @@ export default function POS() {
 
       // Marcar como cargado para evitar duplicados
       orderLoadedRef.current = true
+
+      // Guardar info de la orden para marcar como pagada al completar
+      if (orderInfo.orderId) {
+        setPendingOrderId(orderInfo.orderId)
+        setMarkOrderPaidOnComplete(orderInfo.markAsPaidOnComplete || false)
+      }
 
       // Establecer tipo de orden
       setOrderType(orderInfo.orderType || 'takeaway')
@@ -2558,6 +2569,24 @@ export default function POS() {
         } catch (error) {
           console.error('Error al liberar mesa:', error)
           toast.warning(`Comprobante generado, pero no se pudo liberar la mesa automáticamente`)
+        }
+      }
+
+      // 6.1. Si viene de una orden de restaurante, marcar como pagada
+      if (pendingOrderId && markOrderPaidOnComplete) {
+        try {
+          const markPaidResult = await markOrderAsPaid(businessId, pendingOrderId)
+          if (markPaidResult.success) {
+            console.log('✅ Orden marcada como pagada:', pendingOrderId)
+          } else {
+            console.warn('⚠️ No se pudo marcar la orden como pagada:', markPaidResult.error)
+          }
+        } catch (error) {
+          console.error('Error al marcar orden como pagada:', error)
+        } finally {
+          // Limpiar estado de orden pendiente
+          setPendingOrderId(null)
+          setMarkOrderPaidOnComplete(false)
         }
       }
 

@@ -473,6 +473,40 @@ export default function Orders() {
     }
   }
 
+  // Ir al POS para cobrar una orden
+  const handleGoToPayment = (order) => {
+    navigate('/app/pos', {
+      state: {
+        fromOrder: true,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        items: order.items,
+        orderType: order.orderType,
+        markAsPaidOnComplete: true, // Flag para marcar como pagada al completar
+      }
+    })
+  }
+
+  // Marcar orden como entregada (quita de la lista activa)
+  const handleMarkAsDelivered = async (orderId) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    try {
+      const result = await updateOrderStatus(getBusinessId(), orderId, 'delivered')
+      if (result.success) {
+        toast.success('Orden marcada como entregada')
+      } else {
+        toast.error('Error al actualizar orden: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al marcar orden como entregada:', error)
+      toast.error('Error al actualizar orden')
+    }
+  }
+
   const calculateElapsedTime = (createdAt) => {
     if (!createdAt) return '0 min'
 
@@ -907,16 +941,29 @@ export default function Orders() {
                       </Button>
                     )}
 
-                    {/* Botón de marcar como pagado (solo si está pendiente y requiere pago antes de cocina) */}
-                    {order.status === 'pending' && requirePaymentBeforeKitchen && !order.paid && (
+                    {/* Botón de Cobrar (para órdenes no pagadas en cualquier estado activo) */}
+                    {!order.paid && order.status !== 'delivered' && (
                       <Button
-                        onClick={() => handleMarkAsPaid(order.id)}
+                        onClick={() => handleGoToPayment(order)}
                         variant="outline"
                         className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
                         size="sm"
                       >
                         <DollarSign className="w-4 h-4 mr-2" />
-                        Marcar Pagado
+                        Cobrar
+                      </Button>
+                    )}
+
+                    {/* Botón de Marcar Entregada (para órdenes despachadas) */}
+                    {order.status === 'dispatched' && (
+                      <Button
+                        onClick={() => handleMarkAsDelivered(order.id)}
+                        variant="success"
+                        className="flex-1"
+                        size="sm"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Marcar Entregada
                       </Button>
                     )}
 
