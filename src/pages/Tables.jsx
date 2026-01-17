@@ -15,7 +15,7 @@ import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import { printPreBill } from '@/utils/printPreBill'
 import { Capacitor } from '@capacitor/core'
-import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
+import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig, printKitchenOrder } from '@/services/thermalPrinterService'
 import {
   getTables,
   getTablesStats,
@@ -559,6 +559,60 @@ export default function Tables() {
     }
   }
 
+  const handlePrintKitchenTicket = async () => {
+    if (!selectedTable || !selectedOrder) {
+      toast.error('No se puede imprimir: datos incompletos')
+      return
+    }
+
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    const isNative = Capacitor.isNativePlatform()
+
+    // Si es móvil, intentar imprimir en impresora térmica
+    if (isNative) {
+      try {
+        const businessId = getBusinessId()
+        // Obtener configuración de impresora
+        const printerConfigResult = await getPrinterConfig(businessId)
+
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          // Reconectar a la impresora
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+
+          if (connectResult.success) {
+            // Imprimir comanda en impresora térmica
+            const result = await printKitchenOrder(
+              selectedOrder,
+              selectedTable,
+              printerConfigResult.config.paperWidth || 58
+            )
+
+            if (result.success) {
+              toast.success('Comanda impresa en ticketera')
+              return
+            } else {
+              toast.error('Error al imprimir en ticketera: ' + result.error)
+            }
+          } else {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+          }
+        } else {
+          toast.warning('No hay impresora configurada. Configúrala en Ajustes.')
+        }
+      } catch (error) {
+        console.error('Error al imprimir comanda:', error)
+        toast.error('Error al imprimir comanda')
+      }
+    } else {
+      // En web, mostrar mensaje
+      toast.info('La impresión de comanda solo está disponible en la app móvil')
+    }
+  }
+
   const handleOccupyTable = async (tableId, occupyData) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
@@ -1022,6 +1076,7 @@ export default function Tables() {
         onTransferTable={handleTransferTable}
         onMoveTable={handleMoveTable}
         onPrintPreBill={handlePrintPreBill}
+        onPrintKitchenTicket={handlePrintKitchenTicket}
       />
 
       {/* Modal para agregar items a la orden */}

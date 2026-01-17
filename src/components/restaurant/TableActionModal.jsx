@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -20,6 +20,7 @@ export default function TableActionModal({
   onTransferTable,
   onMoveTable,
   onPrintPreBill,
+  onPrintKitchenTicket,
   waiters = [],
   availableTables = [],
 }) {
@@ -264,16 +265,28 @@ export default function TableActionModal({
                   </Button>
                 </div>
 
-                <Button
-                  onClick={() => {
-                    if (onPrintPreBill) onPrintPreBill()
-                  }}
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2"
-                >
-                  <Printer className="w-5 h-5" />
-                  Imprimir Precuenta
-                </Button>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => {
+                      if (onPrintKitchenTicket) onPrintKitchenTicket()
+                    }}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-5 h-5" />
+                    Imprimir Comanda
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (onPrintPreBill) onPrintPreBill()
+                    }}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <Printer className="w-5 h-5" />
+                    Imprimir Precuenta
+                  </Button>
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button
