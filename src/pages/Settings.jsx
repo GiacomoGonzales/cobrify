@@ -188,6 +188,10 @@ export default function Settings() {
     itemStatusTracking: false, // Seguimiento de estado por item (false = por orden completa)
     enableKitchenStations: false, // Modo multi-estación de cocina
     kitchenStations: [], // Configuración de estaciones de cocina
+    requirePaymentBeforeKitchen: false, // Requerir pago antes de enviar a cocina
+    deliveryPersons: [], // Lista de repartidores
+    brands: [], // Lista de marcas (para dark kitchens / multi-marca)
+    autoPrintByStation: false, // Impresión automática por estación al enviar a cocina
   })
 
   // Categorías de productos (para asignar a estaciones)
@@ -2638,6 +2642,26 @@ export default function Settings() {
                         </div>
                       </label>
 
+                      {/* Pago obligatorio antes de cocina */}
+                      <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={restaurantConfig.requirePaymentBeforeKitchen || false}
+                          onChange={(e) => setRestaurantConfig({...restaurantConfig, requirePaymentBeforeKitchen: e.target.checked})}
+                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                            Requerir pago antes de enviar a cocina
+                          </span>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                            {restaurantConfig.requirePaymentBeforeKitchen
+                              ? '✓ Habilitado: Las órdenes no se pueden enviar a cocina hasta que estén pagadas. Ideal para restaurantes de comida rápida, food courts o delivery donde el pago es por adelantado.'
+                              : '✗ Deshabilitado: Las órdenes se pueden enviar a cocina sin necesidad de pago previo. El cliente puede pagar después de recibir su pedido.'}
+                          </p>
+                        </div>
+                      </label>
+
                       {/* Modo Multi-Estación de Cocina */}
                       <label className={`flex items-start space-x-3 cursor-pointer group p-4 border rounded-lg transition-colors ${
                         restaurantConfig.enableKitchenStations
@@ -2679,7 +2703,8 @@ export default function Settings() {
                                   categories: [],
                                   color: '#EF4444',
                                   order: (restaurantConfig.kitchenStations?.length || 0) + 1,
-                                  isPase: false
+                                  isPase: false,
+                                  printerIp: ''
                                 }
                                 setRestaurantConfig({
                                   ...restaurantConfig,
@@ -2692,6 +2717,26 @@ export default function Settings() {
                               Agregar Estación
                             </button>
                           </div>
+
+                          {/* Checkbox para impresión automática */}
+                          <label className="flex items-center gap-2 cursor-pointer p-3 bg-white border border-gray-200 rounded-lg mb-4">
+                            <input
+                              type="checkbox"
+                              checked={restaurantConfig.autoPrintByStation || false}
+                              onChange={(e) => setRestaurantConfig({...restaurantConfig, autoPrintByStation: e.target.checked})}
+                              className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                Impresión automática por estación
+                              </span>
+                              <p className="text-xs text-gray-500">
+                                {restaurantConfig.autoPrintByStation
+                                  ? '✓ Habilitado: Al enviar una orden a cocina, se imprimirán automáticamente las comandas en cada estación según las categorías asignadas.'
+                                  : 'Al enviar a cocina, imprime automáticamente en la impresora de cada estación.'}
+                              </p>
+                            </div>
+                          </label>
 
                           {/* Lista de estaciones */}
                           <div className="space-y-3">
@@ -2744,10 +2789,15 @@ export default function Settings() {
                                         ) : (
                                           <div className="flex flex-wrap gap-2">
                                             {productCategories.map((category) => {
-                                              const isSelected = (station.categories || []).includes(category)
+                                              // Soportar tanto strings como objetos {id, name, parentId}
+                                              const categoryId = typeof category === 'string' ? category : category.id
+                                              const categoryName = typeof category === 'string' ? category : category.name
+                                              const isSelected = (station.categories || []).some(c =>
+                                                typeof c === 'string' ? c === categoryId : c === categoryId || c.id === categoryId
+                                              )
                                               return (
                                                 <button
-                                                  key={category}
+                                                  key={categoryId}
                                                   type="button"
                                                   onClick={() => {
                                                     const updated = [...restaurantConfig.kitchenStations]
@@ -2755,12 +2805,14 @@ export default function Settings() {
                                                     if (isSelected) {
                                                       updated[index] = {
                                                         ...station,
-                                                        categories: currentCategories.filter(c => c !== category)
+                                                        categories: currentCategories.filter(c =>
+                                                          typeof c === 'string' ? c !== categoryId : c !== categoryId && c.id !== categoryId
+                                                        )
                                                       }
                                                     } else {
                                                       updated[index] = {
                                                         ...station,
-                                                        categories: [...currentCategories, category]
+                                                        categories: [...currentCategories, categoryId]
                                                       }
                                                     }
                                                     setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
@@ -2771,7 +2823,7 @@ export default function Settings() {
                                                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                                   }`}
                                                 >
-                                                  {category}
+                                                  {categoryName}
                                                 </button>
                                               )
                                             })}
@@ -2795,6 +2847,27 @@ export default function Settings() {
                                           Estación de Pase/Despacho (ve todos los items para consolidar)
                                         </span>
                                       </label>
+
+                                      {/* Impresora asignada a la estación */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                          Impresora WiFi (IP):
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={station.printerIp || ''}
+                                          onChange={(e) => {
+                                            const updated = [...restaurantConfig.kitchenStations]
+                                            updated[index] = { ...station, printerIp: e.target.value }
+                                            setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                          }}
+                                          placeholder="Ej: 192.168.1.100"
+                                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                          Imprime automáticamente comandas al enviar a cocina
+                                        </p>
+                                      </div>
                                     </div>
 
                                     {/* Botón eliminar */}
@@ -2831,6 +2904,204 @@ export default function Settings() {
                               </div>
                             </div>
                           )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Gestión de Repartidores */}
+                    <div className={`p-4 border rounded-lg transition-colors ${
+                      (restaurantConfig.deliveryPersons || []).length > 0
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
+                    }`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">
+                            Repartidores / Motoristas
+                          </span>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            Gestiona tu equipo de delivery para asignar pedidos
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newPerson = {
+                              id: `delivery_${Date.now()}`,
+                              name: '',
+                              phone: '',
+                              active: true
+                            }
+                            setRestaurantConfig({
+                              ...restaurantConfig,
+                              deliveryPersons: [...(restaurantConfig.deliveryPersons || []), newPerson]
+                            })
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Agregar
+                        </button>
+                      </div>
+
+                      {/* Lista de repartidores */}
+                      {(restaurantConfig.deliveryPersons || []).length === 0 ? (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          <Bike className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p>No hay repartidores configurados</p>
+                          <p className="text-xs">Agrega repartidores para asignarlos a pedidos de delivery</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(restaurantConfig.deliveryPersons || []).map((person, index) => (
+                            <div key={person.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                              <input
+                                type="text"
+                                value={person.name}
+                                onChange={(e) => {
+                                  const updated = [...restaurantConfig.deliveryPersons]
+                                  updated[index] = { ...person, name: e.target.value }
+                                  setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
+                                }}
+                                placeholder="Nombre del repartidor"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                              <input
+                                type="tel"
+                                value={person.phone || ''}
+                                onChange={(e) => {
+                                  const updated = [...restaurantConfig.deliveryPersons]
+                                  updated[index] = { ...person, phone: e.target.value }
+                                  setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
+                                }}
+                                placeholder="Teléfono"
+                                className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={person.active !== false}
+                                  onChange={(e) => {
+                                    const updated = [...restaurantConfig.deliveryPersons]
+                                    updated[index] = { ...person, active: e.target.checked }
+                                    setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
+                                  }}
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-gray-600">Activo</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = restaurantConfig.deliveryPersons.filter((_, i) => i !== index)
+                                  setRestaurantConfig({ ...restaurantConfig, deliveryPersons: updated })
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Eliminar repartidor"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Gestión de Marcas (Multi-marca / Dark Kitchen) */}
+                    <div className={`p-4 border rounded-lg transition-colors ${
+                      (restaurantConfig.brands || []).length > 0
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/30'
+                    }`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">
+                            Marcas / Dark Kitchen
+                          </span>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            Gestiona múltiples marcas desde la misma cocina
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newBrand = {
+                              id: `brand_${Date.now()}`,
+                              name: '',
+                              color: '#8B5CF6',
+                              active: true
+                            }
+                            setRestaurantConfig({
+                              ...restaurantConfig,
+                              brands: [...(restaurantConfig.brands || []), newBrand]
+                            })
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Agregar
+                        </button>
+                      </div>
+
+                      {/* Lista de marcas */}
+                      {(restaurantConfig.brands || []).length === 0 ? (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p>No hay marcas configuradas</p>
+                          <p className="text-xs">Agrega marcas si operas varias desde la misma cocina</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(restaurantConfig.brands || []).map((brand, index) => (
+                            <div key={brand.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                              <input
+                                type="color"
+                                value={brand.color || '#8B5CF6'}
+                                onChange={(e) => {
+                                  const updated = [...restaurantConfig.brands]
+                                  updated[index] = { ...brand, color: e.target.value }
+                                  setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                }}
+                                className="w-8 h-8 rounded cursor-pointer border-0"
+                                title="Color de la marca"
+                              />
+                              <input
+                                type="text"
+                                value={brand.name}
+                                onChange={(e) => {
+                                  const updated = [...restaurantConfig.brands]
+                                  updated[index] = { ...brand, name: e.target.value }
+                                  setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                }}
+                                placeholder="Nombre de la marca"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                              />
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={brand.active !== false}
+                                  onChange={(e) => {
+                                    const updated = [...restaurantConfig.brands]
+                                    updated[index] = { ...brand, active: e.target.checked }
+                                    setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                  }}
+                                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                />
+                                <span className="text-xs text-gray-600">Activa</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = restaurantConfig.brands.filter((_, i) => i !== index)
+                                  setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Eliminar marca"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

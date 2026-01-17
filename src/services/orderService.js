@@ -175,6 +175,18 @@ export const createOrder = async (businessId, orderData) => {
       ...(orderData.customerName && { customerName: orderData.customerName }),
       ...(orderData.customerPhone && { customerPhone: orderData.customerPhone }),
 
+      // Marca (para dark kitchens / multi-marca)
+      ...(orderData.brandId && { brandId: orderData.brandId }),
+      ...(orderData.brandName && { brandName: orderData.brandName }),
+      ...(orderData.brandColor && { brandColor: orderData.brandColor }),
+
+      // Prioridad del pedido
+      priority: orderData.priority || 'normal', // 'normal' o 'urgent'
+
+      // Estado de pago
+      paid: orderData.paid || false,
+      paidAt: orderData.paid ? serverTimestamp() : null,
+
       // Cálculos
       subtotal: orderData.subtotal || 0,
       tax: orderData.tax || 0,
@@ -238,6 +250,26 @@ export const deleteOrder = async (businessId, orderId) => {
     return { success: true }
   } catch (error) {
     console.error('Error al eliminar orden:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Marcar una orden como pagada
+ */
+export const markOrderAsPaid = async (businessId, orderId) => {
+  try {
+    const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
+
+    await updateDoc(orderRef, {
+      paid: true,
+      paidAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al marcar orden como pagada:', error)
     return { success: false, error: error.message }
   }
 }
@@ -500,7 +532,7 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
 /**
  * Actualizar el estado de una orden
  */
-export const updateOrderStatus = async (businessId, orderId, newStatus, note = '') => {
+export const updateOrderStatus = async (businessId, orderId, newStatus, note = '', extraData = {}) => {
   try {
     const orderRef = doc(db, 'businesses', businessId, 'orders', orderId)
     const orderSnap = await getDoc(orderRef)
@@ -518,11 +550,24 @@ export const updateOrderStatus = async (businessId, orderId, newStatus, note = '
       note: note || `Estado cambiado a ${newStatus}`,
     })
 
-    await updateDoc(orderRef, {
+    // Preparar datos de actualización
+    const updateData = {
       status: newStatus,
       statusHistory,
       updatedAt: serverTimestamp(),
-    })
+      ...extraData,
+    }
+
+    // Agregar timestamps específicos según el estado
+    if (newStatus === 'ready') {
+      updateData.readyAt = serverTimestamp()
+    } else if (newStatus === 'dispatched') {
+      updateData.dispatchedAt = serverTimestamp()
+    } else if (newStatus === 'delivered') {
+      updateData.deliveredAt = serverTimestamp()
+    }
+
+    await updateDoc(orderRef, updateData)
 
     return { success: true }
   } catch (error) {

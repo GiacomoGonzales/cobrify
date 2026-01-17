@@ -61,8 +61,12 @@ export default function Kitchen() {
         ['pending', 'preparing', 'ready', 'active'].includes(o.status)
       )
 
-      // Ordenar por fecha de creación (más antiguas primero para cocina)
+      // Ordenar: urgentes primero, luego por fecha de creación (más antiguas primero)
       ordersData.sort((a, b) => {
+        // Primero por prioridad (urgente primero)
+        if (a.priority === 'urgent' && b.priority !== 'urgent') return -1
+        if (b.priority === 'urgent' && a.priority !== 'urgent') return 1
+        // Luego por fecha (más antiguas primero)
         const dateA = a.createdAt || new Date(0)
         const dateB = b.createdAt || new Date(0)
         return dateA - dateB
@@ -93,8 +97,12 @@ export default function Kitchen() {
           ordersData.push({ id: doc.id, ...doc.data() })
         })
 
-        // Ordenar por fecha de creación en el cliente (más antiguas primero para cocina)
+        // Ordenar: urgentes primero, luego por fecha de creación (más antiguas primero)
         ordersData.sort((a, b) => {
+          // Primero por prioridad (urgente primero)
+          if (a.priority === 'urgent' && b.priority !== 'urgent') return -1
+          if (b.priority === 'urgent' && a.priority !== 'urgent') return 1
+          // Luego por fecha (más antiguas primero)
           const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0)
           const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0)
           return dateA - dateB // Ascendente - las más antiguas primero
@@ -292,17 +300,25 @@ export default function Kitchen() {
   const renderOrderCard = (order, showActions = true) => {
     const elapsed = calculateElapsedTime(order.createdAt)
     const isUpdating = updatingOrderId === order.id
+    const isUrgent = order.priority === 'urgent'
 
     return (
-      <Card key={order.id} className="border-2 border-gray-200">
+      <Card key={order.id} className={`border-2 ${isUrgent ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="bg-primary-100 rounded-full w-10 h-10 flex items-center justify-center">
-                <span className="font-bold text-primary-600 text-lg">{order.tableNumber}</span>
+              <div className={`rounded-full w-10 h-10 flex items-center justify-center ${isUrgent ? 'bg-red-100' : 'bg-primary-100'}`}>
+                <span className={`font-bold text-lg ${isUrgent ? 'text-red-600' : 'text-primary-600'}`}>{order.tableNumber}</span>
               </div>
               <div>
-                <div className="font-mono font-bold text-gray-900">{order.orderNumber || '#' + order.id.slice(-6)}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-gray-900">{order.orderNumber || '#' + order.id.slice(-6)}</span>
+                  {isUrgent && (
+                    <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
+                      URGENTE
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-gray-500">{order.waiterName}</div>
               </div>
             </div>

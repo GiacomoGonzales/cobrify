@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder } from '@/services/orderService'
+import { getActiveOrders, getOrdersStats, updateOrderStatus, createOrder, completeOrder, markOrderAsPaid, updateOrder } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
@@ -16,7 +16,7 @@ import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { Capacitor } from '@capacitor/core'
-import { printKitchenOrder, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
+import { printKitchenOrder, connectPrinter, getPrinterConfig, printToAllStations } from '@/services/thermalPrinterService'
 
 export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
@@ -28,6 +28,11 @@ export default function Orders() {
   const [isLoading, setIsLoading] = useState(true)
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
   const [itemStatusTracking, setItemStatusTracking] = useState(false) // Config para modo de seguimiento
+  const [requirePaymentBeforeKitchen, setRequirePaymentBeforeKitchen] = useState(false) // Config para pago obligatorio
+  const [deliveryPersons, setDeliveryPersons] = useState([]) // Lista de repartidores
+  const [brands, setBrands] = useState([]) // Lista de marcas
+  const [kitchenStations, setKitchenStations] = useState([]) // Estaciones de cocina
+  const [autoPrintByStation, setAutoPrintByStation] = useState(false) // Impresión automática
 
   // Modales para nueva orden
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false)
@@ -75,6 +80,11 @@ export default function Orders() {
           const businessData = docSnap.data()
           const config = businessData.restaurantConfig || {}
           setItemStatusTracking(config.itemStatusTracking || false)
+          setRequirePaymentBeforeKitchen(config.requirePaymentBeforeKitchen || false)
+          setDeliveryPersons((config.deliveryPersons || []).filter(p => p.active !== false))
+          setBrands((config.brands || []).filter(b => b.active !== false))
+          setKitchenStations(config.kitchenStations || [])
+          setAutoPrintByStation(config.autoPrintByStation || false)
         }
       },
       (error) => {
@@ -171,7 +181,7 @@ export default function Orders() {
     if (isDemoMode && demoData?.orders) {
       // Solo mostrar órdenes activas (excluir delivered y cancelled)
       const ordersData = demoData.orders.filter(o =>
-        ['pending', 'preparing', 'ready'].includes(o.status)
+        ['pending', 'preparing', 'ready', 'dispatched'].includes(o.status)
       )
 
       // Ordenar por fecha de creación (más recientes primero)
@@ -189,6 +199,7 @@ export default function Orders() {
         pending: ordersData.filter(o => o.status === 'pending').length,
         preparing: ordersData.filter(o => o.status === 'preparing').length,
         ready: ordersData.filter(o => o.status === 'ready').length,
+        dispatched: ordersData.filter(o => o.status === 'dispatched').length,
         totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
       }
       setStats(newStats)
@@ -204,7 +215,7 @@ export default function Orders() {
     // Ordenaremos los datos en el cliente después de recibirlos
     const q = query(
       ordersRef,
-      where('status', 'in', ['pending', 'preparing', 'ready'])
+      where('status', 'in', ['pending', 'preparing', 'ready', 'dispatched'])
     )
 
     // Listener en tiempo real - se ejecuta cada vez que hay cambios
@@ -231,6 +242,7 @@ export default function Orders() {
           pending: ordersData.filter(o => o.status === 'pending').length,
           preparing: ordersData.filter(o => o.status === 'preparing').length,
           ready: ordersData.filter(o => o.status === 'ready').length,
+          dispatched: ordersData.filter(o => o.status === 'dispatched').length,
           totalRevenue: ordersData.reduce((sum, o) => sum + (o.total || 0), 0),
         }
         setStats(newStats)
@@ -354,7 +366,7 @@ export default function Orders() {
     }
   }
 
-  const handleStatusChange = async (orderId, currentStatus) => {
+  const handleStatusChange = async (orderId, currentStatus, order) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
@@ -364,18 +376,48 @@ export default function Orders() {
     const statusFlow = {
       pending: 'preparing',
       preparing: 'ready',
-      ready: 'delivered',
+      ready: 'dispatched',
+      dispatched: 'delivered',
     }
 
     const nextStatus = statusFlow[currentStatus]
     if (!nextStatus) return
+
+    // Validar pago antes de enviar a cocina si está configurado
+    if (currentStatus === 'pending' && nextStatus === 'preparing' && requirePaymentBeforeKitchen) {
+      if (!order?.paid) {
+        toast.error('Esta orden debe estar pagada antes de enviarla a cocina')
+        return
+      }
+    }
 
     setUpdatingOrderId(orderId)
     try {
       const result = await updateOrderStatus(getBusinessId(), orderId, nextStatus)
       if (result.success) {
         toast.success(`Orden actualizada a ${getStatusConfig(nextStatus).label}`)
-        // No es necesario llamar a loadOrders() - el listener actualiza automáticamente
+
+        // Auto-imprimir a estaciones cuando se envía a cocina
+        if (currentStatus === 'pending' && nextStatus === 'preparing' && autoPrintByStation && kitchenStations.length > 0) {
+          const stationsWithPrinter = kitchenStations.filter(s => s.printerIp)
+          if (stationsWithPrinter.length > 0) {
+            toast.info('Imprimiendo comandas en estaciones...')
+            try {
+              const printResults = await printToAllStations(order, kitchenStations)
+              const successCount = printResults.filter(r => r.success).length
+              if (successCount > 0) {
+                toast.success(`Comandas impresas en ${successCount} estación(es)`)
+              }
+              const failedStations = printResults.filter(r => !r.success)
+              if (failedStations.length > 0) {
+                console.warn('Estaciones con error de impresión:', failedStations)
+              }
+            } catch (printError) {
+              console.error('Error al imprimir a estaciones:', printError)
+              // No mostrar error al usuario ya que la orden se actualizó correctamente
+            }
+          }
+        }
       } else {
         toast.error('Error al actualizar orden: ' + result.error)
       }
@@ -384,6 +426,50 @@ export default function Orders() {
       toast.error('Error al actualizar orden')
     } finally {
       setUpdatingOrderId(null)
+    }
+  }
+
+  const handleMarkAsPaid = async (orderId) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    try {
+      const result = await markOrderAsPaid(getBusinessId(), orderId)
+      if (result.success) {
+        toast.success('Orden marcada como pagada')
+      } else {
+        toast.error('Error al marcar orden como pagada: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al marcar orden como pagada:', error)
+      toast.error('Error al marcar orden como pagada')
+    }
+  }
+
+  const handleAssignDeliveryPerson = async (orderId, deliveryPersonId) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    const deliveryPerson = deliveryPersons.find(p => p.id === deliveryPersonId)
+
+    try {
+      const result = await updateOrder(getBusinessId(), orderId, {
+        deliveryPersonId: deliveryPersonId || null,
+        deliveryPersonName: deliveryPerson?.name || null,
+        deliveryPersonPhone: deliveryPerson?.phone || null,
+      })
+      if (result.success) {
+        toast.success(deliveryPerson ? `Repartidor ${deliveryPerson.name} asignado` : 'Repartidor removido')
+      } else {
+        toast.error('Error al asignar repartidor: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al asignar repartidor:', error)
+      toast.error('Error al asignar repartidor')
     }
   }
 
@@ -435,6 +521,14 @@ export default function Orders() {
           icon: CheckCircle,
           color: 'text-green-600',
           bgColor: 'bg-green-50 border-green-200',
+        }
+      case 'dispatched':
+        return {
+          label: 'Despachada',
+          variant: 'info',
+          icon: Truck,
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-50 border-purple-200',
         }
       case 'delivered':
         return {
@@ -560,13 +654,40 @@ export default function Orders() {
             const StatusIcon = statusConfig.icon
             const elapsed = calculateElapsedTime(order.createdAt)
             const isUpdating = updatingOrderId === order.id
+            const isUrgent = order.priority === 'urgent'
 
             return (
-              <Card key={order.id} className={`border-2 ${statusConfig.bgColor}`}>
+              <Card key={order.id} className={`border-2 ${isUrgent ? 'border-red-500 bg-red-50' : statusConfig.bgColor}`}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-lg">{order.orderNumber || '#' + order.id.slice(-6)}</span>
+                      {isUrgent && (
+                        <span className="px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded-full animate-pulse">
+                          URGENTE
+                        </span>
+                      )}
+                      {requirePaymentBeforeKitchen && (
+                        order.paid ? (
+                          <span className="px-2 py-0.5 bg-green-600 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" />
+                            PAGADO
+                          </span>
+                        ) : order.status === 'pending' ? (
+                          <span className="px-2 py-0.5 bg-yellow-500 text-white text-xs font-bold rounded-full flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" />
+                            PAGO PENDIENTE
+                          </span>
+                        ) : null
+                      )}
+                      {order.brandName && (
+                        <span
+                          className="px-2 py-0.5 text-white text-xs font-bold rounded-full"
+                          style={{ backgroundColor: order.brandColor || '#8B5CF6' }}
+                        >
+                          {order.brandName}
+                        </span>
+                      )}
                       <Badge variant={statusConfig.variant} className="flex items-center gap-1">
                         <StatusIcon className="w-3 h-3" />
                         {statusConfig.label}
@@ -633,6 +754,34 @@ export default function Orders() {
                       {order.customerPhone && (
                         <span className="text-gray-400">• {order.customerPhone}</span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Selector de repartidor para delivery */}
+                  {order.orderType === 'delivery' && deliveryPersons.length > 0 && (
+                    <div className="flex items-center gap-2 text-sm pb-2 border-b border-gray-200 mb-2">
+                      <Bike className="w-4 h-4 text-blue-600" />
+                      <span className="text-gray-600">Repartidor:</span>
+                      <select
+                        value={order.deliveryPersonId || ''}
+                        onChange={(e) => handleAssignDeliveryPerson(order.id, e.target.value)}
+                        className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      >
+                        <option value="">Sin asignar</option>
+                        {deliveryPersons.map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Mostrar repartidor asignado cuando hay pocos repartidores */}
+                  {order.orderType === 'delivery' && order.deliveryPersonName && deliveryPersons.length === 0 && (
+                    <div className="flex items-center gap-2 text-sm text-blue-600 pb-2">
+                      <Bike className="w-4 h-4" />
+                      <span>Repartidor: {order.deliveryPersonName}</span>
                     </div>
                   )}
 
@@ -715,6 +864,14 @@ export default function Orders() {
                     <span>Iniciada a las {formatTime(order.createdAt)}</span>
                   </div>
 
+                  {/* Mostrar hora de despacho si existe */}
+                  {order.dispatchedAt && (
+                    <div className="flex items-center gap-2 text-xs text-purple-600 mt-2">
+                      <Truck className="w-3 h-3" />
+                      <span>Despachada a las {formatTime(order.dispatchedAt)}</span>
+                    </div>
+                  )}
+
                   {/* Botones de acción */}
                   <div className="flex gap-2 mt-3">
                     {/* Botón de cerrar cuenta (solo para órdenes listas) */}
@@ -730,11 +887,44 @@ export default function Orders() {
                       </Button>
                     )}
 
-                    {/* Botón de avanzar estado (para pending y preparing) */}
-                    {order.status !== 'delivered' && order.status !== 'ready' && (
+                    {/* Botón de despachar (para órdenes listas - delivery/para llevar) */}
+                    {order.status === 'ready' && !order.tableNumber && (
                       <Button
-                        onClick={() => handleStatusChange(order.id, order.status)}
+                        onClick={() => handleStatusChange(order.id, 'ready', order)}
                         disabled={isUpdating}
+                        variant="outline"
+                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50"
+                        size="sm"
+                      >
+                        {isUpdating ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <PackageCheck className="w-4 h-4 mr-2" />
+                            Despachar
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {/* Botón de marcar como pagado (solo si está pendiente y requiere pago antes de cocina) */}
+                    {order.status === 'pending' && requirePaymentBeforeKitchen && !order.paid && (
+                      <Button
+                        onClick={() => handleMarkAsPaid(order.id)}
+                        variant="outline"
+                        className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                        size="sm"
+                      >
+                        <DollarSign className="w-4 h-4 mr-2" />
+                        Marcar Pagado
+                      </Button>
+                    )}
+
+                    {/* Botón de avanzar estado (para pending y preparing) */}
+                    {order.status !== 'delivered' && order.status !== 'ready' && order.status !== 'dispatched' && (
+                      <Button
+                        onClick={() => handleStatusChange(order.id, order.status, order)}
+                        disabled={isUpdating || (order.status === 'pending' && requirePaymentBeforeKitchen && !order.paid)}
                         className="flex-1"
                         size="sm"
                       >
@@ -766,6 +956,7 @@ export default function Orders() {
         isOpen={showCreateOrderModal}
         onClose={() => setShowCreateOrderModal(false)}
         onConfirm={handleOrderTypeSelected}
+        brands={brands}
       />
 
       {/* Modal para agregar items a la orden */}

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { X, ShoppingBag, Bike, Smartphone, User, Phone } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, ShoppingBag, Bike, Smartphone, User, Phone, AlertTriangle, Clock, Tag } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -17,18 +17,32 @@ const ORDER_SOURCES = [
   { value: 'other', label: 'Otro' },
 ]
 
-export default function CreateOrderModal({ isOpen, onClose, onConfirm }) {
+export default function CreateOrderModal({ isOpen, onClose, onConfirm, brands = [] }) {
   const [orderType, setOrderType] = useState('takeaway') // 'takeaway' or 'delivery'
   const [source, setSource] = useState('counter')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [priority, setPriority] = useState('normal') // 'normal' or 'urgent'
+  const [brandId, setBrandId] = useState('') // Brand selection
+
+  // Auto-select brand if there's only one
+  useEffect(() => {
+    if (brands.length === 1) {
+      setBrandId(brands[0].id)
+    }
+  }, [brands])
 
   const handleConfirm = () => {
+    const selectedBrand = brands.find(b => b.id === brandId)
     const orderData = {
       orderType,
       source: ORDER_SOURCES.find(s => s.value === source)?.label || source,
       customerName: customerName.trim() || null,
       customerPhone: customerPhone.trim() || null,
+      priority,
+      brandId: brandId || null,
+      brandName: selectedBrand?.name || null,
+      brandColor: selectedBrand?.color || null,
     }
 
     onConfirm(orderData)
@@ -38,6 +52,8 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm }) {
     setSource('counter')
     setCustomerName('')
     setCustomerPhone('')
+    setPriority('normal')
+    setBrandId(brands.length === 1 ? brands[0].id : '')
   }
 
   const handleClose = () => {
@@ -45,6 +61,8 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm }) {
     setSource('counter')
     setCustomerName('')
     setCustomerPhone('')
+    setPriority('normal')
+    setBrandId(brands.length === 1 ? brands[0].id : '')
     onClose()
   }
 
@@ -140,6 +158,52 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm }) {
           </p>
         </div>
 
+        {/* Selector de Marca (solo si hay marcas configuradas) */}
+        {brands.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4" />
+                Marca
+              </div>
+            </label>
+            {brands.length === 1 ? (
+              <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div
+                  className="w-4 h-4 rounded-full"
+                  style={{ backgroundColor: brands[0].color || '#8B5CF6' }}
+                />
+                <span className="font-medium text-purple-900">{brands[0].name}</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {brands.map((brand) => (
+                  <button
+                    key={brand.id}
+                    type="button"
+                    onClick={() => setBrandId(brand.id)}
+                    className={`p-3 rounded-lg border-2 transition-all flex items-center gap-2 ${
+                      brandId === brand.id
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div
+                      className="w-4 h-4 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: brand.color || '#8B5CF6' }}
+                    />
+                    <span className={`text-sm font-medium ${
+                      brandId === brand.id ? 'text-purple-900' : 'text-gray-700'
+                    }`}>
+                      {brand.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Datos del Cliente (Opcional) */}
         <div className="bg-gray-50 rounded-lg p-4 space-y-4">
           <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -176,6 +240,50 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm }) {
           </div>
         </div>
 
+        {/* Prioridad */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            Prioridad
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setPriority('normal')}
+              className={`p-3 rounded-lg border-2 transition-all ${
+                priority === 'normal'
+                  ? 'border-gray-500 bg-gray-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <Clock className={`w-6 h-6 mx-auto mb-1 ${
+                priority === 'normal' ? 'text-gray-600' : 'text-gray-400'
+              }`} />
+              <p className={`font-semibold text-sm ${
+                priority === 'normal' ? 'text-gray-700' : 'text-gray-600'
+              }`}>
+                Normal
+              </p>
+            </button>
+
+            <button
+              onClick={() => setPriority('urgent')}
+              className={`p-3 rounded-lg border-2 transition-all ${
+                priority === 'urgent'
+                  ? 'border-red-500 bg-red-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <AlertTriangle className={`w-6 h-6 mx-auto mb-1 ${
+                priority === 'urgent' ? 'text-red-600' : 'text-gray-400'
+              }`} />
+              <p className={`font-semibold text-sm ${
+                priority === 'urgent' ? 'text-red-700' : 'text-gray-600'
+              }`}>
+                Urgente
+              </p>
+            </button>
+          </div>
+        </div>
+
         {/* Resumen */}
         <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
           <h4 className="font-semibold text-primary-900 mb-2">Resumen</h4>
@@ -188,6 +296,23 @@ export default function CreateOrderModal({ isOpen, onClose, onConfirm }) {
               • <span className="font-medium">Fuente:</span>{' '}
               {ORDER_SOURCES.find(s => s.value === source)?.label}
             </li>
+            <li>
+              • <span className="font-medium">Prioridad:</span>{' '}
+              <span className={priority === 'urgent' ? 'text-red-600 font-semibold' : ''}>
+                {priority === 'urgent' ? '🔴 Urgente' : 'Normal'}
+              </span>
+            </li>
+            {brandId && brands.find(b => b.id === brandId) && (
+              <li className="flex items-center gap-1">
+                • <span className="font-medium">Marca:</span>{' '}
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-xs font-medium"
+                  style={{ backgroundColor: brands.find(b => b.id === brandId)?.color || '#8B5CF6' }}
+                >
+                  {brands.find(b => b.id === brandId)?.name}
+                </span>
+              </li>
+            )}
             {customerName && (
               <li>
                 • <span className="font-medium">Cliente:</span> {customerName}

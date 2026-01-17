@@ -2012,6 +2012,171 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58) => {
 };
 
 /**
+ * Imprimir comanda de estación a una impresora WiFi específica
+ * @param {string} printerIp - Dirección IP de la impresora
+ * @param {Object} order - Datos de la orden
+ * @param {Object} station - Datos de la estación
+ * @param {Array} items - Items filtrados para esta estación
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ */
+export const printStationTicket = async (printerIp, order, station, items, paperWidth = 58) => {
+  if (!printerIp || items.length === 0) {
+    return { success: false, error: 'IP de impresora no configurada o sin items' };
+  }
+
+  try {
+    const format = getFormat(paperWidth);
+    const builder = new EscPosBuilder();
+
+    builder.init()
+      .alignCenter()
+      .doubleWidth(true)
+      .bold(true)
+      .text(`*** ${station.name?.toUpperCase() || 'ESTACION'} ***`)
+      .newLine()
+      .doubleWidth(false)
+      .bold(false)
+      .text(format.separator)
+      .newLine()
+      .alignLeft()
+      .bold(true)
+      .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
+      .newLine()
+      .text(`Fecha: ${new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`)
+      .newLine();
+
+    // Info de mesa o tipo de orden
+    if (order.tableNumber) {
+      builder.text(`Mesa: ${order.tableNumber}`).newLine();
+    } else {
+      builder.text(order.orderType === 'delivery' ? 'DELIVERY' : 'PARA LLEVAR').newLine();
+    }
+
+    // Marca si existe
+    if (order.brandName) {
+      builder.text(`Marca: ${order.brandName}`).newLine();
+    }
+
+    // Prioridad si es urgente
+    if (order.priority === 'urgent') {
+      builder.doubleWidth(true)
+        .text('!!! URGENTE !!!')
+        .newLine()
+        .doubleWidth(false);
+    }
+
+    builder.bold(false)
+      .text(format.separator)
+      .newLine();
+
+    // Items para esta estación
+    for (const item of items) {
+      builder.bold(true)
+        .text(`${item.quantity}x ${item.name}`)
+        .newLine()
+        .bold(false);
+
+      // Modificadores
+      if (item.modifiers && item.modifiers.length > 0) {
+        builder.text('  *** MODIFICADORES ***').newLine();
+        for (const modifier of item.modifiers) {
+          builder.text(`  * ${modifier.modifierName}:`).newLine();
+          for (const option of modifier.options) {
+            let optionText = `    -> ${option.optionName}`;
+            if (option.priceAdjustment > 0) {
+              optionText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
+            }
+            builder.text(optionText).newLine();
+          }
+        }
+      }
+
+      if (item.notes) {
+        builder.text(`  Nota: ${item.notes}`).newLine();
+      }
+      builder.newLine();
+    }
+
+    builder.text(format.separator)
+      .newLine()
+      .feed(2)
+      .cut();
+
+    const base64Data = builder.toBase64();
+
+    // Conectar temporalmente a la impresora de la estación
+    const port = 9100;
+    console.log(`📤 Imprimiendo a estación ${station.name} (${printerIp}:${port})...`);
+
+    // Usar TcpPrinter para conectar e imprimir
+    const connectResult = await TcpPrinter.connect({ ip: printerIp, port });
+    if (!connectResult?.success) {
+      return { success: false, error: `No se pudo conectar a ${printerIp}` };
+    }
+
+    const printResult = await TcpPrinter.print({ data: base64Data });
+
+    // Desconectar después de imprimir
+    try {
+      await TcpPrinter.disconnect();
+    } catch (e) {
+      console.warn('Error al desconectar de impresora de estación:', e);
+    }
+
+    if (printResult?.success) {
+      console.log(`✅ Ticket impreso en estación ${station.name}`);
+      return { success: true };
+    } else {
+      return { success: false, error: 'Error al imprimir en la estación' };
+    }
+  } catch (error) {
+    console.error(`Error imprimiendo en estación ${station.name}:`, error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Imprimir comanda a todas las estaciones configuradas
+ * @param {Object} order - Datos de la orden
+ * @param {Array} kitchenStations - Lista de estaciones de cocina con sus categorías e impresoras
+ * @param {number} paperWidth - Ancho de papel
+ */
+export const printToAllStations = async (order, kitchenStations, paperWidth = 58) => {
+  const results = [];
+
+  for (const station of kitchenStations) {
+    // Saltear estaciones sin impresora configurada
+    if (!station.printerIp) {
+      continue;
+    }
+
+    // Filtrar items que corresponden a esta estación según sus categorías
+    let stationItems = [];
+
+    if (station.isPase) {
+      // Estación de pase ve todos los items
+      stationItems = order.items || [];
+    } else if (station.categories && station.categories.length > 0) {
+      // Filtrar items por categoría
+      stationItems = (order.items || []).filter(item => {
+        const itemCategory = item.category || item.categoryId;
+        return station.categories.some(cat => {
+          const catId = typeof cat === 'string' ? cat : cat.id;
+          return catId === itemCategory;
+        });
+      });
+    }
+
+    if (stationItems.length > 0) {
+      const result = await printStationTicket(station.printerIp, order, station, stationItems, paperWidth);
+      results.push({ station: station.name, ...result });
+    }
+  }
+
+  return results;
+};
+
+/**
  * Imprimir precuenta vía WiFi
  */
 const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
