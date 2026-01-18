@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -13,6 +13,8 @@ import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
+import KitchenTicket from '@/components/KitchenTicket'
+import { useReactToPrint } from 'react-to-print'
 import { printPreBill } from '@/utils/printPreBill'
 import { Capacitor } from '@capacitor/core'
 import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig, printKitchenOrder } from '@/services/thermalPrinterService'
@@ -31,6 +33,7 @@ import {
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder } from '@/services/orderService'
+import { getCompanySettings } from '@/services/firestoreService'
 import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -64,6 +67,12 @@ export default function Tables() {
 
   // Tax configuration
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
+
+  // Estado para impresión de comanda web
+  const [companySettings, setCompanySettings] = useState(null)
+  const [orderToPrint, setOrderToPrint] = useState(null)
+  const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const kitchenTicketRef = useRef()
 
   // Form state
   const [formData, setFormData] = useState({
@@ -101,6 +110,49 @@ export default function Tables() {
 
     loadTaxConfig()
   }, [user, isDemoMode])
+
+  // Cargar configuración de impresora para webPrintLegible
+  useEffect(() => {
+    const loadPrinterConfig = async () => {
+      if (!user?.uid) return
+      try {
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+        if (printerConfigResult.success && printerConfigResult.config) {
+          setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+        }
+      } catch (error) {
+        console.error('Error loading printer config:', error)
+      }
+    }
+    loadPrinterConfig()
+  }, [user])
+
+  // Cargar configuración de la empresa para comanda
+  useEffect(() => {
+    const loadCompanySettings = async () => {
+      if (!user?.uid) return
+
+      try {
+        const result = await getCompanySettings(getBusinessId())
+        if (result.success) {
+          setCompanySettings(result.data)
+        }
+      } catch (error) {
+        console.error('Error al cargar configuración:', error)
+      }
+    }
+
+    loadCompanySettings()
+  }, [user, getBusinessId])
+
+  // Configurar react-to-print para comanda web
+  const handlePrintWeb = useReactToPrint({
+    contentRef: kitchenTicketRef,
+    onAfterPrint: () => {
+      toast.success('Comanda enviada a impresora')
+      setOrderToPrint(null)
+    },
+  })
 
   // Listener en tiempo real para mesas
   useEffect(() => {
@@ -583,7 +635,10 @@ export default function Tables() {
           // Reconectar a la impresora
           const connectResult = await connectPrinter(printerConfigResult.config.address)
 
-          if (connectResult.success) {
+          if (!connectResult.success) {
+            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+            toast.info('Usando impresión estándar...')
+          } else {
             // Imprimir comanda en impresora térmica
             const result = await printKitchenOrder(
               selectedOrder,
@@ -596,21 +651,22 @@ export default function Tables() {
               return
             } else {
               toast.error('Error al imprimir en ticketera: ' + result.error)
+              toast.info('Usando impresión estándar...')
             }
-          } else {
-            toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
           }
-        } else {
-          toast.warning('No hay impresora configurada. Configúrala en Ajustes.')
         }
       } catch (error) {
         console.error('Error al imprimir comanda:', error)
-        toast.error('Error al imprimir comanda')
+        toast.info('Usando impresión estándar...')
       }
-    } else {
-      // En web, mostrar mensaje
-      toast.info('La impresión de comanda solo está disponible en la app móvil')
     }
+
+    // Fallback: impresión estándar (web o si falla la térmica)
+    setOrderToPrint(selectedOrder)
+    // Esperar a que se renderice el ticket antes de imprimir
+    setTimeout(() => {
+      handlePrintWeb()
+    }, 300)
   }
 
   const handleOccupyTable = async (tableId, occupyData) => {
@@ -1129,6 +1185,18 @@ export default function Tables() {
         onConfirm={handleConfirmCloseTable}
         taxConfig={taxConfig}
       />
+
+      {/* Comanda para imprimir (oculta) */}
+      {orderToPrint && (
+        <div style={{ display: 'none' }}>
+          <KitchenTicket
+            ref={kitchenTicketRef}
+            order={orderToPrint}
+            companySettings={companySettings}
+            webPrintLegible={webPrintLegible}
+          />
+        </div>
+      )}
     </div>
   )
 }

@@ -687,8 +687,18 @@ export const voidBoletaQPse = async (userId, invoiceId, reason, idToken) => {
 export const voidDocument = async (invoice, userId, reason, idToken, emissionMethod = null) => {
   const series = invoice.series || invoice.number?.split('-')[0] || ''
 
-  // Si es boleta (serie empieza con B)
-  if (series.toUpperCase().startsWith('B')) {
+  // Detectar si es boleta: por serie (B...) o por documentType
+  const isBoleta = series.toUpperCase().startsWith('B') || invoice.documentType === 'boleta'
+
+  console.log('🗑️ voidDocument - Detectando tipo:', {
+    series,
+    documentType: invoice.documentType,
+    isBoleta,
+    emissionMethod
+  })
+
+  // Si es boleta (serie empieza con B o documentType es 'boleta')
+  if (isBoleta) {
     // Si el método de emisión es QPSe, usar la función específica
     if (emissionMethod === 'qpse') {
       return await voidBoletaQPse(userId, invoice.id, reason, idToken)
