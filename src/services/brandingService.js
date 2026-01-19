@@ -101,6 +101,7 @@ export async function updateResellerBranding(resellerId, branding) {
         companyName: branding.companyName || '',
         logoUrl: branding.logoUrl || null,
         socialImageUrl: branding.socialImageUrl || null,
+        heroImageUrl: branding.heroImageUrl || null,
         primaryColor: branding.primaryColor || DEFAULT_BRANDING.primaryColor,
         secondaryColor: branding.secondaryColor || DEFAULT_BRANDING.secondaryColor,
         accentColor: branding.accentColor || DEFAULT_BRANDING.accentColor,
@@ -124,7 +125,7 @@ export async function updateResellerBranding(resellerId, branding) {
  * Sube el logo del reseller a Firebase Storage
  * @param {string} storageUserId - El UID de Firebase Auth (para la ruta de Storage)
  * @param {File} file - El archivo a subir
- * @param {string} type - Tipo de imagen: 'logo' o 'social'
+ * @param {string} type - Tipo de imagen: 'logo', 'social' o 'hero'
  * @returns {Promise<string>} - La URL de descarga del logo
  *
  * Nota: Esta función solo sube el archivo a Storage y retorna la URL.
@@ -136,7 +137,7 @@ export async function uploadResellerLogo(storageUserId, file, type = 'logo') {
   try {
     // Crear referencia en storage usando el UID de Auth (coincide con las reglas de Storage)
     const fileExtension = file.name.split('.').pop()
-    const imageName = type === 'social' ? 'social-image' : 'logo'
+    const imageName = type === 'social' ? 'social-image' : type === 'hero' ? 'hero-image' : 'logo'
     const fileName = `reseller-logos/${storageUserId}/${imageName}.${fileExtension}`
     const storageRef = ref(storage, fileName)
 
