@@ -1,8 +1,14 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
+import { useBranding } from '@/contexts/BrandingContext'
 
 export default function TermsAndConditions() {
+  const { branding } = useBranding()
+  const companyName = branding.companyName || 'Cobrify'
+  const logoUrl = branding.logoUrl || '/logo.png'
+  const primaryColor = branding.primaryColor || '#10B981'
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -11,11 +17,11 @@ export default function TermsAndConditions() {
           <div className="flex items-center justify-between">
             <Link to="/" className="flex items-center space-x-2">
               <img
-                src="/logo.png"
-                alt="Cobrify"
+                src={logoUrl}
+                alt={companyName}
                 className="w-8 h-8 object-contain"
               />
-              <span className="text-xl font-bold text-gray-900">Cobrify</span>
+              <span className="text-xl font-bold" style={{ color: primaryColor }}>{companyName}</span>
             </Link>
             <Link
               to="/"
@@ -42,7 +48,7 @@ export default function TermsAndConditions() {
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Introducción</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              Bienvenido a Cobrify. Estos Términos y Condiciones ("Términos") rigen el acceso y uso de nuestra plataforma de facturación electrónica y gestión empresarial ("Servicio") proporcionada por Cobrify ("nosotros", "nuestro" o "la Empresa").
+              Bienvenido a {companyName}. Estos Términos y Condiciones ("Términos") rigen el acceso y uso de nuestra plataforma de facturación electrónica y gestión empresarial ("Servicio") proporcionada por {companyName} ("nosotros", "nuestro" o "la Empresa").
             </p>
             <p className="text-gray-700 leading-relaxed">
               Al acceder o utilizar nuestro Servicio, usted acepta estar sujeto a estos Términos. Si no está de acuerdo con alguna parte de estos términos, no debe utilizar nuestro Servicio.
@@ -67,7 +73,7 @@ export default function TermsAndConditions() {
               </li>
               <li className="flex items-start">
                 <Check className="w-5 h-5 text-primary-600 mr-2 mt-0.5 flex-shrink-0" />
-                <span><strong>"Plan"</strong> se refiere a los diferentes niveles de servicio ofrecidos por Cobrify.</span>
+                <span><strong>"Plan"</strong> se refiere a los diferentes niveles de servicio ofrecidos por {companyName}.</span>
               </li>
             </ul>
           </section>
@@ -83,7 +89,7 @@ export default function TermsAndConditions() {
                 Prueba Gratuita de 1 Día
               </h3>
               <p className="text-gray-700 mb-4">
-                Al registrarte en Cobrify, obtienes acceso completo a todas las funcionalidades de la plataforma durante 1 día sin costo alguno.
+                Al registrarte en {companyName}, obtienes acceso completo a todas las funcionalidades de la plataforma durante 1 día sin costo alguno.
               </p>
               <ul className="space-y-2">
                 <li className="flex items-start text-gray-700">
@@ -109,7 +115,7 @@ export default function TermsAndConditions() {
             </div>
 
             <p className="text-gray-700 leading-relaxed mb-6">
-              Cobrify ofrece tres planes de suscripción con las mismas funcionalidades completas. La diferencia está en el período de facturación y el ahorro:
+              {companyName} ofrece tres planes de suscripción con las mismas funcionalidades completas. La diferencia está en el período de facturación y el ahorro:
             </p>
 
             {/* Plan Mensual */}
@@ -244,7 +250,7 @@ export default function TermsAndConditions() {
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">6. Propiedad Intelectual</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              El Servicio y su contenido original, características y funcionalidad son y seguirán siendo propiedad exclusiva de Cobrify y sus licenciantes. El Servicio está protegido por derechos de autor, marcas comerciales y otras leyes.
+              El Servicio y su contenido original, características y funcionalidad son y seguirán siendo propiedad exclusiva de {companyName} y sus licenciantes. El Servicio está protegido por derechos de autor, marcas comerciales y otras leyes.
             </p>
             <p className="text-gray-700 leading-relaxed">
               No puede modificar, reproducir, distribuir, crear trabajos derivados de, exhibir públicamente, realizar públicamente, republicar, descargar, almacenar o transmitir cualquier material de nuestro Servicio sin nuestro consentimiento previo por escrito.
@@ -269,10 +275,10 @@ export default function TermsAndConditions() {
           <section className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">8. Limitación de Responsabilidad</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
-              En ningún caso Cobrify, sus directores, empleados, socios, agentes, proveedores o afiliados serán responsables por daños indirectos, incidentales, especiales, consecuentes o punitivos, incluyendo sin limitación, pérdida de beneficios, datos, uso, buena voluntad u otras pérdidas intangibles.
+              En ningún caso {companyName}, sus directores, empleados, socios, agentes, proveedores o afiliados serán responsables por daños indirectos, incidentales, especiales, consecuentes o punitivos, incluyendo sin limitación, pérdida de beneficios, datos, uso, buena voluntad u otras pérdidas intangibles.
             </p>
             <p className="text-gray-700 leading-relaxed">
-              La responsabilidad total de Cobrify por cualquier reclamo bajo estos Términos no excederá el monto que haya pagado por el Servicio en los últimos 12 meses.
+              La responsabilidad total de {companyName} por cualquier reclamo bajo estos Términos no excederá el monto que haya pagado por el Servicio en los últimos 12 meses.
             </p>
           </section>
 
@@ -328,7 +334,7 @@ export default function TermsAndConditions() {
           <div className="bg-primary-50 rounded-lg p-6 border border-primary-200 mt-8">
             <p className="text-gray-900 font-semibold mb-2">Aceptación de los Términos</p>
             <p className="text-gray-700 text-sm">
-              Al utilizar Cobrify, usted reconoce que ha leído, entendido y acepta estar sujeto a estos Términos y Condiciones, así como a nuestra Política de Privacidad.
+              Al utilizar {companyName}, usted reconoce que ha leído, entendido y acepta estar sujeto a estos Términos y Condiciones, así como a nuestra Política de Privacidad.
             </p>
           </div>
         </div>
@@ -348,7 +354,7 @@ export default function TermsAndConditions() {
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-400 py-8 mt-16">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-sm">© 2025 Cobrify. Todos los derechos reservados.</p>
+          <p className="text-sm">© {new Date().getFullYear()} {companyName}. Todos los derechos reservados.</p>
         </div>
       </footer>
     </div>

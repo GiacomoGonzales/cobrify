@@ -45,10 +45,12 @@ export default function ResellerSettings() {
   const [activeTab, setActiveTab] = useState('empresa') // 'empresa' | 'branding'
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [uploadingSocialImage, setUploadingSocialImage] = useState(false)
+  const [uploadingHeroImage, setUploadingHeroImage] = useState(false)
   const [copied, setCopied] = useState(false)
   const [dataLoaded, setDataLoaded] = useState(false)
   const fileInputRef = useRef(null)
   const socialImageInputRef = useRef(null)
+  const heroImageInputRef = useRef(null)
 
   // Obtener el ID del reseller
   const resellerId = resellerData?.docId || user?.uid
@@ -66,6 +68,7 @@ export default function ResellerSettings() {
     companyName: resellerData?.branding?.companyName || resellerData?.companyName || '',
     logoUrl: resellerData?.branding?.logoUrl || null,
     socialImageUrl: resellerData?.branding?.socialImageUrl || null,
+    heroImageUrl: resellerData?.branding?.heroImageUrl || null,
     primaryColor: resellerData?.branding?.primaryColor || '#10B981',
     secondaryColor: resellerData?.branding?.secondaryColor || '#059669',
     whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
@@ -91,6 +94,7 @@ export default function ResellerSettings() {
         companyName: resellerData.branding?.companyName || resellerData.companyName || '',
         logoUrl: resellerData.branding?.logoUrl || null,
         socialImageUrl: resellerData.branding?.socialImageUrl || null,
+        heroImageUrl: resellerData.branding?.heroImageUrl || null,
         primaryColor: resellerData.branding?.primaryColor || '#10B981',
         secondaryColor: resellerData.branding?.secondaryColor || '#059669',
         whatsapp: resellerData.branding?.whatsapp || resellerData.phone || '',
@@ -201,6 +205,40 @@ export default function ResellerSettings() {
 
   function removeSocialImage() {
     setBrandingData(prev => ({ ...prev, socialImageUrl: null }))
+    setSaved(false)
+  }
+
+  async function handleHeroImageUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validar tipo de archivo
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona una imagen')
+      return
+    }
+
+    // Validar tamaño (máx 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen debe ser menor a 2MB')
+      return
+    }
+
+    setUploadingHeroImage(true)
+    try {
+      const heroImageUrl = await uploadResellerLogo(user.uid, file, 'hero')
+      setBrandingData(prev => ({ ...prev, heroImageUrl }))
+      setSaved(false)
+    } catch (error) {
+      console.error('Error uploading hero image:', error)
+      alert('Error al subir la imagen')
+    } finally {
+      setUploadingHeroImage(false)
+    }
+  }
+
+  function removeHeroImage() {
+    setBrandingData(prev => ({ ...prev, heroImageUrl: null }))
     setSaved(false)
   }
 
@@ -741,6 +779,68 @@ export default function ResellerSettings() {
                             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
                           >
                             {uploadingSocialImage ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Subiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-3.5 h-3.5" />
+                                Subir
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hero Image para Landing */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <Image className="w-4 h-4 inline mr-1" />
+                        Imagen Principal (Hero)
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">Recomendado: 800x600px (aparece en la sección principal de tu landing)</p>
+
+                      <div className="flex items-start gap-3">
+                        {/* Hero Image Preview */}
+                        <div className="relative flex-shrink-0">
+                          {brandingData.heroImageUrl ? (
+                            <div className="relative">
+                              <img
+                                src={brandingData.heroImageUrl}
+                                alt="Hero Preview"
+                                className="w-32 h-24 rounded-lg object-cover border-2 border-gray-200"
+                              />
+                              <button
+                                onClick={removeHeroImage}
+                                className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-32 h-24 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                              <Image className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Upload Button */}
+                        <div>
+                          <input
+                            ref={heroImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleHeroImageUpload}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => heroImageInputRef.current?.click()}
+                            disabled={uploadingHeroImage}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+                          >
+                            {uploadingHeroImage ? (
                               <>
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 Subiendo...

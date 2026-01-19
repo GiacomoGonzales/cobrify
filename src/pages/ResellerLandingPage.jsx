@@ -10,6 +10,7 @@ export default function ResellerLandingPage({ reseller }) {
   // Datos del reseller con valores por defecto
   const brandName = reseller?.branding?.companyName || reseller?.companyName || 'Sistema de Facturación'
   const logoUrl = reseller?.branding?.logoUrl || '/logo.png'
+  const heroImageUrl = reseller?.branding?.heroImageUrl || null
   const primaryColor = reseller?.branding?.primaryColor || '#2563eb'
   const secondaryColor = reseller?.branding?.secondaryColor || '#1d4ed8'
   const whatsapp = reseller?.branding?.whatsapp || reseller?.phone || ''
@@ -121,86 +122,99 @@ export default function ResellerLandingPage({ reseller }) {
 
         <div className="container mx-auto max-w-6xl relative z-10 w-full">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Hero Illustration */}
+            {/* Hero Illustration or Custom Image */}
             <div className="flex justify-center items-center order-1 lg:order-2">
               <div className="relative w-[85%]">
-                {/* Floating documents illustration */}
-                <div className="relative">
-                  {/* Background glow */}
-                  <div className="absolute inset-0 bg-white/10 rounded-3xl blur-3xl"></div>
+                {heroImageUrl ? (
+                  /* Custom Hero Image */
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-white/10 rounded-3xl blur-3xl"></div>
+                    <img
+                      src={heroImageUrl}
+                      alt={brandName}
+                      className="relative w-full rounded-2xl shadow-2xl transform hover:scale-105 transition-all duration-300"
+                      onError={(e) => { e.target.style.display = 'none' }}
+                    />
+                  </div>
+                ) : (
+                  /* Default Floating documents illustration */
+                  <div className="relative">
+                    {/* Background glow */}
+                    <div className="absolute inset-0 bg-white/10 rounded-3xl blur-3xl"></div>
 
-                  {/* Main document card */}
-                  <div className="relative bg-white/95 backdrop-blur rounded-2xl shadow-2xl p-6 transform hover:scale-105 transition-all duration-300 animate-float">
-                    {/* Invoice header */}
-                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: primaryColor }}>
-                          <FileText className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-semibold text-gray-800">FACTURA ELECTRÓNICA</div>
-                          <div className="text-xs text-gray-500">F001-00001234</div>
-                        </div>
-                      </div>
-                      <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                        EMITIDA
-                      </div>
-                    </div>
-
-                    {/* Invoice items mock */}
-                    <div className="space-y-3 mb-6">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gray-100 rounded"></div>
+                    {/* Main document card */}
+                    <div className="relative bg-white/95 backdrop-blur rounded-2xl shadow-2xl p-6 transform hover:scale-105 transition-all duration-300 animate-float">
+                      {/* Invoice header */}
+                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: primaryColor }}>
+                            <FileText className="w-5 h-5 text-white" />
+                          </div>
                           <div>
-                            <div className="text-sm font-medium text-gray-700">Producto / Servicio</div>
-                            <div className="text-xs text-gray-400">Cantidad: 2</div>
+                            <div className="text-sm font-semibold text-gray-800">FACTURA ELECTRÓNICA</div>
+                            <div className="text-xs text-gray-500">F001-00001234</div>
                           </div>
                         </div>
-                        <div className="text-sm font-semibold text-gray-800">S/ 150.00</div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-gray-100 rounded"></div>
-                          <div>
-                            <div className="text-sm font-medium text-gray-700">Producto / Servicio</div>
-                            <div className="text-xs text-gray-400">Cantidad: 1</div>
-                          </div>
+                        <div className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          EMITIDA
                         </div>
-                        <div className="text-sm font-semibold text-gray-800">S/ 85.00</div>
+                      </div>
+
+                      {/* Invoice items mock */}
+                      <div className="space-y-3 mb-6">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gray-100 rounded"></div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-700">Producto / Servicio</div>
+                              <div className="text-xs text-gray-400">Cantidad: 2</div>
+                            </div>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-800">S/ 150.00</div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gray-100 rounded"></div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-700">Producto / Servicio</div>
+                              <div className="text-xs text-gray-400">Cantidad: 1</div>
+                            </div>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-800">S/ 85.00</div>
+                        </div>
+                      </div>
+
+                      {/* Invoice total */}
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm text-gray-500">Subtotal</span>
+                          <span className="text-sm text-gray-700">S/ 235.00</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm text-gray-500">IGV (18%)</span>
+                          <span className="text-sm text-gray-700">S/ 42.30</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-base font-semibold text-gray-800">TOTAL</span>
+                          <span className="text-xl font-bold" style={{ color: primaryColor }}>S/ 277.30</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Invoice total */}
-                    <div className="pt-4 border-t border-gray-200">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-gray-500">Subtotal</span>
-                        <span className="text-sm text-gray-700">S/ 235.00</span>
-                      </div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-gray-500">IGV (18%)</span>
-                        <span className="text-sm text-gray-700">S/ 42.30</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-base font-semibold text-gray-800">TOTAL</span>
-                        <span className="text-xl font-bold" style={{ color: primaryColor }}>S/ 277.30</span>
-                      </div>
+                    {/* Floating elements around the card */}
+                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/90 rounded-xl shadow-lg flex items-center justify-center animate-bounce-slow">
+                      <Check className="w-8 h-8 text-green-500" />
+                    </div>
+
+                    <div className="absolute -bottom-4 -left-4 w-14 h-14 bg-white/90 rounded-xl shadow-lg flex items-center justify-center animate-pulse">
+                      <Shield className="w-7 h-7" style={{ color: primaryColor }} />
+                    </div>
+
+                    <div className="absolute top-1/2 -right-8 w-12 h-12 bg-white/80 rounded-lg shadow-lg flex items-center justify-center">
+                      <BarChart3 className="w-6 h-6 text-blue-500" />
                     </div>
                   </div>
-
-                  {/* Floating elements around the card */}
-                  <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/90 rounded-xl shadow-lg flex items-center justify-center animate-bounce-slow">
-                    <Check className="w-8 h-8 text-green-500" />
-                  </div>
-
-                  <div className="absolute -bottom-4 -left-4 w-14 h-14 bg-white/90 rounded-xl shadow-lg flex items-center justify-center animate-pulse">
-                    <Shield className="w-7 h-7" style={{ color: primaryColor }} />
-                  </div>
-
-                  <div className="absolute top-1/2 -right-8 w-12 h-12 bg-white/80 rounded-lg shadow-lg flex items-center justify-center">
-                    <BarChart3 className="w-6 h-6 text-blue-500" />
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
