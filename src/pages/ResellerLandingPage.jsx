@@ -124,15 +124,15 @@ export default function ResellerLandingPage({ reseller }) {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Hero Illustration or Custom Image */}
             <div className="flex justify-center items-center order-1 lg:order-2">
-              <div className="relative w-[85%]">
+              <div className={`relative ${heroImageUrl ? 'w-full' : 'w-[85%]'}`}>
                 {heroImageUrl ? (
-                  /* Custom Hero Image */
+                  /* Custom Hero Image - más grande para aprovechar el espacio */
                   <div className="relative">
                     <div className="absolute inset-0 bg-white/10 rounded-3xl blur-3xl"></div>
                     <img
                       src={heroImageUrl}
                       alt={brandName}
-                      className="relative w-full rounded-2xl shadow-2xl transform hover:scale-105 transition-all duration-300"
+                      className="relative w-full max-h-[500px] object-contain rounded-2xl shadow-2xl transform hover:scale-[1.02] transition-all duration-300"
                       onError={(e) => { e.target.style.display = 'none' }}
                     />
                   </div>
