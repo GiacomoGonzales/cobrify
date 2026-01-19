@@ -313,6 +313,7 @@ export default function POS() {
   // Modal de selección de lote (modo farmacia)
   const [showBatchModal, setShowBatchModal] = useState(false)
   const [productForBatchSelection, setProductForBatchSelection] = useState(null)
+  const [pendingPriceForBatch, setPendingPriceForBatch] = useState(null) // Precio seleccionado antes de elegir lote
 
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
@@ -1091,6 +1092,7 @@ export default function POS() {
     const availableBatches = getAvailableBatches(product)
     if (availableBatches.length > 1 && selectedBatch === null) {
       setProductForBatchSelection(product)
+      setPendingPriceForBatch(selectedPrice) // Guardar precio seleccionado para usarlo después
       setShowBatchModal(true)
       return
     }
@@ -1150,9 +1152,11 @@ export default function POS() {
   // Manejar selección de lote desde el modal
   const handleBatchSelection = (batch) => {
     if (!productForBatchSelection) return
-    addToCart(productForBatchSelection, null, null, batch)
+    // Usar el precio que se había seleccionado antes de mostrar el modal de lotes
+    addToCart(productForBatchSelection, pendingPriceForBatch, null, batch)
     setShowBatchModal(false)
     setProductForBatchSelection(null)
+    setPendingPriceForBatch(null)
   }
 
   // Manejar selección de precio desde el modal
@@ -5113,6 +5117,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         onClose={() => {
           setShowBatchModal(false)
           setProductForBatchSelection(null)
+          setPendingPriceForBatch(null)
         }}
         title={`Seleccionar lote - ${productForBatchSelection?.name || ''}`}
         size="sm"
