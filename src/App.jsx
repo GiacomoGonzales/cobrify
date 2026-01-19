@@ -87,6 +87,10 @@ import Commissions from './pages/Commissions'
 import Agents from './pages/Agents'
 // Public catalog
 import CatalogoPublico from './pages/CatalogoPublico'
+// Public complaints book
+import LibroReclamaciones from './pages/LibroReclamaciones'
+// Admin complaints
+import ComplaintsList from './pages/ComplaintsList'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -135,6 +139,10 @@ function App() {
             <Route path="/catalogo/:slug" element={<CatalogoPublico />} />
             <Route path="/app/catalogo/:slug" element={<CatalogoPublico />} />
 
+            {/* Libro de Reclamaciones público */}
+            <Route path="/reclamos/:slug" element={<LibroReclamaciones />} />
+            <Route path="/app/reclamos/:slug" element={<LibroReclamaciones />} />
+
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />
 
@@ -172,6 +180,7 @@ function App() {
               <Route path="prestamos" element={<Loans />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
+              <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="configuracion" element={<Settings />} />
               {/* Rutas de modo restaurante en demo */}
               <Route path="mesas" element={<Tables />} />
@@ -274,6 +283,7 @@ function App() {
               <Route path="prestamos" element={<Loans />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
+              <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />

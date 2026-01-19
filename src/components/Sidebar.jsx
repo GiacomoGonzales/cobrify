@@ -43,6 +43,7 @@ import {
   DollarSign,
   UserCheck,
   Award,
+  BookOpen,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -240,6 +241,13 @@ function Sidebar() {
       menuId: 'cash-flow',
     },
     {
+      path: '/reclamos',
+      icon: BookOpen,
+      label: 'Libro de Reclamos',
+      pageId: 'complaints',
+      menuId: 'complaints',
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -380,6 +388,13 @@ function Sidebar() {
       menuId: 'cash-flow',
     },
     {
+      path: '/reclamos',
+      icon: BookOpen,
+      label: 'Libro de Reclamos',
+      pageId: 'complaints',
+      menuId: 'complaints',
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -506,6 +521,13 @@ function Sidebar() {
       menuId: 'cash-flow',
     },
     {
+      path: '/reclamos',
+      icon: BookOpen,
+      label: 'Libro de Reclamos',
+      pageId: 'complaints',
+      menuId: 'complaints',
+    },
+    {
       path: '/configuracion',
       icon: Settings,
       label: 'Configuración',
@@ -562,6 +584,13 @@ function Sidebar() {
       icon: UserCog,
       label: 'Gestión de Usuarios',
       pageId: 'users',
+    },
+    {
+      path: '/reclamos',
+      icon: BookOpen,
+      label: 'Libro de Reclamos',
+      pageId: 'complaints',
+      menuId: 'complaints',
     },
     {
       path: '/configuracion',

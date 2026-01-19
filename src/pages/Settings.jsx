@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -170,6 +170,12 @@ export default function Settings() {
   // Estados para catálogo público
   const [catalogEnabled, setCatalogEnabled] = useState(false)
   const [catalogSlug, setCatalogSlug] = useState('')
+
+  // Estados para Libro de Reclamaciones
+  const [complaintsBookEnabled, setComplaintsBookEnabled] = useState(false)
+  const [complaintsBookSlug, setComplaintsBookSlug] = useState('')
+  const [complaintsBookResponseDays, setComplaintsBookResponseDays] = useState(30)
+  const [complaintsBookQrDataUrl, setComplaintsBookQrDataUrl] = useState('')
   const [catalogColor, setCatalogColor] = useState('#10B981')
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
@@ -301,6 +307,30 @@ export default function Settings() {
       setCatalogQrDataUrl('')
     }
   }, [catalogSlug, catalogEnabled, resellerCustomDomain])
+
+  // Generar QR del Libro de Reclamaciones cuando cambie el slug
+  useEffect(() => {
+    if (complaintsBookSlug && complaintsBookEnabled) {
+      const baseUrl = resellerCustomDomain
+        ? `https://${resellerCustomDomain}`
+        : PRODUCTION_URL
+      const complaintsUrl = `${baseUrl}/app/reclamos/${complaintsBookSlug}`
+      QRCode.toDataURL(complaintsUrl, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      }).then(url => {
+        setComplaintsBookQrDataUrl(url)
+      }).catch(err => {
+        console.error('Error generating complaints QR:', err)
+      })
+    } else {
+      setComplaintsBookQrDataUrl('')
+    }
+  }, [complaintsBookSlug, complaintsBookEnabled, resellerCustomDomain])
 
   // Obtener dominio personalizado del reseller cuando hay suscripción
   useEffect(() => {
@@ -604,6 +634,11 @@ export default function Settings() {
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
+
+        // Cargar configuración de Libro de Reclamaciones
+        setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
+        setComplaintsBookSlug(businessData.complaintsBookSlug || '')
+        setComplaintsBookResponseDays(businessData.complaintsBookResponseDays || 30)
 
         // Cargar modo de negocio
         setBusinessMode(businessData.businessMode || 'retail')
@@ -1515,6 +1550,7 @@ export default function Settings() {
     { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
     { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
     { id: 'catalogo', label: 'Catálogo', icon: Globe },
+    { id: 'reclamos', label: 'Reclamos', icon: BookOpen },
     { id: 'series', label: 'Series', icon: FileText },
     { id: 'avanzado', label: 'Avanzado', icon: Cog },
     { id: 'impresora', label: 'Impresora', icon: Printer },
@@ -2380,6 +2416,7 @@ export default function Settings() {
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
                         <label
                           key={item.id}
@@ -2423,6 +2460,7 @@ export default function Settings() {
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
                         <label
                           key={item.id}
@@ -2466,6 +2504,7 @@ export default function Settings() {
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
                         <label
                           key={item.id}
@@ -2515,6 +2554,7 @@ export default function Settings() {
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
                         { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
                         { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
                       ].map((item) => (
                         <label
                           key={item.id}
@@ -3541,7 +3581,7 @@ export default function Settings() {
                     <div className="flex items-center gap-2">
                       <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
                         <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
-                          cobrify.com/catalogo/
+                          cobrifyperu.com/app/catalogo/
                         </span>
                         <input
                           type="text"
@@ -3800,6 +3840,248 @@ export default function Settings() {
                   <>
                     <Save className="w-4 h-4 mr-2" />
                     Guardar Catálogo
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Libro de Reclamaciones */}
+      {activeTab === 'reclamos' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <BookOpen className="w-5 h-5 text-red-600" />
+              <CardTitle>Libro de Reclamaciones Virtual</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Descripción */}
+              <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl border border-red-200">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0">
+                    <BookOpen className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-red-900">Cumple con la normativa peruana</h3>
+                    <p className="text-sm text-red-700 mt-1">
+                      Según la Ley N° 29571 y D.S. N° 011-2011-PCM, tu negocio debe contar con un Libro de Reclamaciones.
+                      Activa esta opción para que tus clientes puedan registrar sus reclamos y quejas de forma virtual.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Toggle habilitar */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border-2 rounded-xl transition-colors hover:border-red-300">
+                <input
+                  type="checkbox"
+                  checked={complaintsBookEnabled}
+                  onChange={(e) => setComplaintsBookEnabled(e.target.checked)}
+                  className="mt-1 w-5 h-5 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                />
+                <div className="flex-1">
+                  <span className="text-base font-semibold text-gray-900">
+                    {complaintsBookEnabled ? 'Libro de Reclamaciones habilitado' : 'Habilitar Libro de Reclamaciones'}
+                  </span>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {complaintsBookEnabled
+                      ? 'Tu Libro de Reclamaciones está activo y visible para el público'
+                      : 'Activa esta opción para crear tu Libro de Reclamaciones virtual'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Configuración (solo si está habilitado) */}
+              {complaintsBookEnabled && (
+                <>
+                  {/* URL del Libro de Reclamaciones */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      URL de tu Libro de Reclamaciones
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                        <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
+                          cobrifyperu.com/app/reclamos/
+                        </span>
+                        <input
+                          type="text"
+                          value={complaintsBookSlug}
+                          onChange={(e) => setComplaintsBookSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                          placeholder="mi-negocio"
+                          className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-red-500 text-gray-900"
+                        />
+                      </div>
+                      {complaintsBookSlug && (
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/app/reclamos/${complaintsBookSlug}`, '_blank')}
+                          className="p-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                          title="Ver Libro de Reclamaciones"
+                        >
+                          <ExternalLink className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Solo letras minúsculas, números y guiones. Ejemplo: mi-negocio, ferreteria-lopez
+                    </p>
+                  </div>
+
+                  {/* Vista previa del enlace */}
+                  {complaintsBookSlug && (
+                    <div className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-500 mb-1">Enlace de tu Libro de Reclamaciones:</p>
+                          <p className="text-sm font-medium text-red-600 truncate">
+                            {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/app/reclamos/{complaintsBookSlug}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/app/reclamos/${complaintsBookSlug}`)
+                            toast.success('Enlace copiado al portapapeles')
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                        >
+                          <Copy className="w-4 h-4" />
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Código QR */}
+                  {complaintsBookSlug && complaintsBookQrDataUrl && (
+                    <div className="p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border border-red-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <QrCode className="w-5 h-5 text-red-600" />
+                        <h4 className="font-medium text-gray-900">Código QR del Libro de Reclamaciones</h4>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="bg-white p-3 rounded-xl shadow-sm">
+                          <img
+                            src={complaintsBookQrDataUrl}
+                            alt="QR del Libro de Reclamaciones"
+                            className="w-40 h-40"
+                          />
+                        </div>
+                        <div className="flex-1 text-center sm:text-left">
+                          <p className="text-sm text-gray-600 mb-3">
+                            Imprime y coloca este código QR en un lugar visible de tu establecimiento.
+                            Es obligatorio según la normativa peruana.
+                          </p>
+                          <button
+                            onClick={() => {
+                              const link = document.createElement('a')
+                              link.download = `libro-reclamaciones-${complaintsBookSlug}-qr.png`
+                              link.href = complaintsBookQrDataUrl
+                              link.click()
+                              toast.success('QR descargado exitosamente')
+                            }}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                          >
+                            <Download className="w-4 h-4" />
+                            Descargar QR
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-200"></div>
+
+                  {/* Plazo de respuesta */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Plazo de respuesta (días calendario)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={complaintsBookResponseDays}
+                        onChange={(e) => setComplaintsBookResponseDays(parseInt(e.target.value) || 30)}
+                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      />
+                      <span className="text-sm text-gray-500">días</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Por ley, el plazo máximo es de 30 días calendario, prorrogable 30 días más.
+                    </p>
+                  </div>
+
+                  <div className="border-t border-gray-200"></div>
+
+                  {/* Información adicional */}
+                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-blue-900">¿Cómo funciona?</h4>
+                        <ul className="text-sm text-blue-700 mt-2 space-y-1">
+                          <li>• Tus clientes pueden registrar reclamos o quejas desde la URL pública</li>
+                          <li>• Recibirán un código de seguimiento para consultar el estado</li>
+                          <li>• Podrás ver y responder los reclamos desde el menú "Libro de Reclamos"</li>
+                          <li>• Los reclamos y respuestas quedan registrados por 2 años mínimo</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+
+          {/* Save Button */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo.')
+                    return
+                  }
+
+                  if (complaintsBookEnabled && !complaintsBookSlug) {
+                    toast.error('Ingresa una URL para tu Libro de Reclamaciones')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      complaintsBookEnabled,
+                      complaintsBookSlug: complaintsBookSlug.toLowerCase().trim(),
+                      complaintsBookResponseDays,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    toast.success(complaintsBookEnabled ? 'Libro de Reclamaciones configurado exitosamente' : 'Libro de Reclamaciones deshabilitado')
+                  } catch (error) {
+                    console.error('Error al guardar Libro de Reclamaciones:', error)
+                    toast.error('Error al guardar la configuración')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Configuración
                   </>
                 )}
               </Button>

@@ -440,6 +440,23 @@ service cloud.firestore {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
+
+      // Subcollection: Complaints (Libro de Reclamaciones)
+      match /complaints/{complaintId} {
+        // El dueño del negocio puede leer y actualizar todos los reclamos
+        allow read, update: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Lectura pública para consultar por código de seguimiento (si el libro está habilitado)
+        allow read: if get(/databases/$(database)/documents/businesses/$(userId)).data.complaintsBookEnabled == true;
+
+        // Creación pública (si el libro está habilitado y datos válidos)
+        allow create: if get(/databases/$(database)/documents/businesses/$(userId)).data.complaintsBookEnabled == true
+                      && request.resource.data.status == 'pending'
+                      && request.resource.data.trackingCode != null;
+
+        // No se permite eliminar reclamos (obligación legal de conservarlos 2 años)
+        allow delete: if false;
+      }
     }
   }
 }

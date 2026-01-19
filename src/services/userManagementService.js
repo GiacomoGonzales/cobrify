@@ -36,6 +36,8 @@ export const COMMON_PAGES = [
   // Sistema
   { id: 'settings', name: 'Configuración', path: '/configuracion', category: 'sistema' },
   { id: 'users', name: 'Gestión de Usuarios', path: '/usuarios', category: 'sistema' },
+  // Otros
+  { id: 'complaints', name: 'Libro de Reclamos', path: '/reclamos', category: 'otros' },
 ]
 
 // ============ PÁGINAS MODO RETAIL ============
