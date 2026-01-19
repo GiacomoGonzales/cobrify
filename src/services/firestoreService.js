@@ -391,10 +391,44 @@ export const updateProduct = async (userId, productId, updates) => {
 
 /**
  * Eliminar un producto
+ * Verifica que el producto no tenga stock antes de eliminarlo
  */
 export const deleteProduct = async (userId, productId) => {
   try {
-    await deleteDoc(doc(db, 'businesses', userId, 'products', productId))
+    // Primero obtener el producto para verificar el stock
+    const productRef = doc(db, 'businesses', userId, 'products', productId)
+    const productSnap = await getDoc(productRef)
+
+    if (!productSnap.exists()) {
+      return { success: false, error: 'Producto no encontrado' }
+    }
+
+    const product = productSnap.data()
+
+    // Verificar si el producto tiene stock
+    // 1. Verificar stock general
+    const generalStock = product.stock || 0
+
+    // 2. Verificar stock en almacenes (si existe warehouseStocks)
+    let warehouseStock = 0
+    if (product.warehouseStocks && Array.isArray(product.warehouseStocks)) {
+      warehouseStock = product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+    }
+
+    // El stock total es el mayor entre el general y la suma de almacenes
+    // (algunos productos pueden tener discrepancias)
+    const totalStock = Math.max(generalStock, warehouseStock)
+
+    // Si tiene stock, no permitir eliminar
+    if (totalStock > 0) {
+      return {
+        success: false,
+        error: `No se puede eliminar el producto porque tiene ${totalStock} unidad(es) en stock. Primero debes ajustar el inventario a 0.`
+      }
+    }
+
+    // Si no tiene stock, proceder con la eliminación
+    await deleteDoc(productRef)
     return { success: true }
   } catch (error) {
     console.error('Error al eliminar producto:', error)

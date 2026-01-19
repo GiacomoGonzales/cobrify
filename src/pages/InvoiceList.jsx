@@ -700,7 +700,8 @@ Gracias por tu preferencia.`
       return
     }
 
-    if (paymentAmount > paymentInvoice.balance) {
+    // Usar tolerancia de 0.01 para evitar problemas de precisión de decimales flotantes
+    if (paymentAmount > paymentInvoice.balance + 0.01) {
       toast.error('El monto no puede ser mayor que el saldo pendiente')
       return
     }
