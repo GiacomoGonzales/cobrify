@@ -1,10 +1,10 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
 import { sendPushNotification } from './sendPushNotification.js'
-import { getFirestore } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 
 /**
  * Trigger cuando se detecta un nuevo pago de Yape
- * Envía notificación push al dueño del negocio (igual que onNewSale)
+ * Envía notificación push al dueño del negocio y crea notificación en la campanita
  */
 export const onYapePayment = onDocumentCreated(
   'businesses/{businessId}/yapePayments/{paymentId}',
@@ -45,9 +45,9 @@ export const onYapePayment = onDocumentCreated(
 
       // Preparar mensaje
       const title = '💜 Yape Recibido'
-      const body = `S/ ${payment.amount?.toFixed(2) || '0.00'} de ${payment.senderName || 'Desconocido'} en ${businessName}`
+      const body = `S/ ${payment.amount?.toFixed(2) || '0.00'} de ${payment.senderName || 'Desconocido'}`
 
-      // Enviar notificación al dueño (igual que onNewSale)
+      // Enviar notificación push al dueño
       const result = await sendPushNotification(
         ownerId,
         title,
@@ -62,9 +62,28 @@ export const onYapePayment = onDocumentCreated(
       )
 
       console.log('📤 Push notification result:', result)
-      console.log(`✅ Yape notification sent for payment: ${paymentId}`)
+      console.log(`✅ Yape push notification sent for payment: ${paymentId}`)
 
-      // Actualizar el documento
+      // Crear notificación en la colección notifications (campanita)
+      await db.collection('notifications').add({
+        userId: ownerId,
+        type: 'yape_payment',
+        title: title,
+        message: body,
+        metadata: {
+          paymentId: paymentId,
+          businessId: businessId,
+          amount: payment.amount || 0,
+          senderName: payment.senderName || 'Desconocido'
+        },
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      console.log(`🔔 Bell notification created for Yape payment: ${paymentId}`)
+
+      // Actualizar el documento de pago
       await db
         .collection('businesses')
         .doc(businessId)

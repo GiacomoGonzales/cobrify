@@ -10,7 +10,8 @@ import {
   Clock,
   CreditCard,
   Gift,
-  Sparkles
+  Sparkles,
+  Wallet
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -100,6 +101,8 @@ export default function NotificationPanel({ userId, isOpen, onClose }) {
         return <Gift className="w-5 h-5 text-purple-500" />;
       case NOTIFICATION_TYPES.WELCOME:
         return <Sparkles className="w-5 h-5 text-yellow-500" />;
+      case NOTIFICATION_TYPES.YAPE_PAYMENT:
+        return <Wallet className="w-5 h-5 text-purple-600" />;
       default:
         return <Bell className="w-5 h-5 text-gray-500" />;
     }
@@ -118,6 +121,8 @@ export default function NotificationPanel({ userId, isOpen, onClose }) {
         return 'bg-green-50';
       case NOTIFICATION_TYPES.PAYMENT_RECEIVED:
         return 'bg-blue-50';
+      case NOTIFICATION_TYPES.YAPE_PAYMENT:
+        return 'bg-purple-50';
       default:
         return 'bg-gray-50';
     }
@@ -139,6 +144,10 @@ export default function NotificationPanel({ userId, isOpen, onClose }) {
       notification.type === NOTIFICATION_TYPES.PLAN_CHANGED
     ) {
       navigate('/mi-suscripcion');
+      onClose();
+    } else if (notification.type === NOTIFICATION_TYPES.YAPE_PAYMENT) {
+      // Navegar al POS para usar el pago Yape
+      navigate('/pos');
       onClose();
     }
   };

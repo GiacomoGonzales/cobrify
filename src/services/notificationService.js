@@ -29,6 +29,7 @@ export const NOTIFICATION_TYPES = {
   NEW_SALE: 'new_sale', // Nueva venta realizada
   LOW_STOCK: 'low_stock', // Producto con stock bajo
   OUT_OF_STOCK: 'out_of_stock', // Producto sin stock
+  YAPE_PAYMENT: 'yape_payment', // Pago Yape detectado
 };
 
 // ===========================================
