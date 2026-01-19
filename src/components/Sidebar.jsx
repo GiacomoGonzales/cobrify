@@ -431,6 +431,13 @@ function Sidebar() {
       pageId: 'invoices',
     },
     {
+      path: '/cotizaciones',
+      icon: FileCheck,
+      label: 'Cotizaciones',
+      pageId: 'invoices',
+      menuId: 'quotations',
+    },
+    {
       path: '/clientes',
       icon: Users,
       label: 'Clientes',

@@ -2494,6 +2494,7 @@ export default function Settings() {
                     <>
                       {[
                         { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
                         { id: 'laboratories', label: 'Laboratorios', description: 'Fabricantes de medicamentos' },
                         { id: 'inventory', label: 'Inventario', description: 'Control de stock' },
                         { id: 'batch-control', label: 'Control de Lotes', description: 'Gestión de lotes y vencimientos' },
