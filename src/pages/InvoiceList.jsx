@@ -43,7 +43,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToBoleta } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -2003,7 +2003,7 @@ Gracias por tu preferencia.`
                   <p className="text-primary-100 text-sm">{getDocumentTypeName(viewingInvoice.documentType)}</p>
                   <p className="text-2xl font-bold mt-1">{viewingInvoice.number}</p>
                   <p className="text-primary-100 text-sm mt-2">
-                    {getInvoiceDate(viewingInvoice) ? formatDate(getInvoiceDate(viewingInvoice)) : 'Sin fecha'}
+                    {getInvoiceDate(viewingInvoice) ? formatDateTime(getInvoiceDate(viewingInvoice)) : 'Sin fecha'}
                   </p>
                 </div>
                 <div className="text-right space-y-2">
