@@ -96,6 +96,7 @@ export default function LandingRouter() {
                 ...DEFAULT_BRANDING,
                 companyName: data.branding?.companyName || data.companyName || DEFAULT_BRANDING.companyName,
                 logoUrl: data.branding?.logoUrl || null,
+                heroImageUrl: data.branding?.heroImageUrl || null,
                 primaryColor: data.branding?.primaryColor || DEFAULT_BRANDING.primaryColor,
                 secondaryColor: data.branding?.secondaryColor || DEFAULT_BRANDING.secondaryColor,
                 accentColor: data.branding?.accentColor || DEFAULT_BRANDING.accentColor,
