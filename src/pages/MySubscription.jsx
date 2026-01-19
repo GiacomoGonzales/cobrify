@@ -88,12 +88,23 @@ export default function MySubscription() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Precio Mensual</p>
-              <p className="text-2xl font-bold text-gray-900">
-                S/ {subscription.monthlyPrice}
-                <span className="text-sm text-gray-500 font-normal">/mes</span>
+              <p className="text-sm text-gray-500">Duración</p>
+              <p className="text-lg font-semibold text-gray-900">
+                {planInfo.months === 1 ? 'Mensual' :
+                 planInfo.months === 6 ? 'Semestral' :
+                 planInfo.months === 12 ? 'Anual' :
+                 `${planInfo.months || 1} meses`}
               </p>
             </div>
+            {planInfo.months === 1 && (
+              <div>
+                <p className="text-sm text-gray-500">Precio Mensual</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  S/ {subscription.monthlyPrice}
+                  <span className="text-sm text-gray-500 font-normal">/mes</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -241,7 +252,9 @@ export default function MySubscription() {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Fecha</th>
-                  <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Monto</th>
+                  {planInfo.months === 1 && (
+                    <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Monto</th>
+                  )}
                   <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Método</th>
                   <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Estado</th>
                 </tr>
@@ -260,9 +273,11 @@ export default function MySubscription() {
                             ? format(new Date(paymentDate), "dd/MM/yyyy", { locale: es })
                             : 'N/A'}
                         </td>
-                        <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                          S/ {payment.amount}
-                        </td>
+                        {planInfo.months === 1 && (
+                          <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                            S/ {payment.amount}
+                          </td>
+                        )}
                         <td className="py-3 px-4 text-sm text-gray-700">{payment.method}</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-1 text-xs rounded-full ${

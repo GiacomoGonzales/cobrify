@@ -16,9 +16,9 @@ export default function ResellerLandingPage({ reseller }) {
   const whatsapp = reseller?.branding?.whatsapp || reseller?.phone || ''
 
   // Precios dinámicos
-  const priceMonthly = reseller?.branding?.priceMonthly ?? 19.90
-  const priceSemester = reseller?.branding?.priceSemester ?? 99.90
-  const priceAnnual = reseller?.branding?.priceAnnual ?? 149.90
+  const priceMonthly = reseller?.branding?.priceMonthly ?? 29.90
+  const priceSemester = reseller?.branding?.priceSemester ?? 149.90
+  const priceAnnual = reseller?.branding?.priceAnnual ?? 199.90
 
   // Calcular ahorros
   const savingSemester = (priceMonthly * 6) - priceSemester

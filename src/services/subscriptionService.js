@@ -177,6 +177,110 @@ export const PLANS = {
     badge: "Ahorra S/89"
   },
 
+  // ============================================
+  // PLANES NUEVOS 2024 (Precios actualizados)
+  // ============================================
+  qpse_1_month_2024: {
+    name: "Plan QPse - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 29.90,
+    totalPrice: 29.90,
+    emissionMethod: "qpse",
+    limits: {
+      maxInvoicesPerMonth: 500,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    }
+  },
+  qpse_6_months_2024: {
+    name: "Plan QPse - 6 Meses",
+    category: "qpse",
+    months: 6,
+    pricePerMonth: 24.98, // 149.90 / 6
+    totalPrice: 149.90,
+    emissionMethod: "qpse",
+    limits: {
+      maxInvoicesPerMonth: 500,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    },
+    badge: "Ahorra S/29.50"
+  },
+  qpse_12_months_2024: {
+    name: "Plan QPse - 12 Meses",
+    category: "qpse",
+    months: 12,
+    pricePerMonth: 16.66, // 199.90 / 12
+    totalPrice: 199.90,
+    emissionMethod: "qpse",
+    limits: {
+      maxInvoicesPerMonth: 500,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    },
+    badge: "Ahorra S/158.90"
+  },
+  sunat_direct_1_month_2024: {
+    name: "Plan SUNAT Directo - 1 Mes",
+    category: "sunat_direct",
+    months: 1,
+    pricePerMonth: 29.90,
+    totalPrice: 29.90,
+    emissionMethod: "sunat_direct",
+    limits: {
+      maxInvoicesPerMonth: -1,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    }
+  },
+  sunat_direct_6_months_2024: {
+    name: "Plan SUNAT Directo - 6 Meses",
+    category: "sunat_direct",
+    months: 6,
+    pricePerMonth: 24.98, // 149.90 / 6
+    totalPrice: 149.90,
+    emissionMethod: "sunat_direct",
+    limits: {
+      maxInvoicesPerMonth: -1,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    },
+    badge: "Ahorra S/29.50"
+  },
+  sunat_direct_12_months_2024: {
+    name: "Plan SUNAT Directo - 12 Meses",
+    category: "sunat_direct",
+    months: 12,
+    pricePerMonth: 16.66, // 199.90 / 12
+    totalPrice: 199.90,
+    emissionMethod: "sunat_direct",
+    limits: {
+      maxInvoicesPerMonth: -1,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    },
+    badge: "Ahorra S/158.90"
+  },
+
   // Plan Enterprise (para casos especiales/admin - TODO ILIMITADO, SIN VENCIMIENTO)
   enterprise: {
     name: "Plan Enterprise",

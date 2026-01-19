@@ -9,6 +9,20 @@ export default function TermsAndConditions() {
   const logoUrl = branding.logoUrl || '/logo.png'
   const primaryColor = branding.primaryColor || '#10B981'
 
+  // Precios dinámicos
+  const priceMonthly = branding.priceMonthly ?? 29.90
+  const priceSemester = branding.priceSemester ?? 149.90
+  const priceAnnual = branding.priceAnnual ?? 199.90
+
+  // Calcular ahorros
+  const savingSemester = (priceMonthly * 6) - priceSemester
+  const savingSemesterPercent = Math.round((savingSemester / (priceMonthly * 6)) * 100)
+  const monthlyEquivSemester = (priceSemester / 6).toFixed(2)
+
+  const savingAnnual = (priceMonthly * 12) - priceAnnual
+  const savingAnnualPercent = Math.round((savingAnnual / (priceMonthly * 12)) * 100)
+  const monthlyEquivAnnual = (priceAnnual / 12).toFixed(2)
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -123,7 +137,7 @@ export default function TermsAndConditions() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xl font-bold text-gray-900">Plan Mensual</h3>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900">S/19.90</p>
+                  <p className="text-3xl font-bold text-gray-900">S/{priceMonthly.toFixed(2)}</p>
                   <p className="text-sm text-gray-500">/mes</p>
                 </div>
               </div>
@@ -138,12 +152,12 @@ export default function TermsAndConditions() {
                   <span className="bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold">MÁS POPULAR</span>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900">S/99.90</p>
+                  <p className="text-3xl font-bold text-gray-900">S/{priceSemester.toFixed(2)}</p>
                   <p className="text-sm text-gray-500">/6 meses</p>
                 </div>
               </div>
-              <p className="text-gray-600 mb-2">Pago cada 6 meses. Ahorra S/19.50 (16% de descuento).</p>
-              <p className="text-sm text-primary-700 font-semibold">Equivalente a S/16.65/mes</p>
+              <p className="text-gray-600 mb-2">Pago cada 6 meses. Ahorra S/{savingSemester.toFixed(2)} ({savingSemesterPercent}% de descuento).</p>
+              <p className="text-sm text-primary-700 font-semibold">Equivalente a S/{monthlyEquivSemester}/mes</p>
             </div>
 
             {/* Plan Anual */}
@@ -154,12 +168,12 @@ export default function TermsAndConditions() {
                   <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">MEJOR AHORRO</span>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900">S/149.90</p>
+                  <p className="text-3xl font-bold text-gray-900">S/{priceAnnual.toFixed(2)}</p>
                   <p className="text-sm text-gray-500">/año</p>
                 </div>
               </div>
-              <p className="text-gray-600 mb-2">Pago anual. Ahorra S/88.90 (37% de descuento).</p>
-              <p className="text-sm text-green-700 font-semibold">Equivalente a S/12.49/mes</p>
+              <p className="text-gray-600 mb-2">Pago anual. Ahorra S/{savingAnnual.toFixed(2)} ({savingAnnualPercent}% de descuento).</p>
+              <p className="text-sm text-green-700 font-semibold">Equivalente a S/{monthlyEquivAnnual}/mes</p>
             </div>
 
             {/* Características incluidas en todos los planes */}

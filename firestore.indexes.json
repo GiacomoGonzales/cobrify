@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "businesses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "complaintsBookSlug",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "complaintsBookEnabled",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "branches",
       "queryScope": "COLLECTION",
       "fields": [

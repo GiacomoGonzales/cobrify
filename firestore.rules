@@ -203,6 +203,10 @@ service cloud.firestore {
       // El cliente filtrará adicionalmente por catalogSlug
       allow read: if resource.data.catalogEnabled == true;
 
+      // Lectura pública para Libro de Reclamaciones - permite buscar negocios por complaintsBookSlug
+      // Solo negocios con complaintsBookEnabled == true pueden ser consultados públicamente
+      allow read: if resource.data.complaintsBookEnabled == true;
+
       // Subcollection: Invoices (Facturas/Boletas)
       match /invoices/{invoiceId} {
         // Admins pueden leer todas las facturas

@@ -74,9 +74,9 @@ export default function ResellerSettings() {
     whatsapp: resellerData?.branding?.whatsapp || resellerData?.phone || '',
     description: resellerData?.branding?.description || '',
     // Precios de la landing page
-    priceMonthly: resellerData?.branding?.priceMonthly ?? 19.90,
-    priceSemester: resellerData?.branding?.priceSemester ?? 99.90,
-    priceAnnual: resellerData?.branding?.priceAnnual ?? 149.90,
+    priceMonthly: resellerData?.branding?.priceMonthly ?? 29.90,
+    priceSemester: resellerData?.branding?.priceSemester ?? 149.90,
+    priceAnnual: resellerData?.branding?.priceAnnual ?? 199.90,
   })
 
   // Sincronizar formData y brandingData cuando resellerData se cargue
@@ -100,9 +100,9 @@ export default function ResellerSettings() {
         whatsapp: resellerData.branding?.whatsapp || resellerData.phone || '',
         description: resellerData.branding?.description || '',
         // Precios de la landing page
-        priceMonthly: resellerData.branding?.priceMonthly ?? 19.90,
-        priceSemester: resellerData.branding?.priceSemester ?? 99.90,
-        priceAnnual: resellerData.branding?.priceAnnual ?? 149.90,
+        priceMonthly: resellerData.branding?.priceMonthly ?? 29.90,
+        priceSemester: resellerData.branding?.priceSemester ?? 149.90,
+        priceAnnual: resellerData.branding?.priceAnnual ?? 199.90,
       })
       setDataLoaded(true)
     }
