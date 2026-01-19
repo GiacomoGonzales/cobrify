@@ -95,7 +95,7 @@ export default function CreatePurchase() {
   const [creditType, setCreditType] = useState('unico')
   const [installments, setInstallments] = useState([]) // Solo para compras antiguas con cuotas
   const [purchaseItems, setPurchaseItems] = useState([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
+    { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
   ])
 
   // Warehouses y Branches
@@ -337,7 +337,7 @@ export default function CreatePurchase() {
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
-      { productId: '', productName: '', quantity: 1, unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
+      { productId: '', productName: '', quantity: '', unitPrice: 0, cost: 0, costWithoutIGV: 0, batchNumber: '', expirationDate: '', itemType: 'product', unit: 'NIU' },
     ])
   }
 
@@ -349,14 +349,7 @@ export default function CreatePurchase() {
 
   const updateItem = (index, field, value) => {
     const newItems = [...purchaseItems]
-    // Normalizar quantity para mantener el valor numérico actual si el input está vacío
-    if (field === 'quantity' && value === '') {
-      // Si se borra el campo, mantener el valor actual para evitar pérdida de datos
-      // El usuario puede escribir un nuevo valor
-      newItems[index][field] = newItems[index][field] || 1
-    } else {
-      newItems[index][field] = value
-    }
+    newItems[index][field] = value
     setPurchaseItems(newItems)
   }
 
@@ -1443,10 +1436,9 @@ export default function CreatePurchase() {
                     {/* Cantidad */}
                     <td className="px-2 py-2">
                       <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        placeholder="0"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder=""
                         value={item.quantity}
                         onChange={e => updateItem(index, 'quantity', e.target.value)}
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -1649,9 +1641,9 @@ export default function CreatePurchase() {
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Cantidad</label>
                     <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder=""
                       value={item.quantity}
                       onChange={e => updateItem(index, 'quantity', e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
