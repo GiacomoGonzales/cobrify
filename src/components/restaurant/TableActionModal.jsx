@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -33,6 +33,15 @@ export default function TableActionModal({
   const [reservationTime, setReservationTime] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+
+  // Preseleccionar mozo si solo hay uno activo
+  const activeWaiters = waiters.filter(w => w.status === 'active')
+
+  useEffect(() => {
+    if (action === 'occupy' && activeWaiters.length === 1 && !selectedWaiter) {
+      setSelectedWaiter(activeWaiters[0].id)
+    }
+  }, [action, activeWaiters.length])
 
   if (!table) return null
 
@@ -390,17 +399,20 @@ export default function TableActionModal({
               required
             >
               <option value="">-- Seleccionar mozo --</option>
-              {waiters
-                .filter((w) => w.status === 'active')
-                .map((waiter) => (
-                  <option key={waiter.id} value={waiter.id}>
-                    {waiter.name} ({waiter.code})
-                  </option>
-                ))}
+              {activeWaiters.map((waiter) => (
+                <option key={waiter.id} value={waiter.id}>
+                  {waiter.name} ({waiter.code})
+                </option>
+              ))}
             </Select>
-            {waiters.filter((w) => w.status === 'active').length === 0 && (
+            {activeWaiters.length === 0 && (
               <p className="text-sm text-red-600 mt-2">
                 No hay mozos activos disponibles. Crea mozos primero.
+              </p>
+            )}
+            {activeWaiters.length === 1 && (
+              <p className="text-sm text-green-600 mt-2">
+                Mozo preseleccionado automáticamente
               </p>
             )}
           </div>
@@ -453,15 +465,15 @@ export default function TableActionModal({
               required
             >
               <option value="">-- Seleccionar mozo --</option>
-              {waiters
-                .filter((w) => w.status === 'active' && w.id !== table.waiterId)
+              {activeWaiters
+                .filter((w) => w.id !== table.waiterId)
                 .map((waiter) => (
                   <option key={waiter.id} value={waiter.id}>
                     {waiter.name} ({waiter.code})
                   </option>
                 ))}
             </Select>
-            {waiters.filter((w) => w.status === 'active' && w.id !== table.waiterId).length === 0 && (
+            {activeWaiters.filter((w) => w.id !== table.waiterId).length === 0 && (
               <p className="text-sm text-amber-600 mt-2">
                 No hay otros mozos activos disponibles para transferir.
               </p>

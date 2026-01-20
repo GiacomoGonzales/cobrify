@@ -289,38 +289,23 @@ export default function Tables() {
     return () => unsubscribe()
   }, [user, selectedTable?.currentOrder, isDemoMode, demoData])
 
-  // Listener en tiempo real para la mesa seleccionada
+  // Mantener selectedTable sincronizado con el array tables (en tiempo real)
+  // Esto evita tener un listener separado que pueda causar conflictos
   useEffect(() => {
-    if (!user?.uid || !selectedTable?.id) return
+    if (!selectedTable?.id) return
 
-    // Si estamos en modo demo, buscar la mesa en los datos de demo
-    if (isDemoMode && demoData?.tables) {
-      const table = demoData.tables.find(t => t.id === selectedTable.id)
-      if (table) {
-        setSelectedTable(table)
+    // Buscar la mesa actualizada en el array tables
+    const updatedTable = tables.find(t => t.id === selectedTable.id)
+
+    if (updatedTable) {
+      // Solo actualizar si hay diferencias relevantes
+      if (updatedTable.status !== selectedTable.status ||
+          updatedTable.amount !== selectedTable.amount ||
+          updatedTable.currentOrder !== selectedTable.currentOrder) {
+        setSelectedTable(updatedTable)
       }
-      return
     }
-
-    const businessId = getBusinessId()
-    const tableRef = doc(db, 'businesses', businessId, 'tables', selectedTable.id)
-
-    // Listener en tiempo real para la mesa - mantiene actualizado el monto y estado
-    const unsubscribe = onSnapshot(
-      tableRef,
-      (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          setSelectedTable({ id: docSnapshot.id, ...docSnapshot.data() })
-        }
-      },
-      (error) => {
-        console.error('Error en listener de mesa:', error)
-      }
-    )
-
-    // Cleanup: desuscribirse cuando cambie la mesa o se desmonte
-    return () => unsubscribe()
-  }, [user, selectedTable?.id, isDemoMode, demoData])
+  }, [tables, selectedTable?.id])
 
   // Función para recargar la mesa y orden seleccionadas (ya no necesaria, pero mantenida para compatibilidad)
   const reloadSelectedTableAndOrder = async () => {
@@ -701,25 +686,35 @@ export default function Tables() {
       return
     }
 
-    try {
-      // Solo cierra sin comprobante (el comprobante se genera desde el POS si es necesario)
-      const result = await releaseTable(getBusinessId(), selectedTable.id)
-      if (result.success) {
-        toast.success('Mesa cerrada exitosamente')
-        // Recargar las mesas para actualizar el estado
-        loadTables()
-        // Cerrar todos los modales y limpiar selección
-        setIsCloseTableModalOpen(false)
-        setIsActionModalOpen(false)
-        setSelectedTable(null)
-        setSelectedOrder(null)
-      } else {
-        toast.error(result.error || 'Error al liberar mesa')
-      }
-    } catch (error) {
-      console.error('Error al cerrar mesa:', error)
-      toast.error('Error al cerrar mesa')
-    }
+    const tableIdToClose = selectedTable.id
+
+    // Cerrar modales y limpiar selección PRIMERO
+    setIsCloseTableModalOpen(false)
+    setIsActionModalOpen(false)
+    setSelectedTable(null)
+    setSelectedOrder(null)
+
+    // ACTUALIZACIÓN OPTIMISTA: Actualizar la UI inmediatamente sin esperar a Firestore
+    setTables(prevTables => prevTables.map(t =>
+      t.id === tableIdToClose
+        ? { ...t, status: 'available', currentOrder: null, waiter: null, waiterId: null, amount: 0 }
+        : t
+    ))
+
+    // Actualizar stats inmediatamente
+    setStats(prevStats => ({
+      ...prevStats,
+      available: prevStats.available + 1,
+      occupied: prevStats.occupied - 1,
+    }))
+
+    toast.success('Mesa cerrada exitosamente')
+
+    // Ejecutar la operación en Firestore en background
+    releaseTable(getBusinessId(), tableIdToClose).catch(error => {
+      console.error('Error al cerrar mesa en Firestore:', error)
+      // Si falla, el listener de Firestore corregirá el estado
+    })
   }
 
   const handleReserveTable = async (tableId, reservationData) => {

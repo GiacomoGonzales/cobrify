@@ -1020,6 +1020,210 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
   }
 };
 
+/**
+ * Imprimir comanda de cocina via BLE
+ */
+export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58) => {
+  if (!isBLEPrinterConnected()) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+
+  try {
+    const separator = paperWidth === 58 ? '------------------------' : '------------------------------------------';
+    const charsPerLine = paperWidth === 58 ? 24 : 42;
+
+    const commands = [
+      ESCPOSCommands.init(),
+      ESCPOSCommands.align(1), // Centro
+      ESCPOSCommands.bold(true),
+      ESCPOSCommands.doubleWidth(true),
+      ESCPOSCommands.text('*** COMANDA ***\n'),
+      ESCPOSCommands.doubleWidth(false),
+      ESCPOSCommands.bold(false),
+      ESCPOSCommands.text(separator + '\n'),
+      ESCPOSCommands.align(0), // Izquierda
+      ESCPOSCommands.bold(true),
+      ESCPOSCommands.text('Fecha: ' + new Date().toLocaleString('es-PE') + '\n'),
+    ];
+
+    if (table) {
+      commands.push(ESCPOSCommands.text('Mesa: ' + table.number + '\n'));
+      commands.push(ESCPOSCommands.text('Mozo: ' + (table.waiter || 'N/A') + '\n'));
+    }
+
+    const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
+    commands.push(ESCPOSCommands.text('Orden: #' + orderNum + '\n'));
+    commands.push(ESCPOSCommands.bold(false));
+    commands.push(ESCPOSCommands.text(separator + '\n'));
+    commands.push(ESCPOSCommands.lineFeed());
+
+    // Items
+    for (const item of order.items || []) {
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text(item.quantity + 'x ' + convertSpanishText(item.name) + '\n'));
+      commands.push(ESCPOSCommands.bold(false));
+
+      // Modificadores
+      if (item.modifiers && item.modifiers.length > 0) {
+        commands.push(ESCPOSCommands.text('  *** MODIFICADORES ***\n'));
+        for (const modifier of item.modifiers) {
+          commands.push(ESCPOSCommands.text('  * ' + convertSpanishText(modifier.modifierName) + ':\n'));
+          for (const option of modifier.options) {
+            let optText = '    -> ' + convertSpanishText(option.optionName);
+            if (option.priceAdjustment > 0) {
+              optText += ' (+S/' + option.priceAdjustment.toFixed(2) + ')';
+            }
+            commands.push(ESCPOSCommands.text(optText + '\n'));
+          }
+        }
+      }
+
+      // Notas del item
+      if (item.notes) {
+        commands.push(ESCPOSCommands.text('  Nota: ' + convertSpanishText(item.notes) + '\n'));
+      }
+      commands.push(ESCPOSCommands.lineFeed());
+    }
+
+    commands.push(ESCPOSCommands.text(separator + '\n'));
+    commands.push(ESCPOSCommands.feed(3));
+    commands.push(ESCPOSCommands.cut());
+
+    const data = concatUint8Arrays(...commands);
+    const result = await writeBLEData(data);
+
+    if (result.success) {
+      console.log('✅ Comanda BLE impresa correctamente');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('❌ Error imprimiendo comanda BLE:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Imprimir precuenta via BLE
+ */
+export const printBLEPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
+  if (!isBLEPrinterConnected()) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+
+  try {
+    const separator = paperWidth === 58 ? '------------------------' : '------------------------------------------';
+    const halfSeparator = paperWidth === 58 ? '------------' : '---------------------';
+    const charsPerLine = paperWidth === 58 ? 24 : 42;
+
+    // Calcular totales
+    let subtotal, tax;
+    const total = order.total || 0;
+
+    if (taxConfig.igvExempt) {
+      subtotal = total;
+      tax = 0;
+    } else {
+      const igvRate = taxConfig.igvRate || 18;
+      const igvMultiplier = 1 + (igvRate / 100);
+      subtotal = total / igvMultiplier;
+      tax = total - subtotal;
+    }
+
+    const commands = [
+      ESCPOSCommands.init(),
+      ESCPOSCommands.align(1), // Centro
+      ESCPOSCommands.bold(true),
+      ESCPOSCommands.doubleWidth(true),
+      ESCPOSCommands.text(convertSpanishText(business.tradeName || 'RESTAURANTE') + '\n'),
+      ESCPOSCommands.doubleWidth(false),
+      ESCPOSCommands.bold(false),
+      ESCPOSCommands.text(convertSpanishText(business.address || '') + '\n'),
+      ESCPOSCommands.text((business.phone || '') + '\n'),
+      ESCPOSCommands.bold(true),
+      ESCPOSCommands.doubleWidth(true),
+      ESCPOSCommands.text('PRECUENTA\n'),
+      ESCPOSCommands.doubleWidth(false),
+      ESCPOSCommands.bold(false),
+      ESCPOSCommands.text(separator + '\n'),
+      ESCPOSCommands.align(0), // Izquierda
+      ESCPOSCommands.text('Fecha: ' + new Date().toLocaleString('es-PE') + '\n'),
+      ESCPOSCommands.text('Mesa: ' + table.number + '\n'),
+      ESCPOSCommands.text('Mozo: ' + (table.waiter || 'N/A') + '\n'),
+      ESCPOSCommands.text('Orden: #' + (order.orderNumber || order.id?.slice(-6) || 'N/A') + '\n'),
+      ESCPOSCommands.text(halfSeparator + '\n'),
+    ];
+
+    // Items
+    for (const item of order.items || []) {
+      const itemName = convertSpanishText(item.name || '');
+      const itemTotal = (item.total || 0).toFixed(2);
+
+      commands.push(ESCPOSCommands.text(item.quantity + 'x ' + itemName + '\n'));
+      commands.push(ESCPOSCommands.text('   S/ ' + itemTotal + '\n'));
+
+      // Modificadores
+      if (item.modifiers && item.modifiers.length > 0) {
+        for (const modifier of item.modifiers) {
+          for (const option of modifier.options) {
+            let optText = '  + ' + convertSpanishText(option.optionName);
+            if (option.priceAdjustment > 0) {
+              optText += ' (+S/' + option.priceAdjustment.toFixed(2) + ')';
+            }
+            commands.push(ESCPOSCommands.text(optText + '\n'));
+          }
+        }
+      }
+
+      if (item.notes) {
+        commands.push(ESCPOSCommands.text('  * ' + convertSpanishText(item.notes) + '\n'));
+      }
+    }
+
+    commands.push(ESCPOSCommands.text(halfSeparator + '\n'));
+    commands.push(ESCPOSCommands.align(2)); // Derecha
+
+    // Totales
+    if (!taxConfig.igvExempt) {
+      commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotal.toFixed(2) + '\n'));
+      commands.push(ESCPOSCommands.text('IGV (' + taxConfig.igvRate + '%): S/ ' + tax.toFixed(2) + '\n'));
+    } else {
+      commands.push(ESCPOSCommands.text('*** Exonerado de IGV ***\n'));
+    }
+
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.doubleWidth(true));
+    commands.push(ESCPOSCommands.text('TOTAL: S/ ' + total.toFixed(2) + '\n'));
+    commands.push(ESCPOSCommands.doubleWidth(false));
+    commands.push(ESCPOSCommands.bold(false));
+
+    // Footer
+    commands.push(ESCPOSCommands.text(separator + '\n'));
+    commands.push(ESCPOSCommands.align(1)); // Centro
+    commands.push(ESCPOSCommands.bold(true));
+    commands.push(ESCPOSCommands.text('*** PRECUENTA ***\n'));
+    commands.push(ESCPOSCommands.bold(false));
+    commands.push(ESCPOSCommands.text('No valido como comprobante\n'));
+    commands.push(ESCPOSCommands.text('Solicite su factura o boleta\n'));
+    commands.push(ESCPOSCommands.lineFeed());
+    commands.push(ESCPOSCommands.text('Gracias por su preferencia\n'));
+    commands.push(ESCPOSCommands.feed(3));
+    commands.push(ESCPOSCommands.cut());
+
+    const data = concatUint8Arrays(...commands);
+    const result = await writeBLEData(data);
+
+    if (result.success) {
+      console.log('✅ Precuenta BLE impresa correctamente');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('❌ Error imprimiendo precuenta BLE:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   initializeBLE,
   scanBLEDevices,
@@ -1030,5 +1234,7 @@ export default {
   printBLEText,
   printBLETest,
   printBLEReceipt,
+  printBLEKitchenOrder,
+  printBLEPreBill,
   ESCPOSCommands,
 };

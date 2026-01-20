@@ -1048,8 +1048,14 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
     return await printWifiKitchenOrder(order, table, paperWidth);
   }
 
-  // Bluetooth - comportamiento original
-  console.log('🔵 Usando impresión Bluetooth para comanda...');
+  // Si usa el servicio BLE alternativo (iOS), usar printBLEKitchenOrder
+  if (useAlternativeBLE) {
+    console.log('🔵 iOS: Usando impresión BLE alternativa para comanda...');
+    return await BLEPrinter.printBLEKitchenOrder(order, table, paperWidth);
+  }
+
+  // Bluetooth Android - comportamiento original
+  console.log('🔵 Android: Usando impresión Bluetooth para comanda...');
 
   try {
     const format = getFormat(paperWidth);
@@ -1148,8 +1154,14 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     return await printWifiPreBill(order, table, business, taxConfig, paperWidth);
   }
 
-  // Bluetooth - comportamiento original
-  console.log('🔵 Usando impresión Bluetooth para precuenta...');
+  // Si usa el servicio BLE alternativo (iOS), usar printBLEPreBill
+  if (useAlternativeBLE) {
+    console.log('🔵 iOS: Usando impresión BLE alternativa para precuenta...');
+    return await BLEPrinter.printBLEPreBill(order, table, business, taxConfig, paperWidth);
+  }
+
+  // Bluetooth Android - comportamiento original
+  console.log('🔵 Android: Usando impresión Bluetooth para precuenta...');
 
   try {
     const format = getFormat(paperWidth);

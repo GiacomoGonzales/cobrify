@@ -213,28 +213,7 @@ export const releaseTable = async (businessId, tableId) => {
 
     const tableData = tableSnap.data()
 
-    // Si hay una orden asociada, completarla
-    if (tableData.currentOrder) {
-      const orderResult = await completeOrder(businessId, tableData.currentOrder)
-      if (!orderResult.success) {
-        console.warn('No se pudo completar la orden:', orderResult.error)
-        // Continuar de todos modos para liberar la mesa
-      }
-    }
-
-    // Actualizar métricas del mozo (decrementar mesas activas)
-    if (tableData.waiterId) {
-      const waiterRef = doc(db, 'businesses', businessId, 'waiters', tableData.waiterId)
-      await updateDoc(waiterRef, {
-        activeTables: increment(-1),
-        updatedAt: serverTimestamp(),
-      }).catch(err => {
-        console.warn('No se pudo actualizar métricas del mozo:', err)
-        // No fallar si no se puede actualizar las métricas
-      })
-    }
-
-    // Liberar la mesa
+    // PRIMERO: Liberar la mesa inmediatamente para que la UI se actualice rápido
     await updateDoc(tableRef, {
       status: 'available',
       currentOrder: null,
@@ -244,6 +223,36 @@ export const releaseTable = async (businessId, tableId) => {
       amount: 0,
       updatedAt: serverTimestamp(),
     })
+
+    // DESPUÉS: Completar orden y actualizar métricas en paralelo (no bloquea)
+    const backgroundTasks = []
+
+    // Completar la orden si existe
+    if (tableData.currentOrder) {
+      backgroundTasks.push(
+        completeOrder(businessId, tableData.currentOrder).catch(err => {
+          console.warn('No se pudo completar la orden:', err)
+        })
+      )
+    }
+
+    // Actualizar métricas del mozo
+    if (tableData.waiterId) {
+      const waiterRef = doc(db, 'businesses', businessId, 'waiters', tableData.waiterId)
+      backgroundTasks.push(
+        updateDoc(waiterRef, {
+          activeTables: increment(-1),
+          updatedAt: serverTimestamp(),
+        }).catch(err => {
+          console.warn('No se pudo actualizar métricas del mozo:', err)
+        })
+      )
+    }
+
+    // Ejecutar tareas en paralelo sin esperar (fire and forget)
+    if (backgroundTasks.length > 0) {
+      Promise.all(backgroundTasks).catch(() => {})
+    }
 
     return { success: true }
   } catch (error) {
