@@ -91,6 +91,8 @@ import CatalogoPublico from './pages/CatalogoPublico'
 import LibroReclamaciones from './pages/LibroReclamaciones'
 // Admin complaints
 import ComplaintsList from './pages/ComplaintsList'
+// Student payment control
+import StudentPaymentControl from './pages/StudentPaymentControl'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -163,6 +165,7 @@ function App() {
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
@@ -204,6 +207,7 @@ function App() {
               <Route path="cocina" element={<Kitchen />} />
               <Route path="facturas" element={<InvoiceList />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
@@ -266,6 +270,7 @@ function App() {
               <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
+              <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />

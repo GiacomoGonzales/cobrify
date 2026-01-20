@@ -119,6 +119,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData) => 
     'Número',
     'Cliente',
     'RUC/DNI',
+    'Alumno',
+    'Productos',
     'Subtotal',
     'IGV',
     'Total',
@@ -155,12 +157,22 @@ export const generateInvoicesExcel = async (invoices, filters, businessData) => 
     // Obtener RUC/DNI del cliente (puede estar en customer.documentNumber o customerDocumentNumber)
     const customerDoc = invoice.customer?.documentNumber || invoice.customerDocumentNumber || 'N/A';
 
+    // Obtener nombre del alumno (si aplica)
+    const studentName = invoice.customer?.studentName || invoice.studentName || '';
+
+    // Obtener lista de productos
+    const productsList = invoice.items && Array.isArray(invoice.items)
+      ? invoice.items.map(item => `${item.quantity || 1}x ${item.name || item.description || 'Producto'}`).join(', ')
+      : '';
+
     invoiceData.push([
       invoice.createdAt ? format(invoice.createdAt.toDate(), 'dd/MM/yyyy', { locale: es }) : 'N/A',
       typeNames[docType] || docType || 'N/A',
       invoice.number || 'N/A',
       customerName,
       customerDoc,
+      studentName,
+      productsList,
       invoice.subtotal || 0,
       invoice.igv || invoice.tax || 0,
       invoice.total || 0,
@@ -176,6 +188,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData) => 
 
   invoiceData.push(['']);
   invoiceData.push([
+    '',
+    '',
     '',
     '',
     '',
@@ -198,6 +212,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData) => 
     { width: 15 },  // Número
     { width: 30 },  // Cliente
     { width: 15 },  // RUC/DNI
+    { width: 25 },  // Alumno
+    { width: 50 },  // Productos
     { width: 12 },  // Subtotal
     { width: 10 },  // IGV
     { width: 12 },  // Total

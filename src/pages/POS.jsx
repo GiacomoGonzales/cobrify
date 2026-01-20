@@ -2096,6 +2096,8 @@ export default function POS() {
         series: numberResult.series,
         correlativeNumber: numberResult.correlativeNumber,
         documentType: documentType,
+        // Guardar el ID del cliente si fue seleccionado de la lista
+        ...(selectedCustomer?.id && { customerId: selectedCustomer.id }),
         customer: customerData.documentNumber || customerData.name || customerData.businessName
           ? {
               documentType: customerData.documentType || ID_TYPES.DNI,

@@ -23,6 +23,7 @@ import {
   Landmark,
   Receipt,
   TrendingUp,
+  GraduationCap,
   // Iconos para modo restaurante
   UtensilsCrossed,
   Grid3x3,
@@ -132,6 +133,14 @@ function Sidebar() {
       label: 'Clientes',
       pageId: 'customers',
       // No tiene menuId = módulo principal que no se puede ocultar
+    },
+    {
+      path: '/control-pagos-alumnos',
+      icon: GraduationCap,
+      label: 'Control de Alumnos',
+      pageId: 'customers',
+      menuId: 'student-payments',
+      requiresStudentField: true,
     },
     {
       path: '/vendedores',
@@ -669,6 +678,12 @@ function Sidebar() {
     if (item.requiresFeature) {
       const featureEnabled = hasFeature && hasFeature(item.requiresFeature)
       if (!featureEnabled && !isDemoMode) return false
+    }
+
+    // Si requiere el campo de alumno habilitado, verificar
+    if (item.requiresStudentField) {
+      const studentFieldEnabled = businessSettings?.posCustomFields?.showStudentField
+      if (!studentFieldEnabled && !isDemoMode) return false
     }
 
     // Si es solo para business owner y el usuario no lo es, no mostrar
