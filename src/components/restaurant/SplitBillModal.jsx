@@ -15,8 +15,9 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
   const totalAmount = order.total || 0
 
   const handleSplitEqual = () => {
-    const amountPerPerson = totalAmount / numberOfPeople
-    const amounts = Array(numberOfPeople).fill(amountPerPerson)
+    const validPeople = parseInt(numberOfPeople) || 2
+    const amountPerPerson = totalAmount / validPeople
+    const amounts = Array(validPeople).fill(amountPerPerson)
     setCustomAmounts(amounts)
   }
 
@@ -35,6 +36,12 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
   }
 
   const handleConfirm = async () => {
+    // Validar número de personas para división igual
+    const validNumberOfPeople = Math.min(20, Math.max(2, parseInt(numberOfPeople) || 2))
+    if (splitMethod === 'equal' && validNumberOfPeople !== numberOfPeople) {
+      setNumberOfPeople(validNumberOfPeople)
+    }
+
     if (splitMethod === 'equal') {
       handleSplitEqual()
     }
@@ -51,12 +58,12 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
     setIsProcessing(true)
     try {
       const amounts = splitMethod === 'equal'
-        ? Array(numberOfPeople).fill(totalAmount / numberOfPeople)
+        ? Array(validNumberOfPeople).fill(totalAmount / validNumberOfPeople)
         : customAmounts
 
       await onConfirm({
         method: splitMethod,
-        numberOfPeople: splitMethod === 'equal' ? numberOfPeople : customAmounts.length,
+        numberOfPeople: splitMethod === 'equal' ? validNumberOfPeople : customAmounts.length,
         amounts,
         total: totalAmount
       })
@@ -155,18 +162,29 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
               Número de Personas
             </label>
             <Input
-              type="number"
-              min="2"
-              max="20"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={numberOfPeople}
-              onChange={(e) => setNumberOfPeople(parseInt(e.target.value) || 2)}
+              onChange={(e) => {
+                const val = e.target.value
+                // Permitir campo vacío o números
+                if (val === '' || /^\d+$/.test(val)) {
+                  setNumberOfPeople(val === '' ? '' : parseInt(val))
+                }
+              }}
+              onBlur={(e) => {
+                // Al perder foco, validar mínimo 2 y máximo 20
+                const val = parseInt(e.target.value) || 2
+                setNumberOfPeople(Math.min(20, Math.max(2, val)))
+              }}
               className="w-full"
             />
             <div className="mt-4 bg-gray-50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-700">Monto por persona:</span>
                 <span className="text-xl font-bold text-gray-900">
-                  S/ {(totalAmount / numberOfPeople).toFixed(2)}
+                  S/ {(totalAmount / (numberOfPeople || 2)).toFixed(2)}
                 </span>
               </div>
             </div>

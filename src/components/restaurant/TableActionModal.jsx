@@ -43,6 +43,18 @@ export default function TableActionModal({
     }
   }, [action, activeWaiters.length])
 
+  // Resetear estado cuando el modal se cierra externamente
+  useEffect(() => {
+    if (!isOpen) {
+      setAction(null)
+      setSelectedWaiter('')
+      setSelectedDestinationTable('')
+      setReservationTime('')
+      setCustomerName('')
+      setCustomerPhone('')
+    }
+  }, [isOpen])
+
   if (!table) return null
 
   const handleClose = () => {
