@@ -494,6 +494,13 @@ function Sidebar() {
       menuId: 'suppliers',
     },
     {
+      path: '/guias-remision',
+      icon: Truck,
+      label: 'GRE Remitente',
+      pageId: 'dispatch-guides',
+      menuId: 'dispatch-guides',
+    },
+    {
       path: '/compras',
       icon: ShoppingBag,
       label: 'Compras',
