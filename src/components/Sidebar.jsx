@@ -508,6 +508,13 @@ function Sidebar() {
       menuId: 'purchases',
     },
     {
+      path: '/ordenes-compra',
+      icon: ClipboardList,
+      label: 'Órdenes de Compra',
+      pageId: 'purchase-orders',
+      menuId: 'purchase-orders',
+    },
+    {
       path: '/prestamos',
       icon: Landmark,
       label: 'Préstamos',
