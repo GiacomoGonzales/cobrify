@@ -65,6 +65,10 @@ export default function Tables() {
   const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
+  // Estado para división de cuenta por items
+  const [splitData, setSplitData] = useState(null)
+  const [isPrintSplitModalOpen, setIsPrintSplitModalOpen] = useState(false)
+
   // Tax configuration
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
 
@@ -451,11 +455,19 @@ export default function Tables() {
     setIsSplitBillModalOpen(true)
   }
 
-  const handleConfirmSplit = async (splitData) => {
-    // Por ahora solo mostramos la información
-    // En el futuro esto podría crear múltiples transacciones de pago
-    toast.success(`Cuenta dividida entre ${splitData.numberOfPeople} personas`)
-    console.log('Split data:', splitData)
+  const handleConfirmSplit = async (splitDataResult) => {
+    console.log('Split data:', splitDataResult)
+
+    if (splitDataResult.method === 'items') {
+      // Para división por items, guardar datos y mostrar opciones de impresión
+      setSplitData(splitDataResult)
+      setIsSplitBillModalOpen(false)
+      setIsPrintSplitModalOpen(true)
+      toast.success(`Cuenta dividida entre ${splitDataResult.numberOfPeople} personas. Selecciona qué precuenta imprimir.`)
+    } else {
+      // Para otros métodos, solo mostrar mensaje
+      toast.success(`Cuenta dividida entre ${splitDataResult.numberOfPeople} personas`)
+    }
   }
 
   const handleTransferTable = async (tableId, transferData) => {
@@ -506,7 +518,7 @@ export default function Tables() {
     }
   }
 
-  const handlePrintPreBill = async () => {
+  const handlePrintPreBill = async (itemFilter = null, personLabel = null) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
       return
@@ -555,7 +567,8 @@ export default function Tables() {
       const isNative = Capacitor.isNativePlatform()
 
       // Si es móvil, intentar imprimir en impresora térmica
-      if (isNative) {
+      // Nota: La impresión térmica parcial no está implementada aún
+      if (isNative && !itemFilter) {
         try {
           // Obtener configuración de impresora
           const printerConfigResult = await getPrinterConfig(businessId)
@@ -588,12 +601,18 @@ export default function Tables() {
       const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
       console.log('🖨️ Tables - webPrintLegible:', webPrintLegible)
       const paperWidth = printerConfigResult.config?.paperWidth || 80
-      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible)
+      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)
       toast.error('Error al imprimir precuenta')
     }
+  }
+
+  // Imprimir precuenta de una persona específica (división por items)
+  const handlePrintPersonPreBill = async (personData, totalPersons) => {
+    const personLabel = `Persona ${personData.personNumber} de ${totalPersons}`
+    await handlePrintPreBill(personData.items, personLabel)
   }
 
   const handlePrintKitchenTicket = async () => {
@@ -1180,6 +1199,83 @@ export default function Tables() {
         onConfirm={handleConfirmCloseTable}
         taxConfig={taxConfig}
       />
+
+      {/* Modal para imprimir precuenta dividida por items */}
+      <Modal
+        isOpen={isPrintSplitModalOpen}
+        onClose={() => {
+          setIsPrintSplitModalOpen(false)
+          setSplitData(null)
+          setIsActionModalOpen(true)
+        }}
+        title={
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            <span>Imprimir Precuentas - Mesa {selectedTable?.number}</span>
+          </div>
+        }
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Selecciona qué precuenta deseas imprimir:
+          </p>
+
+          {splitData?.persons?.map((person) => (
+            <button
+              key={person.personNumber}
+              onClick={() => handlePrintPersonPreBill(person, splitData.numberOfPeople)}
+              className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors text-left"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-full bg-primary-500 text-white flex items-center justify-center font-bold text-lg">
+                    {person.personNumber}
+                  </span>
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      Persona {person.personNumber}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {person.items.length} {person.items.length === 1 ? 'item' : 'items'}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-gray-900">
+                    S/ {person.total.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+
+          <div className="border-t pt-4 mt-4">
+            <button
+              onClick={() => handlePrintPreBill()}
+              className="w-full p-3 border-2 border-gray-300 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors text-center"
+            >
+              <span className="text-gray-700 font-medium">
+                Imprimir Precuenta Completa (S/ {splitData?.total?.toFixed(2)})
+              </span>
+            </button>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsPrintSplitModalOpen(false)
+                setSplitData(null)
+                setIsActionModalOpen(true)
+              }}
+              className="flex-1"
+            >
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Comanda para imprimir (oculta) */}
       {orderToPrint && (

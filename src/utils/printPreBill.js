@@ -1,9 +1,17 @@
 /**
  * Utility para imprimir precuenta de restaurante
+ *
+ * @param {Object} table - Mesa
+ * @param {Object} order - Orden completa
+ * @param {Object} businessInfo - Información del negocio
+ * @param {Object} taxConfig - Configuración de impuestos
+ * @param {number} paperWidth - Ancho del papel (58 o 80mm)
+ * @param {boolean} webPrintLegible - Si usar fuente más grande
+ * @param {Array} itemFilter - Items a mostrar (opcional, si es null muestra todos)
+ * @param {string} personLabel - Etiqueta de persona (ej: "Persona 1 de 3")
  */
-
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false) => {
-  console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible })
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null) => {
+  console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel })
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
 
@@ -28,7 +36,10 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
   // Determinar si es papel de 58mm o 80mm
   const is58mm = paperWidth === 58
 
-  // Recalcular totales según taxConfig actual
+  // Determinar qué items mostrar
+  const itemsToShow = itemFilter || (order.items || [])
+
+  // Recalcular totales según taxConfig actual y items filtrados
   // Esto asegura que si la empresa cambió su estado de exoneración,
   // la precuenta muestre los valores correctos
   console.log('🔍 printPreBill - taxConfig recibido:', taxConfig)
@@ -36,7 +47,13 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
   console.log('🔍 printPreBill - igvRate:', taxConfig.igvRate)
 
   let subtotal, tax, total
-  total = order.total || 0
+
+  // Si hay filtro de items, calcular el total solo de esos items
+  if (itemFilter) {
+    total = itemFilter.reduce((sum, item) => sum + (item.total || 0), 0)
+  } else {
+    total = order.total || 0
+  }
 
   if (taxConfig.igvExempt) {
     // Si está exonerado, el total es igual al subtotal y no hay IGV
@@ -136,6 +153,17 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           font-weight: ${webPrintLegible ? '600' : 'normal'};
           color: #000;
           margin: ${is58mm ? '0.3mm' : '0.5mm'} 0;
+        }
+
+        .header .person-label {
+          font-size: ${webPrintLegible ? (is58mm ? '12pt' : '14pt') : (is58mm ? '9pt' : '10pt')};
+          font-weight: ${webPrintLegible ? '700' : 'bold'};
+          color: #000;
+          background-color: #f3f4f6;
+          padding: ${is58mm ? '1.5mm 3mm' : '2mm 4mm'};
+          border-radius: 2px;
+          margin-top: ${is58mm ? '1.5mm' : '2mm'};
+          display: inline-block;
         }
 
         .separator {
@@ -288,6 +316,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         ${businessInfo.address ? `<div class="info">${businessInfo.address.toUpperCase()}</div>` : ''}
         ${businessInfo.phone ? `<div class="info">${businessInfo.phone}</div>` : ''}
         <h1>PRECUENTA</h1>
+        ${personLabel ? `<div class="person-label">${personLabel.toUpperCase()}</div>` : ''}
       </div>
 
       <div class="separator"></div>
@@ -321,7 +350,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         <div class="price">IMPORTE</div>
       </div>
 
-      ${(order.items || []).map(item => `
+      ${itemsToShow.map(item => `
         <div class="item-row">
           <div class="qty">${item.quantity}</div>
           <div class="desc">${(item.name || '').toUpperCase()}</div>
