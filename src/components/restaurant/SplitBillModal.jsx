@@ -14,39 +14,9 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
   const [itemsNumberOfPeople, setItemsNumberOfPeople] = useState(2)
   const [itemAssignments, setItemAssignments] = useState({}) // { itemIndex: personNumber }
 
-  if (!table || !order) return null
-
-  const totalAmount = order.total || 0
-  const orderItems = order.items || []
-
-  const handleSplitEqual = () => {
-    const validPeople = parseInt(numberOfPeople) || 2
-    const amountPerPerson = totalAmount / validPeople
-    const amounts = Array(validPeople).fill(amountPerPerson)
-    setCustomAmounts(amounts)
-  }
-
-  const handleCustomAmountChange = (index, value) => {
-    const newAmounts = [...customAmounts]
-    newAmounts[index] = parseFloat(value) || 0
-    setCustomAmounts(newAmounts)
-  }
-
-  const getTotalCustomAmount = () => {
-    return customAmounts.reduce((sum, amount) => sum + amount, 0)
-  }
-
-  const getRemainingAmount = () => {
-    return totalAmount - getTotalCustomAmount()
-  }
-
-  // Funciones para división por items
-  const handleAssignItem = (itemIndex, personNumber) => {
-    setItemAssignments(prev => ({
-      ...prev,
-      [itemIndex]: personNumber
-    }))
-  }
+  // Valores derivados (seguros para cuando order es null)
+  const totalAmount = order?.total || 0
+  const orderItems = order?.items || []
 
   // Calcular totales por persona para división por items
   const personTotals = useMemo(() => {
@@ -78,6 +48,38 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
   const totalAssignedItems = useMemo(() => {
     return personTotals.reduce((sum, person) => sum + person.total, 0)
   }, [personTotals])
+
+  // Early return DESPUÉS de todos los hooks
+  if (!table || !order) return null
+
+  const handleSplitEqual = () => {
+    const validPeople = parseInt(numberOfPeople) || 2
+    const amountPerPerson = totalAmount / validPeople
+    const amounts = Array(validPeople).fill(amountPerPerson)
+    setCustomAmounts(amounts)
+  }
+
+  const handleCustomAmountChange = (index, value) => {
+    const newAmounts = [...customAmounts]
+    newAmounts[index] = parseFloat(value) || 0
+    setCustomAmounts(newAmounts)
+  }
+
+  const getTotalCustomAmount = () => {
+    return customAmounts.reduce((sum, amount) => sum + amount, 0)
+  }
+
+  const getRemainingAmount = () => {
+    return totalAmount - getTotalCustomAmount()
+  }
+
+  // Funciones para división por items
+  const handleAssignItem = (itemIndex, personNumber) => {
+    setItemAssignments(prev => ({
+      ...prev,
+      [itemIndex]: personNumber
+    }))
+  }
 
   const handleConfirm = async () => {
     // Validar número de personas para división igual
