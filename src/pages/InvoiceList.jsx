@@ -61,7 +61,7 @@ import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess } = useAppContext()
   const { branding } = useBranding()
   const navigate = useNavigate()
   const toast = useToast()
@@ -309,13 +309,15 @@ Gracias por tu preferencia.`
     loadBranches()
   }, [user])
 
-  // Cargar sucursales para filtro
+  // Cargar sucursales para filtro (solo las que el usuario tiene acceso)
   const loadBranches = async () => {
     if (!user?.uid || isDemoMode) return
     try {
       const result = await getActiveBranches(getBusinessId())
       if (result.success) {
-        setBranches(result.data || [])
+        // Filtrar sucursales según acceso del usuario
+        const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data) : result.data
+        setBranches(branchList || [])
       }
     } catch (error) {
       console.error('Error al cargar sucursales:', error)

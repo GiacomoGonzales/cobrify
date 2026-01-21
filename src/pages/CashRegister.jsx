@@ -17,7 +17,7 @@ import {
   getCashMovements,
   updateCashMovement,
   deleteCashMovement,
-  getInvoices,
+  getInvoicesByBranch,
   getCompanySettings,
   getCashRegisterHistory,
 } from '@/services/firestoreService'
@@ -172,27 +172,18 @@ export default function CashRegister() {
       }
 
       // Obtener facturas de la sesión actual (desde apertura hasta ahora)
-      const invoicesResult = await getInvoices(getBusinessId())
+      // Filtrar por sucursal directamente desde el servicio
+      const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId)
       if (invoicesResult.success && sessionResult.success && sessionResult.data) {
         const sessionOpenedAt = sessionResult.data.openedAt?.toDate
           ? sessionResult.data.openedAt.toDate()
           : new Date(sessionResult.data.openedAt)
         const now = new Date()
 
+        // Solo filtrar por período de sesión (el filtro de sucursal ya viene aplicado)
         const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
           const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-          // Filtrar por período de sesión: desde apertura hasta ahora
-          if (!(invoiceDate >= sessionOpenedAt && invoiceDate <= now)) {
-            return false
-          }
-          // Filtrar por sucursal
-          if (branchId) {
-            // Sucursal específica
-            return invoice.branchId === branchId
-          } else {
-            // Sucursal Principal (sin branchId)
-            return !invoice.branchId
-          }
+          return invoiceDate >= sessionOpenedAt && invoiceDate <= now
         })
         setTodayInvoices(sessionInvoicesList)
       } else if (invoicesResult.success) {

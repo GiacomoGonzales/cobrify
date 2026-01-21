@@ -68,6 +68,46 @@ export const getInvoices = async userId => {
 }
 
 /**
+ * Obtener facturas de un usuario filtradas por sucursal
+ * @param {string} userId - ID del negocio
+ * @param {string|null} branchId - ID de la sucursal (null para sucursal principal)
+ */
+export const getInvoicesByBranch = async (userId, branchId = null) => {
+  try {
+    const invoicesRef = collection(db, 'businesses', userId, 'invoices')
+    const querySnapshot = await getDocs(invoicesRef)
+
+    // Filtrar por branchId en el cliente
+    // Si branchId es null, obtener facturas sin branchId (sucursal principal)
+    // Si branchId tiene valor, obtener facturas de esa sucursal
+    const invoices = querySnapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .filter(invoice => {
+        if (branchId) {
+          return invoice.branchId === branchId
+        } else {
+          return !invoice.branchId
+        }
+      })
+
+    // Ordenar por fecha de creación (más reciente primero)
+    invoices.sort((a, b) => {
+      if (!a.createdAt) return 1
+      if (!b.createdAt) return -1
+      return b.createdAt.seconds - a.createdAt.seconds
+    })
+
+    return { success: true, data: invoices }
+  } catch (error) {
+    console.error('Error al obtener facturas por sucursal:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Actualizar una factura
  */
 export const updateInvoice = async (userId, invoiceId, updates) => {
