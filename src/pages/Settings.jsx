@@ -2833,8 +2833,9 @@ export default function Settings() {
                                               // Soportar tanto strings como objetos {id, name, parentId}
                                               const categoryId = typeof category === 'string' ? category : category.id
                                               const categoryName = typeof category === 'string' ? category : category.name
+                                              // Verificar si está seleccionada por nombre O por ID (para compatibilidad)
                                               const isSelected = (station.categories || []).some(c =>
-                                                typeof c === 'string' ? c === categoryId : c === categoryId || c.id === categoryId
+                                                c === categoryName || c === categoryId
                                               )
                                               return (
                                                 <button
@@ -2846,14 +2847,16 @@ export default function Settings() {
                                                     if (isSelected) {
                                                       updated[index] = {
                                                         ...station,
+                                                        // Filtrar tanto por nombre como por ID para compatibilidad
                                                         categories: currentCategories.filter(c =>
-                                                          typeof c === 'string' ? c !== categoryId : c !== categoryId && c.id !== categoryId
+                                                          c !== categoryName && c !== categoryId
                                                         )
                                                       }
                                                     } else {
+                                                      // Guardar el NOMBRE de la categoría para que coincida con item.category
                                                       updated[index] = {
                                                         ...station,
-                                                        categories: [...currentCategories, categoryId]
+                                                        categories: [...currentCategories, categoryName]
                                                       }
                                                     }
                                                     setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })

@@ -4,6 +4,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import { getActiveOrders, updateOrderStatus, updateItemStatus } from '@/services/orderService'
+import { getProductCategories } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
@@ -23,6 +24,7 @@ export default function Kitchen() {
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
   const [kitchenStations, setKitchenStations] = useState([])
   const [selectedStation, setSelectedStation] = useState('all') // 'all' o el ID de una estación
+  const [categoryMap, setCategoryMap] = useState({}) // Mapeo de ID a nombre de categoría
 
   // Listener para la configuración del negocio
   useEffect(() => {
@@ -47,6 +49,28 @@ export default function Kitchen() {
     )
 
     return () => unsubscribe()
+  }, [user, isDemoMode, getBusinessId])
+
+  // Cargar categorías para mapeo ID -> nombre (necesario para compatibilidad con estaciones antiguas)
+  useEffect(() => {
+    if (!user?.uid || isDemoMode) return
+
+    const loadCategories = async () => {
+      try {
+        const result = await getProductCategories(getBusinessId())
+        if (result.success && result.data) {
+          const catMap = {}
+          result.data.forEach(cat => {
+            catMap[cat.id] = cat.name
+          })
+          setCategoryMap(catMap)
+        }
+      } catch (error) {
+        console.error('Error al cargar categorías:', error)
+      }
+    }
+
+    loadCategories()
   }, [user, isDemoMode, getBusinessId])
 
   // Listener en tiempo real para órdenes activas de cocina
@@ -187,6 +211,24 @@ export default function Kitchen() {
   // Para modo item-tracking: todas las órdenes activas ordenadas por tiempo
   const allActiveOrders = itemStatusTracking ? orders : []
 
+  // Helper para verificar si una categoría de item coincide con las categorías de una estación
+  // Soporta tanto nombres (nuevo) como IDs (compatibilidad con config antigua)
+  const itemMatchesStationCategory = (itemCategory, stationCategories) => {
+    if (!itemCategory || !stationCategories || stationCategories.length === 0) return false
+
+    // Verificar coincidencia directa (por nombre)
+    if (stationCategories.includes(itemCategory)) return true
+
+    // Verificar si algún ID en stationCategories corresponde al nombre del item
+    // (para compatibilidad con configuraciones antiguas que guardaron IDs)
+    for (const stationCat of stationCategories) {
+      // Si stationCat es un ID y su nombre en el mapa coincide con itemCategory
+      if (categoryMap[stationCat] === itemCategory) return true
+    }
+
+    return false
+  }
+
   // Función para filtrar items de una orden según la estación seleccionada
   const filterItemsByStation = (items) => {
     if (!enableKitchenStations || selectedStation === 'all') {
@@ -204,7 +246,7 @@ export default function Kitchen() {
     // Filtrar items cuya categoría esté en las categorías de la estación
     return items.filter(item => {
       const itemCategory = item.category || ''
-      return station.categories.includes(itemCategory)
+      return itemMatchesStationCategory(itemCategory, station.categories || [])
     })
   }
 
@@ -237,7 +279,7 @@ export default function Kitchen() {
     orders.forEach(order => {
       (order.items || []).forEach(item => {
         const itemCategory = item.category || ''
-        if (station.isPase || station.categories.includes(itemCategory)) {
+        if (station.isPase || itemMatchesStationCategory(itemCategory, station.categories || [])) {
           // Solo contar items pendientes o en preparación
           const itemStatus = item.status || 'pending'
           if (itemStatus === 'pending' || itemStatus === 'preparing') {
