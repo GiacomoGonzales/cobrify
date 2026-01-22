@@ -228,6 +228,7 @@ function hexToRgb(hex) {
 /**
  * Genera un PDF para Guía de Remisión Electrónica - Diseño Profesional
  * Basado en el estilo visual de la Guía de Remisión Transportista
+ * Con soporte para paginación dinámica cuando hay muchos items
  */
 export const generateDispatchGuidePDF = async (guide, companySettings, download = true) => {
   const doc = new jsPDF({
@@ -250,7 +251,45 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
-  let currentY = 25
+  // Constantes para paginación
+  const MARGIN_TOP = 25
+  const MARGIN_BOTTOM = 40
+  const FOOTER_HEIGHT = 120 // Espacio reservado para el footer con QR
+  const USABLE_HEIGHT = PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM
+
+  let currentY = MARGIN_TOP
+  let currentPage = 1
+  let totalPages = 1 // Se calculará después
+
+  // Función helper para verificar espacio y agregar nueva página si es necesario
+  const checkPageBreak = (neededHeight, reserveFooter = false) => {
+    const maxY = reserveFooter ? PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_HEIGHT : PAGE_HEIGHT - MARGIN_BOTTOM
+    if (currentY + neededHeight > maxY) {
+      doc.addPage()
+      currentPage++
+      currentY = MARGIN_TOP
+
+      // Header reducido en páginas siguientes
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...BLACK)
+      doc.text(`GUÍA DE REMISIÓN ELECTRÓNICA REMITENTE - ${guide.number || 'T001-00000001'}`, MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...MEDIUM_GRAY)
+      doc.text(`(Continuación - Página ${currentPage})`, PAGE_WIDTH - MARGIN_RIGHT, currentY, { align: 'right' })
+      currentY += 20
+
+      // Línea separadora
+      doc.setDrawColor(...LIGHT_GRAY)
+      doc.setLineWidth(0.5)
+      doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+      currentY += 15
+
+      return true // Indica que se creó nueva página
+    }
+    return false
+  }
 
   // Extraer datos de transporte
   const driver = guide.transport?.driver || guide.driver || {}
@@ -624,42 +663,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     unit: 70
   }
 
-  // Fondo del encabezado con color accent (mismo estilo que GRE Transportista)
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(tableX, currentY, tableWidth, 18, 'F')
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(0.5)
-  doc.rect(tableX, currentY, tableWidth, 18)
-
-  // Textos del encabezado (texto blanco sobre fondo de color)
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-
-  let colX = tableX
-  doc.text('N°', colX + colWidths.num/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.num, currentY, colX + colWidths.num, currentY + 18)
-  colX += colWidths.num
-
-  doc.text('CÓDIGO', colX + colWidths.code/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.code, currentY, colX + colWidths.code, currentY + 18)
-  colX += colWidths.code
-
-  doc.text('DESCRIPCIÓN', colX + colWidths.desc/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.desc, currentY, colX + colWidths.desc, currentY + 18)
-  colX += colWidths.desc
-
-  doc.text('CANTIDAD', colX + colWidths.qty/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.qty, currentY, colX + colWidths.qty, currentY + 18)
-  colX += colWidths.qty
-
-  doc.text('UNIDAD DE', colX + colWidths.unit/2, currentY + 7, { align: 'center' })
-  doc.text('DESPACHO', colX + colWidths.unit/2, currentY + 14, { align: 'center' })
-
-  currentY += 18
-  doc.setTextColor(...BLACK) // Restaurar color negro para el contenido
-
-  // Filas de datos con altura dinámica
+  // Filas de datos con altura dinámica y PAGINACIÓN
   const items = guide.items || []
   const minRowHeight = 20
   const lineHeight = 9 // Altura por línea de texto
@@ -673,167 +677,291 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     return { height: calculatedHeight, descLines }
   }
 
-  // Calcular alturas de todos los items
-  const itemHeights = items.map(item => calculateItemHeight(item))
-  const totalItemsHeight = itemHeights.reduce((sum, ih) => sum + ih.height, 0)
-  const tableBodyHeight = Math.max(totalItemsHeight, 100) // Mínimo 100pt de altura
+  // Función para dibujar el encabezado de la tabla (se usa en cada página)
+  const drawTableHeader = () => {
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(tableX, currentY, tableWidth, 18, 'F')
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(tableX, currentY, tableWidth, 18)
 
-  // Dibujar el cuerpo de la tabla
-  doc.rect(tableX, currentY, tableWidth, tableBodyHeight)
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
 
-  // Datos de items con alturas dinámicas
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
+    let hColX = tableX
+    doc.text('N°', hColX + colWidths.num/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.num, currentY, hColX + colWidths.num, currentY + 18)
+    hColX += colWidths.num
 
-  let itemY = currentY
-  items.forEach((item, index) => {
-    const { height: rowHeight, descLines } = itemHeights[index]
-    const centerY = itemY + rowHeight / 2 + 3 // Centro vertical de la fila
+    doc.text('CÓDIGO', hColX + colWidths.code/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.code, currentY, hColX + colWidths.code, currentY + 18)
+    hColX += colWidths.code
 
-    colX = tableX
-    doc.text((index + 1).toString(), colX + colWidths.num/2, centerY, { align: 'center' })
+    doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.desc, currentY, hColX + colWidths.desc, currentY + 18)
+    hColX += colWidths.desc
+
+    doc.text('CANTIDAD', hColX + colWidths.qty/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.qty, currentY, hColX + colWidths.qty, currentY + 18)
+    hColX += colWidths.qty
+
+    doc.text('UNIDAD DE', hColX + colWidths.unit/2, currentY + 7, { align: 'center' })
+    doc.text('DESPACHO', hColX + colWidths.unit/2, currentY + 14, { align: 'center' })
+
+    currentY += 18
+    doc.setTextColor(...BLACK)
+  }
+
+  // Función para dibujar una fila de item
+  const drawItemRow = (item, index, rowHeight, descLines) => {
+    const centerYRow = currentY + rowHeight / 2 + 3
+
+    // Fondo de la fila
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.rect(tableX, currentY, tableWidth, rowHeight)
+
+    let itemColX = tableX
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...BLACK)
+
+    doc.text((index + 1).toString(), itemColX + colWidths.num/2, centerYRow, { align: 'center' })
 
     // Línea vertical N°
-    doc.line(colX + colWidths.num, itemY, colX + colWidths.num, itemY + rowHeight)
-    colX += colWidths.num
+    doc.line(itemColX + colWidths.num, currentY, itemColX + colWidths.num, currentY + rowHeight)
+    itemColX += colWidths.num
 
     // Solo mostrar código si es "real" (no vacío, no CUSTOM)
     const rawCode = item.code || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     const itemCode = isValidCode ? rawCode : '-'
-    doc.text(itemCode.substring(0, 12), colX + 5, centerY)
+    doc.text(itemCode.substring(0, 12), itemColX + 5, centerYRow)
 
     // Línea vertical Código
-    doc.line(colX + colWidths.code, itemY, colX + colWidths.code, itemY + rowHeight)
-    colX += colWidths.code
+    doc.line(itemColX + colWidths.code, currentY, itemColX + colWidths.code, currentY + rowHeight)
+    itemColX += colWidths.code
 
     // Descripción - múltiples líneas
-    const descStartY = itemY + 10
+    const descStartY = currentY + 10
     descLines.forEach((line, lineIdx) => {
-      doc.text(line, colX + 5, descStartY + (lineIdx * lineHeight))
+      doc.text(line, itemColX + 5, descStartY + (lineIdx * lineHeight))
     })
 
     // Línea vertical Descripción
-    doc.line(colX + colWidths.desc, itemY, colX + colWidths.desc, itemY + rowHeight)
-    colX += colWidths.desc
+    doc.line(itemColX + colWidths.desc, currentY, itemColX + colWidths.desc, currentY + rowHeight)
+    itemColX += colWidths.desc
 
-    doc.text((item.quantity || 1).toString(), colX + colWidths.qty/2, centerY, { align: 'center' })
+    doc.text((item.quantity || 1).toString(), itemColX + colWidths.qty/2, centerYRow, { align: 'center' })
 
     // Línea vertical Cantidad
-    doc.line(colX + colWidths.qty, itemY, colX + colWidths.qty, itemY + rowHeight)
-    colX += colWidths.qty
+    doc.line(itemColX + colWidths.qty, currentY, itemColX + colWidths.qty, currentY + rowHeight)
+    itemColX += colWidths.qty
 
-    doc.text(item.unit || 'UNIDAD', colX + colWidths.unit/2, centerY, { align: 'center' })
+    doc.text(item.unit || 'UNIDAD', itemColX + colWidths.unit/2, centerYRow, { align: 'center' })
 
-    // Línea horizontal entre filas
-    if (index < items.length - 1) {
-      doc.setDrawColor(...LIGHT_GRAY)
-      doc.line(tableX, itemY + rowHeight, tableX + tableWidth, itemY + rowHeight)
-      doc.setDrawColor(...BLACK)
+    currentY += rowHeight
+  }
+
+  // Dibujar el encabezado de la tabla inicial
+  drawTableHeader()
+
+  // Dibujar items con paginación
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+
+  items.forEach((item, index) => {
+    const { height: rowHeight, descLines } = calculateItemHeight(item)
+
+    // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
+    const isLastItem = index === items.length - 1
+    const reserveSpace = isLastItem ? FOOTER_HEIGHT + 150 : 0 // 150pt para transporte/observaciones
+
+    if (checkPageBreak(rowHeight + 20 + reserveSpace, isLastItem)) {
+      // Nueva página - redibujar encabezado de tabla
+      drawTableHeader()
     }
 
-    itemY += rowHeight
+    drawItemRow(item, index, rowHeight, descLines)
   })
 
-  currentY += tableBodyHeight + 15
+  // Si no hay items, dibujar un espacio mínimo
+  if (items.length === 0) {
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.rect(tableX, currentY, tableWidth, 40)
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(8)
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text('Sin items', tableX + tableWidth/2, currentY + 25, { align: 'center' })
+    currentY += 40
+  }
 
-  // ========== 5. UNIDAD DE TRANSPORTE Y CONDUCTOR ==========
+  currentY += 15
+
+  // ========== 5. DATOS DE TRANSPORTE ==========
+
+  // Verificar espacio para sección de transporte (~100pt)
+  checkPageBreak(100, false)
 
   doc.setLineWidth(0.5)
+  doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 10
 
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.text('UNIDAD DE TRANSPORTE Y CONDUCTOR', MARGIN_LEFT, currentY)
-  currentY += 14
+  doc.setTextColor(...BLACK)
 
-  // Valores
-  const plateValue = vehicle.plate || '-'
-  const dniValue = driver.documentNumber || '-'
-  const driverFullName = [driver.name, driver.lastName].filter(Boolean).join(' ') || '-'
+  // Determinar si es transporte público o privado
+  const isPublicTransport = guide.transportMode === '01'
 
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(0.5)
+  if (isPublicTransport) {
+    // ========== TRANSPORTE PÚBLICO - Mostrar datos del transportista ==========
+    doc.text('DATOS DEL TRANSPORTISTA', MARGIN_LEFT, currentY)
+    currentY += 14
 
-  // Posiciones fijas para alineación vertical
-  const labelWidth = 95 // Ancho para las etiquetas
-  const leftValueX = MARGIN_LEFT + labelWidth // Donde empiezan los valores izquierdos
-  const leftBoxWidth = 120 // Ancho uniforme para todos los recuadros izquierdos (Placa, DNI, Nombre)
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
 
-  const rightLabelX = PAGE_WIDTH - MARGIN_RIGHT - 170 // Columna derecha
-  const rightValueX = PAGE_WIDTH - MARGIN_RIGHT - 75 // Valores derechos alineados
+    // Posiciones
+    const labelWidth = 95
+    const leftValueX = MARGIN_LEFT + labelWidth
+    const leftBoxWidth = 180
+    const rightLabelX = PAGE_WIDTH - MARGIN_RIGHT - 170
+    const rightValueX = PAGE_WIDTH - MARGIN_RIGHT - 75
 
-  doc.setFontSize(7)
-
-  // Fila 1: Placa del vehículo | Modalidad de transporte
-  doc.setFont('helvetica', 'normal')
-  doc.text('Placa del vehículo:', MARGIN_LEFT, currentY)
-  doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
-  // Si es M1/L y no hay placa, mostrar "N/A (Vehículo M1/L)"
-  const plateDisplay = plateValue === '-' && guide.isM1LVehicle ? 'N/A (Vehículo M1/L)' : plateValue
-  doc.text(plateDisplay, leftValueX + 5, currentY)
-
-  doc.text('Modalidad de transporte:', rightLabelX, currentY)
-  doc.setFont('helvetica', 'bold')
-  doc.text(TRANSPORT_MODES[guide.transportMode] || 'TRANSPORTE PRIVADO', rightValueX, currentY)
-
-  currentY += 16
-
-  // Fila 1.5: Indicador vehículo M1 o L (si aplica)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Indicador vehículo M1 o L:', MARGIN_LEFT, currentY)
-  doc.setFont('helvetica', 'bold')
-  const m1lIndicator = guide.isM1LVehicle ? 'SI' : 'NO'
-  doc.text(m1lIndicator, leftValueX + 5, currentY)
-
-  if (guide.isM1LVehicle) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6)
-    doc.text('(Motos, mototaxis, autos, taxis - hasta 8 asientos)', leftValueX + 25, currentY)
     doc.setFontSize(7)
+
+    // Fila 1: Modalidad de transporte
+    doc.setFont('helvetica', 'bold')
+    doc.text('Modalidad de transporte:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text('TRANSPORTE PÚBLICO', leftValueX + 5, currentY)
+
+    doc.setFont('helvetica', 'bold')
+    doc.text('Peso Total Aprox. (KGM):', rightLabelX, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
+
+    currentY += 16
+
+    // Fila 2: RUC del Transportista
+    doc.setFont('helvetica', 'bold')
+    doc.text('RUC Transportista:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
+    const carrierRuc = carrier.ruc || guide.carrier?.ruc || '-'
+    doc.text(carrierRuc, leftValueX + 5, currentY)
+
+    currentY += 16
+
+    // Fila 3: Razón Social del Transportista
+    doc.setFont('helvetica', 'bold')
+    doc.text('Razón Social:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'normal')
+    doc.rect(leftValueX, currentY - 8, leftBoxWidth + 100, 12)
+    const carrierName = carrier.businessName || guide.carrier?.businessName || '-'
+    const carrierNameLines = doc.splitTextToSize(carrierName, leftBoxWidth + 90)
+    doc.text(carrierNameLines[0], leftValueX + 5, currentY)
+
+    currentY += 18
+  } else {
+    // ========== TRANSPORTE PRIVADO - Mostrar datos del vehículo y conductor ==========
+    doc.text('UNIDAD DE TRANSPORTE Y CONDUCTOR', MARGIN_LEFT, currentY)
+    currentY += 14
+
+    // Valores
+    const plateValue = vehicle.plate || '-'
+    const dniValue = driver.documentNumber || '-'
+    const driverFullName = [driver.name, driver.lastName].filter(Boolean).join(' ') || '-'
+
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+
+    // Posiciones fijas para alineación vertical
+    const labelWidth = 95 // Ancho para las etiquetas
+    const leftValueX = MARGIN_LEFT + labelWidth // Donde empiezan los valores izquierdos
+    const leftBoxWidth = 120 // Ancho uniforme para todos los recuadros izquierdos (Placa, DNI, Nombre)
+
+    const rightLabelX = PAGE_WIDTH - MARGIN_RIGHT - 170 // Columna derecha
+    const rightValueX = PAGE_WIDTH - MARGIN_RIGHT - 75 // Valores derechos alineados
+
+    doc.setFontSize(7)
+
+    // Fila 1: Placa del vehículo | Modalidad de transporte
+    doc.setFont('helvetica', 'normal')
+    doc.text('Placa del vehículo:', MARGIN_LEFT, currentY)
+    doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
+    // Si es M1/L y no hay placa, mostrar "N/A (Vehículo M1/L)"
+    const plateDisplay = plateValue === '-' && guide.isM1LVehicle ? 'N/A (Vehículo M1/L)' : plateValue
+    doc.text(plateDisplay, leftValueX + 5, currentY)
+
+    doc.text('Modalidad de transporte:', rightLabelX, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.text('TRANSPORTE PRIVADO', rightValueX, currentY)
+
+    currentY += 16
+
+    // Fila 1.5: Indicador vehículo M1 o L (si aplica)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Indicador vehículo M1 o L:', MARGIN_LEFT, currentY)
+    doc.setFont('helvetica', 'bold')
+    const m1lIndicator = guide.isM1LVehicle ? 'SI' : 'NO'
+    doc.text(m1lIndicator, leftValueX + 5, currentY)
+
+    if (guide.isM1LVehicle) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6)
+      doc.text('(Motos, mototaxis, autos, taxis - hasta 8 asientos)', leftValueX + 25, currentY)
+      doc.setFontSize(7)
+    }
+
+    currentY += 16
+
+    // Fila 2: DNI del Conductor | Peso Total
+    doc.setFont('helvetica', 'normal')
+    doc.text('DNI del Conductor:', MARGIN_LEFT, currentY)
+    doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
+    // Si es M1/L y no hay DNI, mostrar "N/A"
+    const dniDisplay = dniValue === '-' && guide.isM1LVehicle ? 'N/A' : dniValue
+    doc.text(dniDisplay, leftValueX + 5, currentY)
+
+    doc.text('Peso Total Aprox. (KGM):', rightLabelX, currentY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
+
+    currentY += 16
+
+    // Fila 3: Nombre del Conductor | Licencia
+    doc.setFont('helvetica', 'normal')
+    doc.text('Nombre del Conductor:', MARGIN_LEFT, currentY)
+    doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12) // Mismo ancho que Placa y DNI
+    // Si es M1/L y no hay nombre, mostrar "N/A"
+    const nameDisplay = driverFullName === '-' && guide.isM1LVehicle ? 'N/A' : driverFullName.substring(0, 22)
+    doc.text(nameDisplay, leftValueX + 5, currentY) // Truncar para que quepa en el recuadro
+
+    doc.text('Licencia:', rightLabelX, currentY)
+    doc.rect(rightValueX - 5, currentY - 8, 70, 12)
+    // Si es M1/L y no hay licencia, mostrar "N/A"
+    const licenseDisplay = (!driver.license || driver.license === '-') && guide.isM1LVehicle ? 'N/A' : (driver.license || '-')
+    doc.text(licenseDisplay, rightValueX, currentY)
+
+    currentY += 18
   }
-
-  currentY += 16
-
-  // Fila 2: DNI del Conductor | Peso Total
-  doc.setFont('helvetica', 'normal')
-  doc.text('DNI del Conductor:', MARGIN_LEFT, currentY)
-  doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12)
-  // Si es M1/L y no hay DNI, mostrar "N/A"
-  const dniDisplay = dniValue === '-' && guide.isM1LVehicle ? 'N/A' : dniValue
-  doc.text(dniDisplay, leftValueX + 5, currentY)
-
-  doc.text('Peso Total Aprox. (KGM):', rightLabelX, currentY)
-  doc.setFont('helvetica', 'bold')
-  doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
-
-  currentY += 16
-
-  // Fila 3: Nombre del Conductor | Licencia
-  doc.setFont('helvetica', 'normal')
-  doc.text('Nombre del Conductor:', MARGIN_LEFT, currentY)
-  doc.rect(leftValueX, currentY - 8, leftBoxWidth, 12) // Mismo ancho que Placa y DNI
-  // Si es M1/L y no hay nombre, mostrar "N/A"
-  const nameDisplay = driverFullName === '-' && guide.isM1LVehicle ? 'N/A' : driverFullName.substring(0, 22)
-  doc.text(nameDisplay, leftValueX + 5, currentY) // Truncar para que quepa en el recuadro
-
-  doc.text('Licencia:', rightLabelX, currentY)
-  doc.rect(rightValueX - 5, currentY - 8, 70, 12)
-  // Si es M1/L y no hay licencia, mostrar "N/A"
-  const licenseDisplay = (!driver.license || driver.license === '-') && guide.isM1LVehicle ? 'N/A' : (driver.license || '-')
-  doc.text(licenseDisplay, rightValueX, currentY)
-
-  currentY += 18
 
   // ========== 6. OBSERVACIONES ==========
 
+  // Verificar espacio para observaciones (~50pt)
+  checkPageBreak(50, false)
+
   doc.setLineWidth(0.5)
+  doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 10
 
   doc.setFontSize(7)
   doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
   doc.text('Observaciones', MARGIN_LEFT, currentY)
   currentY += 10
 
@@ -853,7 +981,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   // ========== 7. PIE DE PÁGINA - QR Y FIRMA ==========
 
+  // Verificar espacio para footer (~110pt)
+  checkPageBreak(110, false)
+
   doc.setLineWidth(0.5)
+  doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 10
 
@@ -872,6 +1004,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setDrawColor(...LIGHT_GRAY)
     doc.rect(MARGIN_LEFT, footerY, qrSize, qrSize)
     doc.setFontSize(6)
+    doc.setTextColor(...MEDIUM_GRAY)
     doc.text('QR', MARGIN_LEFT + qrSize/2, footerY + qrSize/2, { align: 'center' })
   }
 
@@ -921,14 +1054,25 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   currentY = footerY + qrSize + 15
 
-  // Pie final
+  // Pie final con número de páginas
   doc.setDrawColor(...LIGHT_GRAY)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 8
 
+  // Obtener número total de páginas
+  totalPages = doc.internal.getNumberOfPages()
+
   doc.setFontSize(7)
   doc.setTextColor(...MEDIUM_GRAY)
   doc.text('Documento generado por Cobrify - Sistema de Facturación Electrónica - www.cobrifyperu.com', PAGE_WIDTH/2, currentY, { align: 'center' })
+
+  // Agregar números de página a todas las páginas
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    doc.setFontSize(7)
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text(`Página ${i} de ${totalPages}`, PAGE_WIDTH - MARGIN_RIGHT, PAGE_HEIGHT - 15, { align: 'right' })
+  }
 
   // ========== GENERAR PDF ==========
 

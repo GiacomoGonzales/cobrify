@@ -196,6 +196,7 @@ const formatDate = (dateValue) => {
 /**
  * Genera un PDF para Guía de Remisión Transportista - Diseño Profesional
  * Basado en el estilo visual de facturas y guías remitente
+ * Con soporte para paginación dinámica cuando hay muchos items
  */
 export const generateCarrierDispatchGuidePDF = async (guide, companySettings, download = true) => {
   const doc = new jsPDF({
@@ -218,7 +219,44 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   const PAGE_HEIGHT = doc.internal.pageSize.getHeight()
   const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 
-  let currentY = 25
+  // Constantes para paginación
+  const MARGIN_TOP = 25
+  const MARGIN_BOTTOM = 40
+  const FOOTER_HEIGHT = 120 // Espacio reservado para el footer con QR
+
+  let currentY = MARGIN_TOP
+  let currentPage = 1
+  let totalPages = 1 // Se calculará después
+
+  // Función helper para verificar espacio y agregar nueva página si es necesario
+  const checkPageBreak = (neededHeight, reserveFooter = false) => {
+    const maxY = reserveFooter ? PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_HEIGHT : PAGE_HEIGHT - MARGIN_BOTTOM
+    if (currentY + neededHeight > maxY) {
+      doc.addPage()
+      currentPage++
+      currentY = MARGIN_TOP
+
+      // Header reducido en páginas siguientes
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...BLACK)
+      doc.text(`GRE TRANSPORTISTA ELECTRÓNICA - ${guide.number || 'V001-00000001'}`, MARGIN_LEFT, currentY)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...MEDIUM_GRAY)
+      doc.text(`(Continuación - Página ${currentPage})`, PAGE_WIDTH - MARGIN_RIGHT, currentY, { align: 'right' })
+      currentY += 20
+
+      // Línea separadora
+      doc.setDrawColor(...LIGHT_GRAY)
+      doc.setLineWidth(0.5)
+      doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+      currentY += 15
+
+      return true // Indica que se creó nueva página
+    }
+    return false
+  }
 
   // Extraer datos
   const shipper = guide.shipper || {}
@@ -726,117 +764,155 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
     unit: 40
   }
 
-  // Fondo del encabezado con color accent
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(tableX, currentY, tableWidth, 18, 'F')
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(0.5)
-  doc.rect(tableX, currentY, tableWidth, 18)
-
-  // Textos del encabezado
-  doc.setFontSize(6)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-
-  let colX = tableX
-  doc.text('N°', colX + colWidths.num/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.num, currentY, colX + colWidths.num, currentY + 18)
-  colX += colWidths.num
-
-  doc.text('CÓDIGO', colX + colWidths.code/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.code, currentY, colX + colWidths.code, currentY + 18)
-  colX += colWidths.code
-
-  doc.text('COD. SUNAT', colX + colWidths.sunatCode/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.sunatCode, currentY, colX + colWidths.sunatCode, currentY + 18)
-  colX += colWidths.sunatCode
-
-  doc.text('GTIN', colX + colWidths.gtin/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.gtin, currentY, colX + colWidths.gtin, currentY + 18)
-  colX += colWidths.gtin
-
-  doc.text('DESCRIPCIÓN', colX + colWidths.desc/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.desc, currentY, colX + colWidths.desc, currentY + 18)
-  colX += colWidths.desc
-
-  doc.text('CANT.', colX + colWidths.qty/2, currentY + 12, { align: 'center' })
-  doc.line(colX + colWidths.qty, currentY, colX + colWidths.qty, currentY + 18)
-  colX += colWidths.qty
-
-  doc.text('UNID.', colX + colWidths.unit/2, currentY + 12, { align: 'center' })
-
-  currentY += 18
-
-  // Filas de datos con altura dinámica según descripción
+  // Filas de datos con altura dinámica según descripción y PAGINACIÓN
   const minRowHeight = 16
   const lineHeight = 8 // Altura por línea de texto
-  doc.setTextColor(...BLACK)
-  doc.setFont('helvetica', 'normal')
 
-  const maxItems = Math.min(items.length || 1, 15) // Aumentado para soportar más items
-  for (let i = 0; i < maxItems; i++) {
-    const item = items[i] || {}
-
-    // Calcular líneas de descripción para determinar altura de fila
+  // Función para calcular altura dinámica de cada item
+  const calculateItemHeight = (item) => {
     doc.setFontSize(6)
     const descText = item.description || '-'
     const descLines = doc.splitTextToSize(descText, colWidths.desc - 6)
     const numLines = descLines.length
     const rowHeight = Math.max(minRowHeight, numLines * lineHeight + 8)
+    return { height: rowHeight, descLines }
+  }
+
+  // Función para dibujar el encabezado de la tabla (se usa en cada página)
+  const drawTableHeader = () => {
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(tableX, currentY, tableWidth, 18, 'F')
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(tableX, currentY, tableWidth, 18)
+
+    doc.setFontSize(6)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+
+    let hColX = tableX
+    doc.text('N°', hColX + colWidths.num/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.num, currentY, hColX + colWidths.num, currentY + 18)
+    hColX += colWidths.num
+
+    doc.text('CÓDIGO', hColX + colWidths.code/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.code, currentY, hColX + colWidths.code, currentY + 18)
+    hColX += colWidths.code
+
+    doc.text('COD. SUNAT', hColX + colWidths.sunatCode/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.sunatCode, currentY, hColX + colWidths.sunatCode, currentY + 18)
+    hColX += colWidths.sunatCode
+
+    doc.text('GTIN', hColX + colWidths.gtin/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.gtin, currentY, hColX + colWidths.gtin, currentY + 18)
+    hColX += colWidths.gtin
+
+    doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.desc, currentY, hColX + colWidths.desc, currentY + 18)
+    hColX += colWidths.desc
+
+    doc.text('CANT.', hColX + colWidths.qty/2, currentY + 12, { align: 'center' })
+    doc.line(hColX + colWidths.qty, currentY, hColX + colWidths.qty, currentY + 18)
+    hColX += colWidths.qty
+
+    doc.text('UNID.', hColX + colWidths.unit/2, currentY + 12, { align: 'center' })
+
+    currentY += 18
+    doc.setTextColor(...BLACK)
+  }
+
+  // Función para dibujar una fila de item
+  const drawItemRow = (item, index, rowHeight, descLines) => {
+    const centerYRow = currentY + rowHeight / 2 + 2
 
     // Dibujar rectángulo de fila
     doc.setDrawColor(...LIGHT_GRAY)
     doc.rect(tableX, currentY, tableWidth, rowHeight)
 
     // Dibujar líneas verticales de separación de columnas
-    colX = tableX
-    doc.line(colX + colWidths.num, currentY, colX + colWidths.num, currentY + rowHeight)
-    colX += colWidths.num
-    doc.line(colX + colWidths.code, currentY, colX + colWidths.code, currentY + rowHeight)
-    colX += colWidths.code
-    doc.line(colX + colWidths.sunatCode, currentY, colX + colWidths.sunatCode, currentY + rowHeight)
-    colX += colWidths.sunatCode
-    doc.line(colX + colWidths.gtin, currentY, colX + colWidths.gtin, currentY + rowHeight)
-    colX += colWidths.gtin
-    doc.line(colX + colWidths.desc, currentY, colX + colWidths.desc, currentY + rowHeight)
-    colX += colWidths.desc
-    doc.line(colX + colWidths.qty, currentY, colX + colWidths.qty, currentY + rowHeight)
+    let itemColX = tableX
+    doc.line(itemColX + colWidths.num, currentY, itemColX + colWidths.num, currentY + rowHeight)
+    itemColX += colWidths.num
+    doc.line(itemColX + colWidths.code, currentY, itemColX + colWidths.code, currentY + rowHeight)
+    itemColX += colWidths.code
+    doc.line(itemColX + colWidths.sunatCode, currentY, itemColX + colWidths.sunatCode, currentY + rowHeight)
+    itemColX += colWidths.sunatCode
+    doc.line(itemColX + colWidths.gtin, currentY, itemColX + colWidths.gtin, currentY + rowHeight)
+    itemColX += colWidths.gtin
+    doc.line(itemColX + colWidths.desc, currentY, itemColX + colWidths.desc, currentY + rowHeight)
+    itemColX += colWidths.desc
+    doc.line(itemColX + colWidths.qty, currentY, itemColX + colWidths.qty, currentY + rowHeight)
 
     // Datos - centrados verticalmente en la fila
-    const centerY = currentY + rowHeight / 2 + 2
-
     doc.setFontSize(6)
-    colX = tableX
-    doc.text(String(i + 1), colX + colWidths.num/2, centerY, { align: 'center' })
-    colX += colWidths.num
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...BLACK)
 
-    doc.text((item.code || '-').substring(0, 10), colX + colWidths.code/2, centerY, { align: 'center' })
-    colX += colWidths.code
+    itemColX = tableX
+    doc.text(String(index + 1), itemColX + colWidths.num/2, centerYRow, { align: 'center' })
+    itemColX += colWidths.num
 
-    doc.text((item.sunatCode || '-').substring(0, 12), colX + colWidths.sunatCode/2, centerY, { align: 'center' })
-    colX += colWidths.sunatCode
+    doc.text((item.code || '-').substring(0, 10), itemColX + colWidths.code/2, centerYRow, { align: 'center' })
+    itemColX += colWidths.code
 
-    doc.text((item.gtin || '-').substring(0, 14), colX + colWidths.gtin/2, centerY, { align: 'center' })
-    colX += colWidths.gtin
+    doc.text((item.sunatCode || '-').substring(0, 12), itemColX + colWidths.sunatCode/2, centerYRow, { align: 'center' })
+    itemColX += colWidths.sunatCode
+
+    doc.text((item.gtin || '-').substring(0, 14), itemColX + colWidths.gtin/2, centerYRow, { align: 'center' })
+    itemColX += colWidths.gtin
 
     // Descripción - múltiples líneas
     const descStartY = currentY + 8
     descLines.forEach((line, lineIdx) => {
-      doc.text(line, colX + 3, descStartY + (lineIdx * lineHeight))
+      doc.text(line, itemColX + 3, descStartY + (lineIdx * lineHeight))
     })
-    colX += colWidths.desc
+    itemColX += colWidths.desc
 
-    doc.text(String(item.quantity || 1), colX + colWidths.qty/2, centerY, { align: 'center' })
-    colX += colWidths.qty
+    doc.text(String(item.quantity || 1), itemColX + colWidths.qty/2, centerYRow, { align: 'center' })
+    itemColX += colWidths.qty
 
-    doc.text(item.unit || 'NIU', colX + colWidths.unit/2, centerY, { align: 'center' })
+    doc.text(item.unit || 'NIU', itemColX + colWidths.unit/2, centerYRow, { align: 'center' })
 
     currentY += rowHeight
+  }
+
+  // Dibujar el encabezado de la tabla inicial
+  drawTableHeader()
+
+  // Dibujar items con paginación (SIN LÍMITE de items)
+  items.forEach((item, index) => {
+    const { height: rowHeight, descLines } = calculateItemHeight(item)
+
+    // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
+    const isLastItem = index === items.length - 1
+    const reserveSpace = isLastItem ? FOOTER_HEIGHT + 200 : 0 // 200pt para vehículos/conductores/observaciones
+
+    if (checkPageBreak(rowHeight + 20 + reserveSpace, isLastItem)) {
+      // Nueva página - redibujar encabezado de tabla
+      drawTableHeader()
+    }
+
+    drawItemRow(item, index, rowHeight, descLines)
+  })
+
+  // Si no hay items, dibujar un espacio mínimo
+  if (items.length === 0) {
+    doc.setDrawColor(...LIGHT_GRAY)
+    doc.rect(tableX, currentY, tableWidth, 30)
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(7)
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text('Sin items', tableX + tableWidth/2, currentY + 18, { align: 'center' })
+    currentY += 30
   }
 
   currentY += 15
 
   // ========== 6. DATOS DEL VEHÍCULO(S) ==========
+
+  // Verificar espacio para sección de vehículos (~50pt por vehículo)
+  checkPageBreak(50, false)
+
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
@@ -851,6 +927,8 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   // Mostrar todos los vehículos con etiquetas Principal/Secundario
   const validVehicles = vehicles.filter(v => v && v.plate)
   validVehicles.forEach((v, idx) => {
+    // Verificar espacio para cada vehículo
+    checkPageBreak(20, false)
     doc.setFontSize(7)
 
     // Etiqueta Principal/Secundario
@@ -901,18 +979,26 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   currentY += 6
 
   // ========== 7. DATOS DEL CONDUCTOR(ES) ==========
+
+  // Verificar espacio para sección de conductores (~50pt por conductor)
+  checkPageBreak(50, false)
+
   doc.setLineWidth(0.5)
+  doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
   currentY += 12
 
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...BLACK)
   doc.text(`DATOS DEL CONDUCTOR${drivers.length > 1 ? 'ES' : ''}`, MARGIN_LEFT, currentY)
   currentY += 12
 
   // Mostrar todos los conductores con etiquetas Principal/Secundario
   const validDrivers = drivers.filter(d => d && (d.documentNumber || d.name))
   validDrivers.forEach((d, idx) => {
+    // Verificar espacio para cada conductor
+    checkPageBreak(20, false)
     doc.setFontSize(7)
 
     // Etiqueta Principal/Secundario
@@ -953,12 +1039,17 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   // ========== 8. GRE REMITENTE RELACIONADAS ==========
   if (guide.relatedGuides && guide.relatedGuides.length > 0 && guide.relatedGuides.some(g => g.number)) {
+    // Verificar espacio para documentos relacionados (~40pt)
+    checkPageBreak(40, false)
+
     doc.setLineWidth(0.5)
+    doc.setDrawColor(...BLACK)
     doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
     currentY += 12
 
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
     doc.text('DOCUMENTOS RELACIONADOS', MARGIN_LEFT, currentY)
     currentY += 12
 
@@ -974,7 +1065,11 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
   // ========== 9. OBSERVACIONES ==========
   if (observations) {
+    // Verificar espacio para observaciones (~60pt)
+    checkPageBreak(60, false)
+
     doc.setLineWidth(0.5)
+    doc.setDrawColor(...BLACK)
     doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
     currentY += 12
 
@@ -994,13 +1089,19 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   }
 
   // ========== 10. FOOTER CON QR Y SELLO SUNAT ==========
-  const footerY = PAGE_HEIGHT - 100
+
+  // Verificar espacio para el footer (~100pt)
+  checkPageBreak(100, false)
+
   const qrSize = 60
 
   // Línea superior del footer
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
-  doc.line(MARGIN_LEFT, footerY - 10, PAGE_WIDTH - MARGIN_RIGHT, footerY - 10)
+  doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
+  currentY += 10
+
+  const footerY = currentY
 
   // QR
   try {
@@ -1066,11 +1167,16 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFontSize(5)
   doc.text(`Emitido: ${emissionDate}`, sealX + sealWidth/2, sealY + 44, { align: 'center' })
 
-  // Número de página
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...BLACK)
-  doc.text('Página 1 de 1', PAGE_WIDTH - MARGIN_RIGHT, footerY + qrSize + 10, { align: 'right' })
+  // Obtener número total de páginas y agregar números de página a todas las páginas
+  totalPages = doc.internal.getNumberOfPages()
+
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...MEDIUM_GRAY)
+    doc.text(`Página ${i} de ${totalPages}`, PAGE_WIDTH - MARGIN_RIGHT, PAGE_HEIGHT - 15, { align: 'right' })
+  }
 
   // Generar o retornar
   if (download) {
