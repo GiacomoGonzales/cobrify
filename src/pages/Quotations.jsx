@@ -192,28 +192,27 @@ export default function Quotations() {
 
     setIsConverting(true)
     try {
-      // MODO DEMO: Simular conversión sin guardar en Firebase
+      // MODO DEMO: Simular conversión
       if (isDemoMode) {
-        console.log('🎭 MODO DEMO: Convirtiendo cotización a factura simulada...')
-        await new Promise(resolve => setTimeout(resolve, 1000)) // Simular delay
+        console.log('🎭 MODO DEMO: Navegando a POS con datos de cotización...')
 
-        // Actualizar la cotización como convertida en la lista local
-        setQuotations(prev => prev.map(q =>
-          q.id === convertingQuotation.id
-            ? { ...q, status: 'converted', isConverted: true }
-            : q
-        ))
+        // Navegar a POS con los datos de la cotización
+        navigate('/demo/pos', {
+          state: {
+            fromQuotation: true,
+            quotationId: convertingQuotation.id,
+            quotationNumber: convertingQuotation.number,
+            customer: convertingQuotation.customer,
+            items: convertingQuotation.items,
+          }
+        })
 
-        toast.success('Cotización convertida a factura exitosamente (DEMO - No se guardó)', { duration: 5000 })
         setConvertingQuotation(null)
         setIsConverting(false)
-
-        // Navegar a la lista de facturas en modo demo
-        navigate('/demo/facturas')
         return
       }
 
-      // Obtener datos de la cotización para crear la factura
+      // Obtener datos de la cotización
       const convertResult = await convertToInvoice(getBusinessId(), convertingQuotation.id)
 
       if (!convertResult.success) {
@@ -222,49 +221,22 @@ export default function Quotations() {
 
       const quotationData = convertResult.data
 
-      // Determinar el tipo de documento basado en el cliente
-      const documentType = quotationData.customer.documentType === 'RUC' ? 'factura' : 'boleta'
+      // Navegar a POS con los datos de la cotización prellenados
+      navigate('/app/pos', {
+        state: {
+          fromQuotation: true,
+          quotationId: convertingQuotation.id,
+          quotationNumber: convertingQuotation.number,
+          customer: quotationData.customer,
+          items: quotationData.items,
+          notes: quotationData.notes || '',
+        }
+      })
 
-      // Obtener el siguiente número de documento
-      const numberResult = await getNextDocumentNumber(getBusinessId(), documentType)
-
-      if (!numberResult.success) {
-        throw new Error(numberResult.error)
-      }
-
-      // Crear la factura
-      const invoiceData = {
-        number: numberResult.number,
-        documentType,
-        customer: quotationData.customer,
-        items: quotationData.items,
-        subtotal: quotationData.subtotal,
-        igv: quotationData.igv,
-        total: quotationData.total,
-        paymentMethod: 'Efectivo', // Valor por defecto
-        status: 'pending',
-        notes: quotationData.notes || '',
-        sunatStatus: 'pending',
-      }
-
-      const createResult = await createInvoice(getBusinessId(), invoiceData)
-
-      if (!createResult.success) {
-        throw new Error(createResult.error)
-      }
-
-      // Marcar cotización como convertida
-      await markQuotationAsConverted(getBusinessId(), convertingQuotation.id, createResult.id)
-
-      toast.success('Cotización convertida a factura exitosamente')
       setConvertingQuotation(null)
-      loadQuotations()
-
-      // Navegar a la lista de facturas
-      navigate('/app/facturas')
     } catch (error) {
-      console.error('Error al convertir cotización:', error)
-      toast.error(error.message || 'Error al convertir la cotización a factura.')
+      console.error('Error al preparar cotización:', error)
+      toast.error(error.message || 'Error al cargar la cotización.')
     } finally {
       setIsConverting(false)
     }
@@ -959,11 +931,11 @@ export default function Quotations() {
             </div>
             <div>
               <p className="text-sm text-gray-700">
-                ¿Estás seguro de que deseas convertir la cotización{' '}
-                <strong>{convertingQuotation?.number}</strong> en una factura?
+                ¿Deseas convertir la cotización{' '}
+                <strong>{convertingQuotation?.number}</strong> en un comprobante?
               </p>
               <p className="text-sm text-gray-600 mt-2">
-                Se creará un nuevo comprobante y la cotización se marcará como convertida.
+                Se abrirá el punto de venta con los datos de la cotización prellenados para que puedas revisar, agregar productos o modificar antes de emitir el comprobante.
               </p>
             </div>
           </div>
@@ -981,12 +953,12 @@ export default function Quotations() {
               {isConverting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Convirtiendo...
+                  Cargando...
                 </>
               ) : (
                 <>
                   <Receipt className="w-4 h-4 mr-2" />
-                  Convertir
+                  Ir al Punto de Venta
                 </>
               )}
             </Button>

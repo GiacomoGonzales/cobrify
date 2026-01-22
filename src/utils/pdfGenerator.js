@@ -1918,6 +1918,23 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY += 20
   }
 
+  // ========== OBSERVACIONES GENERALES ==========
+  if (invoice.notes && invoice.notes.trim()) {
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    doc.text('OBSERVACIONES:', MARGIN_LEFT, footerY + 5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...DARK_GRAY)
+    const notesLines = doc.splitTextToSize(invoice.notes, CONTENT_WIDTH - 10)
+    const maxLines = Math.min(notesLines.length, 4) // Máximo 4 líneas
+    for (let i = 0; i < maxLines; i++) {
+      doc.text(notesLines[i], MARGIN_LEFT + 5, footerY + 14 + (i * 8))
+    }
+    footerY += 15 + (maxLines * 8)
+  }
+
   // ========== FOOTER FINAL ==========
 
   doc.setDrawColor(...MEDIUM_GRAY)

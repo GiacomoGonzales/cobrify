@@ -1018,6 +1018,18 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text('www.sunat.gob.pe\n'));
     }
 
+    // Observaciones generales (si existen)
+    if (invoice.notes && invoice.notes.trim()) {
+      commands.push(ESCPOSCommands.align('left'));
+      commands.push(ESCPOSCommands.text(format.separator + '\n'));
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('OBSERVACIONES:\n'));
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.text(convertSpanishText(invoice.notes) + '\n'));
+      commands.push(ESCPOSCommands.text(format.separator + '\n'));
+      commands.push(ESCPOSCommands.align('center'));
+    }
+
     // Mensaje de agradecimiento
     commands.push(ESCPOSCommands.bold(true));
     commands.push(ESCPOSCommands.text('!Gracias por su preferencia!\n'));

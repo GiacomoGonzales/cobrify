@@ -27,6 +27,7 @@ import {
   ScanBarcode,
   Store,
   Warehouse,
+  FileText,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -66,6 +67,7 @@ import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid } from '@/services/orderService'
+import { markQuotationAsConverted } from '@/services/quotationService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -282,6 +284,9 @@ export default function POS() {
   const [pendingOrderId, setPendingOrderId] = useState(null)
   const [markOrderPaidOnComplete, setMarkOrderPaidOnComplete] = useState(false)
 
+  // Estado para cotización (para marcar como convertida al completar)
+  const [pendingQuotationId, setPendingQuotationId] = useState(null)
+
   // Barcode Scanner
   const [isScanning, setIsScanning] = useState(false)
 
@@ -319,6 +324,10 @@ export default function POS() {
   // Descuento
   const [discountAmount, setDiscountAmount] = useState('')
   const [discountPercentage, setDiscountPercentage] = useState('')
+
+  // Observaciones generales
+  const [generalNotes, setGeneralNotes] = useState('')
+  const [showNotesSection, setShowNotesSection] = useState(false)
 
   // Variant selection modal
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
@@ -509,9 +518,10 @@ export default function POS() {
     loadPrinterConfig()
   }, [user])
 
-  // Ref para evitar ejecución duplicada del efecto de carga de mesa
+  // Ref para evitar ejecución duplicada del efecto de carga de mesa/orden/cotización
   const tableLoadedRef = useRef(false)
   const orderLoadedRef = useRef(false)
+  const quotationLoadedRef = useRef(false)
 
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
@@ -571,7 +581,65 @@ export default function POS() {
       // Limpiar el state de navegación para evitar recarga
       navigate(location.pathname, { replace: true, state: null })
     }
-  }, [location.state])
+
+    // Detectar si viene de una cotización y cargar items
+    if (location.state?.fromQuotation && !quotationLoadedRef.current) {
+      const quotationInfo = location.state
+
+      // Marcar como cargado para evitar duplicados
+      quotationLoadedRef.current = true
+
+      // Guardar info de la cotización para marcar como convertida al completar
+      if (quotationInfo.quotationId) {
+        setPendingQuotationId(quotationInfo.quotationId)
+      }
+
+      // Cargar items de la cotización al carrito
+      if (quotationInfo.items && quotationInfo.items.length > 0) {
+        const cartItems = quotationInfo.items.map(item => ({
+          id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
+          productId: item.productId || '',
+          name: item.name || '',
+          description: item.description || '',
+          price: item.unitPrice || item.price || 0,
+          quantity: item.quantity || 1,
+          unit: item.unit || 'NIU',
+          code: item.code || '',
+          observations: item.observations || '',
+        }))
+        setCart(cartItems)
+      }
+
+      // Cargar datos del cliente si existe
+      if (quotationInfo.customer) {
+        const customer = quotationInfo.customer
+        // Buscar si el cliente existe en la lista
+        const existingCustomer = customers.find(
+          c => c.documentNumber === customer.documentNumber
+        )
+        if (existingCustomer) {
+          setSelectedCustomer(existingCustomer)
+        } else {
+          // Usar los datos del cliente de la cotización
+          setSelectedCustomer({
+            id: customer.id || null,
+            name: customer.name || '',
+            businessName: customer.businessName || '',
+            documentType: customer.documentType || 'DNI',
+            documentNumber: customer.documentNumber || '',
+            email: customer.email || '',
+            phone: customer.phone || '',
+            address: customer.address || '',
+          })
+        }
+      }
+
+      toast.success(`Cotización ${quotationInfo.quotationNumber} cargada - ${quotationInfo.items?.length || 0} items. Revisa y completa la venta.`)
+
+      // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.state, customers])
 
   // Cargar documento para edición si viene editInvoiceId en la URL
   useEffect(() => {
@@ -1552,6 +1620,9 @@ export default function POS() {
     setSaleCompleted(false) // Desbloquear carrito para nueva venta
     setDiscountAmount('')
     setDiscountPercentage('')
+    // Reset observaciones generales
+    setGeneralNotes('')
+    setShowNotesSection(false)
     // Reset forma de pago
     setPaymentType('contado')
     setPaymentDueDate('')
@@ -2059,7 +2130,7 @@ export default function POS() {
           payments: allPayments,
           paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
           status: isCreditSaleDemo ? 'pending' : 'paid',
-          notes: '',
+          notes: generalNotes || '',
           sunatStatus: 'not_applicable',
           sunatResponse: null,
           sunatSentAt: null,
@@ -2251,7 +2322,7 @@ export default function POS() {
             recordedByName: user.displayName || user.email || 'Usuario'
           }] : []
         }),
-        notes: '',
+        notes: generalNotes || '',
         // Estado de SUNAT - solo facturas y boletas pueden enviarse a SUNAT
         sunatStatus: (documentType === 'factura' || documentType === 'boleta') ? 'pending' : 'not_applicable',
         sunatResponse: null,
@@ -2666,6 +2737,23 @@ export default function POS() {
           // Limpiar estado de orden pendiente
           setPendingOrderId(null)
           setMarkOrderPaidOnComplete(false)
+        }
+      }
+
+      // 6.2. Si viene de una cotización, marcar como convertida
+      if (pendingQuotationId) {
+        try {
+          const markConvertedResult = await markQuotationAsConverted(businessId, pendingQuotationId, createResult.id)
+          if (markConvertedResult.success) {
+            console.log('✅ Cotización marcada como convertida:', pendingQuotationId)
+          } else {
+            console.warn('⚠️ No se pudo marcar la cotización como convertida:', markConvertedResult.error)
+          }
+        } catch (error) {
+          console.error('Error al marcar cotización como convertida:', error)
+        } finally {
+          // Limpiar estado de cotización pendiente
+          setPendingQuotationId(null)
         }
       }
 
@@ -4451,6 +4539,45 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </button>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {/* Observaciones Generales */}
+                {cart.length > 0 && (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowNotesSection(!showNotesSection)}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
+                      disabled={lastInvoiceData !== null}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        <span className="text-base font-medium text-gray-700">
+                          Observaciones {generalNotes && <span className="text-blue-600">(1)</span>}
+                        </span>
+                      </div>
+                      {showNotesSection ? (
+                        <ChevronUp className="w-5 h-5 text-gray-500" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-gray-500" />
+                      )}
+                    </button>
+                    {showNotesSection && (
+                      <div className="p-4 bg-white">
+                        <textarea
+                          value={generalNotes}
+                          onChange={(e) => setGeneralNotes(e.target.value)}
+                          placeholder="Ej: Garantía 6 meses, entrega programada, instrucciones especiales..."
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                          disabled={lastInvoiceData !== null}
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Estas observaciones aparecerán en el comprobante impreso y PDF.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

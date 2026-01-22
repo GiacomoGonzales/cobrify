@@ -435,11 +435,15 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const businessName = companySettings?.businessName ? companySettings.businessName.toUpperCase() : ''
   const showBusinessName = businessName && businessName !== companyName
 
+  // Usar dirección de sucursal si existe, de lo contrario usar dirección principal
   let fullAddress = ''
-  if (companySettings?.address) {
+  if (quotation.branchAddress) {
+    // Usar la dirección de la sucursal seleccionada
+    fullAddress = quotation.branchAddress
+  } else if (companySettings?.address) {
     fullAddress = companySettings.address
   }
-  if (companySettings?.district || companySettings?.province || companySettings?.department) {
+  if (!quotation.branchAddress && (companySettings?.district || companySettings?.province || companySettings?.department)) {
     const locationParts = [
       companySettings?.district,
       companySettings?.province,
@@ -739,9 +743,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const colWidths = {
     cant: CONTENT_WIDTH * 0.08,
     um: CONTENT_WIDTH * 0.08,
-    desc: CONTENT_WIDTH * 0.49,
-    pu: CONTENT_WIDTH * 0.17,
-    total: CONTENT_WIDTH * 0.18
+    desc: CONTENT_WIDTH * 0.44,
+    pu: CONTENT_WIDTH * 0.20,
+    total: CONTENT_WIDTH * 0.20
   }
 
   let colX = MARGIN_LEFT
@@ -767,20 +771,22 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     // La descripción adicional del producto
     const productDescription = item.description || ''
 
-    // Calcular líneas necesarias para el nombre
-    doc.setFontSize(7)
-    const nameLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
+    // Calcular líneas necesarias para el nombre (usar mismo tamaño que al renderizar: 8pt)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    const nameLines = doc.splitTextToSize(itemDesc, colWidths.desc - 15)
 
     // Calcular líneas necesarias para la descripción (si existe)
     let descLines = []
     if (productDescription && productDescription.trim()) {
-      doc.setFontSize(6)
-      descLines = doc.splitTextToSize(productDescription, colWidths.desc - 10)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      descLines = doc.splitTextToSize(productDescription, colWidths.desc - 15)
     }
 
     const totalLines = nameLines.length + descLines.length
     const minHeight = baseHeight
-    const calculatedHeight = Math.max(minHeight, 10 + (totalLines * 8))
+    const calculatedHeight = Math.max(minHeight, 10 + (totalLines * 9))
 
     return { height: calculatedHeight, nameLines, descLines }
   }
@@ -849,7 +855,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     let currentDescY = textY
     nameLines.forEach((line, idx) => {
       doc.text(line, cols.desc + 4, currentDescY)
-      currentDescY += 8
+      currentDescY += 9
     })
 
     // Descripción del producto (debajo del nombre, en gris, mismo tamaño pero normal)
@@ -859,15 +865,15 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setTextColor(...MEDIUM_GRAY)
       descLines.forEach((line) => {
         doc.text(line, cols.desc + 4, currentDescY)
-        currentDescY += 8
+        currentDescY += 9
       })
       doc.setTextColor(...BLACK)
     }
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
-    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
+    doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu / 2, textY, { align: 'center' })
+    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total / 2, textY, { align: 'center' })
 
     dataRowY += rowHeight
   }

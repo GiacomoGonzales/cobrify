@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText } from 'lucide-react'
+import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/utils'
 import { getCustomers, getProducts, createCustomer } from '@/services/firestoreService'
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
+import { getActiveBranches } from '@/services/branchService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 // Reordenadas: las más comunes primero (UNIDAD, HORA, SERVICIO)
@@ -137,6 +138,10 @@ export default function CreateQuotation() {
   // Destinatario (persona a quien va dirigida la cotización)
   const [recipientName, setRecipientName] = useState('')
   const [recipientPosition, setRecipientPosition] = useState('')
+
+  // Sucursales
+  const [branches, setBranches] = useState([])
+  const [selectedBranch, setSelectedBranch] = useState(null)
   const [quotationItems, setQuotationItems] = useState([
     { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
   ])
@@ -153,9 +158,10 @@ export default function CreateQuotation() {
 
     setIsLoading(true)
     try {
-      const [customersResult, productsResult] = await Promise.all([
+      const [customersResult, productsResult, branchesResult] = await Promise.all([
         getCustomers(user.uid),
         getProducts(user.uid),
+        getActiveBranches(user.uid),
       ])
 
       if (customersResult.success) {
@@ -164,6 +170,10 @@ export default function CreateQuotation() {
 
       if (productsResult.success) {
         setProducts(productsResult.data || [])
+      }
+
+      if (branchesResult.success) {
+        setBranches(branchesResult.data || [])
       }
 
       // Si hay quotationId, cargar la cotización para edición
@@ -218,6 +228,14 @@ export default function CreateQuotation() {
           // Cargar destinatario
           setRecipientName(q.recipientName || '')
           setRecipientPosition(q.recipientPosition || '')
+
+          // Cargar sucursal si existe
+          if (q.branchId && branchesResult.data) {
+            const branch = branchesResult.data.find(b => b.id === q.branchId)
+            if (branch) {
+              setSelectedBranch(branch)
+            }
+          }
 
           // Cargar serie/número personalizado si existe
           if (q.customSeries || q.customNumber) {
@@ -632,6 +650,9 @@ export default function CreateQuotation() {
           notes: notes,
           recipientName: recipientName,
           recipientPosition: recipientPosition,
+          branchId: selectedBranch?.id || null,
+          branchName: selectedBranch?.name || null,
+          branchAddress: selectedBranch?.address || null,
         }
 
         const result = await updateQuotation(user.uid, quotationId, quotationData)
@@ -677,6 +698,9 @@ export default function CreateQuotation() {
           customSeries: useCustomNumber ? customSeries : '',
           customNumber: useCustomNumber ? customNumber : '',
           sentVia: [],
+          branchId: selectedBranch?.id || null,
+          branchName: selectedBranch?.name || null,
+          branchAddress: selectedBranch?.address || null,
         }
 
         const result = await createQuotation(user.uid, quotationData)
@@ -786,6 +810,53 @@ export default function CreateQuotation() {
                     <p className="text-sm text-gray-500">
                       Se generará automáticamente el siguiente número disponible según la configuración de series.
                     </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Sucursal (solo si hay sucursales configuradas) */}
+          {branches.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Store className="w-5 h-5" />
+                  Sucursal
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-500">
+                    Selecciona la sucursal desde donde se emite esta cotización. La dirección de la sucursal aparecerá en el documento.
+                  </p>
+                  <select
+                    value={selectedBranch?.id || ''}
+                    onChange={(e) => {
+                      const branch = branches.find(b => b.id === e.target.value)
+                      setSelectedBranch(branch || null)
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="">Sucursal Principal (por defecto)</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name} {branch.address ? `- ${branch.address}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedBranch && (
+                    <div className="p-3 bg-gray-50 rounded-lg text-sm">
+                      <p className="font-medium text-gray-700">{selectedBranch.name}</p>
+                      {selectedBranch.address && (
+                        <p className="text-gray-600">{selectedBranch.address}</p>
+                      )}
+                      {(selectedBranch.district || selectedBranch.province || selectedBranch.department) && (
+                        <p className="text-gray-500">
+                          {[selectedBranch.district, selectedBranch.province, selectedBranch.department].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               </CardContent>

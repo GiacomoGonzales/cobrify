@@ -1013,6 +1013,18 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .text('www.sunat.gob.pe\n');
     }
 
+    // Observaciones generales (si existen)
+    if (invoice.notes && invoice.notes.trim()) {
+      printer = printer
+        .align('left')
+        .text(divider80)
+        .bold()
+        .text('OBSERVACIONES:\n')
+        .clearFormatting()
+        .text(convertSpanishText(invoice.notes + '\n'))
+        .text(divider80);
+    }
+
     // Mensaje de agradecimiento
     printer = printer
       .align('center')
@@ -1970,6 +1982,16 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 
       builder.text('Consulte su comprobante en:').newLine()
         .text('www.sunat.gob.pe').newLine();
+    }
+
+    // Observaciones generales (si existen)
+    if (invoice.notes && invoice.notes.trim()) {
+      builder.text('------------------------').newLine()
+        .bold(true)
+        .text('OBSERVACIONES:').newLine()
+        .bold(false)
+        .text(invoice.notes).newLine()
+        .text('------------------------').newLine();
     }
 
     builder.bold(true)
