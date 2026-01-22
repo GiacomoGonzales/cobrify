@@ -21,7 +21,8 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
   // Filtros de búsqueda
   const [filterSeries, setFilterSeries] = useState('')
   const [filterDocType, setFilterDocType] = useState('all')
-  const [filterStatus, setFilterStatus] = useState('rejected')
+  const [filterStatus, setFilterStatus] = useState('all_problematic') // Nuevo: buscar todos los problemáticos
+  const [filterSunatCode, setFilterSunatCode] = useState('')
 
   // Documentos encontrados y seleccionados
   const [documents, setDocuments] = useState([])
@@ -56,6 +57,10 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
     }
   }
 
+  // Códigos de SUNAT que indican duplicado/ya existe
+  const DUPLICATE_CODES = ['0100', '2033', '2800', '4000']
+  const DUPLICATE_MESSAGES = ['ya fue enviado', 'ya existe', 'registrado anteriormente', 'duplicado', 'ya se encuentra']
+
   const searchDocuments = async () => {
     if (!user?.uid) return
 
@@ -63,13 +68,8 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
     try {
       const invoicesRef = collection(db, 'businesses', user.uid, 'invoices')
 
-      // Construir query base - documentos rechazados
-      let q = query(
-        invoicesRef,
-        where('sunatStatus', '==', filterStatus)
-      )
-
-      const snapshot = await getDocs(q)
+      // Obtener todos los documentos de la serie especificada
+      const snapshot = await getDocs(invoicesRef)
       let docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -83,6 +83,54 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
       // Filtrar por tipo de documento
       if (filterDocType !== 'all') {
         docs = docs.filter(d => d.documentType === filterDocType)
+      }
+
+      // Filtrar por estado y detectar duplicados "falsos aceptados"
+      if (filterStatus === 'all_problematic') {
+        // Buscar rechazados Y aceptados que parecen ser duplicados
+        docs = docs.filter(d => {
+          // Documentos explícitamente rechazados
+          if (d.sunatStatus === 'rejected') return true
+
+          // Documentos pendientes o enviando (atascados)
+          if (d.sunatStatus === 'pending' || d.sunatStatus === 'sending') return true
+
+          // Documentos "aceptados" pero con códigos/mensajes de duplicado
+          if (d.sunatStatus === 'accepted') {
+            const code = d.sunatResponseCode || ''
+            const desc = (d.sunatDescription || '').toLowerCase()
+
+            // Verificar si tiene código de duplicado
+            if (DUPLICATE_CODES.includes(code)) return true
+
+            // Verificar si el mensaje indica duplicado
+            if (DUPLICATE_MESSAGES.some(msg => desc.includes(msg))) return true
+          }
+
+          return false
+        })
+      } else if (filterStatus === 'accepted_duplicates') {
+        // Solo "aceptados" que parecen duplicados
+        docs = docs.filter(d => {
+          if (d.sunatStatus !== 'accepted') return false
+
+          const code = d.sunatResponseCode || ''
+          const desc = (d.sunatDescription || '').toLowerCase()
+
+          return DUPLICATE_CODES.includes(code) ||
+                 DUPLICATE_MESSAGES.some(msg => desc.includes(msg))
+        })
+      } else if (filterStatus !== 'all') {
+        // Filtro normal por estado específico
+        docs = docs.filter(d => d.sunatStatus === filterStatus)
+      }
+
+      // Filtrar por código SUNAT específico si se especificó
+      if (filterSunatCode) {
+        docs = docs.filter(d =>
+          d.sunatResponseCode === filterSunatCode ||
+          (d.sunatDescription || '').toLowerCase().includes(filterSunatCode.toLowerCase())
+        )
       }
 
       // Ordenar por fecha de creación
@@ -363,10 +411,10 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Serie a buscar
+                    Serie a buscar <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -395,18 +443,42 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Estado SUNAT
+                    Filtro de estado
                   </label>
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   >
-                    <option value="rejected">Rechazados</option>
-                    <option value="pending">Pendientes</option>
-                    <option value="sending">Enviando</option>
+                    <option value="all_problematic">🔍 Todos los problemáticos (recomendado)</option>
+                    <option value="accepted_duplicates">⚠️ "Aceptados" que son duplicados</option>
+                    <option value="rejected">❌ Solo rechazados</option>
+                    <option value="pending">⏳ Solo pendientes</option>
+                    <option value="sending">📤 Enviando (atascados)</option>
+                    <option value="all">📋 Todos los documentos</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Código/mensaje SUNAT (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={filterSunatCode}
+                    onChange={(e) => setFilterSunatCode(e.target.value)}
+                    placeholder="Ej: 2033, ya existe..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                <p className="text-sm text-blue-800">
+                  <strong>💡 Tip:</strong> La opción "Todos los problemáticos" buscará documentos rechazados,
+                  pendientes, y también aquellos marcados como "aceptados" pero que en realidad tienen
+                  mensajes de error como "ya existe" o "duplicado" (fueron enviados desde otro sistema anteriormente).
+                </p>
               </div>
 
               <button
@@ -440,7 +512,7 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
               </div>
 
               <div className="border rounded-lg overflow-hidden">
-                <div className="max-h-64 overflow-y-auto">
+                <div className="max-h-72 overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
@@ -457,39 +529,76 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                         <th className="p-2 text-left">Cliente</th>
                         <th className="p-2 text-left">Fecha</th>
                         <th className="p-2 text-right">Total</th>
-                        <th className="p-2 text-left">Error SUNAT</th>
+                        <th className="p-2 text-left">Estado</th>
+                        <th className="p-2 text-left">Respuesta SUNAT</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {documents.map(doc => (
-                        <tr
-                          key={doc.id}
-                          className={`border-t hover:bg-gray-50 cursor-pointer ${
-                            selectedDocs.includes(doc.id) ? 'bg-orange-50' : ''
-                          }`}
-                          onClick={() => toggleSelectDoc(doc.id)}
-                        >
-                          <td className="p-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedDocs.includes(doc.id)}
-                              onChange={() => toggleSelectDoc(doc.id)}
-                              className="rounded"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                          <td className="p-2 font-mono">{doc.number}</td>
-                          <td className="p-2 capitalize">{doc.documentType}</td>
-                          <td className="p-2 truncate max-w-[150px]">
-                            {doc.customer?.name || doc.customer?.businessName || '-'}
-                          </td>
-                          <td className="p-2">{formatDate(doc.createdAt)}</td>
-                          <td className="p-2 text-right">S/ {doc.total?.toFixed(2)}</td>
-                          <td className="p-2 text-red-600 text-xs truncate max-w-[150px]">
-                            {doc.sunatDescription || doc.sunatResponseCode || '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {documents.map(doc => {
+                        // Determinar si es un "falso aceptado" (duplicado)
+                        const isFalseAccepted = doc.sunatStatus === 'accepted' && (
+                          DUPLICATE_CODES.includes(doc.sunatResponseCode || '') ||
+                          DUPLICATE_MESSAGES.some(msg => (doc.sunatDescription || '').toLowerCase().includes(msg))
+                        )
+
+                        return (
+                          <tr
+                            key={doc.id}
+                            className={`border-t hover:bg-gray-50 cursor-pointer ${
+                              selectedDocs.includes(doc.id) ? 'bg-orange-50' : ''
+                            } ${isFalseAccepted ? 'bg-yellow-50' : ''}`}
+                            onClick={() => toggleSelectDoc(doc.id)}
+                          >
+                            <td className="p-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedDocs.includes(doc.id)}
+                                onChange={() => toggleSelectDoc(doc.id)}
+                                className="rounded"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </td>
+                            <td className="p-2 font-mono text-xs">{doc.number}</td>
+                            <td className="p-2 capitalize text-xs">{doc.documentType}</td>
+                            <td className="p-2 truncate max-w-[120px] text-xs">
+                              {doc.customer?.name || doc.customer?.businessName || '-'}
+                            </td>
+                            <td className="p-2 text-xs">{formatDate(doc.createdAt)}</td>
+                            <td className="p-2 text-right text-xs">S/ {doc.total?.toFixed(2)}</td>
+                            <td className="p-2">
+                              {isFalseAccepted ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                  ⚠️ Duplicado
+                                </span>
+                              ) : doc.sunatStatus === 'rejected' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                  ❌ Rechazado
+                                </span>
+                              ) : doc.sunatStatus === 'pending' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                  ⏳ Pendiente
+                                </span>
+                              ) : doc.sunatStatus === 'sending' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                  📤 Enviando
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                  ✓ {doc.sunatStatus}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2 text-xs max-w-[180px]">
+                              <div className="truncate text-gray-600" title={doc.sunatDescription || ''}>
+                                {doc.sunatResponseCode && (
+                                  <span className="font-mono text-red-600 mr-1">[{doc.sunatResponseCode}]</span>
+                                )}
+                                {doc.sunatDescription || '-'}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
