@@ -10,7 +10,7 @@
  * @param {Array} itemFilter - Items a mostrar (opcional, si es null muestra todos)
  * @param {string} personLabel - Etiqueta de persona (ej: "Persona 1 de 3")
  */
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null) => {
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
   console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel })
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
@@ -55,6 +55,8 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
     total = order.total || 0
   }
 
+  let recargoConsumo = 0
+
   if (taxConfig.igvExempt) {
     // Si está exonerado, el total es igual al subtotal y no hay IGV
     subtotal = total
@@ -65,6 +67,12 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
     const igvMultiplier = 1 + (igvRate / 100) // Ej: 1.18 para 18%
     subtotal = total / igvMultiplier // Precio sin IGV
     tax = total - subtotal // IGV = Total - Subtotal
+  }
+
+  // Calcular Recargo al Consumo si está habilitado
+  if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+    recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100)
+    total = total + recargoConsumo // Total final incluye RC
   }
 
   // Generar HTML para imprimir
@@ -374,6 +382,12 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           <span>⚠ EMPRESA EXONERADA DE IGV</span>
         </div>
         `}
+        ${recargoConsumo > 0 ? `
+        <div class="row" style="color: #059669;">
+          <span>RECARGO CONSUMO (${recargoConsumoConfig.rate}%):</span>
+          <span>S/ ${recargoConsumo.toFixed(2)}</span>
+        </div>
+        ` : ''}
         <div class="row total">
           <span>TOTAL:</span>
           <span>S/ ${total.toFixed(2)}</span>

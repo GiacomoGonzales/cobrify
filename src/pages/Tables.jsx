@@ -541,6 +541,10 @@ export default function Tables() {
         igvRate: 18,
         igvExempt: false
       }
+      let recargoConsumoConfig = {
+        enabled: false,
+        rate: 10
+      }
 
       if (businessSnap.exists()) {
         const businessData = businessSnap.data()
@@ -560,8 +564,17 @@ export default function Tables() {
           }
         }
 
+        // Obtener configuración de Recargo al Consumo
+        if (businessData.restaurantConfig) {
+          recargoConsumoConfig = {
+            enabled: businessData.restaurantConfig.recargoConsumoEnabled ?? false,
+            rate: businessData.restaurantConfig.recargoConsumoRate ?? 10
+          }
+        }
+
         console.log('📄 Datos del negocio para precuenta:', businessInfo)
         console.log('💰 Configuración de impuestos:', taxConfig)
+        console.log('💵 Configuración de RC:', recargoConsumoConfig)
       }
 
       const isNative = Capacitor.isNativePlatform()
@@ -579,7 +592,7 @@ export default function Tables() {
             await connectPrinter(printerConfigResult.config.address)
 
             // Imprimir en impresora térmica
-            const result = await printPreBillThermal(selectedOrder, selectedTable, businessInfo, taxConfig)
+            const result = await printPreBillThermal(selectedOrder, selectedTable, businessInfo, taxConfig, printerConfigResult.config?.paperWidth || 58, recargoConsumoConfig)
 
             if (result.success) {
               toast.success('Precuenta impresa en ticketera')
@@ -601,7 +614,7 @@ export default function Tables() {
       const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
       console.log('🖨️ Tables - webPrintLegible:', webPrintLegible)
       const paperWidth = printerConfigResult.config?.paperWidth || 80
-      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel)
+      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)

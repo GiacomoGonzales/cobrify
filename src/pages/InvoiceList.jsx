@@ -2315,7 +2315,11 @@ Gracias por tu preferencia.`
                 <Button size="sm" variant="outline" className="flex-1" onClick={() => setViewingInvoice(null)}>
                   Cerrar
                 </Button>
-                {viewingInvoice.documentType === 'nota_venta' && !viewingInvoice.convertedTo && viewingInvoice.status !== 'voided' && (
+                {/* Solo mostrar para notas de venta reales (no boletas/facturas mal etiquetadas) */}
+                {viewingInvoice.documentType === 'nota_venta' &&
+                 viewingInvoice.sunatStatus === 'not_applicable' &&
+                 !viewingInvoice.convertedTo &&
+                 viewingInvoice.status !== 'voided' && (
                   <Button size="sm" variant="success" className="flex-1" onClick={() => handleOpenConvertModal(viewingInvoice)}>
                     <Receipt className="w-4 h-4 mr-1" />
                     Convertir a Boleta

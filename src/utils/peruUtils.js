@@ -305,3 +305,26 @@ export function numberToWords(amount) {
 
   return `${enteros} CON ${decimales.toString().padStart(2, '0')}/100 SOLES`
 }
+
+// ========================================
+// RECARGO AL CONSUMO (Decreto Ley N° 25988)
+// ========================================
+
+// Porcentaje máximo permitido por ley
+export const RECARGO_CONSUMO_MAX_RATE = 13
+
+/**
+ * Calcula el Recargo al Consumo
+ * El RC se calcula sobre el subtotal SIN IGV (base imponible)
+ * NO forma parte de la base imponible del IGV
+ * Código SUNAT: 46 (Catálogo 53)
+ * @param {number} subtotal - Subtotal sin IGV (base imponible)
+ * @param {number} rate - Porcentaje del recargo (1-13%)
+ * @returns {number} - Monto del recargo al consumo
+ */
+export function calculateRecargoConsumo(subtotal, rate) {
+  if (!rate || rate <= 0 || subtotal <= 0) return 0
+  // Limitar al máximo permitido por ley
+  const effectiveRate = Math.min(rate, RECARGO_CONSUMO_MAX_RATE)
+  return Number((subtotal * (effectiveRate / 100)).toFixed(2))
+}

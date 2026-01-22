@@ -198,6 +198,9 @@ export default function Settings() {
     deliveryPersons: [], // Lista de repartidores
     brands: [], // Lista de marcas (para dark kitchens / multi-marca)
     autoPrintByStation: false, // Impresión automática por estación al enviar a cocina
+    // Recargo al Consumo (Decreto Ley N° 25988)
+    recargoConsumoEnabled: false, // Habilitar recargo al consumo
+    recargoConsumoRate: 10, // Porcentaje del recargo (1-13%)
   })
 
   // Categorías de productos (para asignar a estaciones)
@@ -2702,6 +2705,55 @@ export default function Settings() {
                           </p>
                         </div>
                       </label>
+
+                      {/* Recargo al Consumo (Decreto Ley N° 25988) */}
+                      <div className={`p-4 border rounded-lg transition-colors ${
+                        restaurantConfig.recargoConsumoEnabled
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-gray-200 hover:border-green-300 hover:bg-green-50/30'
+                      }`}>
+                        <label className="flex items-start space-x-3 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={restaurantConfig.recargoConsumoEnabled || false}
+                            onChange={(e) => setRestaurantConfig({...restaurantConfig, recargoConsumoEnabled: e.target.checked})}
+                            className="mt-1 w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 group-hover:text-green-900">
+                              Recargo al Consumo
+                            </span>
+                            <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                              {restaurantConfig.recargoConsumoEnabled
+                                ? `✓ Habilitado: Se aplica ${restaurantConfig.recargoConsumoRate}% adicional sobre el subtotal. Este recargo se distribuye entre los trabajadores según Decreto Ley N° 25988.`
+                                : '✗ Deshabilitado: No se aplica recargo al consumo en las ventas.'}
+                            </p>
+                          </div>
+                        </label>
+
+                        {/* Configuración del porcentaje (solo si está habilitado) */}
+                        {restaurantConfig.recargoConsumoEnabled && (
+                          <div className="mt-3 ml-7 flex items-center gap-3">
+                            <label className="text-sm text-gray-700">Porcentaje:</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max="13"
+                                step="1"
+                                value={restaurantConfig.recargoConsumoRate || 10}
+                                onChange={(e) => {
+                                  const value = Math.min(13, Math.max(1, parseInt(e.target.value) || 10))
+                                  setRestaurantConfig({...restaurantConfig, recargoConsumoRate: value})
+                                }}
+                                className="w-16 px-2 py-1.5 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                              />
+                              <span className="text-sm text-gray-600">%</span>
+                            </div>
+                            <span className="text-xs text-gray-500">(máximo 13% por ley)</span>
+                          </div>
+                        )}
+                      </div>
 
                       {/* Modo Multi-Estación de Cocina */}
                       <label className={`flex items-start space-x-3 cursor-pointer group p-4 border rounded-lg transition-colors ${
