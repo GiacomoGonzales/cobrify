@@ -3,8 +3,8 @@ import { X, AlertTriangle, RefreshCw, Check, Loader2, Search, FileText } from 'l
 import { collection, query, where, getDocs, doc, updateDoc, runTransaction, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { sendInvoiceToSunat } from '@/services/firestoreService'
-import toast from 'react-hot-toast'
 
 /**
  * Modal de administración para renumerar documentos rechazados por SUNAT
@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
  */
 export default function RenumberInvoicesModal({ isOpen, onClose }) {
   const { user } = useAuth()
+  const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
   const [processing, setProcessing] = useState(false)
