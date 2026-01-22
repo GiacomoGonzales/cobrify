@@ -1070,12 +1070,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const QR_BOX_HEIGHT = 75
   const BANK_ROWS = Math.max(bankAccountsArray.length, 2) // Mínimo 2 filas para bancos
   const HAS_DISCOUNT = (invoice.discount || 0) > 0
+  const HAS_RECARGO_CONSUMO = (invoice.recargoConsumo || 0) > 0
   const HAS_DETRACTION = invoice.hasDetraction && invoice.detractionAmount > 0
   // Altura de la sección de información de detracción (leyenda SPOT + datos)
   const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
   const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT
-  // Altura base 55, +15 si hay descuento, +36 si hay detracción (2 filas: detracción + neto a pagar)
-  const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)
+  // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
+  const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)
   const SON_SECTION_HEIGHT = 22
 
   // Posición Y donde termina el área de productos (empieza el pie fijo)
@@ -1088,26 +1089,47 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const minProductRowHeight = 15
   const lineHeight = 9 // Altura por línea de texto
 
-  // Definir columnas: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
-  const colWidths = {
+  // Solo mostrar las filas que tienen productos (sin filas vacías)
+  const items = invoice.items || []
+
+  // Verificar si algún item tiene descuento para mostrar la columna DCTO
+  const hasAnyItemDiscount = items.some(item => (item.itemDiscount || 0) > 0)
+
+  // Definir columnas dinámicamente según si hay descuentos
+  // Con descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | DCTO. | IMPORTE
+  // Sin descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
+  const colWidths = hasAnyItemDiscount ? {
+    cant: CONTENT_WIDTH * 0.07,
+    um: CONTENT_WIDTH * 0.07,
+    desc: CONTENT_WIDTH * 0.40,
+    pu: CONTENT_WIDTH * 0.15,
+    dcto: CONTENT_WIDTH * 0.13,
+    total: CONTENT_WIDTH * 0.18
+  } : {
     cant: CONTENT_WIDTH * 0.08,
     um: CONTENT_WIDTH * 0.08,
     desc: CONTENT_WIDTH * 0.49,
     pu: CONTENT_WIDTH * 0.17,
+    dcto: 0,
     total: CONTENT_WIDTH * 0.18
   }
 
   let colX = MARGIN_LEFT
-  const cols = {
+  const cols = hasAnyItemDiscount ? {
     cant: colX,
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
     pu: colX += colWidths.desc,
+    dcto: colX += colWidths.pu,
+    total: colX += colWidths.dcto
+  } : {
+    cant: colX,
+    um: colX += colWidths.cant,
+    desc: colX += colWidths.um,
+    pu: colX += colWidths.desc,
+    dcto: 0,
     total: colX += colWidths.pu
   }
-
-  // Solo mostrar las filas que tienen productos (sin filas vacías)
-  const items = invoice.items || []
 
   // Función para calcular altura dinámica de cada item
   const calculateItemHeight = (item) => {
@@ -1131,8 +1153,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       itemDesc += ` - ${item.observations}`
     }
     doc.setFontSize(8)
-    const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-    const calculatedHeight = Math.max(minProductRowHeight, descLines.length * lineHeight + 6)
+    // Usar el ancho de descripción correcto según si hay descuentos
+    const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
+    const descLines = doc.splitTextToSize(itemDesc, descWidth)
+    const baseHeight = descLines.length * lineHeight + 6
+    const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
     return { height: calculatedHeight, descLines }
   }
 
@@ -1157,6 +1182,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
+  if (hasAnyItemDiscount) {
+    doc.text('DCTO.', cols.dcto + colWidths.dcto / 2, headerTextY, { align: 'center' })
+  }
   doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
 
   // Dibujar filas de productos (solo las que tienen datos)
@@ -1182,6 +1210,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const item = items[i]
     const precioConIGV = item.unitPrice || item.price || 0
     const importeConIGV = item.quantity * precioConIGV
+    const itemDiscount = item.itemDiscount || 0
+    const importeFinal = importeConIGV - itemDiscount
     const centerY = dataRowY + rowHeight / 2 + 3 // Centro vertical de la fila
 
     doc.setTextColor(...BLACK)
@@ -1207,8 +1237,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(8)
     doc.text(precioConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, centerY, { align: 'right' })
 
-    // Importe - centrado verticalmente
-    doc.text(importeConIGV.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, centerY, { align: 'right' })
+    // Columna DCTO (solo si hay descuentos en algún item)
+    if (hasAnyItemDiscount) {
+      doc.setFontSize(8)
+      doc.setTextColor(...BLACK)
+      if (itemDiscount > 0) {
+        doc.text(`-${itemDiscount.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, cols.dcto + colWidths.dcto - 5, centerY, { align: 'right' })
+      } else {
+        doc.text('-', cols.dcto + colWidths.dcto / 2, centerY, { align: 'center' })
+      }
+    }
+
+    // Importe - centrado verticalmente (siempre muestra el importe final)
+    doc.setFontSize(8)
+    doc.text(importeFinal.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, centerY, { align: 'right' })
 
     dataRowY += rowHeight
   }
@@ -1248,8 +1290,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // --- TOTALES (derecha) con borde ---
   const totalsRowHeight = 15
   const totalsStartY = footerY
-  // 3 filas base (gravada, igv, total) + 1 si descuento + 2 si detracción
-  const totalsSectionRows = 3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_DETRACTION ? 2 : 0)
+  // 3 filas base (gravada, igv, total) + 1 si descuento + 1 si recargo consumo + 2 si detracción
+  const totalsSectionRows = 3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0)
 
   // Borde exterior de totales
   doc.setDrawColor(...BLACK)
@@ -1289,6 +1331,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
   doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
   footerY += totalsRowHeight
+
+  // Fila: RECARGO AL CONSUMO (solo si aplica)
+  if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
+    doc.setFillColor(255, 255, 255) // Blanco como las otras filas
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.setTextColor(...BLACK)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(`REC. CONSUMO (${invoice.recargoConsumoRate || 10}%)`, totalsX + 5, footerY + 10)
+    doc.text('S/ ' + (invoice.recargoConsumo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    footerY += totalsRowHeight
+  }
 
   // Fila: TOTAL (fondo oscuro) - Si hay detracción, no es la última fila
   const totalRowHeight = HAS_DETRACTION ? totalsRowHeight : totalsRowHeight + 6

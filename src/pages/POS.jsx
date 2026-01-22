@@ -38,7 +38,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
-import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
+import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
@@ -237,6 +237,7 @@ export default function POS() {
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false }) // Configuración de impuestos
+  const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
   const [cart, setCart] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -752,12 +753,18 @@ export default function POS() {
         }
 
         // Establecer tipo de documento por defecto si está configurado y no hay borrador
-        const draftKey = `pos_draft_${businessId}`
-        const savedDraft = localStorage.getItem(draftKey)
-        const hasDraft = savedDraft && JSON.parse(savedDraft)?.cart?.length > 0
+        // IMPORTANTE: No sobrescribir si estamos en modo edición (editInvoiceId en URL)
+        const searchParams = new URLSearchParams(location.search)
+        const isEditingFromUrl = searchParams.get('editInvoiceId')
 
-        if (!hasDraft && settingsResult.data.defaultDocumentType) {
-          setDocumentType(settingsResult.data.defaultDocumentType)
+        if (!isEditingFromUrl) {
+          const draftKey = `pos_draft_${businessId}`
+          const savedDraft = localStorage.getItem(draftKey)
+          const hasDraft = savedDraft && JSON.parse(savedDraft)?.cart?.length > 0
+
+          if (!hasDraft && settingsResult.data.defaultDocumentType) {
+            setDocumentType(settingsResult.data.defaultDocumentType)
+          }
         }
       }
 
@@ -785,6 +792,16 @@ export default function POS() {
             setTaxConfig(newTaxConfig)
           } else {
             console.warn('⚠️ taxConfig no existe en emissionConfig, usando valores por defecto')
+          }
+
+          // Cargar configuración de Recargo al Consumo (solo para restaurantes)
+          if (businessData.restaurantConfig) {
+            const rcConfig = {
+              enabled: businessData.restaurantConfig.recargoConsumoEnabled ?? false,
+              rate: businessData.restaurantConfig.recargoConsumoRate ?? 10
+            }
+            console.log('✅ RecargoConsumo config:', rcConfig)
+            setRecargoConsumoConfig(rcConfig)
           }
         } else {
           console.warn('⚠️ Documento business no existe para businessId:', businessId)
@@ -1483,6 +1500,25 @@ export default function POS() {
     }))
   }
 
+  // Actualizar descuento individual de un item
+  const updateItemDiscount = (itemId, discountValue) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+    const discount = parseFloat(discountValue) || 0
+    setCart(cart.map(item => {
+      const matchId = item.cartId || item.id
+      if (matchId === itemId) {
+        // El descuento no puede ser mayor al total de la línea
+        const maxDiscount = item.price * item.quantity
+        const validDiscount = Math.min(Math.max(0, discount), maxDiscount)
+        return { ...item, itemDiscount: validDiscount }
+      }
+      return item
+    }))
+  }
+
   const clearCart = () => {
     setCart([])
     setSelectedCustomer(null)
@@ -1647,21 +1683,36 @@ export default function POS() {
 
   // Calcular montos sin descuento (optimizado con useMemo)
   const amounts = React.useMemo(() => {
+    // Calcular total de descuentos por ítem
+    const totalItemDiscounts = cart.reduce((sum, item) => sum + (item.itemDiscount || 0), 0)
+
     // Usar calculateMixedInvoiceAmounts para manejar productos con diferentes taxAffectation
+    // Aplicamos el precio efectivo considerando el descuento por ítem
     const baseAmounts = calculateMixedInvoiceAmounts(
-      cart.map(item => ({
-        price: item.price,
-        quantity: item.quantity,
-        taxAffectation: item.taxAffectation || '10', // Default: Gravado
-      })),
+      cart.map(item => {
+        const lineTotal = item.price * item.quantity
+        const itemDiscount = item.itemDiscount || 0
+        // Calcular precio efectivo por unidad después del descuento del ítem
+        const effectivePrice = itemDiscount > 0
+          ? (lineTotal - itemDiscount) / item.quantity
+          : item.price
+        return {
+          price: effectivePrice,
+          quantity: item.quantity,
+          taxAffectation: item.taxAffectation || '10', // Default: Gravado
+        }
+      }),
       taxConfig.igvRate
     )
 
-    // Aplicar descuento al TOTAL (no al subtotal) para que sea más intuitivo
-    const discount = parseFloat(discountAmount) || 0
+    // Aplicar descuento GLOBAL al TOTAL (no al subtotal) para que sea más intuitivo
+    const globalDiscount = parseFloat(discountAmount) || 0
 
-    // El descuento se aplica al total (con IGV incluido)
-    const totalAfterDiscount = Math.max(0, baseAmounts.total - discount)
+    // Descuento total = descuentos por ítem + descuento global
+    const totalDiscount = totalItemDiscounts + globalDiscount
+
+    // El descuento global se aplica al total (con IGV incluido)
+    const totalAfterDiscount = Math.max(0, baseAmounts.total - globalDiscount)
 
     // Calcular proporción del descuento para aplicarlo a cada tipo
     const discountRatio = baseAmounts.total > 0 ? totalAfterDiscount / baseAmounts.total : 1
@@ -1678,18 +1729,32 @@ export default function POS() {
     // Subtotal total = subtotal gravado + exonerado + inafecto
     const subtotalAfterDiscount = subtotalGravadoAfterDiscount + exoneradoAfterDiscount + inafectoAfterDiscount
 
+    // Calcular Recargo al Consumo (solo si está habilitado y es restaurante)
+    // El RC se calcula sobre el subtotal SIN IGV y NO forma parte de la base imponible del IGV
+    let recargoConsumo = 0
+    if (recargoConsumoConfig.enabled && businessMode === 'restaurant') {
+      recargoConsumo = calculateRecargoConsumo(subtotalAfterDiscount, recargoConsumoConfig.rate)
+    }
+
+    // Total final = total con IGV + recargo al consumo
+    const totalFinal = totalAfterDiscount + recargoConsumo
+
     return {
       subtotal: Number(baseAmounts.subtotal.toFixed(2)),
-      discount: Number(discount.toFixed(2)),
+      discount: Number(totalDiscount.toFixed(2)), // Total de descuentos (ítems + global)
+      globalDiscount: Number(globalDiscount.toFixed(2)),
+      itemDiscounts: Number(totalItemDiscounts.toFixed(2)),
       subtotalAfterDiscount: Number(subtotalAfterDiscount.toFixed(2)),
       igv: Number(igvAfterDiscount.toFixed(2)),
-      total: Number(totalAfterDiscount.toFixed(2)),
+      recargoConsumo: Number(recargoConsumo.toFixed(2)),
+      recargoConsumoRate: recargoConsumoConfig.enabled ? recargoConsumoConfig.rate : 0,
+      total: Number(totalFinal.toFixed(2)),
       // Montos por tipo de afectación (para mostrar desglose)
       gravado: baseAmounts.gravado,
       exonerado: baseAmounts.exonerado,
       inafecto: baseAmounts.inafecto,
     }
-  }, [cart, taxConfig.igvRate, discountAmount])
+  }, [cart, taxConfig.igvRate, discountAmount, recargoConsumoConfig, businessMode])
 
   // Calcular totales de pago (optimizado con useMemo)
   const paymentTotals = React.useMemo(() => {
@@ -1910,6 +1975,7 @@ export default function POS() {
           subtotal: item.price * item.quantity,
           taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
           ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
+          ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
@@ -1987,6 +2053,9 @@ export default function POS() {
           opGravadas: amounts.gravado?.total || 0,
           opExoneradas: amounts.exonerado?.total || 0,
           opInafectas: amounts.inafecto?.total || 0,
+          // Recargo al Consumo (para restaurantes)
+          recargoConsumo: amounts.recargoConsumo || 0,
+          recargoConsumoRate: amounts.recargoConsumoRate || 0,
           payments: allPayments,
           paymentMethod: allPayments.length > 0 ? allPayments[0].method : 'Efectivo',
           status: isCreditSaleDemo ? 'pending' : 'paid',
@@ -2073,6 +2142,7 @@ export default function POS() {
         subtotal: item.price * item.quantity,
         taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
+        ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
         ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
@@ -2160,6 +2230,9 @@ export default function POS() {
         opInafectas: amounts.inafecto?.total || 0,
         // Configuración de impuestos
         taxConfig: taxConfig,
+        // Recargo al Consumo (para restaurantes)
+        recargoConsumo: amounts.recargoConsumo || 0,
+        recargoConsumoRate: amounts.recargoConsumoRate || 0,
         // Guardar los métodos de pago
         payments: allPayments,
         // Guardar el primer método como principal para compatibilidad
@@ -4126,19 +4199,19 @@ ${companySettings?.businessName || 'Tu Empresa'}`
 
               <div className={`flex-1 space-y-3 overflow-y-auto custom-scrollbar mb-4 max-h-[300px] lg:max-h-[400px] ${saleCompleted ? 'opacity-60 pointer-events-none' : ''}`}>
                 {cart.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400 py-8">
-                    <ShoppingCart className="w-12 h-12 mb-2" />
-                    <p className="text-sm">No hay productos en el carrito</p>
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
+                    <ShoppingCart className="w-16 h-16 mb-3" />
+                    <p className="text-base">No hay productos en el carrito</p>
                   </div>
                 ) : (
                   cart.map(item => {
                     const itemId = item.cartId || item.id
                     return (
-                      <div key={itemId} className="p-3 bg-gray-50 rounded-lg">
+                      <div key={itemId} className="p-4 bg-gray-50 rounded-xl">
                         <div className="flex gap-3">
                           {/* Product thumbnail - Left side */}
                           {item.imageUrl && (
-                            <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
+                            <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
                               <img
                                 src={item.imageUrl}
                                 alt={item.name}
@@ -4148,13 +4221,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           )}
                           {/* Content - Right side */}
                           <div className="flex-1 min-w-0">
+                            {/* Header: Nombre + Eliminar */}
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex-1 pr-2">
-                                <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                                <p className="font-semibold text-base text-gray-900 line-clamp-2">
                                   {item.name}
                                 </p>
                                 {item.isVariant && item.variantAttributes && (
-                                  <p className="text-xs text-gray-600 mt-1">
+                                  <p className="text-sm text-gray-600 mt-0.5">
                                     {Object.entries(item.variantAttributes).map(([key, value]) => (
                                       <span key={key} className="mr-2">
                                         {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
@@ -4163,49 +4237,67 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   </p>
                                 )}
                                 {item.presentationName && (
-                                  <p className="text-xs text-green-600 mt-1 font-medium">
+                                  <p className="text-sm text-green-600 mt-0.5 font-medium">
                                     {item.presentationName} (×{item.presentationFactor})
                                   </p>
                                 )}
-                                {/* Campo de observaciones (IMEI, placa, serie, etc.) */}
-                                <input
-                                  type="text"
-                                  placeholder="IMEI, placa, serie..."
-                                  value={item.observations || ''}
-                                  onChange={(e) => updateItemObservations(itemId, e.target.value)}
-                                  className="w-full text-xs px-2 py-1 border border-gray-200 rounded mt-1 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                                />
                               </div>
                               <button
                                 onClick={() => removeFromCart(itemId)}
-                                className="text-red-600 hover:text-red-800 flex-shrink-0"
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-1.5 transition-colors flex-shrink-0"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-5 h-5" />
                               </button>
                             </div>
+
+                            {/* Fila: Observaciones + Descuento (lado a lado) */}
+                            <div className="flex gap-2 mb-3">
+                              <input
+                                type="text"
+                                placeholder="Obs: IMEI, placa..."
+                                value={item.observations || ''}
+                                onChange={(e) => updateItemObservations(itemId, e.target.value)}
+                                className="flex-1 text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              />
+                              <div className="flex items-center gap-1 w-28">
+                                <Tag className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                                <input
+                                  type="number"
+                                  placeholder="Dcto"
+                                  value={item.itemDiscount || ''}
+                                  onChange={(e) => updateItemDiscount(itemId, e.target.value)}
+                                  min="0"
+                                  max={item.price * item.quantity}
+                                  step="0.01"
+                                  className="w-full text-sm px-2 py-1.5 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Fila: Cantidad + Precio */}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
                                 {item.allowDecimalQuantity ? (
                                   /* Input editable para productos por peso */
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-2">
                                     <input
                                       type="number"
                                       value={item.quantity}
                                       onChange={(e) => setQuantityDirectly(itemId, e.target.value)}
                                       step="0.001"
                                       min="0.001"
-                                      className="w-20 px-2 py-1 text-sm text-center font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                      className="w-20 px-2 py-1.5 text-sm text-center font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
-                                    <span className="text-xs text-gray-500">{item.unit || 'kg'}</span>
+                                    <span className="text-sm text-gray-500">{item.unit || 'kg'}</span>
                                   </div>
                                 ) : (
                                   /* Botones +/- para productos normales con cantidad editable */
                                   <>
                                     <button
                                       onClick={() => updateQuantity(itemId, -1)}
-                                      className="w-7 h-7 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
                                     >
-                                      <Minus className="w-3 h-3" />
+                                      <Minus className="w-4 h-4" />
                                     </button>
                                     <input
                                       type="number"
@@ -4218,13 +4310,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                       }}
                                       onFocus={(e) => e.target.select()}
                                       min="1"
-                                      className="w-12 text-center font-semibold text-sm border border-gray-300 rounded-md py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      className="w-14 text-center font-bold text-base border border-gray-300 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                     <button
                                       onClick={() => updateQuantity(itemId, 1)}
-                                      className="w-7 h-7 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
+                                      className="w-9 h-9 rounded-lg bg-primary-600 hover:bg-primary-700 text-white flex items-center justify-center transition-colors"
                                     >
-                                      <Plus className="w-3 h-3" />
+                                      <Plus className="w-4 h-4" />
                                     </button>
                                   </>
                                 )}
@@ -4245,38 +4337,51 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                           cancelEditingPrice()
                                         }
                                       }}
-                                      className="w-16 px-2 py-1 text-sm font-bold text-right border border-primary-500 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                      className="w-20 px-2 py-1.5 text-base font-bold text-right border border-primary-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                       autoFocus
                                       step="0.01"
                                       min="0.01"
                                     />
                                     <button
                                       onClick={() => saveEditedPrice(itemId)}
-                                      className="text-green-600 hover:text-green-800 p-1"
+                                      className="text-green-600 hover:text-green-800 p-1.5"
                                       title="Guardar"
                                     >
-                                      <Check className="w-4 h-4" />
+                                      <Check className="w-5 h-5" />
                                     </button>
                                     <button
                                       onClick={cancelEditingPrice}
-                                      className="text-gray-600 hover:text-gray-800 p-1"
+                                      className="text-gray-600 hover:text-gray-800 p-1.5"
                                       title="Cancelar"
                                     >
-                                      <X className="w-4 h-4" />
+                                      <X className="w-5 h-5" />
                                     </button>
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1">
-                                    <p className="font-bold text-gray-900 text-sm">
-                                      {formatCurrency(item.price * item.quantity)}
-                                    </p>
+                                    <div className="text-right">
+                                      {item.itemDiscount > 0 ? (
+                                        <>
+                                          <p className="text-sm text-gray-400 line-through">
+                                            {formatCurrency(item.price * item.quantity)}
+                                          </p>
+                                          <p className="font-bold text-orange-600 text-lg">
+                                            {formatCurrency((item.price * item.quantity) - item.itemDiscount)}
+                                          </p>
+                                        </>
+                                      ) : (
+                                        <p className="font-bold text-gray-900 text-lg">
+                                          {formatCurrency(item.price * item.quantity)}
+                                        </p>
+                                      )}
+                                    </div>
                                     {companySettings?.allowPriceEdit && !item.isCustom && (
                                       <button
                                         onClick={() => startEditingPrice(itemId, item.price)}
-                                        className="text-primary-600 hover:text-primary-700 p-1"
+                                        className="text-primary-600 hover:text-primary-700 p-1.5"
                                         title="Editar precio"
                                       >
-                                        <Edit2 className="w-4 h-4" />
+                                        <Edit2 className="w-5 h-5" />
                                       </button>
                                     )}
                                   </div>
@@ -4298,12 +4403,16 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <span className="font-medium">{formatCurrency(amounts.subtotal)}</span>
                 </div>
 
-                {/* Discount Field */}
+                {/* Descuento General */}
                 {cart.length > 0 && (
-                  <div className="border-t border-b py-3 space-y-2">
-                    <p className="text-sm text-gray-600 font-medium">Descuento:</p>
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 flex-1">
+                      <Tag className="w-5 h-5 text-green-600" />
+                      <p className="text-base text-green-800 font-semibold">Descuento General</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-sm text-green-700 font-medium">S/</span>
                         <input
                           type="number"
                           value={discountAmount}
@@ -4312,13 +4421,12 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           min="0"
                           max={amounts.subtotal}
                           step="0.01"
-                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          className="flex-1 px-3 py-2 text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           disabled={lastInvoiceData !== null}
                         />
-                        <span className="text-sm text-gray-600 font-medium flex-shrink-0">S/</span>
                       </div>
-                      <span className="text-sm text-gray-500 font-medium flex-shrink-0">o</span>
-                      <div className="flex items-center gap-1 flex-1">
+                      <span className="text-sm text-green-600 font-medium">ó</span>
+                      <div className="flex items-center gap-2 flex-1">
                         <input
                           type="number"
                           value={discountPercentage}
@@ -4327,27 +4435,44 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           min="0"
                           max="100"
                           step="0.01"
-                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          className="flex-1 px-3 py-2 text-base border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           disabled={lastInvoiceData !== null}
                         />
-                        <span className="text-sm text-gray-600 font-medium flex-shrink-0">%</span>
+                        <span className="text-sm text-green-700 font-medium">%</span>
                       </div>
                       {(discountAmount || discountPercentage) && (
                         <button
                           onClick={handleClearDiscount}
-                          className="flex-shrink-0 p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                          className="flex-shrink-0 p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
                           title="Limpiar descuento"
                           disabled={lastInvoiceData !== null}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-5 h-5" />
                         </button>
                       )}
                     </div>
-                    {/* Show discount amount if applied */}
-                    {amounts.discount > 0 && (
-                      <div className="flex justify-between text-sm text-green-600">
-                        <span>Descuento aplicado:</span>
-                        <span className="font-medium">-{formatCurrency(amounts.discount)}</span>
+                  </div>
+                )}
+
+                {/* Resumen de Descuentos */}
+                {(amounts.itemDiscounts > 0 || amounts.globalDiscount > 0) && (
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                    {amounts.itemDiscounts > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-orange-600">Dcto. por ítems:</span>
+                        <span className="font-semibold text-orange-600">-{formatCurrency(amounts.itemDiscounts)}</span>
+                      </div>
+                    )}
+                    {amounts.globalDiscount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">Dcto. general:</span>
+                        <span className="font-semibold text-green-600">-{formatCurrency(amounts.globalDiscount)}</span>
+                      </div>
+                    )}
+                    {amounts.itemDiscounts > 0 && amounts.globalDiscount > 0 && (
+                      <div className="flex justify-between text-base font-bold border-t border-gray-200 pt-2 mt-2">
+                        <span className="text-gray-700">Total Descuentos:</span>
+                        <span className="text-red-600">-{formatCurrency(amounts.discount)}</span>
                       </div>
                     )}
                   </div>
@@ -4358,6 +4483,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">IGV ({taxConfig.igvRate}%):</span>
                     <span className="font-medium">{formatCurrency(amounts.igv)}</span>
+                  </div>
+                )}
+                {/* Mostrar Recargo al Consumo si está habilitado */}
+                {amounts.recargoConsumo > 0 && (
+                  <div className="flex justify-between text-sm text-green-700">
+                    <span>Recargo Consumo ({amounts.recargoConsumoRate}%):</span>
+                    <span className="font-medium">{formatCurrency(amounts.recargoConsumo)}</span>
                   </div>
                 )}
                 {/* Mostrar montos exonerados si hay productos exonerados */}

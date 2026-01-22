@@ -696,12 +696,31 @@ export function generateInvoiceXML(invoiceData, businessData) {
   console.log(`      Exoneradas (20): ${sumExoneradas}`)
   console.log(`      Inafectas (30): ${sumInafectas}`)
 
+  // === RECARGO AL CONSUMO (Decreto Ley N° 25988) ===
+  // El RC se declara como AllowanceCharge con ChargeIndicator=true (es un cargo, no un descuento)
+  // Código SUNAT: 46 (Catálogo 53)
+  // IMPORTANTE: El RC NO forma parte de la base imponible del IGV
+  const recargoConsumo = invoiceData.recargoConsumo || 0
+  const recargoConsumoRate = invoiceData.recargoConsumoRate || 0
+  const currency = invoiceData.currency || 'PEN'
+
+  if (recargoConsumo > 0) {
+    // === RECARGO AL CONSUMO según especificación SUNAT UBL 2.1 ===
+    // El AllowanceChargeReasonCode NO debe tener atributos según los ejemplos oficiales de SUNAT
+    const allowanceChargeRC = root.ele('cac:AllowanceCharge')
+    allowanceChargeRC.ele('cbc:ChargeIndicator').txt('true') // true = cargo (no descuento)
+    allowanceChargeRC.ele('cbc:AllowanceChargeReasonCode').txt('46') // Código 46 = Recargo al Consumo (Catálogo 53)
+    allowanceChargeRC.ele('cbc:MultiplierFactorNumeric').txt((recargoConsumoRate / 100).toFixed(5))
+    allowanceChargeRC.ele('cbc:Amount', { 'currencyID': currency }).txt(recargoConsumo.toFixed(2))
+    allowanceChargeRC.ele('cbc:BaseAmount', { 'currencyID': currency }).txt(sumLineExtension.toFixed(2))
+    console.log(`✅ AllowanceCharge RC agregado: ${recargoConsumo.toFixed(2)} (${recargoConsumoRate}% de ${sumLineExtension.toFixed(2)})`)
+  }
+
   // === IMPUESTOS (IGV) ===
   // IMPORTANTE: TaxTotal DEBE ir ANTES de LegalMonetaryTotal según UBL 2.1
   // SIEMPRE usar los valores calculados para que cuadren con las líneas
   // NUEVO: Generar múltiples TaxSubtotals según los tipos de afectación usados
   const finalIgv = igvAmount
-  const currency = invoiceData.currency || 'PEN'
 
   const taxTotal = root.ele('cac:TaxTotal')
   taxTotal.ele('cbc:TaxAmount', { 'currencyID': currency })
@@ -758,27 +777,34 @@ export function generateInvoiceXML(invoiceData, businessData) {
   // === TOTALES ===
   // IMPORTANTE: LegalMonetaryTotal DEBE ir DESPUÉS de TaxTotal y ANTES de InvoiceLine
   // El orden de los elementos es CRÍTICO según el esquema XSD UBL 2.1 de SUNAT:
-  // LineExtensionAmount -> TaxInclusiveAmount -> AllowanceTotalAmount -> PayableAmount
+  // LineExtensionAmount -> TaxExclusiveAmount -> TaxInclusiveAmount -> AllowanceTotalAmount -> ChargeTotalAmount -> PayableAmount
 
-  // SIEMPRE usar los valores calculados para que cuadren con las líneas
-  const finalTotal = totalAmount
+  // El total final incluye: subtotal + IGV + Recargo al Consumo (si aplica)
+  const finalTotal = totalAmount + recargoConsumo
 
   const legalMonetaryTotal = root.ele('cac:LegalMonetaryTotal')
 
   // Con el nuevo enfoque (descuento distribuido en líneas):
   // - LineExtensionAmount = suma de LineExtensionAmount de cada línea (YA con descuento aplicado)
-  // - TaxInclusiveAmount = LineExtensionAmount + IGV
-  // - No hay AllowanceCharge global ni AllowanceTotalAmount
+  // - TaxInclusiveAmount = LineExtensionAmount + IGV + ChargeTotalAmount
+  // - ChargeTotalAmount = Recargo al Consumo (si aplica) - VA DESPUÉS de TaxInclusiveAmount según UBL 2.1
+  // - PayableAmount = TaxInclusiveAmount
 
   // 1. LineExtensionAmount = suma de líneas (ya tienen el descuento proporcional aplicado)
   legalMonetaryTotal.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(sumLineExtension.toFixed(2))
 
-  // 2. Total impuestos incluidos
+  // 2. TaxInclusiveAmount - Total impuestos incluidos (incluye RC si aplica)
   legalMonetaryTotal.ele('cbc:TaxInclusiveAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(finalTotal.toFixed(2))
 
-  // 3. Total a pagar
+  // 3. ChargeTotalAmount = Recargo al Consumo (solo si hay) - DEBE ir después de TaxInclusiveAmount
+  if (recargoConsumo > 0) {
+    legalMonetaryTotal.ele('cbc:ChargeTotalAmount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(recargoConsumo.toFixed(2))
+  }
+
+  // 4. PayableAmount - Total a pagar
   legalMonetaryTotal.ele('cbc:PayableAmount', { 'currencyID': invoiceData.currency || 'PEN' })
     .txt(finalTotal.toFixed(2))
 
@@ -831,6 +857,17 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'listAgencyName': 'PE:SUNAT',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16'
     }).txt('01') // 01 = Precio unitario (incluye el IGV)
+
+    // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
+    // Si el item tiene descuento individual, agregarlo como AllowanceCharge
+    // El descuento del ítem debe venir sin IGV (valor base)
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    if (itemDiscount > 0) {
+      const lineAllowanceCharge = invoiceLine.ele('cac:AllowanceCharge')
+      lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+      lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+        .txt(parseFloat(itemDiscount).toFixed(2))
+    }
 
     // Impuesto de la línea
     const lineTaxTotal = invoiceLine.ele('cac:TaxTotal')
@@ -1258,6 +1295,15 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16'
     }).txt('01')
 
+    // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    if (itemDiscount > 0) {
+      const lineAllowanceCharge = creditNoteLine.ele('cac:AllowanceCharge')
+      lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+      lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': creditNoteData.currency || 'PEN' })
+        .txt(parseFloat(itemDiscount).toFixed(2))
+    }
+
     // Impuesto de la línea
     const lineTaxTotal = creditNoteLine.ele('cac:TaxTotal')
     const lineIGV = isGravado ? lineTotal * igvMultiplier : 0
@@ -1679,6 +1725,15 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
       'listAgencyName': 'PE:SUNAT',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16'
     }).txt('01')
+
+    // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+    if (itemDiscount > 0) {
+      const lineAllowanceCharge = debitNoteLine.ele('cac:AllowanceCharge')
+      lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+      lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': debitNoteData.currency || 'PEN' })
+        .txt(parseFloat(itemDiscount).toFixed(2))
+    }
 
     // Impuesto de la línea
     const lineTaxTotal = debitNoteLine.ele('cac:TaxTotal')

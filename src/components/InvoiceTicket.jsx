@@ -688,19 +688,28 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             const itemName = item.name || item.description || '';
             // Observaciones adicionales (IMEI, placa, serie, etc.)
             const itemObservations = item.observations || null;
+            // Descuento por ítem
+            const itemDiscount = item.itemDiscount || 0;
+            const lineTotal = item.quantity * (item.price || item.unitPrice);
 
             return (
               <div key={index} className="item-row">
                 <div className="item-desc">{itemName}</div>
                 <div className="item-details">
                   <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(item.price || item.unitPrice)}</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(item.quantity * (item.price || item.unitPrice))}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(lineTotal)}</span>
                 </div>
+                {itemDiscount > 0 && (
+                  <div className="item-details">
+                    <span>Dsct.</span>
+                    <span>-{formatCurrency(itemDiscount)}</span>
+                  </div>
+                )}
                 {item.code && (
                   <div className="item-code">Código: {item.code}</div>
                 )}
                 {item.batchNumber && (
-                  <div className="item-code" style={{ color: '#6b21a8' }}>
+                  <div className="item-code">
                     Lote: {item.batchNumber}
                     {item.batchExpiryDate && (() => {
                       const d = item.batchExpiryDate.toDate ? item.batchExpiryDate.toDate() : new Date(item.batchExpiryDate);
@@ -748,6 +757,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
             </div>
           </>
+        )}
+        {/* Recargo al Consumo (si existe) */}
+        {invoice.recargoConsumo > 0 && (
+          <div className="total-row">
+            <span>Rec. Consumo ({invoice.recargoConsumoRate || 10}%):</span>
+            <span>{formatCurrency(invoice.recargoConsumo)}</span>
+          </div>
         )}
         <div className="total-row final">
           <span>TOTAL A PAGAR:</span>

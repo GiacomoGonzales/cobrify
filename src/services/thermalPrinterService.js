@@ -522,6 +522,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         itemTotal = item.price * item.quantity;
       }
 
+      // Descuento por ítem
+      const itemDiscount = item.itemDiscount || 0;
+      const itemTotalWithDiscount = itemTotal - itemDiscount;
+
       if (paperWidth === 80) {
         // FORMATO 80MM - EXACTAMENTE IGUAL AL WEB
         // Línea 1: Nombre del producto completo
@@ -537,6 +541,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         const totalStr = `S/ ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
+
+        // Línea de descuento por ítem si existe
+        if (itemDiscount > 0) {
+          const discountLabel = `Dsct.`;
+          const discountStr = `-S/ ${itemDiscount.toFixed(2)}`;
+          const discountSpace = lineWidth - discountLabel.length - discountStr.length;
+          itemsText += `${discountLabel}${' '.repeat(Math.max(1, discountSpace))}${discountStr}\n`;
+        }
 
         // Línea 3: Código si existe
         if (item.code) {
@@ -576,6 +588,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         const totalStr = `S/ ${itemTotal.toFixed(2)}`;
         const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
         itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
+
+        // Línea de descuento por ítem si existe
+        if (itemDiscount > 0) {
+          const discountLabel = `Dsct.`;
+          const discountStr = `-S/ ${itemDiscount.toFixed(2)}`;
+          const discountSpace = lineWidth - discountLabel.length - discountStr.length;
+          itemsText += `${discountLabel}${' '.repeat(Math.max(1, discountSpace))}${discountStr}\n`;
+        }
 
         // Línea 3: Código si existe (alineado a la izquierda)
         if (item.code) {
@@ -847,6 +867,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Mostrar descuento si existe
     if (invoice.discount && invoice.discount > 0) {
       printer = printer.text(`Descuento: -S/ ${invoice.discount.toFixed(2)}\n`);
+    }
+
+    // Mostrar Recargo al Consumo si existe
+    if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
+      printer = printer.text(`Rec. Consumo (${invoice.recargoConsumoRate || 10}%): S/ ${invoice.recargoConsumo.toFixed(2)}\n`);
     }
 
     printer = printer
@@ -1139,9 +1164,11 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
  * @param {Object} order - Datos de la orden
  * @param {Object} table - Datos de la mesa
  * @param {Object} business - Datos del negocio
+ * @param {Object} taxConfig - Configuración de impuestos
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ * @param {Object} recargoConsumoConfig - Configuración de recargo al consumo
  */
-export const printPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
+export const printPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
   const isNative = Capacitor.isNativePlatform();
 
   if (!isNative || !isPrinterConnected) {
@@ -1151,13 +1178,13 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
   // Si es conexión WiFi, usar función específica
   if (connectionType === 'wifi') {
     console.log('📶 Usando impresión WiFi para precuenta...');
-    return await printWifiPreBill(order, table, business, taxConfig, paperWidth);
+    return await printWifiPreBill(order, table, business, taxConfig, paperWidth, recargoConsumoConfig);
   }
 
   // Si usa el servicio BLE alternativo (iOS), usar printBLEPreBill
   if (useAlternativeBLE) {
     console.log('🔵 iOS: Usando impresión BLE alternativa para precuenta...');
-    return await BLEPrinter.printBLEPreBill(order, table, business, taxConfig, paperWidth);
+    return await BLEPrinter.printBLEPreBill(order, table, business, taxConfig, paperWidth, recargoConsumoConfig);
   }
 
   // Bluetooth Android - comportamiento original
@@ -1173,7 +1200,7 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     console.log('🔍 printPreBillThermal - igvExempt:', taxConfig.igvExempt);
     console.log('🔍 printPreBillThermal - igvRate:', taxConfig.igvRate);
 
-    let subtotal, tax, total;
+    let subtotal, tax, total, recargoConsumo = 0;
     total = order.total || 0;
 
     if (taxConfig.igvExempt) {
@@ -1186,6 +1213,12 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       const igvMultiplier = 1 + (igvRate / 100); // Ej: 1.18 para 18%
       subtotal = total / igvMultiplier; // Precio sin IGV
       tax = total - subtotal; // IGV = Total - Subtotal
+    }
+
+    // Calcular Recargo al Consumo si está habilitado
+    if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+      recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100);
+      total = total + recargoConsumo; // Total final incluye RC
     }
 
     // Items - ajustar columnas según ancho
@@ -1228,6 +1261,11 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
                    `IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}\n`;
     } else {
       totalsText = '*** Empresa exonerada de IGV ***\n';
+    }
+
+    // Agregar Recargo al Consumo si aplica
+    if (recargoConsumo > 0) {
+      totalsText += `Rec. Consumo (${recargoConsumoConfig.rate}%): S/ ${recargoConsumo.toFixed(2)}\n`;
     }
 
     // Construir comando en cadena
@@ -1360,6 +1398,8 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       igv: invoice.igv || invoice.tax || 0,
       discount: invoice.discount || 0,
       total: invoice.total || 0,
+      recargoConsumo: invoice.recargoConsumo || 0,
+      recargoConsumoRate: invoice.recargoConsumoRate || 0,
 
       // Pago
       paymentMethod: invoice.paymentMethod || '',
@@ -1840,6 +1880,9 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       const itemObservations = item.observations || null;
       const unitPrice = item.unitPrice || item.price || 0;
       const itemTotal = item.total || item.subtotal || (unitPrice * item.quantity);
+      // Descuento por ítem
+      const itemDiscount = item.itemDiscount || 0;
+      const itemTotalWithDiscount = itemTotal - itemDiscount;
 
       // Formatear cantidad: con decimales si tiene, sino entero
       const qtyFormatted = Number.isInteger(item.quantity)
@@ -1851,6 +1894,13 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
         .text(`${qtyFormatted}${unitSuffix} x S/ ${unitPrice.toFixed(2)}`)
         .text(`  S/ ${itemTotal.toFixed(2)}`)
         .newLine();
+
+      // Mostrar descuento por ítem si existe
+      if (itemDiscount > 0) {
+        builder.text(`Dsct.`)
+          .text(`  -S/ ${itemDiscount.toFixed(2)}`)
+          .newLine();
+      }
 
       // Información del lote si existe (modo farmacia)
       if (item.batchNumber) {
@@ -1877,6 +1927,11 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       const igvRateDisplay = business.emissionConfig?.taxConfig?.igvRate ?? business.taxConfig?.igvRate ?? 18
       builder.text(`Subtotal: S/ ${(invoice.subtotal || 0).toFixed(2)}`).newLine()
         .text(`IGV (${igvRateDisplay}%): S/ ${(invoice.tax || invoice.igv || 0).toFixed(2)}`).newLine();
+    }
+
+    // Recargo al Consumo (si existe)
+    if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
+      builder.text(`Rec. Consumo (${invoice.recargoConsumoRate || 10}%): S/ ${invoice.recargoConsumo.toFixed(2)}`).newLine();
     }
 
     builder.bold(true)
@@ -2191,13 +2246,13 @@ export const printToAllStations = async (order, kitchenStations, paperWidth = 58
 /**
  * Imprimir precuenta vía WiFi
  */
-const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
+const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
   try {
     const format = getFormat(paperWidth);
     const builder = new EscPosBuilder();
 
     // Calcular totales
-    let subtotal, tax, total;
+    let subtotal, tax, total, recargoConsumo = 0;
     total = order.total || 0;
 
     if (taxConfig.igvExempt) {
@@ -2208,6 +2263,12 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
       const igvMultiplier = 1 + (igvRate / 100);
       subtotal = total / igvMultiplier;
       tax = total - subtotal;
+    }
+
+    // Calcular Recargo al Consumo si está habilitado
+    if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+      recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100);
+      total = total + recargoConsumo;
     }
 
     builder.init()
@@ -2245,10 +2306,18 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
     // Items
     for (const item of order.items || []) {
       const itemTotal = item.total || (item.price * item.quantity);
+      const itemDiscount = item.itemDiscount || 0;
+      const itemTotalWithDiscount = itemTotal - itemDiscount;
       builder.text(`${item.quantity}x ${item.name}`)
         .newLine()
         .text(`   S/ ${itemTotal.toFixed(2)}`)
         .newLine();
+
+      // Mostrar descuento por ítem si existe
+      if (itemDiscount > 0) {
+        builder.text(`   Dsct.  -S/ ${itemDiscount.toFixed(2)}`)
+          .newLine();
+      }
 
       if (item.modifiers && item.modifiers.length > 0) {
         for (const modifier of item.modifiers) {
@@ -2275,6 +2344,11 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
         .text(`IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}`).newLine();
     } else {
       builder.text('*** Exonerado de IGV ***').newLine();
+    }
+
+    // Agregar Recargo al Consumo si aplica
+    if (recargoConsumo > 0) {
+      builder.text(`Rec. Consumo (${recargoConsumoConfig.rate}%): S/ ${recargoConsumo.toFixed(2)}`).newLine();
     }
 
     builder.bold(true)

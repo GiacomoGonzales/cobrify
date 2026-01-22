@@ -657,6 +657,8 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       igv,
       discount,
       total,
+      recargoConsumo,
+      recargoConsumoRate,
       // Pago
       paymentMethod,
       payments,
@@ -863,6 +865,10 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
           itemTotal = item.price * item.quantity;
         }
 
+        // Descuento por ítem
+        const itemDiscount = item.itemDiscount || 0;
+        const itemTotalWithDiscount = itemTotal - itemDiscount;
+
         // Línea 1: Nombre del producto
         commands.push(ESCPOSCommands.text(itemName + '\n'));
 
@@ -875,6 +881,14 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         const totalStr = `S/ ${itemTotal.toFixed(2)}`;
         const spaceBetween = charsPerLine - qtyAndPrice.length - totalStr.length;
         commands.push(ESCPOSCommands.text(qtyAndPrice + ' '.repeat(Math.max(1, spaceBetween)) + totalStr + '\n'));
+
+        // Línea de descuento por ítem si existe
+        if (itemDiscount > 0) {
+          const discountLabel = 'Dsct.';
+          const discountStr = `-S/ ${itemDiscount.toFixed(2)}`;
+          const discountSpace = charsPerLine - discountLabel.length - discountStr.length;
+          commands.push(ESCPOSCommands.text(discountLabel + ' '.repeat(Math.max(1, discountSpace)) + discountStr + '\n'));
+        }
 
         // Línea 3: Código si existe
         if (item.code) {
@@ -907,6 +921,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
 
     if (discount && discount > 0) {
       commands.push(ESCPOSCommands.text('Descuento: -S/ ' + discount.toFixed(2) + '\n'));
+    }
+
+    // Recargo al Consumo (si existe)
+    if (recargoConsumo && recargoConsumo > 0) {
+      commands.push(ESCPOSCommands.text('Rec. Consumo (' + (recargoConsumoRate || 10) + '%): S/ ' + recargoConsumo.toFixed(2) + '\n'));
     }
 
     commands.push(ESCPOSCommands.bold(true));
@@ -1106,7 +1125,7 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
 /**
  * Imprimir precuenta via BLE
  */
-export const printBLEPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58) => {
+export const printBLEPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
   if (!isBLEPrinterConnected()) {
     return { success: false, error: 'Impresora no conectada' };
   }
@@ -1117,8 +1136,8 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     const charsPerLine = paperWidth === 58 ? 24 : 42;
 
     // Calcular totales
-    let subtotal, tax;
-    const total = order.total || 0;
+    let subtotal, tax, recargoConsumo = 0;
+    let total = order.total || 0;
 
     if (taxConfig.igvExempt) {
       subtotal = total;
@@ -1128,6 +1147,12 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
       const igvMultiplier = 1 + (igvRate / 100);
       subtotal = total / igvMultiplier;
       tax = total - subtotal;
+    }
+
+    // Calcular Recargo al Consumo si está habilitado
+    if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+      recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100);
+      total = total + recargoConsumo;
     }
 
     const commands = [
@@ -1189,6 +1214,11 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
       commands.push(ESCPOSCommands.text('IGV (' + taxConfig.igvRate + '%): S/ ' + tax.toFixed(2) + '\n'));
     } else {
       commands.push(ESCPOSCommands.text('*** Exonerado de IGV ***\n'));
+    }
+
+    // Agregar Recargo al Consumo si aplica
+    if (recargoConsumo > 0) {
+      commands.push(ESCPOSCommands.text('Rec. Consumo (' + recargoConsumoConfig.rate + '%): S/ ' + recargoConsumo.toFixed(2) + '\n'));
     }
 
     commands.push(ESCPOSCommands.bold(true));
