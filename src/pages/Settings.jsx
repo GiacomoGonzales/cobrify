@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -31,6 +31,7 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
+import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -96,6 +97,7 @@ export default function Settings() {
   const [editingSunat, setEditingSunat] = useState(false)
   const [showSolPassword, setShowSolPassword] = useState(false)
   const [showCertPassword, setShowCertPassword] = useState(false)
+  const [showRenumberModal, setShowRenumberModal] = useState(false)
   const [certificateFile, setCertificateFile] = useState(null)
 
   // Estados para QPse
@@ -4348,6 +4350,50 @@ export default function Settings() {
                 )}
               </Button>
             </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200 my-6"></div>
+
+              {/* Herramientas de Administración */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                  <Wrench className="w-5 h-5 text-orange-500" />
+                  Herramientas de Administración
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Herramientas especiales para resolver problemas con documentos
+                </p>
+
+                <div className="space-y-3">
+                  <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900 flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4 text-orange-600" />
+                          Renumerar documentos rechazados
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Si SUNAT rechazó documentos por duplicidad de numeración (serie ya usada anteriormente),
+                          esta herramienta permite cambiar la serie y renumerar los documentos para reenviarlos.
+                        </p>
+                        <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-orange-100 rounded-md">
+                          <AlertTriangle className="w-4 h-4 text-orange-600" />
+                          <span className="text-xs text-orange-700">
+                            Use con precaución - solo para documentos rechazados
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => setShowRenumberModal(true)}
+                        className="bg-orange-500 hover:bg-orange-600 text-white flex-shrink-0"
+                      >
+                        <Wrench className="w-4 h-4 mr-2" />
+                        Abrir herramienta
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
           </div>
         </Card>
       )}
@@ -5755,6 +5801,12 @@ export default function Settings() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de Renumeración de Documentos */}
+      <RenumberInvoicesModal
+        isOpen={showRenumberModal}
+        onClose={() => setShowRenumberModal(false)}
+      />
     </div>
   )
 }
