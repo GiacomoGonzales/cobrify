@@ -86,7 +86,10 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
       }
 
       // Filtrar por estado y detectar duplicados "falsos aceptados"
-      if (filterStatus === 'all_problematic') {
+      if (filterStatus === 'all') {
+        // NO filtrar - mostrar TODOS los documentos de la serie
+        // (ya está filtrado por serie arriba)
+      } else if (filterStatus === 'all_problematic') {
         // Buscar rechazados Y aceptados que parecen ser duplicados
         docs = docs.filter(d => {
           // Documentos explícitamente rechazados
@@ -120,8 +123,11 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
           return DUPLICATE_CODES.includes(code) ||
                  DUPLICATE_MESSAGES.some(msg => desc.includes(msg))
         })
-      } else if (filterStatus !== 'all') {
-        // Filtro normal por estado específico
+      } else if (filterStatus === 'accepted') {
+        // Todos los marcados como aceptados (incluyendo los falsos)
+        docs = docs.filter(d => d.sunatStatus === 'accepted')
+      } else {
+        // Filtro normal por estado específico (rejected, pending, sending)
         docs = docs.filter(d => d.sunatStatus === filterStatus)
       }
 
@@ -450,12 +456,13 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                     onChange={(e) => setFilterStatus(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   >
-                    <option value="all_problematic">🔍 Todos los problemáticos (recomendado)</option>
+                    <option value="all">📋 TODOS (para cambio masivo)</option>
+                    <option value="all_problematic">🔍 Todos los problemáticos</option>
+                    <option value="accepted">✅ Marcados como aceptados</option>
                     <option value="accepted_duplicates">⚠️ "Aceptados" que son duplicados</option>
                     <option value="rejected">❌ Solo rechazados</option>
                     <option value="pending">⏳ Solo pendientes</option>
                     <option value="sending">📤 Enviando (atascados)</option>
-                    <option value="all">📋 Todos los documentos</option>
                   </select>
                 </div>
 
@@ -475,9 +482,9 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
                 <p className="text-sm text-blue-800">
-                  <strong>💡 Tip:</strong> La opción "Todos los problemáticos" buscará documentos rechazados,
-                  pendientes, y también aquellos marcados como "aceptados" pero que en realidad tienen
-                  mensajes de error como "ya existe" o "duplicado" (fueron enviados desde otro sistema anteriormente).
+                  <strong>💡 Tip:</strong> Usa <strong>"TODOS"</strong> para cambiar masivamente todos los documentos de una serie,
+                  sin importar su estado actual. Útil cuando la mayoría aparecen como "aceptados" pero realmente
+                  fueron rechazados por SUNAT por ser duplicados de otro sistema.
                 </p>
               </div>
 
