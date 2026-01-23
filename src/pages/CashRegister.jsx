@@ -52,7 +52,6 @@ export default function CashRegister() {
     closingCard: 0,
     closingTransfer: 0,
   })
-  const [editingMovement, setEditingMovement] = useState(null) // Movimiento en edición
   const [editMovementValues, setEditMovementValues] = useState({ description: '', amount: 0 })
 
   // Helper para convertir fechas (Firestore Timestamp o Date)
