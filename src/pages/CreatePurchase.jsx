@@ -767,53 +767,124 @@ export default function CreatePurchase() {
 
       let resultId = purchaseId // Para modo edición
 
-      // En modo edición, primero revertir el stock de los items originales
+      // En modo edición, calcular DIFERENCIAS entre cantidades originales y nuevas
+      // Solo ajustar stock por la diferencia, NO revertir todo (para no afectar ventas ya realizadas)
+      const stockDifferences = {} // { productId: diferencia } - positivo = aumentar, negativo = reducir
+      let warehouseChangedInEdit = false // Indica si cambió el almacén en edición
+
       if (isEditMode && originalPurchase && originalPurchase.items) {
         const originalProductItems = originalPurchase.items.filter(item => item.itemType !== 'ingredient')
         const originalWarehouseId = originalPurchase.warehouseId || ''
+        const newWarehouseId = selectedWarehouse?.id || ''
+        warehouseChangedInEdit = originalWarehouseId !== newWarehouseId
 
-        // Revertir stock de productos originales (restar lo que se había sumado)
-        for (const origItem of originalProductItems) {
-          const product = products.find(p => p.id === origItem.productId)
-          if (product && product.trackStock !== false) {
-            const quantityToRevert = parseFloat(origItem.quantity)
+        // Agrupar cantidades originales por producto
+        const originalQuantities = {}
+        originalProductItems.forEach(item => {
+          const productId = item.productId
+          if (!originalQuantities[productId]) {
+            originalQuantities[productId] = 0
+          }
+          originalQuantities[productId] += parseFloat(item.quantity) || 0
+        })
 
-            // Restar stock usando el helper de almacén (cantidad negativa)
+        // Agrupar cantidades nuevas por producto
+        const newQuantities = {}
+        productItems.forEach(item => {
+          const productId = item.productId
+          if (!newQuantities[productId]) {
+            newQuantities[productId] = 0
+          }
+          newQuantities[productId] += parseFloat(item.quantity) || 0
+        })
+
+        // Calcular diferencias (productos que estaban en original)
+        for (const productId in originalQuantities) {
+          const originalQty = originalQuantities[productId]
+          const newQty = newQuantities[productId] || 0
+          stockDifferences[productId] = newQty - originalQty
+        }
+
+        // Agregar productos nuevos que no estaban en la compra original
+        for (const productId in newQuantities) {
+          if (!(productId in stockDifferences)) {
+            stockDifferences[productId] = newQuantities[productId]
+          }
+        }
+
+        // Aplicar ajustes de stock solo donde hay diferencia o cambio de almacén
+        for (const productId in stockDifferences) {
+          const difference = stockDifferences[productId]
+          const product = products.find(p => p.id === productId)
+
+          if (!product || product.trackStock === false) continue
+
+          // Si cambió el almacén, necesitamos mover el stock
+          if (warehouseChangedInEdit && originalQuantities[productId]) {
+            const originalQty = originalQuantities[productId]
+
+            // Restar del almacén original
+            const afterRemoval = updateWarehouseStock(product, originalWarehouseId, -originalQty)
+            await updateProduct(businessId, productId, {
+              stock: afterRemoval.stock,
+              warehouseStocks: afterRemoval.warehouseStocks
+            })
+
+            // Actualizar en memoria
+            const idx = products.findIndex(p => p.id === productId)
+            if (idx >= 0) {
+              products[idx] = { ...products[idx], ...afterRemoval }
+            }
+
+            // Registrar movimiento de salida del almacén original
+            await createStockMovement(businessId, {
+              productId: productId,
+              warehouseId: originalWarehouseId,
+              type: 'exit',
+              quantity: originalQty,
+              reason: 'Edición de compra (cambio de almacén)',
+              referenceType: 'purchase_edit',
+              referenceId: purchaseId,
+              userId: user?.uid,
+              notes: `Transferido a otro almacén por edición de compra`
+            }).catch(err => console.error('Error movimiento salida:', err))
+
+            // La entrada al nuevo almacén se manejará en la sección de actualización de stock
+            // con la cantidad nueva completa
+            stockDifferences[productId] = newQuantities[productId] || 0
+          } else if (difference !== 0) {
+            // Solo ajustar si hay diferencia (no cambió almacén)
             const updatedProduct = updateWarehouseStock(
               product,
               originalWarehouseId,
-              -quantityToRevert // Negativo porque estamos revirtiendo
+              difference // Positivo = aumentar, Negativo = reducir
             )
 
-            await updateProduct(businessId, origItem.productId, {
+            await updateProduct(businessId, productId, {
               stock: updatedProduct.stock,
               warehouseStocks: updatedProduct.warehouseStocks
             })
 
-            // Actualizar el producto en memoria para cálculos posteriores
-            const idx = products.findIndex(p => p.id === origItem.productId)
+            // Actualizar en memoria
+            const idx = products.findIndex(p => p.id === productId)
             if (idx >= 0) {
               products[idx] = { ...products[idx], ...updatedProduct }
             }
-          }
-        }
 
-        // Registrar movimientos de reversión
-        for (const origItem of originalProductItems) {
-          const product = products.find(p => p.id === origItem.productId)
-          if (product && product.trackStock !== false) {
+            // Registrar movimiento de ajuste
             await createStockMovement(businessId, {
-              productId: origItem.productId,
+              productId: productId,
               warehouseId: originalWarehouseId,
-              type: 'exit',
-              quantity: parseFloat(origItem.quantity),
-              reason: 'Edición de compra (reversión)',
+              type: difference > 0 ? 'entry' : 'exit',
+              quantity: Math.abs(difference),
+              reason: difference > 0 ? 'Edición de compra (aumento)' : 'Edición de compra (reducción)',
               referenceType: 'purchase_edit',
               referenceId: purchaseId,
               userId: user?.uid,
-              notes: `Reversión por edición de compra`
-            }).catch(err => console.error('Error movimiento reversión:', err))
+              notes: `Ajuste de ${difference > 0 ? '+' : ''}${difference} unidades por edición`
+            }).catch(err => console.error('Error movimiento ajuste:', err))
           }
+          // Si difference === 0, no hacer nada con el stock
         }
       }
 
@@ -881,23 +952,45 @@ export default function CreatePurchase() {
           // Costo promedio ponderado de todas las líneas del mismo producto
           const newCost = newQuantity > 0 ? grouped.totalCost / newQuantity : 0
 
-          // Actualizar stock usando el helper de almacén
-          const updatedProduct = updateWarehouseStock(
-            product,
-            selectedWarehouse?.id || '',
-            newQuantity // Positivo porque es una entrada
-          )
+          // En modo edición:
+          // - Si NO cambió el almacén: el stock ya fue ajustado por diferencia arriba, no sumar de nuevo
+          // - Si SÍ cambió el almacén: sumar stock completo al nuevo almacén
+          // En modo creación: sumar stock completo
+          const shouldUpdateStock = !isEditMode || warehouseChangedInEdit
+
+          let updatedProduct = product
+          if (shouldUpdateStock) {
+            // Actualizar stock usando el helper de almacén
+            updatedProduct = updateWarehouseStock(
+              product,
+              selectedWarehouse?.id || '',
+              newQuantity // Positivo porque es una entrada
+            )
+          }
 
           // Calcular costo promedio ponderado con el stock existente
           const currentStock = product.stock || 0
           const currentCost = product.cost || 0
-          const totalStock = currentStock + newQuantity
+          // En modo edición sin cambio de almacén, el stock no cambia, usar stock actual
+          const totalStock = shouldUpdateStock ? currentStock + newQuantity : currentStock
 
           let averageCost = newCost
           if (currentStock > 0 && currentCost > 0) {
             // Solo considerar el costo nuevo si es mayor a 0 (bonificaciones no afectan el costo)
             if (newCost > 0) {
-              averageCost = ((currentStock * currentCost) + (newQuantity * newCost)) / totalStock
+              // En modo edición, recalcular costo promedio considerando la diferencia
+              if (isEditMode && !warehouseChangedInEdit) {
+                const diff = stockDifferences[grouped.productId] || 0
+                if (diff > 0) {
+                  // Solo si aumentó la cantidad, recalcular promedio
+                  averageCost = ((currentStock * currentCost) + (diff * newCost)) / (currentStock + diff)
+                } else {
+                  // Si disminuyó o no cambió, mantener el costo actual
+                  averageCost = currentCost
+                }
+              } else {
+                averageCost = ((currentStock * currentCost) + (newQuantity * newCost)) / totalStock
+              }
             } else {
               // Si todo es bonificación (costo 0), mantener el costo actual
               averageCost = currentCost
@@ -908,8 +1001,11 @@ export default function CreatePurchase() {
           }
 
           const updates = {
-            stock: updatedProduct.stock,
-            warehouseStocks: updatedProduct.warehouseStocks,
+            // Solo actualizar stock si corresponde
+            ...(shouldUpdateStock && {
+              stock: updatedProduct.stock,
+              warehouseStocks: updatedProduct.warehouseStocks,
+            }),
             cost: averageCost,
             ...(selectedSupplier && {
               lastSupplier: {
@@ -959,27 +1055,31 @@ export default function CreatePurchase() {
       await Promise.all(productUpdates)
 
       // 3.5. Registrar movimientos de stock para historial de PRODUCTOS
-      const stockMovementPromises = productItems.map(async item => {
-        const product = products.find(p => p.id === item.productId)
-        if (!product) return
-        if (product.trackStock === false) return
+      // En modo edición sin cambio de almacén, los movimientos de ajuste ya se crearon arriba
+      // Solo crear movimientos si es creación nueva o si cambió el almacén
+      if (!isEditMode || warehouseChangedInEdit) {
+        const stockMovementPromises = productItems.map(async item => {
+          const product = products.find(p => p.id === item.productId)
+          if (!product) return
+          if (product.trackStock === false) return
 
-        return createStockMovement(businessId, {
-          productId: item.productId,
-          warehouseId: selectedWarehouse?.id || '',
-          type: 'entry',
-          quantity: parseFloat(item.quantity),
-          reason: isEditMode ? 'Compra (editada)' : 'Compra',
-          referenceType: 'purchase',
-          referenceId: resultId || '',
-          userId: user?.uid,
-          notes: `${isEditMode ? 'Compra editada' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}`
+          return createStockMovement(businessId, {
+            productId: item.productId,
+            warehouseId: selectedWarehouse?.id || '',
+            type: 'entry',
+            quantity: parseFloat(item.quantity),
+            reason: warehouseChangedInEdit ? 'Compra editada (nuevo almacén)' : 'Compra',
+            referenceType: 'purchase',
+            referenceId: resultId || '',
+            userId: user?.uid,
+            notes: `${warehouseChangedInEdit ? 'Entrada a nuevo almacén' : 'Compra'} - ${selectedSupplier?.businessName || 'Proveedor'} - ${invoiceNumber || 'S/N'}`
+          })
         })
-      })
 
-      Promise.all(stockMovementPromises).catch(err => {
-        console.error('Error al registrar movimientos de stock:', err)
-      })
+        Promise.all(stockMovementPromises).catch(err => {
+          console.error('Error al registrar movimientos de stock:', err)
+        })
+      }
 
       // 4. Actualizar stock de INGREDIENTES (solo en creación, no en edición por complejidad)
       // IMPORTANTE: Agrupar items por ingredientId para manejar múltiples líneas del mismo ingrediente

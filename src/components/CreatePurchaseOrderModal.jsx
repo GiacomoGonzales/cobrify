@@ -310,8 +310,9 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
   // Validar formulario
   const validateForm = () => {
     const supplierData = getSupplierData()
-    if (!supplierData || !supplierData.ruc || !supplierData.businessName) {
-      toast.error('Debe seleccionar o ingresar los datos del proveedor')
+    // Solo requerir razón social del proveedor (RUC es opcional para órdenes de compra)
+    if (!supplierData || !supplierData.businessName) {
+      toast.error('Debe ingresar al menos el nombre/razón social del proveedor')
       return false
     }
 
@@ -322,20 +323,27 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
-      if (!item.name || !item.quantity || !item.unitPrice) {
-        toast.error(`Item ${i + 1}: Todos los campos son obligatorios`)
+      // Solo requerir nombre y cantidad > 0 (precio puede ser 0 para bonificaciones o por definir)
+      if (!item.name) {
+        toast.error(`Item ${i + 1}: Debe ingresar el nombre/descripción del producto`)
         return false
       }
-      if (parseFloat(item.quantity) <= 0 || parseFloat(item.unitPrice) <= 0) {
-        toast.error(`Item ${i + 1}: Cantidad y precio deben ser mayores a 0`)
+      if (!item.quantity || parseFloat(item.quantity) <= 0) {
+        toast.error(`Item ${i + 1}: La cantidad debe ser mayor a 0`)
+        return false
+      }
+      // Precio puede ser 0 (bonificación o precio por definir)
+      if (item.unitPrice === '' || item.unitPrice === null || parseFloat(item.unitPrice) < 0) {
+        toast.error(`Item ${i + 1}: El precio no puede ser negativo`)
         return false
       }
     }
 
-    if (!deliveryDate) {
-      toast.error('Debe ingresar la fecha de entrega esperada')
-      return false
-    }
+    // Fecha de entrega es opcional (se puede definir después)
+    // if (!deliveryDate) {
+    //   toast.error('Debe ingresar la fecha de entrega esperada')
+    //   return false
+    // }
 
     return true
   }
@@ -562,7 +570,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      RUC <span className="text-red-500">*</span>
+                      RUC <span className="text-gray-400 text-xs">(opcional)</span>
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -590,10 +598,10 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
                   </div>
 
                   <Input
-                    label="Razón Social *"
+                    label="Razón Social / Nombre *"
                     value={manualSupplier.businessName}
                     onChange={(e) => setManualSupplier({ ...manualSupplier, businessName: e.target.value })}
-                    placeholder="Nombre de la empresa"
+                    placeholder="Nombre de la empresa o proveedor"
                   />
 
                   <div className="sm:col-span-2">
@@ -633,7 +641,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Input
                   type="date"
-                  label="Fecha de entrega esperada *"
+                  label="Fecha de entrega esperada"
                   value={deliveryDate}
                   onChange={(e) => setDeliveryDate(e.target.value)}
                   min={getLocalDateString()}
@@ -814,7 +822,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
 
                       <Input
                         type="number"
-                        label="Precio Unitario *"
+                        label="Precio Unitario"
                         value={item.unitPrice}
                         onChange={(e) => updateItem(item.id, 'unitPrice', e.target.value)}
                         min="0"

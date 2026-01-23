@@ -328,8 +328,10 @@ export default function Purchases() {
       return
     }
 
-    const remaining = (registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)
-    if (amount > remaining) {
+    // Redondear a 2 decimales para evitar errores de precisión con decimales en JavaScript
+    const remaining = Math.round(((registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)) * 100) / 100
+    const roundedAmount = Math.round(amount * 100) / 100
+    if (roundedAmount > remaining + 0.001) {
       toast.error(`El monto no puede exceder el saldo pendiente (${formatCurrency(remaining)})`)
       return
     }
