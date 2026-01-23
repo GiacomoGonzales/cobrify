@@ -282,8 +282,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       loadItemsWithSku()
 
-      // Calcular peso estimado
-      const estimatedWeight = invoiceItems.reduce((sum, item) => sum + (item.quantity * 1), 0)
+      // Calcular peso estimado desde los items de la factura directamente
+      const estimatedWeight = (referenceInvoice.items || []).reduce((sum, item) => sum + (item.quantity * 1), 0)
       setTotalWeight(estimatedWeight.toString())
 
       // Pre-llenar fechas (usando hora de Perú)
