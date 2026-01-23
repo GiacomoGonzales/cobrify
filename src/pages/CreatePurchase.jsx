@@ -526,9 +526,17 @@ export default function CreatePurchase() {
     }
   }, [])
 
+  // Calcular subtotal de un item usando costo sin IGV para evitar errores de redondeo
+  const calculateItemSubtotal = (item) => {
+    const quantity = parseFloat(item.quantity) || 0
+    const costWithoutIGV = parseFloat(item.costWithoutIGV) || 0
+    // Calcular: (cantidad × costo sin IGV) × 1.18, redondeado a 2 decimales
+    return Math.round(quantity * costWithoutIGV * 1.18 * 100) / 100
+  }
+
   const calculateAmounts = () => {
     const total = purchaseItems.reduce((sum, item) => {
-      return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)
+      return sum + calculateItemSubtotal(item)
     }, 0)
 
     // Los costos ya incluyen IGV, calculamos el IGV del total
@@ -1620,7 +1628,7 @@ export default function CreatePurchase() {
                     {/* Subtotal */}
                     <td className="px-4 py-2 text-right">
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
+                        {formatCurrency(calculateItemSubtotal(item))}
                       </span>
                     </td>
                     {/* Eliminar */}
@@ -1804,7 +1812,7 @@ export default function CreatePurchase() {
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-500">Subtotal:</span>
                   <span className="font-bold text-gray-900">
-                    {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
+                    {formatCurrency(calculateItemSubtotal(item))}
                   </span>
                 </div>
               </div>
