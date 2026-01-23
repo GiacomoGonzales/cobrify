@@ -329,48 +329,12 @@ export default function DispatchGuides() {
 
     // Esperar a que el componente se renderice y luego imprimir
     setTimeout(() => {
-      if (ticketRef.current) {
-        const printWindow = window.open('', '_blank', 'width=300,height=600')
-        if (printWindow) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Guía ${guide.number}</title>
-              <meta charset="utf-8">
-              <style>
-                @media print {
-                  @page { size: 80mm auto; margin: 0; }
-                  body { margin: 0; padding: 0; }
-                }
-                body {
-                  font-family: Arial, sans-serif;
-                  margin: 0;
-                  padding: 0;
-                }
-              </style>
-            </head>
-            <body>
-              ${ticketRef.current.innerHTML}
-              <script>
-                window.onload = function() {
-                  window.print();
-                  window.onafterprint = function() { window.close(); }
-                }
-              </script>
-            </body>
-            </html>
-          `)
-          printWindow.document.close()
-        } else {
-          // Fallback si no se puede abrir ventana
-          window.print()
-        }
-      }
-      setPrintingTicket(null)
+      window.print()
+      // Limpiar después de imprimir
+      setTimeout(() => {
+        setPrintingTicket(null)
+      }, 500)
     }, 100)
-
-    toast.info(`Preparando ticket de ${guide.number}...`)
   }
 
   // Filtrar guías
@@ -1323,16 +1287,14 @@ export default function DispatchGuides() {
         )
       })()}
 
-      {/* Componente de ticket oculto para impresión */}
+      {/* Componente de ticket para impresión */}
       {printingTicket && (
-        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
-          <DispatchGuideTicket
-            ref={ticketRef}
-            guide={printingTicket}
-            companySettings={companySettings}
-            paperWidth={80}
-          />
-        </div>
+        <DispatchGuideTicket
+          ref={ticketRef}
+          guide={printingTicket}
+          companySettings={companySettings}
+          paperWidth={80}
+        />
       )}
     </div>
   )

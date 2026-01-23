@@ -4,9 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 
 /**
  * Componente de Ticket Imprimible para Guía de Remisión
- *
- * Formato optimizado para impresoras térmicas de 80mm
- * Incluye todos los datos requeridos por SUNAT
+ * Formato idéntico a InvoiceTicket para impresoras térmicas 80mm/58mm
  */
 const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 80 }, ref) => {
   // Determinar si es papel de 58mm o 80mm
@@ -26,12 +24,6 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
     '19': 'Traslado a zona primaria',
   }
 
-  // Modos de transporte
-  const TRANSPORT_MODES = {
-    '01': 'Transporte Público',
-    '02': 'Transporte Privado',
-  }
-
   // Unidades de medida
   const UNITS = {
     'NIU': 'UND',
@@ -48,14 +40,10 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
   // Formatear fecha
   const formatDate = (dateValue) => {
     if (!dateValue) return '-'
-
-    // Si es formato YYYY-MM-DD, formatear directamente
     if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
       const [year, month, day] = dateValue.split('-')
       return `${day}/${month}/${year}`
     }
-
-    // Si es Timestamp de Firestore o Date
     const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue)
     return date.toLocaleDateString('es-PE', {
       year: 'numeric',
@@ -64,15 +52,13 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
     })
   }
 
-  // Generar código QR según formato SUNAT para guías
+  // Generar código QR
   const generateQRData = () => {
     const ruc = companySettings?.ruc || '00000000000'
     const tipoDoc = guide.documentType === '31' ? '31' : '09'
     const serie = guide.series || guide.number?.split('-')[0] || 'T001'
     const numero = guide.number?.split('-')[1] || '1'
-    const fecha = formatDate(guide.issueDate || guide.transferDate)
-
-    return `${ruc}|${tipoDoc}|${serie}|${numero}|${fecha}`
+    return `${ruc}|${tipoDoc}|${serie}|${numero}`
   }
 
   // Obtener datos del destinatario
@@ -84,21 +70,16 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         address: guide.recipient.address || '-',
       }
     }
-    return {
-      documentNumber: '-',
-      name: '-',
-      address: '-',
-    }
+    return { documentNumber: '-', name: '-', address: '-' }
   }
 
   const recipientData = getRecipientData()
 
-  // Obtener datos del transportista/conductor
+  // Obtener datos del transporte
   const getTransportData = () => {
     if (guide.transportMode === '02') {
-      // Transporte privado
       return {
-        type: 'Privado',
+        type: 'PRIVADO',
         vehicle: guide.transport?.vehicle?.plate || guide.vehicle?.plate || '-',
         driver: guide.transport?.driver
           ? `${guide.transport.driver.name || ''} ${guide.transport.driver.lastName || ''}`.trim() || '-'
@@ -106,9 +87,8 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         license: guide.transport?.driver?.license || guide.driver?.license || '-',
       }
     } else {
-      // Transporte público
       return {
-        type: 'Público',
+        type: 'PUBLICO',
         carrier: guide.transport?.carrier?.businessName || guide.carrier?.businessName || '-',
         carrierRuc: guide.transport?.carrier?.ruc || guide.carrier?.ruc || '-',
       }
@@ -118,8 +98,8 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
   const transportData = getTransportData()
 
   return (
-    <div ref={ref} className="dispatch-ticket-container">
-      {/* Estilos de impresión */}
+    <div ref={ref} className="guide-ticket-container">
+      {/* Estilos de impresión - idénticos a InvoiceTicket */}
       <style>{`
         @media print {
           @page {
@@ -141,12 +121,12 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
             visibility: hidden;
           }
 
-          .dispatch-ticket-container,
-          .dispatch-ticket-container * {
+          .guide-ticket-container,
+          .guide-ticket-container * {
             visibility: visible;
           }
 
-          .dispatch-ticket-container {
+          .guide-ticket-container {
             position: absolute;
             left: 0;
             top: 0;
@@ -164,11 +144,18 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
           }
         }
 
+        /* Ocultar en pantalla, mostrar solo al imprimir */
+        @media screen {
+          .guide-ticket-container {
+            display: none;
+          }
+        }
+
         * {
           box-sizing: border-box;
         }
 
-        .dispatch-ticket-container {
+        .guide-ticket-container {
           max-width: ${paperWidth}mm;
           margin: 0 auto;
           padding: ${is58mm ? '1.5mm' : '2mm'};
@@ -184,21 +171,23 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         .ticket-header {
           text-align: center;
           margin-bottom: 3px;
-          border-bottom: 2px solid #000;
+          border-bottom: 1px solid #000;
           padding-bottom: 3px;
         }
 
         .company-name {
-          font-size: ${is58mm ? '9pt' : '10pt'};
+          font-size: ${is58mm ? '9pt' : '11pt'};
           font-weight: 700;
           margin-bottom: 1px;
           color: #000;
+          letter-spacing: 0.3px;
         }
 
         .company-info {
           font-size: ${is58mm ? '7pt' : '8pt'};
           margin: 0.5px 0;
           color: #000;
+          line-height: 1.2;
         }
 
         .document-type {
@@ -209,19 +198,21 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
           background: #000;
           color: #fff;
           text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
         .document-number {
-          font-size: ${is58mm ? '10pt' : '11pt'};
+          font-size: ${is58mm ? '9pt' : '10pt'};
           font-weight: 700;
           margin: 2px 0;
           color: #000;
+          letter-spacing: 0.5px;
         }
 
         .ticket-section {
-          margin: 3px 0;
-          border-bottom: 1px dashed #999;
-          padding-bottom: 3px;
+          margin: 2px 0;
+          border-bottom: 1px dashed #ccc;
+          padding-bottom: 2px;
         }
 
         .ticket-section:last-child {
@@ -229,47 +220,62 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         }
 
         .section-title {
-          font-size: ${is58mm ? '7pt' : '8pt'};
           font-weight: 700;
-          margin-bottom: 2px;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          margin-bottom: 1px;
           text-transform: uppercase;
-          background: #eee;
-          padding: 1px 3px;
+          letter-spacing: 0.5px;
+          color: #000;
         }
 
         .info-row {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          font-size: ${is58mm ? '6.5pt' : '7.5pt'};
+          gap: ${is58mm ? '2px' : '4px'};
           margin: 1px 0;
-          gap: 4px;
+          font-size: ${is58mm ? '7pt' : '8pt'};
+          overflow: hidden;
+          line-height: 1.2;
         }
 
         .info-label {
-          font-weight: 600;
-          min-width: 35%;
+          font-weight: 700;
           flex-shrink: 0;
+          white-space: nowrap;
         }
 
-        .info-value {
+        .info-row span:last-child {
           text-align: right;
-          flex: 1;
-          word-wrap: break-word;
           overflow-wrap: break-word;
+          word-wrap: break-word;
+          word-break: break-word;
+          hyphens: auto;
+          white-space: normal;
         }
 
-        .items-section {
-          margin: 3px 0;
+        .weight-box {
+          text-align: center;
+          font-size: ${is58mm ? '8pt' : '9pt'};
+          font-weight: 700;
+          padding: 2px 4px;
+          margin: 2px 0;
+          background: #eee;
+          border: 1px solid #000;
+        }
+
+        .items-table {
+          width: 100%;
+          margin: 2px 0;
+          font-size: ${is58mm ? '7pt' : '8pt'};
         }
 
         .items-header {
-          display: flex;
-          font-size: ${is58mm ? '6pt' : '7pt'};
-          font-weight: 700;
           border-bottom: 1px solid #000;
           padding-bottom: 1px;
-          margin-bottom: 2px;
+          margin-bottom: 1px;
+          font-weight: 700;
+          display: flex;
         }
 
         .items-header span:nth-child(1) { width: 15%; text-align: center; }
@@ -278,54 +284,57 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
 
         .item-row {
           display: flex;
-          font-size: ${is58mm ? '6pt' : '7pt'};
           margin: 1px 0;
+          padding: 1px 0;
           border-bottom: 1px dotted #ddd;
-          padding-bottom: 1px;
+          font-size: ${is58mm ? '6.5pt' : '7.5pt'};
         }
 
         .item-row span:nth-child(1) { width: 15%; text-align: center; }
         .item-row span:nth-child(2) { width: 15%; text-align: center; }
         .item-row span:nth-child(3) { width: 70%; word-wrap: break-word; }
 
-        .qr-section {
+        .qr-container {
+          margin: 3px auto;
           text-align: center;
-          margin: 4px 0;
-          padding: 3px 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
         }
 
         .ticket-footer {
-          text-align: center;
-          font-size: ${is58mm ? '6pt' : '7pt'};
-          margin-top: 3px;
+          margin-top: 4px;
           padding-top: 3px;
           border-top: 1px solid #000;
+          text-align: center;
+          font-size: ${is58mm ? '6pt' : '7pt'};
         }
 
         .footer-text {
           margin: 1px 0;
+          line-height: 1.2;
         }
 
-        .weight-info {
-          font-size: ${is58mm ? '7pt' : '8pt'};
-          font-weight: 600;
-          text-align: center;
-          margin: 2px 0;
-          padding: 2px;
-          background: #f0f0f0;
+        .address-text {
+          font-size: ${is58mm ? '6pt' : '7pt'};
+          line-height: 1.1;
+          text-align: left;
+          margin: 1px 0;
         }
       `}</style>
 
-      {/* Header - Datos del Emisor */}
+      {/* HEADER - Datos del Emisor */}
       <div className="ticket-header">
-        <div className="company-name">
-          {companySettings?.tradeName || companySettings?.name || 'EMPRESA'}
-        </div>
-        <div className="company-info">RUC: {companySettings?.ruc || '-'}</div>
+        <div className="company-name">{companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
+        <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
         <div className="company-info">{companySettings?.address || ''}</div>
+        {companySettings?.phone && (
+          <div className="company-info">Tel: {companySettings.phone}</div>
+        )}
 
         <div className="document-type">
-          {guide.documentType === '31' ? 'GUÍA REMISIÓN TRANSPORTISTA' : 'GUÍA DE REMISIÓN REMITENTE'}
+          {guide.documentType === '31' ? 'GUÍA REMISIÓN TRANSPORTISTA' : 'GUÍA DE REMISIÓN'}
         </div>
         <div className="document-number">{guide.number || '-'}</div>
       </div>
@@ -333,126 +342,124 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
       {/* Fechas */}
       <div className="ticket-section">
         <div className="info-row">
-          <span className="info-label">F. EMISIÓN:</span>
-          <span className="info-value">{formatDate(guide.issueDate || guide.createdAt)}</span>
+          <span className="info-label">F. Emisión:</span>
+          <span>{formatDate(guide.issueDate || guide.createdAt)}</span>
         </div>
         <div className="info-row">
-          <span className="info-label">F. TRASLADO:</span>
-          <span className="info-value">{formatDate(guide.transferDate)}</span>
+          <span className="info-label">F. Traslado:</span>
+          <span>{formatDate(guide.transferDate)}</span>
         </div>
       </div>
 
       {/* Destinatario */}
       <div className="ticket-section">
-        <div className="section-title">DESTINATARIO</div>
+        <div className="section-title">Destinatario</div>
         <div className="info-row">
-          <span className="info-label">DOC:</span>
-          <span className="info-value">{recipientData.documentNumber}</span>
+          <span className="info-label">Doc:</span>
+          <span>{recipientData.documentNumber}</span>
         </div>
         <div className="info-row">
-          <span className="info-label">NOMBRE:</span>
-          <span className="info-value">{recipientData.name}</span>
+          <span className="info-label">Nombre:</span>
+          <span>{recipientData.name}</span>
         </div>
       </div>
 
       {/* Motivo y Peso */}
       <div className="ticket-section">
-        <div className="section-title">DATOS DEL TRASLADO</div>
+        <div className="section-title">Datos del Traslado</div>
         <div className="info-row">
-          <span className="info-label">MOTIVO:</span>
-          <span className="info-value">{TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-'}</span>
+          <span className="info-label">Motivo:</span>
+          <span>{TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-'}</span>
         </div>
-        <div className="weight-info">
+        <div className="weight-box">
           PESO: {guide.totalWeight || guide.weight || '0'} {guide.weightUnit || 'KGM'}
         </div>
       </div>
 
       {/* Origen */}
       <div className="ticket-section">
-        <div className="section-title">PUNTO DE PARTIDA</div>
-        <div className="info-row">
-          <span className="info-value" style={{ textAlign: 'left', width: '100%' }}>
-            {guide.origin?.address || guide.originAddress || '-'}
-          </span>
+        <div className="section-title">Punto de Partida</div>
+        <div className="address-text">
+          {guide.origin?.address || guide.originAddress || '-'}
         </div>
         {guide.origin?.ubigeo && (
           <div className="info-row">
-            <span className="info-label">UBIGEO:</span>
-            <span className="info-value">{guide.origin.ubigeo}</span>
+            <span className="info-label">Ubigeo:</span>
+            <span>{guide.origin.ubigeo}</span>
           </div>
         )}
       </div>
 
       {/* Destino */}
       <div className="ticket-section">
-        <div className="section-title">PUNTO DE LLEGADA</div>
-        <div className="info-row">
-          <span className="info-value" style={{ textAlign: 'left', width: '100%' }}>
-            {guide.destination?.address || guide.destinationAddress || '-'}
-          </span>
+        <div className="section-title">Punto de Llegada</div>
+        <div className="address-text">
+          {guide.destination?.address || guide.destinationAddress || '-'}
         </div>
         {guide.destination?.ubigeo && (
           <div className="info-row">
-            <span className="info-label">UBIGEO:</span>
-            <span className="info-value">{guide.destination.ubigeo}</span>
+            <span className="info-label">Ubigeo:</span>
+            <span>{guide.destination.ubigeo}</span>
           </div>
         )}
       </div>
 
       {/* Transporte */}
       <div className="ticket-section">
-        <div className="section-title">TRANSPORTE ({transportData.type})</div>
+        <div className="section-title">Transporte {transportData.type}</div>
         {guide.transportMode === '02' ? (
           <>
             <div className="info-row">
-              <span className="info-label">PLACA:</span>
-              <span className="info-value">{transportData.vehicle}</span>
+              <span className="info-label">Placa:</span>
+              <span>{transportData.vehicle}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">CONDUCTOR:</span>
-              <span className="info-value">{transportData.driver}</span>
+              <span className="info-label">Conductor:</span>
+              <span>{transportData.driver}</span>
             </div>
             <div className="info-row">
-              <span className="info-label">LICENCIA:</span>
-              <span className="info-value">{transportData.license}</span>
+              <span className="info-label">Licencia:</span>
+              <span>{transportData.license}</span>
             </div>
           </>
         ) : (
           <>
             <div className="info-row">
-              <span className="info-label">TRANSPORTISTA:</span>
-              <span className="info-value">{transportData.carrier}</span>
+              <span className="info-label">Transportista:</span>
+              <span>{transportData.carrier}</span>
             </div>
             <div className="info-row">
               <span className="info-label">RUC:</span>
-              <span className="info-value">{transportData.carrierRuc}</span>
+              <span>{transportData.carrierRuc}</span>
             </div>
           </>
         )}
       </div>
 
       {/* Items */}
-      <div className="ticket-section items-section">
-        <div className="section-title">BIENES A TRANSPORTAR ({guide.items?.length || 0})</div>
-        <div className="items-header">
-          <span>CANT</span>
-          <span>UND</span>
-          <span>DESCRIPCIÓN</span>
-        </div>
-        {(guide.items || []).map((item, index) => (
-          <div key={index} className="item-row">
-            <span>{item.quantity || 0}</span>
-            <span>{UNITS[item.unit] || item.unit || 'UND'}</span>
-            <span>{item.description || item.name || '-'}</span>
+      <div className="ticket-section">
+        <div className="section-title">Bienes ({guide.items?.length || 0})</div>
+        <div className="items-table">
+          <div className="items-header">
+            <span>Cant</span>
+            <span>Und</span>
+            <span>Descripción</span>
           </div>
-        ))}
+          {(guide.items || []).map((item, index) => (
+            <div key={index} className="item-row">
+              <span>{item.quantity || 0}</span>
+              <span>{UNITS[item.unit] || item.unit || 'UND'}</span>
+              <span>{item.description || item.name || '-'}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* QR Code */}
-      <div className="qr-section">
+      <div className="qr-container">
         <QRCodeSVG
           value={generateQRData()}
-          size={is58mm ? 60 : 80}
+          size={is58mm ? 50 : 70}
           level="M"
         />
       </div>
