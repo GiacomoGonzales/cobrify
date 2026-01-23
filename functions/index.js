@@ -3907,9 +3907,14 @@ export const voidInvoice = onRequest(
         return
       }
 
-      const referenceDateStr = `${issueDate.getFullYear()}-${String(issueDate.getMonth() + 1).padStart(2, '0')}-${String(issueDate.getDate()).padStart(2, '0')}`
+      // IMPORTANTE: Convertir fecha de emisión del documento a zona horaria de Perú
+      // para que coincida con la fecha mostrada al usuario cuando emitió el documento
+      const issueDatePeru = new Date(issueDate.getTime() + (peruOffset - issueDate.getTimezoneOffset()) * 60000)
+      console.log('📅 Fecha emisión documento UTC:', issueDate.toISOString(), '-> Perú:', issueDatePeru.toISOString())
+
+      const referenceDateStr = `${issueDatePeru.getFullYear()}-${String(issueDatePeru.getMonth() + 1).padStart(2, '0')}-${String(issueDatePeru.getDate()).padStart(2, '0')}`
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate:', issueDateStr)
+      console.log('📅 Fechas generadas - referenceDate (doc):', referenceDateStr, 'issueDate (comunicación):', issueDateStr)
 
       const voidedXmlData = {
         id: voidedDocId,
