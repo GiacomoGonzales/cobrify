@@ -286,9 +286,10 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
   const getSupplierData = () => {
     if (supplierMode === 'select' && selectedSupplier) {
       return {
-        id: selectedSupplier.id,
-        ruc: selectedSupplier.ruc,
-        businessName: selectedSupplier.businessName,
+        id: selectedSupplier.id || '',
+        // Soportar ambos campos: ruc (nuevo) y documentNumber (legacy)
+        ruc: selectedSupplier.ruc || selectedSupplier.documentNumber || '',
+        businessName: selectedSupplier.businessName || '',
         address: selectedSupplier.address || '',
         phone: selectedSupplier.phone || '',
         email: selectedSupplier.email || '',
@@ -296,8 +297,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
       }
     } else if (supplierMode === 'manual') {
       return {
-        ruc: manualSupplier.ruc,
-        businessName: manualSupplier.businessName,
+        ruc: manualSupplier.ruc || '',
+        businessName: manualSupplier.businessName || '',
         address: manualSupplier.address || '',
         phone: manualSupplier.phone || '',
         email: manualSupplier.email || '',
@@ -525,7 +526,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
                     <option value="">Seleccionar proveedor...</option>
                     {suppliers.map(supplier => (
                       <option key={supplier.id} value={supplier.id}>
-                        {supplier.businessName} - {supplier.ruc}
+                        {supplier.businessName} - {supplier.ruc || supplier.documentNumber || 'Sin RUC'}
                       </option>
                     ))}
                   </Select>
@@ -539,7 +540,7 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
                         </div>
                         <div>
                           <span className="text-gray-600">RUC:</span>
-                          <span className="ml-2 font-medium">{selectedSupplier.ruc}</span>
+                          <span className="ml-2 font-medium">{selectedSupplier.ruc || selectedSupplier.documentNumber}</span>
                         </div>
                         {selectedSupplier.address && (
                           <div className="col-span-2">
