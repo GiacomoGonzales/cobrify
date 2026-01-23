@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat } from '@/services/firestoreService'
+import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { consultarRUC } from '@/services/documentLookupService'
@@ -239,20 +239,48 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Pre-llenar datos si hay factura de referencia
   useEffect(() => {
     if (referenceInvoice) {
-      // Pre-llenar items desde la factura
-      const invoiceItems = referenceInvoice.items?.map((item, index) => ({
-        id: index + 1,
-        code: item.sku || item.code || '',
-        description: item.description || item.name || '',
-        quantity: item.quantity || 0,
-        unit: item.unit || 'NIU',
-        sunatCode: '',
-        gtin: '',
-        subpCode: '',
-        isNormalized: false,
-      })) || []
+      // Cargar productos para obtener SKU actualizado
+      const loadItemsWithSku = async () => {
+        const businessId = getBusinessId()
+        let productsMap = {}
 
-      setItems(invoiceItems)
+        // Buscar productos para obtener SKU actualizado
+        if (businessId) {
+          try {
+            const result = await getProducts(businessId)
+            if (result.success && result.data) {
+              result.data.forEach(p => {
+                productsMap[p.id] = p
+              })
+            }
+          } catch (error) {
+            console.error('Error cargando productos:', error)
+          }
+        }
+
+        // Pre-llenar items usando SKU del producto original
+        const invoiceItems = referenceInvoice.items?.map((item, index) => {
+          // Buscar SKU del producto original
+          const product = item.productId ? productsMap[item.productId] : null
+          const sku = product?.sku || item.sku || item.code || ''
+
+          return {
+            id: index + 1,
+            code: sku,
+            description: item.description || item.name || '',
+            quantity: item.quantity || 0,
+            unit: item.unit || 'NIU',
+            sunatCode: '',
+            gtin: '',
+            subpCode: '',
+            isNormalized: false,
+          }
+        }) || []
+
+        setItems(invoiceItems)
+      }
+
+      loadItemsWithSku()
 
       // Calcular peso estimado
       const estimatedWeight = invoiceItems.reduce((sum, item) => sum + (item.quantity * 1), 0)
