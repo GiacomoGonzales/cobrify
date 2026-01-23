@@ -305,7 +305,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     if (guide.items && guide.items.length > 0) {
       setItems(guide.items.map((item, idx) => ({
         id: item.id || idx + 1,
-        code: item.code || '',
+        code: item.sku || item.code || '',
         description: item.description || item.name || '',
         quantity: item.quantity || 0,
         unit: item.unit || 'NIU',

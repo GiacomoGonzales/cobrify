@@ -242,7 +242,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       // Pre-llenar items desde la factura
       const invoiceItems = referenceInvoice.items?.map((item, index) => ({
         id: index + 1,
-        code: item.code || item.productId || '',
+        code: item.sku || item.code || '',
         description: item.description || item.name || '',
         quantity: item.quantity || 0,
         unit: item.unit || 'NIU',
