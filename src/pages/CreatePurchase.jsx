@@ -528,7 +528,9 @@ export default function CreatePurchase() {
 
   const calculateAmounts = () => {
     const total = purchaseItems.reduce((sum, item) => {
-      return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)
+      // Redondear el subtotal de cada item al entero más cercano
+      const itemTotal = Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))
+      return sum + itemTotal
     }, 0)
 
     // Los costos ya incluyen IGV, calculamos el IGV del total
@@ -891,16 +893,40 @@ export default function CreatePurchase() {
       // 2. Guardar o actualizar la compra
       let result
       if (isEditMode) {
-        // En modo edición, mantener los campos de pago si ya fueron pagados
-        if (originalPurchase?.paymentStatus === 'paid') {
-          purchaseData.paymentStatus = 'paid'
-          purchaseData.paidAmount = originalPurchase.paidAmount
+        // Detectar si cambió el tipo de pago
+        const originalPaymentType = originalPurchase?.paymentType || 'contado'
+        const paymentTypeChanged = originalPaymentType !== paymentType
+
+        if (paymentTypeChanged) {
+          // Si cambió el tipo de pago, actualizar el estado según el nuevo tipo
+          if (paymentType === 'contado') {
+            // Cambió de crédito a contado → marcar como pagado
+            purchaseData.paymentStatus = 'paid'
+            purchaseData.paidAmount = amounts.total
+            purchaseData.payments = [] // Limpiar pagos parciales
+          } else {
+            // Cambió de contado a crédito → marcar como pendiente
+            purchaseData.paymentStatus = 'pending'
+            purchaseData.paidAmount = 0
+            purchaseData.payments = []
+          }
+        } else {
+          // No cambió el tipo de pago, preservar estado existente
+          if (originalPurchase?.paymentStatus === 'paid' && paymentType === 'contado') {
+            purchaseData.paymentStatus = 'paid'
+            purchaseData.paidAmount = amounts.total
+          }
+          // Preservar pagos parciales existentes si es crédito
+          if (paymentType === 'credito' && originalPurchase?.payments && originalPurchase.payments.length > 0) {
+            purchaseData.payments = originalPurchase.payments
+            purchaseData.paidAmount = originalPurchase.paidAmount || 0
+            // Verificar si ya está pagado completamente
+            if (purchaseData.paidAmount >= amounts.total) {
+              purchaseData.paymentStatus = 'paid'
+            }
+          }
         }
-        // Preservar pagos parciales existentes
-        if (originalPurchase?.payments && originalPurchase.payments.length > 0) {
-          purchaseData.payments = originalPurchase.payments
-          purchaseData.paidAmount = originalPurchase.paidAmount || 0
-        }
+
         // Compatibilidad con compras antiguas con cuotas
         if (originalPurchase?.installments && originalPurchase.installments.length > 0) {
           purchaseData.installments = originalPurchase.installments
@@ -1593,7 +1619,7 @@ export default function CreatePurchase() {
                     {/* Subtotal */}
                     <td className="px-4 py-2 text-right">
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
+                        {formatCurrency(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)))}
                       </span>
                     </td>
                     {/* Eliminar */}
@@ -1777,7 +1803,7 @@ export default function CreatePurchase() {
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-500">Subtotal:</span>
                   <span className="font-bold text-gray-900">
-                    {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
+                    {formatCurrency(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)))}
                   </span>
                 </div>
               </div>
