@@ -154,7 +154,7 @@ const INITIAL_OPERABILITY_FORM = {
 }
 
 export default function Certificates() {
-  const { isDemoMode, getBusinessId, businessSettings } = useAppContext()
+  const { isDemoMode, demoData, getBusinessId, businessSettings } = useAppContext()
   const toast = useToast()
 
   // Estados principales
@@ -198,8 +198,9 @@ export default function Certificates() {
       const businessId = getBusinessId()
 
       if (isDemoMode) {
-        setCertificates(DEMO_CERTIFICATES)
-        setCustomers([
+        // Usar datos del contexto demo si están disponibles, sino usar DEMO_CERTIFICATES
+        setCertificates(demoData?.certificates || DEMO_CERTIFICATES)
+        setCustomers(demoData?.customers || [
           { id: 'demo-1', businessName: 'Restaurante El Buen Sabor S.A.C.', documentNumber: '20123456789', address: 'Av. Larco 123, Miraflores' },
           { id: 'demo-2', businessName: 'Farmacia San Pedro E.I.R.L.', documentNumber: '20987654321', address: 'Jr. Cusco 456, Lima' }
         ])
