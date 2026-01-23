@@ -271,6 +271,8 @@ export default function CreateInvoice() {
               email: selectedCustomer.email || '',
               phone: selectedCustomer.phone || '',
               address: selectedCustomer.address || '',
+              studentName: selectedCustomer.studentName || '',
+              studentSchedule: selectedCustomer.studentSchedule || '',
             }
           : {
               documentType: ID_TYPES.DNI,
@@ -280,6 +282,8 @@ export default function CreateInvoice() {
               email: '',
               phone: '',
               address: '',
+              studentName: '',
+              studentSchedule: '',
             },
         items: items,
         subtotal: amounts.subtotal,
