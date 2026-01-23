@@ -1406,7 +1406,7 @@ export default function AdminUsers() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
         {/* Vista móvil - Cards */}
         <div className="sm:hidden">
           {loading ? (
@@ -1694,8 +1694,8 @@ export default function AdminUsers() {
                         </button>
 
                         {actionMenuUser === user.id && (
-                          <div className={`absolute right-0 w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-20 ${
-                            index >= filteredUsers.length - 2 ? 'bottom-full mb-1' : 'mt-1'
+                          <div className={`absolute right-0 w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 ${
+                            filteredUsers.length <= 3 || index >= filteredUsers.length - 2 ? 'bottom-full mb-1' : 'top-full mt-1'
                           }`}>
                             <button
                               onClick={e => {
