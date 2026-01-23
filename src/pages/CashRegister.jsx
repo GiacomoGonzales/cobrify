@@ -20,6 +20,7 @@ import {
   getInvoicesByBranch,
   getCompanySettings,
   getCashRegisterHistory,
+  updateCashSession, // TEMPORAL: Para editar historial
 } from '@/services/firestoreService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
@@ -42,6 +43,15 @@ export default function CashRegister() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [selectedHistorySession, setSelectedHistorySession] = useState(null)
   const [historyMovements, setHistoryMovements] = useState([])
+
+  // TEMPORAL: Estados para edición de historial
+  const [isEditingHistory, setIsEditingHistory] = useState(false)
+  const [editValues, setEditValues] = useState({
+    openingAmount: 0,
+    closingCash: 0,
+    closingCard: 0,
+    closingTransfer: 0,
+  })
 
   // Helper para convertir fechas (Firestore Timestamp o Date)
   const getDateFromTimestamp = (timestamp) => {
@@ -287,6 +297,48 @@ export default function CashRegister() {
     } finally {
       setIsLoadingHistory(false)
     }
+  }
+
+  // TEMPORAL: Función para guardar edición del historial
+  const handleSaveHistoryEdit = async () => {
+    if (!selectedHistorySession) return
+
+    try {
+      const result = await updateCashSession(getBusinessId(), selectedHistorySession.id, {
+        openingAmount: editValues.openingAmount,
+        closingCash: editValues.closingCash,
+        closingCard: editValues.closingCard,
+        closingTransfer: editValues.closingTransfer,
+        totalSales: selectedHistorySession.totalSales || 0,
+        totalIncome: selectedHistorySession.totalIncome || 0,
+        totalExpense: selectedHistorySession.totalExpense || 0,
+      })
+
+      if (result.success) {
+        toast.success('Sesión actualizada correctamente')
+        setIsEditingHistory(false)
+        // Recargar historial para ver cambios
+        loadHistory()
+        setSelectedHistorySession(null)
+        setShowHistoryDetailModal(false)
+      } else {
+        toast.error('Error al actualizar')
+      }
+    } catch (error) {
+      console.error('Error al guardar:', error)
+      toast.error('Error al guardar cambios')
+    }
+  }
+
+  // TEMPORAL: Iniciar edición de historial
+  const startEditingHistory = () => {
+    setEditValues({
+      openingAmount: selectedHistorySession.openingAmount || 0,
+      closingCash: selectedHistorySession.closingCash || 0,
+      closingCard: selectedHistorySession.closingCard || 0,
+      closingTransfer: selectedHistorySession.closingTransfer || 0,
+    })
+    setIsEditingHistory(true)
   }
 
   const handleViewHistoryDetail = async (session) => {
@@ -1405,14 +1457,25 @@ export default function CashRegister() {
           setShowHistoryDetailModal(false)
           setSelectedHistorySession(null)
           setHistoryMovements([])
+          setIsEditingHistory(false) // TEMPORAL: Resetear estado de edición
         }}
         title="Detalle de Sesión"
         size="lg"
       >
         {selectedHistorySession && (
           <div className="space-y-6">
-            {/* Fecha y hora */}
-            <div className="text-center py-4 bg-gray-50 rounded-lg">
+            {/* Fecha y hora + Botón Editar */}
+            <div className="text-center py-4 bg-gray-50 rounded-lg relative">
+              {/* TEMPORAL: Botón de editar */}
+              {!isEditingHistory && (
+                <button
+                  onClick={startEditingHistory}
+                  className="absolute top-2 right-2 p-2 text-gray-500 hover:text-primary-600 hover:bg-white rounded-lg transition-colors"
+                  title="Editar sesión"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              )}
               <p className="text-lg font-semibold text-gray-900">
                 {getDateFromTimestamp(selectedHistorySession.openedAt)?.toLocaleDateString('es-PE', {
                   weekday: 'long',
@@ -1431,7 +1494,17 @@ export default function CashRegister() {
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-xs text-blue-600 font-medium">Monto Inicial</p>
-                <p className="text-xl font-bold text-blue-700">{formatCurrency(selectedHistorySession.openingAmount || 0)}</p>
+                {isEditingHistory ? (
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editValues.openingAmount}
+                    onChange={e => setEditValues({ ...editValues, openingAmount: parseFloat(e.target.value) || 0 })}
+                    className="w-full text-xl font-bold text-blue-700 bg-white border border-blue-300 rounded px-2 py-1"
+                  />
+                ) : (
+                  <p className="text-xl font-bold text-blue-700">{formatCurrency(selectedHistorySession.openingAmount || 0)}</p>
+                )}
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <p className="text-xs text-green-600 font-medium">Ventas del Día</p>
@@ -1451,17 +1524,47 @@ export default function CashRegister() {
             <div className="border-t border-gray-200 pt-4">
               <h4 className="font-semibold text-gray-900 mb-3">Arqueo de Cierre</h4>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-gray-600">Efectivo Contado:</span>
-                  <span className="font-semibold">{formatCurrency(selectedHistorySession.closingCash || 0)}</span>
+                  {isEditingHistory ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editValues.closingCash}
+                      onChange={e => setEditValues({ ...editValues, closingCash: parseFloat(e.target.value) || 0 })}
+                      className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                    />
+                  ) : (
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingCash || 0)}</span>
+                  )}
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-gray-600">Tarjetas:</span>
-                  <span className="font-semibold">{formatCurrency(selectedHistorySession.closingCard || 0)}</span>
+                  {isEditingHistory ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editValues.closingCard}
+                      onChange={e => setEditValues({ ...editValues, closingCard: parseFloat(e.target.value) || 0 })}
+                      className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                    />
+                  ) : (
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingCard || 0)}</span>
+                  )}
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="text-gray-600">Transferencias:</span>
-                  <span className="font-semibold">{formatCurrency(selectedHistorySession.closingTransfer || 0)}</span>
+                  {isEditingHistory ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editValues.closingTransfer}
+                      onChange={e => setEditValues({ ...editValues, closingTransfer: parseFloat(e.target.value) || 0 })}
+                      className="w-32 text-right font-semibold bg-white border border-gray-300 rounded px-2 py-1"
+                    />
+                  ) : (
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingTransfer || 0)}</span>
+                  )}
                 </div>
                 <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
                   <span className="text-gray-600">Efectivo Esperado:</span>
@@ -1480,6 +1583,25 @@ export default function CashRegister() {
                 </div>
               </div>
             </div>
+
+            {/* TEMPORAL: Botones de guardar/cancelar edición */}
+            {isEditingHistory && (
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditingHistory(false)}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSaveHistoryEdit}
+                  className="flex-1"
+                >
+                  Guardar Cambios
+                </Button>
+              </div>
+            )}
 
             {/* Movimientos */}
             {historyMovements.length > 0 && (

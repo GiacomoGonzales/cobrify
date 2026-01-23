@@ -1411,6 +1411,37 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
 }
 
 /**
+ * TEMPORAL: Actualizar sesión de caja cerrada (para correcciones)
+ * TODO: Quitar esta función cuando ya no sea necesaria
+ */
+export const updateCashSession = async (userId, sessionId, updateData) => {
+  try {
+    const { closingCash, closingCard, closingTransfer, openingAmount } = updateData
+    const closingAmount = (closingCash || 0) + (closingCard || 0) + (closingTransfer || 0)
+
+    // Recalcular diferencia
+    const expectedAmount = (openingAmount || 0) + (updateData.totalSales || 0) + (updateData.totalIncome || 0) - (updateData.totalExpense || 0)
+    const difference = closingAmount - expectedAmount
+
+    await updateDoc(doc(db, 'businesses', userId, 'cashSessions', sessionId), {
+      closingAmount,
+      closingCash: closingCash || 0,
+      closingCard: closingCard || 0,
+      closingTransfer: closingTransfer || 0,
+      openingAmount: openingAmount || 0,
+      expectedAmount,
+      difference,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar sesión de caja:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Agregar movimiento de caja
  */
 export const addCashMovement = async (userId, sessionId, movementData) => {
