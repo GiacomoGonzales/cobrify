@@ -655,13 +655,12 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.text('Datos del bien transportado', MARGIN_LEFT, currentY)
   currentY += 12
 
-  // Encabezado de tabla
+  // Encabezado de tabla (sin columna código temporalmente)
   const tableX = MARGIN_LEFT
   const tableWidth = CONTENT_WIDTH
   const colWidths = {
     num: 30,
-    code: 80,
-    desc: tableWidth - 30 - 80 - 60 - 70,
+    desc: tableWidth - 30 - 60 - 70, // Sin columna código
     qty: 60,
     unit: 70
   }
@@ -697,10 +696,6 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.line(hColX + colWidths.num, currentY, hColX + colWidths.num, currentY + 18)
     hColX += colWidths.num
 
-    doc.text('CÓDIGO', hColX + colWidths.code/2, currentY + 12, { align: 'center' })
-    doc.line(hColX + colWidths.code, currentY, hColX + colWidths.code, currentY + 18)
-    hColX += colWidths.code
-
     doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + 12, { align: 'center' })
     doc.line(hColX + colWidths.desc, currentY, hColX + colWidths.desc, currentY + 18)
     hColX += colWidths.desc
@@ -734,19 +729,6 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     // Línea vertical N°
     doc.line(itemColX + colWidths.num, currentY, itemColX + colWidths.num, currentY + rowHeight)
     itemColX += colWidths.num
-
-    // Buscar SKU del producto original si está disponible
-    const product = item.productId ? productsMap[item.productId] : null
-    const rawCode = product?.sku || item.sku || item.code || ''
-    // Detectar si parece ID de Firestore (15-25 chars alfanuméricos con mayúsculas y minúsculas)
-    const looksLikeFirestoreId = /^[a-zA-Z0-9]{15,25}$/.test(rawCode) && /[a-z]/.test(rawCode) && /[A-Z]/.test(rawCode)
-    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM' && !looksLikeFirestoreId
-    const itemCode = isValidCode ? rawCode : '-'
-    doc.text(itemCode.substring(0, 12), itemColX + 5, centerYRow)
-
-    // Línea vertical Código
-    doc.line(itemColX + colWidths.code, currentY, itemColX + colWidths.code, currentY + rowHeight)
-    itemColX += colWidths.code
 
     // Descripción - múltiples líneas
     const descStartY = currentY + 10
