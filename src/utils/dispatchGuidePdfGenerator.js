@@ -965,6 +965,31 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.text('Observaciones', MARGIN_LEFT, currentY)
   currentY += 10
 
+  // Información adicional (observaciones del usuario)
+  if (guide.additionalInfo && guide.additionalInfo.trim()) {
+    doc.setFont('helvetica', 'normal')
+    // Dividir el texto en líneas si es muy largo
+    const maxWidth = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
+    const additionalInfoLines = doc.splitTextToSize(guide.additionalInfo.trim(), maxWidth)
+
+    for (const line of additionalInfoLines) {
+      // Verificar espacio antes de cada línea
+      if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+        doc.addPage()
+        currentY = MARGIN_TOP
+        // Agregar número de página
+        totalPages++
+        doc.setFontSize(6)
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Página ${totalPages}`, PAGE_WIDTH - MARGIN_RIGHT - 30, MARGIN_TOP - 5)
+        doc.setFontSize(7)
+      }
+      doc.text(line, MARGIN_LEFT, currentY)
+      currentY += 8
+    }
+    currentY += 5
+  }
+
   // Documento de referencia
   if (guide.referencedInvoice) {
     const refDoc = guide.referencedInvoice
