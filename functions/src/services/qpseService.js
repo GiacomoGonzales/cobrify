@@ -412,7 +412,10 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
           }
 
           // Si SUNAT aceptó (código 0), actualizar URLs
-          if (codigoEstado === '0' || codigoEstado === '0000' || codigoEstado === 0 || estadoConsulta.sunat_success === true) {
+          // IMPORTANTE: Solo marcar como aceptado si el código es 0, o si no hay código pero sunat_success es true
+          const esCodigoAceptado = codigoEstado === '0' || codigoEstado === '0000' || codigoEstado === 0
+          const sinCodigoPeroExitoso = !codigoEstado && estadoConsulta.sunat_success === true
+          if (esCodigoAceptado || sinCodigoPeroExitoso) {
             resultado.accepted = true
             console.log(`✅ SUNAT aceptó el documento`)
           }
@@ -512,7 +515,11 @@ function parseQPseResponse(qpseResponse) {
   // - success: true/false = si la petición HTTP fue exitosa
   // - sunat_success: true/false = si SUNAT aceptó el comprobante
   // Debemos verificar sunat_success, NO success
-  const accepted = qpseResponse.sunat_success === true || responseCode === '0' || responseCode === '0000'
+  // CRÍTICO: Si hay un responseCode específico (diferente de 0), ese tiene prioridad sobre sunat_success
+  const esCodigoAceptado = responseCode === '0' || responseCode === '0000'
+  const esCodigoRechazado = responseCode && responseCode !== '0' && responseCode !== '0000' && responseCode !== ''
+  const sinCodigoPeroExitoso = !responseCode && qpseResponse.sunat_success === true
+  const accepted = esCodigoAceptado || (!esCodigoRechazado && sinCodigoPeroExitoso)
 
   // Extraer notas/observaciones de los errores de SUNAT
   let notes = qpseResponse.observaciones || qpseResponse.notes || qpseResponse.nota || ''

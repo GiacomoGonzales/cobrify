@@ -222,21 +222,34 @@ async function parseSunatResponse(soapResponse) {
       const cdr = parser.parse(cdrXML)
 
       // Extraer información del CDR
-      // El código de respuesta principal
-      const responseCode = cdr.ApplicationResponse?.['cbc:ResponseCode'] || '0'
+      // IMPORTANTE: El ResponseCode puede estar en diferentes ubicaciones según el tipo de CDR:
+      // 1. Directamente en ApplicationResponse/cbc:ResponseCode (CDRs simples)
+      // 2. En ApplicationResponse/cac:DocumentResponse/cac:Response/cbc:ResponseCode (CDRs con errores)
+
+      let responseCode = cdr.ApplicationResponse?.['cbc:ResponseCode']
 
       // El mensaje puede estar en diferentes lugares:
       // 1. cbc:Note - mensaje general
       // 2. cac:DocumentResponse > cac:Response > cbc:Description - mensaje específico de error
       let description = cdr.ApplicationResponse?.['cbc:Note']
 
-      // Buscar en DocumentResponse para obtener mensaje más específico
+      // Buscar en DocumentResponse para obtener código y mensaje más específico
       const docResponse = cdr.ApplicationResponse?.['cac:DocumentResponse']
       if (docResponse) {
         const response = docResponse['cac:Response']
+        // CRÍTICO: Si el ResponseCode no estaba en el nivel superior, buscarlo aquí
+        if ((responseCode === null || responseCode === undefined) && response?.['cbc:ResponseCode']) {
+          responseCode = response['cbc:ResponseCode']
+          console.log(`📋 ResponseCode encontrado en DocumentResponse/Response: ${responseCode}`)
+        }
         if (response?.['cbc:Description']) {
           description = response['cbc:Description']
         }
+      }
+
+      // Si aún no hay responseCode, usar default 0 (solo si realmente no hay código)
+      if (responseCode === null || responseCode === undefined) {
+        responseCode = '0'
       }
 
       // Si aún no hay descripción, usar default según el código
@@ -246,7 +259,7 @@ async function parseSunatResponse(soapResponse) {
           : `Rechazado por SUNAT (código ${responseCode})`
       }
 
-      // Código 0 = Aceptado
+      // Código 0 = Aceptado, cualquier otro código = Rechazado
       const accepted = responseCode === '0' || responseCode === 0
 
       console.log(`📋 CDR parseado: code=${responseCode}, accepted=${accepted}, description=${description}`)

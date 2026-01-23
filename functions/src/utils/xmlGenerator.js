@@ -953,10 +953,28 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
     // Precio unitario SIN IGV (valor base para SUNAT)
     // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
-    // Para precios pequeños usamos más decimales (SUNAT acepta hasta 10 decimales)
+    // SUNAT acepta hasta 10 decimales en el precio unitario
+    // CRÍTICO: Para cantidades grandes o precios con muchos decimales, necesitamos más precisión
+    // para evitar el error 3271 "El valor de venta por ítem difiere de los importes consignados"
     const exactUnitPrice = lineTotal / item.quantity
-    const unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : 2
-    const unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
+    // Determinar decimales necesarios basado en:
+    // 1. Si el precio es muy pequeño (< 0.1), usar 10 decimales
+    // 2. Si la cantidad es grande (> 100), usar al menos 6 decimales para evitar errores de redondeo
+    // 3. Verificar que quantity × priceRounded = lineTotal, si no, usar más decimales
+    let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
+    let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
+    // Validar que el cálculo cuadra (tolerancia de 0.01 para redondeo)
+    const calculatedLineTotal = Math.round(item.quantity * unitPriceForXML * 100) / 100
+    if (Math.abs(calculatedLineTotal - lineTotal) > 0.01) {
+      // Si no cuadra, usar 10 decimales para máxima precisión
+      unitPriceDecimals = 10
+      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
+      console.log(`⚠️ Item ${index + 1}: Precio ajustado a 10 decimales para cuadrar con SUNAT`)
+      console.log(`   quantity=${item.quantity}, lineTotal=${lineTotal}, priceAmount=${unitPriceForXML}`)
+      console.log(`   Verificación: ${item.quantity} × ${unitPriceForXML} = ${(item.quantity * unitPriceForXML).toFixed(2)}`)
+    }
 
     const price = invoiceLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': invoiceData.currency || 'PEN' })
@@ -1384,11 +1402,20 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
     // Precio unitario SIN IGV (valor base para SUNAT)
     // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
-    // Para precios pequeños usamos más decimales (SUNAT acepta hasta 10 decimales)
+    // SUNAT acepta hasta 10 decimales en el precio unitario
+    // CRÍTICO: Para cantidades grandes o precios con muchos decimales, necesitamos más precisión
     const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
     const exactUnitPrice = roundedLineTotal / item.quantity
-    const unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : 2
-    const unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
+    let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
+    let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
+    // Validar que el cálculo cuadra (tolerancia de 0.01 para redondeo)
+    const calculatedLineTotal = Math.round(item.quantity * unitPriceForXML * 100) / 100
+    if (Math.abs(calculatedLineTotal - roundedLineTotal) > 0.01) {
+      unitPriceDecimals = 10
+      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
+    }
 
     const price = creditNoteLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
@@ -1815,11 +1842,20 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
     // Precio unitario SIN IGV (valor base para SUNAT)
     // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
-    // Para precios pequeños usamos más decimales (SUNAT acepta hasta 10 decimales)
+    // SUNAT acepta hasta 10 decimales en el precio unitario
+    // CRÍTICO: Para cantidades grandes o precios con muchos decimales, necesitamos más precisión
     const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
     const exactUnitPrice = roundedLineTotal / item.quantity
-    const unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : 2
-    const unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
+    let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
+    let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
+
+    // Validar que el cálculo cuadra (tolerancia de 0.01 para redondeo)
+    const calculatedLineTotal = Math.round(item.quantity * unitPriceForXML * 100) / 100
+    if (Math.abs(calculatedLineTotal - roundedLineTotal) > 0.01) {
+      unitPriceDecimals = 10
+      unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
+    }
 
     const price = debitNoteLine.ele('cac:Price')
     price.ele('cbc:PriceAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
