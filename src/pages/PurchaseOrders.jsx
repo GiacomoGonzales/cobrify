@@ -37,7 +37,7 @@ import { preloadLogo } from '@/utils/pdfGenerator'
 import CreatePurchaseOrderModal from '@/components/CreatePurchaseOrderModal'
 
 export default function PurchaseOrders() {
-  const { user, isDemoMode, getBusinessId } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const [orders, setOrders] = useState([])
@@ -64,10 +64,10 @@ export default function PurchaseOrders() {
 
     setIsLoading(true)
     try {
-      if (isDemoMode) {
-        setOrders([])
-        setSuppliers([])
-        setCompanySettings(null)
+      if (isDemoMode && demoData) {
+        setOrders(demoData.purchaseOrders || [])
+        setSuppliers(demoData.suppliers || [])
+        setCompanySettings(demoData.business || null)
         setIsLoading(false)
         return
       }
