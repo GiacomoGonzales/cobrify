@@ -87,6 +87,7 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
   const [actionMenuUser, setActionMenuUser] = useState(null)
+  const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 })
 
   // Estados para modal de configuración SUNAT
   const [showSunatModal, setShowSunatModal] = useState(false)
@@ -1709,7 +1710,19 @@ export default function AdminUsers() {
                         <button
                           onClick={e => {
                             e.stopPropagation()
-                            setActionMenuUser(actionMenuUser === user.id ? null : user.id)
+                            if (actionMenuUser === user.id) {
+                              setActionMenuUser(null)
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              const menuHeight = 180
+                              const spaceBelow = window.innerHeight - rect.bottom
+                              const openUp = spaceBelow < menuHeight
+                              setActionMenuPosition({
+                                top: openUp ? rect.top - menuHeight : rect.bottom + 4,
+                                left: rect.right - 176
+                              })
+                              setActionMenuUser(user.id)
+                            }
                           }}
                           className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                         >
@@ -1717,9 +1730,10 @@ export default function AdminUsers() {
                         </button>
 
                         {actionMenuUser === user.id && (
-                          <div className={`absolute right-0 w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 ${
-                            filteredUsers.length <= 3 || index >= filteredUsers.length - 2 ? 'bottom-full mb-1' : 'top-full mt-1'
-                          }`}>
+                          <div
+                            className="fixed w-44 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
+                            style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
+                          >
                             <button
                               onClick={e => {
                                 e.stopPropagation()

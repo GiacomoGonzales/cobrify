@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -209,6 +209,8 @@ export default function Products() {
   const [deletingProduct, setDeletingProduct] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [actionMenuOpen, setActionMenuOpen] = useState(null) // ID del producto con menú abierto
+  const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0, openUp: false }) // Posición del menú
   const [isSaving, setIsSaving] = useState(false)
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [isScanningSearch, setIsScanningSearch] = useState(false)
@@ -565,6 +567,90 @@ export default function Products() {
       expirationDate: formattedExpirationDate,
     })
     setIsModalOpen(true)
+  }
+
+  // Clonar producto - copia todos los datos pero crea uno nuevo
+  const openCloneModal = product => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+
+    // NO establecemos editingProduct para que se cree como nuevo
+    setEditingProduct(null)
+
+    const hasNoStock = product.stock === null || product.stock === undefined
+    setNoStock(hasNoStock)
+    setAllowDecimalQuantity(product.allowDecimalQuantity || false)
+
+    const hasExpiration = product.trackExpiration || false
+    setTrackExpiration(hasExpiration)
+
+    const productHasVariants = product.hasVariants || false
+    setHasVariants(productHasVariants)
+    setVariantAttributes(product.variantAttributes || [])
+    // Clonar variantes pero limpiar IDs
+    setVariants((product.variants || []).map(v => ({ ...v, id: undefined })))
+    setNewAttributeName('')
+    setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+
+    // Clonar modificadores
+    setModifiers((product.modifiers || []).map(m => ({ ...m, id: undefined })))
+
+    // Clonar presentaciones
+    setPresentations((product.presentations || []).map(p => ({ ...p, id: undefined })))
+    setNewPresentation({ name: '', factor: '', price: '' })
+
+    // Cargar datos de farmacia si existen
+    setPharmacyData({
+      genericName: product.genericName || '',
+      concentration: product.concentration || '',
+      presentation: product.presentation || '',
+      laboratoryId: product.laboratoryId || '',
+      laboratoryName: product.laboratoryName || '',
+      batchNumber: '', // Limpiar lote para el producto clonado
+      activeIngredient: product.activeIngredient || '',
+      therapeuticAction: product.therapeuticAction || '',
+      saleCondition: product.saleCondition || 'sin_receta',
+      requiresPrescription: product.requiresPrescription || false,
+      sanitaryRegistry: product.sanitaryRegistry || '',
+      location: product.location || '',
+    })
+
+    setTaxAffectation(product.taxAffectation || '10')
+    setCatalogVisible(product.catalogVisible || false)
+
+    // No copiar la imagen (el usuario puede agregarla manualmente)
+    setProductImage(null)
+    setProductImagePreview(null)
+
+    // Formatear fecha de expiración si existe
+    let formattedExpirationDate = ''
+    if (product.expirationDate) {
+      const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
+      formattedExpirationDate = expDate.toISOString().split('T')[0]
+    }
+
+    reset({
+      code: '', // Limpiar código para evitar duplicados
+      sku: '', // Limpiar SKU para evitar duplicados
+      name: `${product.name} (copia)`, // Agregar indicador de copia
+      description: product.description || '',
+      price: productHasVariants ? '' : (product.price?.toString() || ''),
+      price2: product.price2?.toString() || '',
+      price3: product.price3?.toString() || '',
+      price4: product.price4?.toString() || '',
+      cost: product.cost?.toString() || '',
+      unit: product.unit || 'NIU',
+      category: product.category || '', // Mantener la categoría
+      initialStock: '', // Stock inicial vacío para el nuevo producto
+      noStock: hasNoStock,
+      trackExpiration: hasExpiration,
+      expirationDate: formattedExpirationDate,
+    })
+
+    setIsModalOpen(true)
+    toast.info('Editando copia del producto. Recuerda cambiar el nombre y código.')
   }
 
   const closeModal = () => {
@@ -2335,7 +2421,7 @@ export default function Products() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedProducts.map(product => {
+                {paginatedProducts.map((product, index) => {
                   const isExpanded = expandedProduct === product.id
                   const hasWarehouseStocks = product.warehouseStocks && product.warehouseStocks.length > 0
 
@@ -2507,30 +2593,90 @@ export default function Products() {
                         )}
                         <TableCell className="max-w-[100px]">
                           <div className="flex items-center justify-end space-x-1">
-                            <button
-                              onClick={() => {
-                                setViewingProduct(product)
-                                setIsViewModalOpen(true)
-                              }}
-                              className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                              title="Ver Detalles"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => openEditModal(product)}
-                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Editar"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setDeletingProduct(product)}
-                              className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="relative">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (actionMenuOpen === product.id) {
+                                    setActionMenuOpen(null)
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect()
+                                    const menuHeight = 180 // Altura aproximada del menú
+                                    const spaceBelow = window.innerHeight - rect.bottom
+                                    const openUp = spaceBelow < menuHeight
+
+                                    setActionMenuPosition({
+                                      top: openUp ? rect.top - menuHeight : rect.bottom + 4,
+                                      left: rect.right - 176, // 176px = w-44 (11rem)
+                                      openUp
+                                    })
+                                    setActionMenuOpen(product.id)
+                                  }
+                                }}
+                                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Acciones"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+
+                              {actionMenuOpen === product.id && (
+                                <>
+                                  {/* Overlay para cerrar el menú al hacer clic fuera */}
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setActionMenuOpen(null)}
+                                  />
+                                  {/* Menú desplegable con position fixed para salir del contenedor */}
+                                  <div
+                                    className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+                                    style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        setViewingProduct(product)
+                                        setIsViewModalOpen(true)
+                                        setActionMenuOpen(null)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                    >
+                                      <Eye className="w-4 h-4 text-green-600" />
+                                      Ver detalles
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        openEditModal(product)
+                                        setActionMenuOpen(null)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                    >
+                                      <Edit className="w-4 h-4 text-blue-600" />
+                                      Editar
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        openCloneModal(product)
+                                        setActionMenuOpen(null)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                    >
+                                      <Copy className="w-4 h-4 text-purple-600" />
+                                      Clonar
+                                    </button>
+                                    <div className="border-t border-gray-100 my-1" />
+                                    <button
+                                      onClick={() => {
+                                        setDeletingProduct(product)
+                                        setActionMenuOpen(null)
+                                      }}
+                                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -4234,6 +4380,16 @@ export default function Products() {
                 }}
               >
                 Cerrar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsViewModalOpen(false)
+                  openCloneModal(viewingProduct)
+                }}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Clonar
               </Button>
               <Button
                 onClick={() => {

@@ -233,6 +233,10 @@ function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="pos" element={<POS />} />
               <Route path="facturas" element={<InvoiceList />} />
+              <Route path="cotizaciones" element={<Quotations />} />
+              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
+              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
+              <Route path="guias-remision" element={<DispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
@@ -241,6 +245,7 @@ function App() {
               <Route path="laboratorios" element={<Laboratories />} />
               <Route path="compras" element={<Purchases />} />
               <Route path="compras/nueva" element={<CreatePurchase />} />
+              <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="proveedores" element={<Suppliers />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
