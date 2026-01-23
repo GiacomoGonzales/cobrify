@@ -3,10 +3,12 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, Link } from 'react-router-dom'
 import { z } from 'zod'
-import { Search, Loader2, Building2, User, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Search, Loader2, Building2, User, ArrowRight, ArrowLeft, MapPin } from 'lucide-react'
 import { registerUser } from '@/services/authService'
 import { consultarRUC } from '@/services/documentLookupService'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import Input from '@/components/ui/Input'
+import Select from '@/components/ui/Select'
 import Button from '@/components/ui/Button'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 
@@ -23,9 +25,6 @@ const registerSchema = z.object({
   tradeName: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().min(5, 'La dirección es requerida'),
-  district: z.string().min(2, 'El distrito es requerido'),
-  province: z.string().min(2, 'La provincia es requerida'),
-  department: z.string().min(2, 'El departamento es requerido'),
 }).refine(data => data.password === data.confirmPassword, {
   message: 'Las contraseñas no coinciden',
   path: ['confirmPassword'],
@@ -39,6 +38,11 @@ export default function Register() {
   const [success, setSuccess] = useState('')
   const [step, setStep] = useState(1) // 1 = cuenta, 2 = negocio
 
+  // Estados para ubicación (códigos de ubigeo)
+  const [departmentCode, setDepartmentCode] = useState('15') // Lima por defecto
+  const [provinceCode, setProvinceCode] = useState('01') // Lima por defecto
+  const [districtCode, setDistrictCode] = useState('')
+
   const {
     register,
     handleSubmit,
@@ -48,13 +52,79 @@ export default function Register() {
     trigger,
   } = useForm({
     resolver: zodResolver(registerSchema),
-    defaultValues: {
-      department: 'Lima',
-      province: 'Lima',
-    }
   })
 
+  // Obtener provincias según departamento
+  const getProvincias = (deptCode) => {
+    return PROVINCIAS[deptCode] || []
+  }
+
+  // Obtener distritos según departamento y provincia
+  const getDistritos = (deptCode, provCode) => {
+    const key = `${deptCode}${provCode}`
+    return DISTRITOS[key] || []
+  }
+
+  // Obtener ubigeo completo (6 dígitos)
+  const getUbigeo = () => {
+    if (departmentCode && provinceCode && districtCode) {
+      return `${departmentCode}${provinceCode}${districtCode}`
+    }
+    return ''
+  }
+
+  // Obtener nombres de ubicación
+  const getLocationNames = () => {
+    const dept = DEPARTAMENTOS.find(d => d.code === departmentCode)
+    const prov = getProvincias(departmentCode).find(p => p.code === provinceCode)
+    const dist = getDistritos(departmentCode, provinceCode).find(d => d.code === districtCode)
+    return {
+      department: dept?.name || '',
+      province: prov?.name || '',
+      district: dist?.name || ''
+    }
+  }
+
   const rucValue = watch('ruc')
+
+  // Buscar código de departamento por nombre
+  const findDepartmentCode = (name) => {
+    if (!name) return ''
+    const normalized = name.toUpperCase().trim()
+    const dept = DEPARTAMENTOS.find(d =>
+      d.name.toUpperCase() === normalized ||
+      d.name.toUpperCase().includes(normalized) ||
+      normalized.includes(d.name.toUpperCase())
+    )
+    return dept?.code || ''
+  }
+
+  // Buscar código de provincia por nombre
+  const findProvinceCode = (deptCode, name) => {
+    if (!deptCode || !name) return ''
+    const normalized = name.toUpperCase().trim()
+    const provincias = PROVINCIAS[deptCode] || []
+    const prov = provincias.find(p =>
+      p.name.toUpperCase() === normalized ||
+      p.name.toUpperCase().includes(normalized) ||
+      normalized.includes(p.name.toUpperCase())
+    )
+    return prov?.code || ''
+  }
+
+  // Buscar código de distrito por nombre
+  const findDistrictCode = (deptCode, provCode, name) => {
+    if (!deptCode || !provCode || !name) return ''
+    const normalized = name.toUpperCase().trim()
+    const key = `${deptCode}${provCode}`
+    const distritos = DISTRITOS[key] || []
+    const dist = distritos.find(d =>
+      d.name.toUpperCase() === normalized ||
+      d.name.toUpperCase().includes(normalized) ||
+      normalized.includes(d.name.toUpperCase())
+    )
+    return dist?.code || ''
+  }
 
   // Buscar datos del RUC automáticamente
   const handleLookupRuc = async () => {
@@ -73,9 +143,20 @@ export default function Register() {
         setValue('businessName', result.data.razonSocial || '')
         setValue('tradeName', result.data.nombreComercial || '')
         setValue('address', result.data.direccion || '')
-        setValue('district', result.data.distrito || '')
-        setValue('province', result.data.provincia || '')
-        setValue('department', result.data.departamento || '')
+
+        // Convertir nombres de ubicación a códigos de ubigeo
+        const deptCode = findDepartmentCode(result.data.departamento)
+        if (deptCode) {
+          setDepartmentCode(deptCode)
+          const provCode = findProvinceCode(deptCode, result.data.provincia)
+          if (provCode) {
+            setProvinceCode(provCode)
+            const distCode = findDistrictCode(deptCode, provCode, result.data.distrito)
+            if (distCode) {
+              setDistrictCode(distCode)
+            }
+          }
+        }
       } else {
         setError(result.error || 'No se encontraron datos para este RUC')
       }
@@ -97,20 +178,30 @@ export default function Register() {
   }
 
   const onSubmit = async data => {
+    // Validar que se haya seleccionado ubicación completa
+    if (!departmentCode || !provinceCode || !districtCode) {
+      setError('Por favor selecciona departamento, provincia y distrito')
+      return
+    }
+
     setIsLoading(true)
     setError('')
     setSuccess('')
 
     try {
+      const locationNames = getLocationNames()
+      const ubigeo = getUbigeo()
+
       const businessData = {
         ruc: data.ruc,
         businessName: data.businessName,
         tradeName: data.tradeName,
         phone: data.phone,
         address: data.address,
-        district: data.district,
-        province: data.province,
-        department: data.department,
+        district: locationNames.district,
+        province: locationNames.province,
+        department: locationNames.department,
+        ubigeo: ubigeo,
       }
 
       const result = await registerUser(data.email, data.password, data.name, businessData)
@@ -280,34 +371,73 @@ export default function Register() {
                     {...register('address')}
                   />
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input
-                      label="Distrito"
-                      type="text"
-                      placeholder="Miraflores"
-                      required
-                      error={errors.district?.message}
-                      {...register('district')}
-                    />
+                  {/* Selector de ubicación con ubigeo automático */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <MapPin className="w-4 h-4" />
+                      <span>Ubicación del negocio</span>
+                    </div>
 
-                    <Input
-                      label="Provincia"
-                      type="text"
-                      placeholder="Lima"
-                      required
-                      error={errors.province?.message}
-                      {...register('province')}
-                    />
+                    <Select
+                      label="Departamento"
+                      value={departmentCode}
+                      onChange={(e) => {
+                        setDepartmentCode(e.target.value)
+                        setProvinceCode('')
+                        setDistrictCode('')
+                      }}
+                    >
+                      <option value="">Seleccione departamento</option>
+                      {DEPARTAMENTOS.map(dept => (
+                        <option key={dept.code} value={dept.code}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </Select>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <Select
+                        label="Provincia"
+                        value={provinceCode}
+                        onChange={(e) => {
+                          setProvinceCode(e.target.value)
+                          setDistrictCode('')
+                        }}
+                        disabled={!departmentCode}
+                      >
+                        <option value="">Seleccione</option>
+                        {getProvincias(departmentCode).map(prov => (
+                          <option key={prov.code} value={prov.code}>
+                            {prov.name}
+                          </option>
+                        ))}
+                      </Select>
+
+                      <Select
+                        label="Distrito"
+                        value={districtCode}
+                        onChange={(e) => setDistrictCode(e.target.value)}
+                        disabled={!provinceCode}
+                      >
+                        <option value="">Seleccione</option>
+                        {getDistritos(departmentCode, provinceCode).map(dist => (
+                          <option key={dist.code} value={dist.code}>
+                            {dist.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    {/* Mostrar ubigeo calculado */}
+                    {departmentCode && provinceCode && districtCode && (
+                      <div className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                        <span className="text-sm text-green-700">
+                          Ubigeo: <span className="font-mono font-semibold">{getUbigeo()}</span>
+                        </span>
+                        <span className="text-xs text-green-600">Calculado automáticamente</span>
+                      </div>
+                    )}
                   </div>
-
-                  <Input
-                    label="Departamento"
-                    type="text"
-                    placeholder="Lima"
-                    required
-                    error={errors.department?.message}
-                    {...register('department')}
-                  />
                 </>
               )}
 

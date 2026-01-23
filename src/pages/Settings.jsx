@@ -32,6 +32,7 @@ import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, upd
 import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -99,6 +100,11 @@ export default function Settings() {
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [showRenumberModal, setShowRenumberModal] = useState(false)
   const [adminToolsEnabled, setAdminToolsEnabled] = useState(false)
+
+  // Estados para selector de ubicación con ubigeo
+  const [locationDeptCode, setLocationDeptCode] = useState('')
+  const [locationProvCode, setLocationProvCode] = useState('')
+  const [locationDistCode, setLocationDistCode] = useState('')
   const [certificateFile, setCertificateFile] = useState(null)
 
   // Estados para QPse
@@ -283,6 +289,63 @@ export default function Settings() {
   } = useForm({
     resolver: zodResolver(companySettingsSchema),
   })
+
+  // Helper functions para ubicación
+  const getProvincias = (deptCode) => {
+    return PROVINCIAS[deptCode] || []
+  }
+
+  const getDistritos = (deptCode, provCode) => {
+    const key = `${deptCode}${provCode}`
+    return DISTRITOS[key] || []
+  }
+
+  const getLocationUbigeo = () => {
+    if (locationDeptCode && locationProvCode && locationDistCode) {
+      return `${locationDeptCode}${locationProvCode}${locationDistCode}`
+    }
+    return ''
+  }
+
+  const getLocationNames = () => {
+    const dept = DEPARTAMENTOS.find(d => d.code === locationDeptCode)
+    const prov = getProvincias(locationDeptCode).find(p => p.code === locationProvCode)
+    const dist = getDistritos(locationDeptCode, locationProvCode).find(d => d.code === locationDistCode)
+    return {
+      department: dept?.name || '',
+      province: prov?.name || '',
+      district: dist?.name || ''
+    }
+  }
+
+  // Actualizar form values cuando cambian los códigos de ubicación
+  const handleLocationChange = (type, value) => {
+    if (type === 'department') {
+      setLocationDeptCode(value)
+      setLocationProvCode('')
+      setLocationDistCode('')
+      // Actualizar nombres en el form
+      const dept = DEPARTAMENTOS.find(d => d.code === value)
+      setValue('department', dept?.name || '')
+      setValue('province', '')
+      setValue('district', '')
+      setValue('ubigeo', '')
+    } else if (type === 'province') {
+      setLocationProvCode(value)
+      setLocationDistCode('')
+      const prov = getProvincias(locationDeptCode).find(p => p.code === value)
+      setValue('province', prov?.name || '')
+      setValue('district', '')
+      setValue('ubigeo', '')
+    } else if (type === 'district') {
+      setLocationDistCode(value)
+      const dist = getDistritos(locationDeptCode, locationProvCode).find(d => d.code === value)
+      setValue('district', dist?.name || '')
+      // Calcular ubigeo
+      const ubigeo = `${locationDeptCode}${locationProvCode}${value}`
+      setValue('ubigeo', ubigeo)
+    }
+  }
 
   // Cargar configuración al montar
   useEffect(() => {
@@ -521,6 +584,13 @@ export default function Settings() {
           department: businessData.department || '',
           ubigeo: businessData.ubigeo || '',
         })
+
+        // Extraer códigos de ubigeo para los selects
+        if (businessData.ubigeo && businessData.ubigeo.length === 6) {
+          setLocationDeptCode(businessData.ubigeo.substring(0, 2))
+          setLocationProvCode(businessData.ubigeo.substring(2, 4))
+          setLocationDistCode(businessData.ubigeo.substring(4, 6))
+        }
 
         // Cargar series de documentos
         if (businessData.series) {
@@ -1825,38 +1895,72 @@ export default function Settings() {
                 helperText="Opcional"
               />
 
-              <Input
-                label="Distrito"
-                required
-                placeholder="Miraflores"
-                error={errors.district?.message}
-                {...register('district')}
-              />
+              {/* Selector de ubicación con ubigeo automático */}
+              <div className="md:col-span-2 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <MapPin className="w-4 h-4" />
+                  <span>Ubicación del negocio</span>
+                </div>
 
-              <Input
-                label="Provincia"
-                required
-                placeholder="Lima"
-                error={errors.province?.message}
-                {...register('province')}
-              />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <Select
+                    label="Departamento"
+                    value={locationDeptCode}
+                    onChange={(e) => handleLocationChange('department', e.target.value)}
+                  >
+                    <option value="">Seleccione</option>
+                    {DEPARTAMENTOS.map(dept => (
+                      <option key={dept.code} value={dept.code}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </Select>
 
-              <Input
-                label="Departamento"
-                required
-                placeholder="Lima"
-                error={errors.department?.message}
-                {...register('department')}
-              />
+                  <Select
+                    label="Provincia"
+                    value={locationProvCode}
+                    onChange={(e) => handleLocationChange('province', e.target.value)}
+                    disabled={!locationDeptCode}
+                  >
+                    <option value="">Seleccione</option>
+                    {getProvincias(locationDeptCode).map(prov => (
+                      <option key={prov.code} value={prov.code}>
+                        {prov.name}
+                      </option>
+                    ))}
+                  </Select>
 
-              <Input
-                label="Ubigeo"
-                placeholder="150101"
-                error={errors.ubigeo?.message}
-                {...register('ubigeo')}
-                maxLength={6}
-                helperText="Código de ubicación geográfica (6 dígitos) - Consultar en SUNAT"
-              />
+                  <Select
+                    label="Distrito"
+                    value={locationDistCode}
+                    onChange={(e) => handleLocationChange('district', e.target.value)}
+                    disabled={!locationProvCode}
+                  >
+                    <option value="">Seleccione</option>
+                    {getDistritos(locationDeptCode, locationProvCode).map(dist => (
+                      <option key={dist.code} value={dist.code}>
+                        {dist.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Mostrar ubigeo calculado */}
+                {locationDeptCode && locationProvCode && locationDistCode && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                    <span className="text-sm text-green-700">
+                      Ubigeo: <span className="font-mono font-semibold">{getLocationUbigeo()}</span>
+                    </span>
+                    <span className="text-xs text-green-600">Calculado automáticamente</span>
+                  </div>
+                )}
+
+                {/* Campos ocultos para el form */}
+                <input type="hidden" {...register('district')} />
+                <input type="hidden" {...register('province')} />
+                <input type="hidden" {...register('department')} />
+                <input type="hidden" {...register('ubigeo')} />
+              </div>
               </div>
 
               {/* Divider */}
