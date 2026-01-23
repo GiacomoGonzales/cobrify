@@ -33,7 +33,7 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
   const [previewNumbers, setPreviewNumbers] = useState([])
 
   // Progreso de procesamiento
-  const [processProgress, setProcessProgress] = useState({ current: 0, total: 0, errors: [] })
+  const [processProgress, setProcessProgress] = useState({ current: 0, total: 0, errors: [], results: [] })
 
   // Series disponibles del negocio
   const [availableSeries, setAvailableSeries] = useState({})
@@ -243,7 +243,7 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
 
     setProcessing(true)
     setStep(4)
-    setProcessProgress({ current: 0, total: previewNumbers.length, errors: [] })
+    setProcessProgress({ current: 0, total: previewNumbers.length, errors: [], results: [] })
 
     const errors = []
 
@@ -319,32 +319,62 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
     if (previewNumbers.length === 0) return
 
     setProcessing(true)
-    setProcessProgress({ current: 0, total: previewNumbers.length, errors: [] })
+    setProcessProgress({ current: 0, total: previewNumbers.length, errors: [], results: [] })
 
     const errors = []
+    const results = []
 
     for (let i = 0; i < previewNumbers.length; i++) {
       const item = previewNumbers[i]
 
       try {
-        await sendInvoiceToSunat(user.uid, item.id)
-        setProcessProgress(prev => ({ ...prev, current: i + 1 }))
+        const result = await sendInvoiceToSunat(user.uid, item.id)
+        console.log(`Resultado envío ${item.newNumber}:`, result)
+
+        // Obtener el estado actualizado del documento en Firebase
+        const invoiceRef = doc(db, 'businesses', user.uid, 'invoices', item.id)
+        const invoiceSnap = await getDoc(invoiceRef)
+        const updatedData = invoiceSnap.data()
+
+        results.push({
+          number: item.newNumber,
+          success: result.success,
+          status: updatedData?.sunatStatus || 'unknown',
+          message: result.message || updatedData?.sunatDescription || ''
+        })
+
+        if (!result.success) {
+          errors.push({ number: item.newNumber, error: result.error || result.message || 'Error desconocido' })
+        }
+
+        setProcessProgress(prev => ({ ...prev, current: i + 1, results: [...prev.results, results[results.length - 1]] }))
 
         // Pequeña pausa entre envíos para no sobrecargar
         await new Promise(resolve => setTimeout(resolve, 1000))
       } catch (error) {
         console.error(`Error enviando ${item.newNumber}:`, error)
         errors.push({ number: item.newNumber, error: error.message })
+        results.push({
+          number: item.newNumber,
+          success: false,
+          status: 'error',
+          message: error.message
+        })
       }
     }
 
-    setProcessProgress(prev => ({ ...prev, errors }))
+    setProcessProgress(prev => ({ ...prev, errors, results }))
     setProcessing(false)
 
-    if (errors.length === 0) {
-      toast.success(`¡${previewNumbers.length} documentos enviados a SUNAT!`)
+    const accepted = results.filter(r => r.status === 'accepted').length
+    const rejected = results.filter(r => r.status === 'rejected').length
+
+    if (accepted === previewNumbers.length) {
+      toast.success(`¡${accepted} documentos aceptados por SUNAT!`)
+    } else if (accepted > 0) {
+      toast.success(`${accepted} aceptados, ${rejected} rechazados por SUNAT`)
     } else {
-      toast.error(`Enviados con ${errors.length} errores`)
+      toast.error(`${rejected} documentos rechazados por SUNAT`)
     }
   }
 
@@ -353,7 +383,7 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
     setDocuments([])
     setSelectedDocs([])
     setPreviewNumbers([])
-    setProcessProgress({ current: 0, total: 0, errors: [] })
+    setProcessProgress({ current: 0, total: 0, errors: [], results: [] })
     setNewSeries('')
     setFilterSeries('')
   }
@@ -732,8 +762,117 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                       style={{ width: `${(processProgress.current / processProgress.total) * 100}%` }}
                     />
                   </div>
+
+                  {/* Mostrar resultados en tiempo real durante envío a SUNAT */}
+                  {processProgress.results?.length > 0 && (
+                    <div className="mt-4 text-left max-h-40 overflow-y-auto border rounded-lg p-2">
+                      {processProgress.results.map((r, i) => (
+                        <div key={i} className={`text-xs p-1 flex items-center gap-2 ${
+                          r.status === 'accepted' ? 'text-green-700' : 'text-red-700'
+                        }`}>
+                          {r.status === 'accepted' ? '✅' : '❌'}
+                          <span className="font-mono">{r.number}</span>
+                          <span className="truncate">{r.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : processProgress.results?.length > 0 ? (
+                // Mostrar resultados de envío a SUNAT
+                <div className="py-4">
+                  <div className="text-center mb-4">
+                    {processProgress.results.filter(r => r.status === 'accepted').length === processProgress.total ? (
+                      <>
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Check className="w-8 h-8 text-green-600" />
+                        </div>
+                        <p className="text-lg font-medium text-green-600">¡Todos aceptados por SUNAT!</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <AlertTriangle className="w-8 h-8 text-yellow-600" />
+                        </div>
+                        <p className="text-lg font-medium text-yellow-600">Envío completado con resultados mixtos</p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <p className="text-2xl font-bold text-green-600">
+                        {processProgress.results.filter(r => r.status === 'accepted').length}
+                      </p>
+                      <p className="text-xs text-green-700">Aceptados</p>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-3">
+                      <p className="text-2xl font-bold text-red-600">
+                        {processProgress.results.filter(r => r.status === 'rejected').length}
+                      </p>
+                      <p className="text-xs text-red-700">Rechazados</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-2xl font-bold text-gray-600">
+                        {processProgress.results.filter(r => r.status !== 'accepted' && r.status !== 'rejected').length}
+                      </p>
+                      <p className="text-xs text-gray-700">Otros</p>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="max-h-48 overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="p-2 text-left">Documento</th>
+                            <th className="p-2 text-left">Estado SUNAT</th>
+                            <th className="p-2 text-left">Mensaje</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {processProgress.results.map((result, i) => (
+                            <tr key={i} className="border-t">
+                              <td className="p-2 font-mono text-xs">{result.number}</td>
+                              <td className="p-2">
+                                {result.status === 'accepted' ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                    ✅ Aceptado
+                                  </span>
+                                ) : result.status === 'rejected' ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                    ❌ Rechazado
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                    ⚠️ {result.status}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2 text-xs text-gray-600 truncate max-w-[200px]" title={result.message}>
+                                {result.message || '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <button
+                      onClick={() => {
+                        resetModal()
+                        onClose()
+                      }}
+                      className="w-full py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
                 </div>
               ) : (
+                // Mostrar resultados de renumeración (antes de enviar a SUNAT)
                 <div className="text-center py-8">
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Check className="w-8 h-8 text-green-600" />
