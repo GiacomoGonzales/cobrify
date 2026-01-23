@@ -837,8 +837,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
       'unitCodeListAgencyName': 'United Nations Economic Commission for Europe'
     }).txt(item.quantity.toFixed(2))
 
-    // USAR los precios pre-calculados (ya ajustados por descuento proporcional)
-    // Esto asegura que: LineExtensionAmount = cantidad × priceWithoutIGV
+    // USAR los precios pre-calculados (ya ajustados por descuento proporcional GLOBAL)
     const priceWithIGV = linePricesWithIGV[index]
     const priceWithoutIGV = linePricesWithoutIGV[index]
 
@@ -847,24 +846,37 @@ export function generateInvoiceXML(invoiceData, businessData) {
     invoiceLine.ele('cbc:LineExtensionAmount', { 'currencyID': invoiceData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
+    // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
+    // El descuento del ítem debe venir sin IGV (valor base)
+    // IMPORTANTE: Declaramos esto ANTES de PricingReference porque afecta el cálculo del precio base
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+
     // Precio unitario (tipo 01 = precio unitario incluye IGV según catálogo 16)
+    // IMPORTANTE: Cuando hay descuento por ítem, el PricingReference debe ser el precio BASE (antes del descuento)
+    // Fórmula SUNAT: LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
+    // Por lo tanto, el precio unitario base (sin IGV) = (LineExtensionAmount + itemDiscount) / Cantidad
+    const basePriceWithoutIGV = itemDiscount > 0
+      ? (lineTotal + itemDiscount) / item.quantity
+      : priceWithoutIGV
+    const basePriceWithIGV = isGravado
+      ? basePriceWithoutIGV * (1 + igvMultiplier)
+      : basePriceWithoutIGV
+
     const pricingReference = invoiceLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(priceWithIGV.toFixed(2))
+      .txt(basePriceWithIGV.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
       'listName': 'Tipo de Precio',
       'listAgencyName': 'PE:SUNAT',
       'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16'
     }).txt('01') // 01 = Precio unitario (incluye el IGV)
 
-    // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
-    // Si el item tiene descuento individual, agregarlo como AllowanceCharge
-    // El descuento del ítem debe venir sin IGV (valor base)
-    const itemDiscount = item.itemDiscount || item.descuento || 0
+    // Si hay descuento por ítem, agregarlo como AllowanceCharge
     if (itemDiscount > 0) {
       const lineAllowanceCharge = invoiceLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+      lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible (Catálogo 53)
       lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
         .txt(parseFloat(itemDiscount).toFixed(2))
     }
@@ -952,28 +964,31 @@ export function generateInvoiceXML(invoiceData, businessData) {
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio unitario SIN IGV (valor base para SUNAT)
-    // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
+    // IMPORTANTE: Cuando hay descuento por ítem (AllowanceCharge), la fórmula SUNAT es:
+    //   LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
+    // Por lo tanto:
+    //   PriceAmount = (LineExtensionAmount + AllowanceCharge) / Cantidad
     // SUNAT acepta hasta 10 decimales en el precio unitario
     // CRÍTICO: Para cantidades grandes o precios con muchos decimales, necesitamos más precisión
-    // para evitar el error 3271 "El valor de venta por ítem difiere de los importes consignados"
-    const exactUnitPrice = lineTotal / item.quantity
+    // para evitar el error 4288 "El valor de venta por ítem difiere de los importes consignados"
+    const exactUnitPrice = (lineTotal + itemDiscount) / item.quantity
 
     // Determinar decimales necesarios basado en:
     // 1. Si el precio es muy pequeño (< 0.1), usar 10 decimales
     // 2. Si la cantidad es grande (> 100), usar al menos 6 decimales para evitar errores de redondeo
-    // 3. Verificar que quantity × priceRounded = lineTotal, si no, usar más decimales
+    // 3. Verificar que quantity × priceRounded - itemDiscount = lineTotal, si no, usar más decimales
     let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
     let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
 
-    // Validar que el cálculo cuadra (tolerancia de 0.01 para redondeo)
-    const calculatedLineTotal = Math.round(item.quantity * unitPriceForXML * 100) / 100
+    // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
+    const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscount) * 100) / 100
     if (Math.abs(calculatedLineTotal - lineTotal) > 0.01) {
       // Si no cuadra, usar 10 decimales para máxima precisión
       unitPriceDecimals = 10
       unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
       console.log(`⚠️ Item ${index + 1}: Precio ajustado a 10 decimales para cuadrar con SUNAT`)
-      console.log(`   quantity=${item.quantity}, lineTotal=${lineTotal}, priceAmount=${unitPriceForXML}`)
-      console.log(`   Verificación: ${item.quantity} × ${unitPriceForXML} = ${(item.quantity * unitPriceForXML).toFixed(2)}`)
+      console.log(`   quantity=${item.quantity}, lineTotal=${lineTotal}, itemDiscount=${itemDiscount}, priceAmount=${unitPriceForXML}`)
+      console.log(`   Verificación: ${item.quantity} × ${unitPriceForXML} - ${itemDiscount} = ${(item.quantity * unitPriceForXML - itemDiscount).toFixed(2)}`)
     }
 
     const price = invoiceLine.ele('cac:Price')
@@ -1297,16 +1312,28 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     // Usar la tasa IGV del taxConfig (no hardcodear 1.18)
     const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
 
+    // === DESCUENTO POR ÍTEM - declarar antes porque afecta los cálculos ===
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+
     // Total línea SIN IGV (base imponible)
     const lineTotal = item.quantity * priceWithoutIGV
     creditNoteLine.ele('cbc:LineExtensionAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
-    // Precio unitario CON IGV
+    // Precio unitario CON IGV (PricingReference)
+    // IMPORTANTE: Cuando hay descuento por ítem, el PricingReference debe ser el precio BASE (antes del descuento)
+    // Fórmula SUNAT: LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
+    const basePriceWithoutIGV = itemDiscount > 0
+      ? (lineTotal + itemDiscount) / item.quantity
+      : priceWithoutIGV
+    const basePriceWithIGV = isGravado
+      ? basePriceWithoutIGV * (1 + igvMultiplier)
+      : basePriceWithoutIGV
+
     const pricingReference = creditNoteLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': creditNoteData.currency || 'PEN' })
-      .txt(priceWithIGV.toFixed(2))
+      .txt(basePriceWithIGV.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
       'listName': 'Tipo de Precio',
       'listAgencyName': 'PE:SUNAT',
@@ -1314,10 +1341,10 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     }).txt('01')
 
     // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
-    const itemDiscount = item.itemDiscount || item.descuento || 0
     if (itemDiscount > 0) {
       const lineAllowanceCharge = creditNoteLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+      lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible (Catálogo 53)
       lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': creditNoteData.currency || 'PEN' })
         .txt(parseFloat(itemDiscount).toFixed(2))
     }
@@ -1401,17 +1428,18 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio unitario SIN IGV (valor base para SUNAT)
-    // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
+    // IMPORTANTE: Cuando hay descuento por ítem (AllowanceCharge), la fórmula SUNAT es:
+    //   LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
+    // Por lo tanto: PriceAmount = (LineExtensionAmount + AllowanceCharge) / Cantidad
     // SUNAT acepta hasta 10 decimales en el precio unitario
-    // CRÍTICO: Para cantidades grandes o precios con muchos decimales, necesitamos más precisión
     const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
-    const exactUnitPrice = roundedLineTotal / item.quantity
+    const exactUnitPrice = (roundedLineTotal + itemDiscount) / item.quantity
 
     let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
     let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
 
-    // Validar que el cálculo cuadra (tolerancia de 0.01 para redondeo)
-    const calculatedLineTotal = Math.round(item.quantity * unitPriceForXML * 100) / 100
+    // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
+    const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscount) * 100) / 100
     if (Math.abs(calculatedLineTotal - roundedLineTotal) > 0.01) {
       unitPriceDecimals = 10
       unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))
@@ -1737,16 +1765,28 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     // Usar la tasa IGV del taxConfig (no hardcodear 1.18)
     const priceWithoutIGV = isGravado ? priceWithIGV / (1 + igvMultiplier) : priceWithIGV
 
+    // === DESCUENTO POR ÍTEM - declarar antes porque afecta los cálculos ===
+    const itemDiscount = item.itemDiscount || item.descuento || 0
+
     // Total línea SIN IGV (base imponible)
     const lineTotal = item.quantity * priceWithoutIGV
     debitNoteLine.ele('cbc:LineExtensionAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
       .txt(lineTotal.toFixed(2))
 
-    // Precio unitario CON IGV
+    // Precio unitario CON IGV (PricingReference)
+    // IMPORTANTE: Cuando hay descuento por ítem, el PricingReference debe ser el precio BASE (antes del descuento)
+    // Fórmula SUNAT: LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
+    const basePriceWithoutIGV = itemDiscount > 0
+      ? (lineTotal + itemDiscount) / item.quantity
+      : priceWithoutIGV
+    const basePriceWithIGV = isGravado
+      ? basePriceWithoutIGV * (1 + igvMultiplier)
+      : basePriceWithoutIGV
+
     const pricingReference = debitNoteLine.ele('cac:PricingReference')
     const alternativeCondition = pricingReference.ele('cac:AlternativeConditionPrice')
     alternativeCondition.ele('cbc:PriceAmount', { 'currencyID': debitNoteData.currency || 'PEN' })
-      .txt(priceWithIGV.toFixed(2))
+      .txt(basePriceWithIGV.toFixed(2))
     alternativeCondition.ele('cbc:PriceTypeCode', {
       'listName': 'Tipo de Precio',
       'listAgencyName': 'PE:SUNAT',
@@ -1754,10 +1794,10 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     }).txt('01')
 
     // === DESCUENTO POR ÍTEM (AllowanceCharge) según especificación SUNAT UBL 2.1 ===
-    const itemDiscount = item.itemDiscount || item.descuento || 0
     if (itemDiscount > 0) {
       const lineAllowanceCharge = debitNoteLine.ele('cac:AllowanceCharge')
       lineAllowanceCharge.ele('cbc:ChargeIndicator').txt('false') // false = descuento
+      lineAllowanceCharge.ele('cbc:AllowanceChargeReasonCode').txt('00') // Código 00 = Descuento que afecta la base imponible (Catálogo 53)
       lineAllowanceCharge.ele('cbc:Amount', { 'currencyID': debitNoteData.currency || 'PEN' })
         .txt(parseFloat(itemDiscount).toFixed(2))
     }
@@ -1841,17 +1881,18 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     sellersItemId.ele('cbc:ID').txt(item.code || item.productId || String(index + 1))
 
     // Precio unitario SIN IGV (valor base para SUNAT)
-    // IMPORTANTE: Calcular precio exacto para que SUNAT valide: quantity × unitPrice = LineExtensionAmount
+    // IMPORTANTE: Cuando hay descuento por ítem (AllowanceCharge), la fórmula SUNAT es:
+    //   LineExtensionAmount = (Cantidad × PriceAmount) - AllowanceCharge
+    // Por lo tanto: PriceAmount = (LineExtensionAmount + AllowanceCharge) / Cantidad
     // SUNAT acepta hasta 10 decimales en el precio unitario
-    // CRÍTICO: Para cantidades grandes o precios con muchos decimales, necesitamos más precisión
     const roundedLineTotal = parseFloat(lineTotal.toFixed(2))
-    const exactUnitPrice = roundedLineTotal / item.quantity
+    const exactUnitPrice = (roundedLineTotal + itemDiscount) / item.quantity
 
     let unitPriceDecimals = exactUnitPrice < 0.1 ? 10 : (item.quantity > 100 ? 6 : 4)
     let unitPriceForXML = parseFloat(exactUnitPrice.toFixed(unitPriceDecimals))
 
-    // Validar que el cálculo cuadra (tolerancia de 0.01 para redondeo)
-    const calculatedLineTotal = Math.round(item.quantity * unitPriceForXML * 100) / 100
+    // Validar que el cálculo cuadra con la fórmula SUNAT (tolerancia de 0.01 para redondeo)
+    const calculatedLineTotal = Math.round((item.quantity * unitPriceForXML - itemDiscount) * 100) / 100
     if (Math.abs(calculatedLineTotal - roundedLineTotal) > 0.01) {
       unitPriceDecimals = 10
       unitPriceForXML = parseFloat(exactUnitPrice.toFixed(10))

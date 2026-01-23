@@ -80,7 +80,8 @@ export default function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller'
+  const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:ID'
+  const [resellers, setResellers] = useState([]) // Lista de resellers para el filtro
   const [sortField, setSortField] = useState('createdAt')
   const [sortDirection, setSortDirection] = useState('desc')
   const [selectedUser, setSelectedUser] = useState(null)
@@ -191,12 +192,18 @@ export default function AdminUsers() {
         getDocs(collection(db, 'resellers'))
       ])
 
-      // Crear mapa de resellers por ID para obtener nombres
+      // Crear mapa de resellers por ID para obtener nombres y lista para el filtro
       const resellersMap = {}
+      const resellersList = []
       resellersSnapshot.forEach(doc => {
         const data = doc.data()
-        resellersMap[doc.id] = data.branding?.companyName || data.companyName || data.email || doc.id
+        const name = data.branding?.companyName || data.companyName || data.email || doc.id
+        resellersMap[doc.id] = name
+        resellersList.push({ id: doc.id, name })
       })
+      // Ordenar resellers alfabéticamente
+      resellersList.sort((a, b) => a.name.localeCompare(b.name))
+      setResellers(resellersList)
 
       // Crear mapa de businesses por ID para acceso rápido
       const businessesMap = {}
@@ -426,11 +433,15 @@ export default function AdminUsers() {
       result = result.filter(u => u.plan === planFilter)
     }
 
-    // Filtro de origen (Cobrify vs Reseller)
+    // Filtro de origen (Cobrify vs Reseller vs Reseller específico)
     if (sourceFilter === 'cobrify') {
       result = result.filter(u => !u.createdByReseller)
     } else if (sourceFilter === 'reseller') {
       result = result.filter(u => u.createdByReseller)
+    } else if (sourceFilter.startsWith('reseller:')) {
+      // Filtrar por reseller específico
+      const resellerId = sourceFilter.replace('reseller:', '')
+      result = result.filter(u => u.resellerId === resellerId)
     }
 
     // Ordenar
@@ -1377,7 +1388,19 @@ export default function AdminUsers() {
             >
               <option value="all">Origen ({stats.cobrify}+{stats.reseller})</option>
               <option value="cobrify">Cobrify ({stats.cobrify})</option>
-              <option value="reseller">Resellers ({stats.reseller})</option>
+              <option value="reseller">Todos Resellers ({stats.reseller})</option>
+              {resellers.length > 0 && (
+                <optgroup label="─── Por Reseller ───">
+                  {resellers.map(r => {
+                    const count = users.filter(u => u.resellerId === r.id).length
+                    return (
+                      <option key={r.id} value={`reseller:${r.id}`}>
+                        {r.name} ({count})
+                      </option>
+                    )
+                  })}
+                </optgroup>
+              )}
             </select>
 
             <button
@@ -1551,14 +1574,14 @@ export default function AdminUsers() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
                             <p className="font-medium text-gray-900 text-[12px] truncate max-w-[140px]">{user.businessName}</p>
-                            {user.createdByReseller && (
-                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-700" title={`Reseller: ${user.resellerName}`}>
-                                R
-                              </span>
-                            )}
                           </div>
                           <p className="text-[10px] text-gray-400 truncate max-w-[150px]">{user.email}</p>
                           {user.ruc && <p className="text-[9px] text-gray-400">RUC: {user.ruc}</p>}
+                          {user.createdByReseller && (
+                            <p className="text-[9px] text-purple-600 font-medium truncate max-w-[150px]">
+                              ↳ {user.resellerName}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
