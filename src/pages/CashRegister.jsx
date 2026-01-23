@@ -24,7 +24,7 @@ import {
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -34,6 +34,7 @@ export default function CashRegister() {
   // Sucursales
   const [branches, setBranches] = useState([])
   const [selectedBranch, setSelectedBranch] = useState(null) // null = Sucursal Principal
+  const [hasMainAccess, setHasMainAccess] = useState(true) // Acceso a Sucursal Principal
 
   // Tab state: 'current' o 'history'
   const [activeTab, setActiveTab] = useState('current')
@@ -92,6 +93,7 @@ export default function CashRegister() {
     // En modo demo, no hay sucursales adicionales
     if (isDemoMode) {
       setBranches([])
+      setHasMainAccess(true)
       return
     }
 
@@ -100,6 +102,20 @@ export default function CashRegister() {
       if (result.success && result.data.length > 0) {
         const branchList = filterBranchesByAccess ? filterBranchesByAccess(result.data) : result.data
         setBranches(branchList)
+
+        // Verificar si el usuario tiene acceso a la Sucursal Principal
+        // Si allowedBranches tiene valores y NO incluye 'main', NO tiene acceso a la principal
+        const mainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
+        setHasMainAccess(mainAccess)
+
+        // Si no tiene acceso a la principal, auto-seleccionar la primera sucursal permitida
+        if (!mainAccess && branchList.length > 0) {
+          setSelectedBranch(branchList[0])
+        }
+      } else {
+        // Verificar acceso a principal aunque no haya sucursales adicionales
+        const mainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
+        setHasMainAccess(mainAccess)
       }
     } catch (error) {
       console.error('Error al cargar sucursales:', error)
@@ -870,8 +886,8 @@ export default function CashRegister() {
           <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
         </div>
 
-        {/* Selector de Sucursal */}
-        {branches.length > 0 && (
+        {/* Selector de Sucursal - Solo mostrar si hay más de una opción */}
+        {(branches.length > 0 || !hasMainAccess) && (
           <div className="flex items-center gap-2">
             <Store className="w-4 h-4 text-gray-500" />
             <select
@@ -887,7 +903,8 @@ export default function CashRegister() {
               }}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Sucursal Principal</option>
+              {/* Solo mostrar Sucursal Principal si el usuario tiene acceso */}
+              {hasMainAccess && <option value="">Sucursal Principal</option>}
               {branches.map(branch => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
