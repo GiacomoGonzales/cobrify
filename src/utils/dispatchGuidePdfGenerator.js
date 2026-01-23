@@ -230,7 +230,10 @@ function hexToRgb(hex) {
  * Basado en el estilo visual de la Guía de Remisión Transportista
  * Con soporte para paginación dinámica cuando hay muchos items
  */
-export const generateDispatchGuidePDF = async (guide, companySettings, download = true) => {
+export const generateDispatchGuidePDF = async (guide, companySettings, download = true, products = []) => {
+  // Crear mapa de productos para buscar SKU por productId
+  const productsMap = {}
+  products.forEach(p => { productsMap[p.id] = p })
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
@@ -732,9 +735,12 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.line(itemColX + colWidths.num, currentY, itemColX + colWidths.num, currentY + rowHeight)
     itemColX += colWidths.num
 
-    // Solo mostrar código si es "real" (no vacío, no CUSTOM)
-    const rawCode = item.code || ''
-    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
+    // Buscar SKU del producto original si está disponible
+    const product = item.productId ? productsMap[item.productId] : null
+    const rawCode = product?.sku || item.sku || item.code || ''
+    // Detectar si parece ID de Firestore (15-25 chars alfanuméricos con mayúsculas y minúsculas)
+    const looksLikeFirestoreId = /^[a-zA-Z0-9]{15,25}$/.test(rawCode) && /[a-z]/.test(rawCode) && /[A-Z]/.test(rawCode)
+    const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM' && !looksLikeFirestoreId
     const itemCode = isValidCode ? rawCode : '-'
     doc.text(itemCode.substring(0, 12), itemColX + 5, centerYRow)
 

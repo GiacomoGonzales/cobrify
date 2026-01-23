@@ -4,7 +4,7 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings } from '@/services/firestoreService'
+import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
@@ -248,7 +248,16 @@ export default function DispatchGuides() {
     setDownloadingPdf(guide.id)
     try {
       toast.info(`Generando PDF de ${guide.number}...`)
-      await generateDispatchGuidePDF(guide, companySettings)
+      // Cargar productos para obtener SKU actualizado
+      let products = []
+      const businessId = getBusinessId()
+      if (businessId) {
+        const productsResult = await getProducts(businessId)
+        if (productsResult.success) {
+          products = productsResult.data || []
+        }
+      }
+      await generateDispatchGuidePDF(guide, companySettings, true, products)
       toast.success('PDF descargado correctamente')
     } catch (error) {
       console.error('Error al generar PDF:', error)
