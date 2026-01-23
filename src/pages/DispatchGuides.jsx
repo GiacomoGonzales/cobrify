@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -7,6 +7,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
+import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
 import { Capacitor } from '@capacitor/core'
@@ -91,6 +92,8 @@ export default function DispatchGuides() {
   const [downloadingPdf, setDownloadingPdf] = useState(null) // ID de guía descargándose
   const [previewingPdf, setPreviewingPdf] = useState(null) // ID de guía en vista previa
   const [sharingPdf, setSharingPdf] = useState(null) // ID de guía siendo compartida
+  const [printingTicket, setPrintingTicket] = useState(null) // Guía para imprimir en ticket
+  const ticketRef = useRef(null) // Ref para el componente de ticket
   const [companySettings, setCompanySettings] = useState(null) // Datos de la empresa
   const [selectedGuide, setSelectedGuide] = useState(null) // Guía seleccionada para ver detalles
   const [editingGuide, setEditingGuide] = useState(null) // Guía en edición
@@ -312,6 +315,62 @@ export default function DispatchGuides() {
     } finally {
       setSharingPdf(null)
     }
+  }
+
+  // Imprimir en formato ticket (impresora térmica)
+  const handlePrintTicket = (guide) => {
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+
+    // Establecer la guía a imprimir
+    setPrintingTicket(guide)
+
+    // Esperar a que el componente se renderice y luego imprimir
+    setTimeout(() => {
+      if (ticketRef.current) {
+        const printWindow = window.open('', '_blank', 'width=300,height=600')
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Guía ${guide.number}</title>
+              <meta charset="utf-8">
+              <style>
+                @media print {
+                  @page { size: 80mm auto; margin: 0; }
+                  body { margin: 0; padding: 0; }
+                }
+                body {
+                  font-family: Arial, sans-serif;
+                  margin: 0;
+                  padding: 0;
+                }
+              </style>
+            </head>
+            <body>
+              ${ticketRef.current.innerHTML}
+              <script>
+                window.onload = function() {
+                  window.print();
+                  window.onafterprint = function() { window.close(); }
+                }
+              </script>
+            </body>
+            </html>
+          `)
+          printWindow.document.close()
+        } else {
+          // Fallback si no se puede abrir ventana
+          window.print()
+        }
+      }
+      setPrintingTicket(null)
+    }, 100)
+
+    toast.info(`Preparando ticket de ${guide.number}...`)
   }
 
   // Filtrar guías
@@ -684,7 +743,7 @@ export default function DispatchGuides() {
                     <span>Ver detalles</span>
                   </button>
 
-                  {/* Vista previa / Imprimir */}
+                  {/* Vista previa / Imprimir PDF */}
                   <button
                     onClick={() => {
                       setOpenMenuId(null)
@@ -698,7 +757,19 @@ export default function DispatchGuides() {
                     ) : (
                       <Printer className="w-4 h-4 text-purple-600" />
                     )}
-                    <span>{previewingPdf === guide.id ? 'Generando...' : 'Vista previa / Imprimir'}</span>
+                    <span>{previewingPdf === guide.id ? 'Generando...' : 'Imprimir PDF'}</span>
+                  </button>
+
+                  {/* Imprimir Ticket (impresora térmica) */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      handlePrintTicket(guide)
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                  >
+                    <Receipt className="w-4 h-4 text-orange-600" />
+                    <span>Imprimir Ticket</span>
                   </button>
 
                   {/* Descargar PDF */}
@@ -1180,7 +1251,7 @@ export default function DispatchGuides() {
 
                 {/* Botones derecha - PDF */}
                 <div className="flex gap-2">
-                  {/* Vista previa / Imprimir */}
+                  {/* Vista previa / Imprimir PDF */}
                   <Button
                     variant="outline"
                     onClick={() => handlePreviewPdf(selectedGuide)}
@@ -1194,9 +1265,18 @@ export default function DispatchGuides() {
                     ) : (
                       <>
                         <Printer className="w-4 h-4 mr-2" />
-                        Vista Previa
+                        PDF
                       </>
                     )}
+                  </Button>
+
+                  {/* Imprimir Ticket */}
+                  <Button
+                    variant="outline"
+                    onClick={() => handlePrintTicket(selectedGuide)}
+                  >
+                    <Receipt className="w-4 h-4 mr-2" />
+                    Ticket
                   </Button>
 
                   {/* Compartir (móvil) o Descargar (web) */}
@@ -1242,6 +1322,18 @@ export default function DispatchGuides() {
         </div>
         )
       })()}
+
+      {/* Componente de ticket oculto para impresión */}
+      {printingTicket && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+          <DispatchGuideTicket
+            ref={ticketRef}
+            guide={printingTicket}
+            companySettings={companySettings}
+            paperWidth={80}
+          />
+        </div>
+      )}
     </div>
   )
 }
