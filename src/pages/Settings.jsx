@@ -98,6 +98,7 @@ export default function Settings() {
   const [showSolPassword, setShowSolPassword] = useState(false)
   const [showCertPassword, setShowCertPassword] = useState(false)
   const [showRenumberModal, setShowRenumberModal] = useState(false)
+  const [adminToolsEnabled, setAdminToolsEnabled] = useState(false)
   const [certificateFile, setCertificateFile] = useState(null)
 
   // Estados para QPse
@@ -591,6 +592,9 @@ export default function Settings() {
         setAllowPriceEdit(businessData.allowPriceEdit || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
+
+        // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
+        setAdminToolsEnabled(businessData.adminTools?.enabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
 
         // Cargar configuración de notas de venta
@@ -4351,49 +4355,53 @@ export default function Settings() {
               </Button>
             </div>
 
-              {/* Divider */}
-              <div className="border-t border-gray-200 my-6"></div>
+              {/* Herramientas de Administración - Solo visible si está habilitado en Firebase */}
+              {adminToolsEnabled && (
+                <>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200 my-6"></div>
 
-              {/* Herramientas de Administración */}
-              <div>
-                <h3 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
-                  <Wrench className="w-5 h-5 text-orange-500" />
-                  Herramientas de Administración
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Herramientas especiales para resolver problemas con documentos
-                </p>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                      <Wrench className="w-5 h-5 text-orange-500" />
+                      Herramientas de Administración
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Herramientas especiales para resolver problemas con documentos
+                    </p>
 
-                <div className="space-y-3">
-                  <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900 flex items-center gap-2">
-                          <RefreshCw className="w-4 h-4 text-orange-600" />
-                          Renumerar documentos rechazados
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Si SUNAT rechazó documentos por duplicidad de numeración (serie ya usada anteriormente),
-                          esta herramienta permite cambiar la serie y renumerar los documentos para reenviarlos.
-                        </p>
-                        <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-orange-100 rounded-md">
-                          <AlertTriangle className="w-4 h-4 text-orange-600" />
-                          <span className="text-xs text-orange-700">
-                            Use con precaución - solo para documentos rechazados
-                          </span>
+                    <div className="space-y-3">
+                      <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 flex items-center gap-2">
+                              <RefreshCw className="w-4 h-4 text-orange-600" />
+                              Renumerar documentos rechazados
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Si SUNAT rechazó documentos por duplicidad de numeración (serie ya usada anteriormente),
+                              esta herramienta permite cambiar la serie y renumerar los documentos para reenviarlos.
+                            </p>
+                            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-orange-100 rounded-md">
+                              <AlertTriangle className="w-4 h-4 text-orange-600" />
+                              <span className="text-xs text-orange-700">
+                                Use con precaución - solo para documentos rechazados
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => setShowRenumberModal(true)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white flex-shrink-0"
+                          >
+                            <Wrench className="w-4 h-4 mr-2" />
+                            Abrir herramienta
+                          </Button>
                         </div>
                       </div>
-                      <Button
-                        onClick={() => setShowRenumberModal(true)}
-                        className="bg-orange-500 hover:bg-orange-600 text-white flex-shrink-0"
-                      >
-                        <Wrench className="w-4 h-4 mr-2" />
-                        Abrir herramienta
-                      </Button>
                     </div>
                   </div>
-                </div>
-              </div>
+                </>
+              )}
           </div>
         </Card>
       )}
