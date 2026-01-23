@@ -75,27 +75,80 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
 
   const recipientData = getRecipientData()
 
+  // Tipos de documento
+  const DOC_TYPES = {
+    '1': 'DNI',
+    '4': 'CE',
+    '6': 'RUC',
+    '7': 'PAS',
+  }
+
+  // Tipos de documento relacionado
+  const RELATED_DOC_TYPES = {
+    '01': 'FAC',
+    '03': 'BOL',
+    '09': 'GRE',
+    '31': 'GRT',
+    '49': 'OC',
+  }
+
   // Obtener datos del transporte
   const getTransportData = () => {
     if (guide.transportMode === '02') {
+      // Transporte privado
+      const driver = guide.transport?.driver || guide.driver || {}
+      const vehicle = guide.transport?.vehicle || guide.vehicle || {}
       return {
-        type: 'PRIVADO',
-        vehicle: guide.transport?.vehicle?.plate || guide.vehicle?.plate || '-',
-        driver: guide.transport?.driver
-          ? `${guide.transport.driver.name || ''} ${guide.transport.driver.lastName || ''}`.trim() || '-'
-          : guide.driver?.name || '-',
-        license: guide.transport?.driver?.license || guide.driver?.license || '-',
+        type: guide.isM1LVehicle ? 'PRIVADO (M1/L)' : 'PRIVADO',
+        vehicle: vehicle.plate || '-',
+        vehicleAuth: vehicle.authorizationNumber
+          ? `${vehicle.authorizationEntity || ''} ${vehicle.authorizationNumber}`.trim()
+          : null,
+        driverDocType: DOC_TYPES[driver.documentType] || driver.documentType || '',
+        driverDocNumber: driver.documentNumber || '-',
+        driverName: `${driver.name || ''} ${driver.lastName || ''}`.trim() || '-',
+        license: driver.license || '-',
+        isM1L: guide.isM1LVehicle,
       }
     } else {
+      // Transporte público
+      const carrier = guide.transport?.carrier || guide.carrier || {}
       return {
         type: 'PUBLICO',
-        carrier: guide.transport?.carrier?.businessName || guide.carrier?.businessName || '-',
-        carrierRuc: guide.transport?.carrier?.ruc || guide.carrier?.ruc || '-',
+        carrier: carrier.businessName || '-',
+        carrierRuc: carrier.ruc || '-',
       }
     }
   }
 
   const transportData = getTransportData()
+
+  // Obtener documentos relacionados
+  const getRelatedDocs = () => {
+    const docs = []
+
+    // Documento de referencia principal (factura/boleta)
+    if (guide.referenceInvoice?.fullNumber) {
+      docs.push({
+        type: RELATED_DOC_TYPES[guide.referenceInvoice.documentType] || 'DOC',
+        number: guide.referenceInvoice.fullNumber,
+      })
+    }
+
+    // Documentos relacionados adicionales
+    if (guide.relatedDocuments?.length > 0) {
+      guide.relatedDocuments.forEach(doc => {
+        docs.push({
+          type: RELATED_DOC_TYPES[doc.type] || 'DOC',
+          number: doc.fullNumber || `${doc.series}-${doc.number}`,
+        })
+      })
+    }
+
+    return docs
+  }
+
+  const relatedDocs = getRelatedDocs()
 
   return (
     <div ref={ref} className="guide-ticket-container">
@@ -332,6 +385,9 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         {companySettings?.phone && (
           <div className="company-info">Tel: {companySettings.phone}</div>
         )}
+        {guide.branchName && (
+          <div className="company-info">Sucursal: {guide.branchName}</div>
+        )}
 
         <div className="document-type">
           {guide.documentType === '31' ? 'GUÍA REMISIÓN TRANSPORTISTA' : 'GUÍA DE REMISIÓN'}
@@ -374,7 +430,25 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         <div className="weight-box">
           PESO: {guide.totalWeight || guide.weight || '0'} {guide.weightUnit || 'KGM'}
         </div>
+        {guide.transferDescription && (
+          <div className="address-text" style={{ marginTop: '2px' }}>
+            Obs: {guide.transferDescription}
+          </div>
+        )}
       </div>
+
+      {/* Documentos Relacionados (si existen) */}
+      {relatedDocs.length > 0 && (
+        <div className="ticket-section">
+          <div className="section-title">Doc. Relacionados</div>
+          {relatedDocs.map((doc, idx) => (
+            <div key={idx} className="info-row">
+              <span className="info-label">{doc.type}:</span>
+              <span>{doc.number}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Origen */}
       <div className="ticket-section">
@@ -409,18 +483,46 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         <div className="section-title">Transporte {transportData.type}</div>
         {guide.transportMode === '02' ? (
           <>
-            <div className="info-row">
-              <span className="info-label">Placa:</span>
-              <span>{transportData.vehicle}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Conductor:</span>
-              <span>{transportData.driver}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Licencia:</span>
-              <span>{transportData.license}</span>
-            </div>
+            {/* Vehículo */}
+            {transportData.vehicle !== '-' && (
+              <div className="info-row">
+                <span className="info-label">Placa:</span>
+                <span>{transportData.vehicle}</span>
+              </div>
+            )}
+            {transportData.vehicleAuth && (
+              <div className="info-row">
+                <span className="info-label">Autoriz:</span>
+                <span>{transportData.vehicleAuth}</span>
+              </div>
+            )}
+            {/* Conductor */}
+            {transportData.driverName !== '-' && (
+              <>
+                <div className="info-row">
+                  <span className="info-label">Conductor:</span>
+                  <span>{transportData.driverName}</span>
+                </div>
+                {transportData.driverDocNumber !== '-' && (
+                  <div className="info-row">
+                    <span className="info-label">{transportData.driverDocType || 'Doc'}:</span>
+                    <span>{transportData.driverDocNumber}</span>
+                  </div>
+                )}
+                {transportData.license !== '-' && (
+                  <div className="info-row">
+                    <span className="info-label">Licencia:</span>
+                    <span>{transportData.license}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {/* Indicador M1/L */}
+            {transportData.isM1L && (
+              <div className="address-text" style={{ textAlign: 'center', fontStyle: 'italic' }}>
+                (Vehículo categoría M1 o L)
+              </div>
+            )}
           </>
         ) : (
           <>
