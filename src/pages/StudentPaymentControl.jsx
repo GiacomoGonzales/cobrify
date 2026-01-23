@@ -249,19 +249,59 @@ export default function StudentPaymentControl() {
       ]
 
       filteredStudents.forEach(student => {
-        const paymentInfo = getPaymentInfo(student.id)
+        const studentPayments = payments[student.id]
 
-        data.push([
-          student.studentName || '',
-          student.name || '',
-          student.phone || '',
-          student.studentSchedule || '',
-          paymentInfo ? 'PAGADO' : 'PENDIENTE',
-          paymentInfo?.lastPaymentDate ? format(new Date(paymentInfo.lastPaymentDate), 'dd/MM/yyyy') : '',
-          paymentInfo?.totalPaid || '',
-          paymentInfo?.products || '',
-          paymentInfo?.invoiceNumber || ''
-        ])
+        if (!studentPayments || studentPayments.length === 0) {
+          // Alumno sin pagos - mostrar una fila como PENDIENTE
+          data.push([
+            student.studentName || '',
+            student.name || '',
+            student.phone || '',
+            student.studentSchedule || '',
+            'PENDIENTE',
+            '',
+            '',
+            '',
+            ''
+          ])
+        } else {
+          // Alumno con pagos - crear una fila por cada item de cada comprobante
+          studentPayments.forEach(invoice => {
+            const invoiceDate = invoice.createdAt?.toDate?.() || invoice.createdAt
+            const formattedDate = invoiceDate ? format(new Date(invoiceDate), 'dd/MM/yyyy') : ''
+
+            if (invoice.items && Array.isArray(invoice.items) && invoice.items.length > 0) {
+              // Una fila por cada item del comprobante
+              invoice.items.forEach(item => {
+                const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+                data.push([
+                  student.studentName || '',
+                  student.name || '',
+                  student.phone || '',
+                  student.studentSchedule || '',
+                  'PAGADO',
+                  formattedDate,
+                  itemTotal,
+                  `${item.quantity || 1}x ${item.name || item.description || 'Producto'}`,
+                  invoice.number || ''
+                ])
+              })
+            } else {
+              // Comprobante sin items detallados
+              data.push([
+                student.studentName || '',
+                student.name || '',
+                student.phone || '',
+                student.studentSchedule || '',
+                'PAGADO',
+                formattedDate,
+                invoice.total || '',
+                '',
+                invoice.number || ''
+              ])
+            }
+          })
+        }
       })
 
       const worksheet = XLSX.utils.aoa_to_sheet(data)
