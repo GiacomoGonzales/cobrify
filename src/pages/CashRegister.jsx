@@ -52,6 +52,8 @@ export default function CashRegister() {
     closingCard: 0,
     closingTransfer: 0,
   })
+  const [editingMovement, setEditingMovement] = useState(null) // Movimiento en edición
+  const [editMovementValues, setEditMovementValues] = useState({ description: '', amount: 0 })
 
   // Helper para convertir fechas (Firestore Timestamp o Date)
   const getDateFromTimestamp = (timestamp) => {
@@ -339,6 +341,56 @@ export default function CashRegister() {
       closingTransfer: selectedHistorySession.closingTransfer || 0,
     })
     setIsEditingHistory(true)
+  }
+
+  // TEMPORAL: Editar movimiento del historial
+  const handleEditHistoryMovement = (movement) => {
+    setEditingMovement(movement)
+    setEditMovementValues({
+      description: movement.description || '',
+      amount: movement.amount || 0,
+    })
+  }
+
+  // TEMPORAL: Guardar edición de movimiento
+  const handleSaveMovementEdit = async () => {
+    if (!editingMovement) return
+    try {
+      const result = await updateCashMovement(getBusinessId(), editingMovement.id, {
+        description: editMovementValues.description,
+        amount: parseFloat(editMovementValues.amount) || 0,
+      })
+      if (result.success) {
+        toast.success('Movimiento actualizado')
+        // Actualizar lista local
+        setHistoryMovements(prev => prev.map(m =>
+          m.id === editingMovement.id
+            ? { ...m, description: editMovementValues.description, amount: parseFloat(editMovementValues.amount) || 0 }
+            : m
+        ))
+        setEditingMovement(null)
+      } else {
+        toast.error('Error al actualizar')
+      }
+    } catch (error) {
+      toast.error('Error al guardar')
+    }
+  }
+
+  // TEMPORAL: Eliminar movimiento del historial
+  const handleDeleteHistoryMovement = async (movement) => {
+    if (!confirm('¿Eliminar este movimiento?')) return
+    try {
+      const result = await deleteCashMovement(getBusinessId(), movement.id)
+      if (result.success) {
+        toast.success('Movimiento eliminado')
+        setHistoryMovements(prev => prev.filter(m => m.id !== movement.id))
+      } else {
+        toast.error('Error al eliminar')
+      }
+    } catch (error) {
+      toast.error('Error al eliminar')
+    }
   }
 
   const handleViewHistoryDetail = async (session) => {
@@ -1607,20 +1659,75 @@ export default function CashRegister() {
             {historyMovements.length > 0 && (
               <div className="border-t border-gray-200 pt-4">
                 <h4 className="font-semibold text-gray-900 mb-3">Movimientos Adicionales</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {historyMovements.map((movement) => (
-                    <div key={movement.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div className="flex items-center gap-2">
-                        {movement.type === 'income' ? (
-                          <TrendingUp className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <TrendingDown className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-sm text-gray-700">{movement.description}</span>
-                      </div>
-                      <span className={`font-semibold ${movement.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                        {movement.type === 'income' ? '+' : '-'}{formatCurrency(movement.amount)}
-                      </span>
+                    <div key={movement.id} className="p-2 bg-gray-50 rounded">
+                      {editingMovement?.id === movement.id ? (
+                        /* TEMPORAL: Formulario de edición inline */
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editMovementValues.description}
+                            onChange={e => setEditMovementValues({ ...editMovementValues, description: e.target.value })}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                            placeholder="Descripción"
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editMovementValues.amount}
+                              onChange={e => setEditMovementValues({ ...editMovementValues, amount: e.target.value })}
+                              className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+                              placeholder="Monto"
+                            />
+                            <button
+                              onClick={handleSaveMovementEdit}
+                              className="px-3 py-1 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              onClick={() => setEditingMovement(null)}
+                              className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Vista normal con botones de editar/eliminar */
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {movement.type === 'income' ? (
+                              <TrendingUp className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <TrendingDown className="w-4 h-4 text-red-600" />
+                            )}
+                            <span className="text-sm text-gray-700">{movement.description}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-semibold ${movement.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                              {movement.type === 'income' ? '+' : '-'}{formatCurrency(movement.amount)}
+                            </span>
+                            {/* TEMPORAL: Botones editar/eliminar */}
+                            <button
+                              onClick={() => handleEditHistoryMovement(movement)}
+                              className="p-1 text-gray-400 hover:text-primary-600"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteHistoryMovement(movement)}
+                              className="p-1 text-gray-400 hover:text-red-600"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
