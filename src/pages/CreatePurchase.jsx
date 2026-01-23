@@ -528,9 +528,7 @@ export default function CreatePurchase() {
 
   const calculateAmounts = () => {
     const total = purchaseItems.reduce((sum, item) => {
-      // Redondear el subtotal de cada item al entero más cercano
-      const itemTotal = Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))
-      return sum + itemTotal
+      return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)
     }, 0)
 
     // Los costos ya incluyen IGV, calculamos el IGV del total
@@ -975,8 +973,8 @@ export default function CreatePurchase() {
           if (product.trackStock === false) return
 
           const newQuantity = grouped.totalQuantity
-          // Costo promedio ponderado de todas las líneas del mismo producto
-          const newCost = newQuantity > 0 ? grouped.totalCost / newQuantity : 0
+          // Costo promedio ponderado de todas las líneas del mismo producto (redondeado a 2 decimales)
+          const newCost = newQuantity > 0 ? Math.round((grouped.totalCost / newQuantity) * 100) / 100 : 0
 
           // En modo edición:
           // - Si NO cambió el almacén: el stock ya fue ajustado por diferencia arriba, no sumar de nuevo
@@ -1026,13 +1024,16 @@ export default function CreatePurchase() {
             averageCost = currentCost
           }
 
+          // Redondear costo promedio a 2 decimales antes de guardar
+          const roundedAverageCost = Math.round(averageCost * 100) / 100
+
           const updates = {
             // Solo actualizar stock si corresponde
             ...(shouldUpdateStock && {
               stock: updatedProduct.stock,
               warehouseStocks: updatedProduct.warehouseStocks,
             }),
-            cost: averageCost,
+            cost: roundedAverageCost,
             ...(selectedSupplier && {
               lastSupplier: {
                 id: selectedSupplier.id,
@@ -1129,8 +1130,8 @@ export default function CreatePurchase() {
         })
 
         const ingredientUpdates = Object.values(groupedIngredients).map(async grouped => {
-          // Costo unitario promedio ponderado
-          const avgUnitPrice = grouped.totalQuantity > 0 ? grouped.totalCost / grouped.totalQuantity : 0
+          // Costo unitario promedio ponderado (redondeado a 2 decimales)
+          const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 100) / 100 : 0
           return registerIngredientPurchase(businessId, {
             ingredientId: grouped.ingredientId,
             ingredientName: grouped.ingredientName,
@@ -1619,7 +1620,7 @@ export default function CreatePurchase() {
                     {/* Subtotal */}
                     <td className="px-4 py-2 text-right">
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)))}
+                        {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
                       </span>
                     </td>
                     {/* Eliminar */}
@@ -1803,7 +1804,7 @@ export default function CreatePurchase() {
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                   <span className="text-xs text-gray-500">Subtotal:</span>
                   <span className="font-bold text-gray-900">
-                    {formatCurrency(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0)))}
+                    {formatCurrency((parseFloat(item.quantity) || 0) * (parseFloat(item.cost) || 0))}
                   </span>
                 </div>
               </div>
