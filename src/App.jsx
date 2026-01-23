@@ -253,7 +253,6 @@ function App() {
               <Route path="prestamos" element={<Loans />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="reclamos" element={<ComplaintsList />} />
-              <Route path="certificados" element={<Certificates />} />
               <Route path="configuracion" element={<Settings />} />
             </Route>
 
