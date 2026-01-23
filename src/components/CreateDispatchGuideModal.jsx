@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store } from 'lucide-react'
+import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { consultarRUC } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -149,6 +150,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   // Datos de transporte público
   const [carrierRuc, setCarrierRuc] = useState('')
   const [carrierName, setCarrierName] = useState('')
+  const [isSearchingCarrier, setIsSearchingCarrier] = useState(false)
 
   // Items (productos)
   const [items, setItems] = useState([])
@@ -454,6 +456,30 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     setItems(items.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ))
+  }
+
+  // Buscar datos del transportista por RUC
+  const handleSearchCarrierRuc = async () => {
+    if (!carrierRuc || carrierRuc.length !== 11) {
+      toast.error('Ingrese un RUC válido de 11 dígitos')
+      return
+    }
+
+    setIsSearchingCarrier(true)
+    try {
+      const result = await consultarRUC(carrierRuc)
+      if (result.success) {
+        setCarrierName(result.data.razonSocial || '')
+        toast.success('Datos del transportista encontrados')
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC')
+      }
+    } catch (error) {
+      console.error('Error al buscar RUC:', error)
+      toast.error('Error al consultar el RUC')
+    } finally {
+      setIsSearchingCarrier(false)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -1116,14 +1142,34 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="RUC del Transportista"
-                  placeholder="20123456789"
-                  required
-                  value={carrierRuc}
-                  onChange={(e) => setCarrierRuc(e.target.value)}
-                  maxLength={11}
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    RUC del Transportista <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="20123456789"
+                      value={carrierRuc}
+                      onChange={(e) => setCarrierRuc(e.target.value.replace(/\D/g, ''))}
+                      maxLength={11}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSearchCarrierRuc}
+                      disabled={isSearchingCarrier || carrierRuc.length !== 11}
+                      className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[44px]"
+                      title="Buscar datos del RUC"
+                    >
+                      {isSearchingCarrier ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Search className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
                 <Input
                   label="Razón Social del Transportista"
