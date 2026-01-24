@@ -1298,6 +1298,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const totalsRowHeight = 15
   const totalsStartY = footerY
 
+  // Calcular filas de totales (usado para posicionar elementos después)
+  // Si oculta IGV: solo 1 fila (total), sino: 3 base + extras
+  const totalsSectionRows = shouldHideRucIgv
+    ? 1
+    : (3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
+
   // Si es nota de venta con ocultar IGV, solo mostrar TOTAL
   if (shouldHideRucIgv) {
     // Solo mostrar el TOTAL sin desglose
@@ -1316,9 +1322,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY += totalRowHeight
   } else {
     // Mostrar desglose completo: gravada, descuento, IGV, recargo, total, detracción
-    // 3 filas base (gravada, igv, total) + 1 si descuento + 1 si recargo consumo + 2 si detracción
-    const totalsSectionRows = 3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0)
-
     // Borde exterior de totales
     doc.setDrawColor(...BLACK)
     doc.setLineWidth(0.5)
