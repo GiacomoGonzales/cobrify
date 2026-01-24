@@ -4298,9 +4298,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   cart.map(item => {
                     const itemId = item.cartId || item.id
                     return (
-                      <div key={itemId} className="p-4 bg-gray-50 rounded-xl">
+                      <div key={itemId} className="p-4 bg-gray-50 rounded-xl space-y-3">
+                        {/* Fila 1: Imagen + Nombre + Eliminar */}
                         <div className="flex gap-3">
-                          {/* Product thumbnail - Left side */}
+                          {/* Product thumbnail */}
                           {item.imageUrl && (
                             <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200">
                               <img
@@ -4310,63 +4311,62 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               />
                             </div>
                           )}
-                          {/* Content - Right side */}
-                          <div className="flex-1 min-w-0">
-                            {/* Header: Nombre + Eliminar */}
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1 pr-2">
-                                <p className="font-semibold text-base text-gray-900 line-clamp-2">
-                                  {item.name}
+                          {/* Nombre + Eliminar */}
+                          <div className="flex-1 min-w-0 flex items-start justify-between">
+                            <div className="flex-1 pr-2">
+                              <p className="font-semibold text-base text-gray-900 line-clamp-2">
+                                {item.name}
+                              </p>
+                              {item.isVariant && item.variantAttributes && (
+                                <p className="text-sm text-gray-600 mt-0.5">
+                                  {Object.entries(item.variantAttributes).map(([key, value]) => (
+                                    <span key={key} className="mr-2">
+                                      {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
+                                    </span>
+                                  ))}
                                 </p>
-                                {item.isVariant && item.variantAttributes && (
-                                  <p className="text-sm text-gray-600 mt-0.5">
-                                    {Object.entries(item.variantAttributes).map(([key, value]) => (
-                                      <span key={key} className="mr-2">
-                                        {key.charAt(0).toUpperCase() + key.slice(1)}: {value}
-                                      </span>
-                                    ))}
-                                  </p>
-                                )}
-                                {item.presentationName && (
-                                  <p className="text-sm text-green-600 mt-0.5 font-medium">
-                                    {item.presentationName} (×{item.presentationFactor})
-                                  </p>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => removeFromCart(itemId)}
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-1.5 transition-colors flex-shrink-0"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </button>
+                              )}
+                              {item.presentationName && (
+                                <p className="text-sm text-green-600 mt-0.5 font-medium">
+                                  {item.presentationName} (×{item.presentationFactor})
+                                </p>
+                              )}
                             </div>
+                            <button
+                              onClick={() => removeFromCart(itemId)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg p-1.5 transition-colors flex-shrink-0"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
 
-                            {/* Fila: Observaciones + Descuento (lado a lado) */}
-                            <div className="flex gap-2 mb-3">
-                              <input
-                                type="text"
-                                placeholder="Obs: IMEI, placa..."
-                                value={item.observations || ''}
-                                onChange={(e) => updateItemObservations(itemId, e.target.value)}
-                                className="flex-1 text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                              />
-                              <div className="flex items-center gap-1 w-28">
-                                <Tag className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                                <input
-                                  type="number"
-                                  placeholder="Dcto"
-                                  value={item.itemDiscount || ''}
-                                  onChange={(e) => updateItemDiscount(itemId, e.target.value)}
-                                  min="0"
-                                  max={item.price * item.quantity}
-                                  step="0.01"
-                                  className="w-full text-sm px-2 py-1.5 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                />
-                              </div>
-                            </div>
+                        {/* Fila 2: Observaciones + Descuento (ancho completo) */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Obs: IMEI, placa..."
+                            value={item.observations || ''}
+                            onChange={(e) => updateItemObservations(itemId, e.target.value)}
+                            className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <div className="flex items-center gap-1">
+                            <Tag className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                            <input
+                              type="number"
+                              placeholder="Dcto"
+                              value={item.itemDiscount || ''}
+                              onChange={(e) => updateItemDiscount(itemId, e.target.value)}
+                              min="0"
+                              max={item.price * item.quantity}
+                              step="0.01"
+                              className="w-20 text-sm px-2 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                          </div>
+                        </div>
 
-                            {/* Fila: Cantidad + Precio */}
-                            <div className="flex items-center justify-between">
+                        {/* Fila 3: Cantidad + Precio (ancho completo) */}
+                        <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-2">
                                 {item.allowDecimalQuantity ? (
                                   /* Input editable para productos por peso */
@@ -4477,8 +4477,6 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                     )}
                                   </div>
                                 )}
-                              </div>
-                            </div>
                           </div>
                         </div>
                       </div>
