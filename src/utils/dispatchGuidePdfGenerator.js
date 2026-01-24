@@ -780,7 +780,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
     // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
     const isLastItem = index === items.length - 1
-    const reserveSpace = isLastItem ? FOOTER_HEIGHT + 150 : 0 // 150pt para transporte/observaciones
+    const reserveSpace = isLastItem ? 150 : 0 // Solo transporte/observaciones, FOOTER_HEIGHT ya se maneja en checkPageBreak
 
     if (checkPageBreak(rowHeight + 20 + reserveSpace, isLastItem)) {
       // Nueva página - redibujar encabezado de tabla

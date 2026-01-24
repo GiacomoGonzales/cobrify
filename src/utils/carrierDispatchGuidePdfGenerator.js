@@ -885,7 +885,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
 
     // Verificar si necesitamos nueva página (reservar espacio para el resto del contenido en la última)
     const isLastItem = index === items.length - 1
-    const reserveSpace = isLastItem ? FOOTER_HEIGHT + 200 : 0 // 200pt para vehículos/conductores/observaciones
+    const reserveSpace = isLastItem ? 200 : 0 // Solo vehículos/conductores/observaciones, FOOTER_HEIGHT ya se maneja en checkPageBreak
 
     if (checkPageBreak(rowHeight + 20 + reserveSpace, isLastItem)) {
       // Nueva página - redibujar encabezado de tabla
