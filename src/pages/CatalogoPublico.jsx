@@ -36,30 +36,149 @@ function ProductSkeleton() {
   )
 }
 
-// Modal de producto
+// Modal de producto con soporte para modificadores
 function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true }) {
   const [quantity, setQuantity] = useState(1)
+  const [selectedModifiers, setSelectedModifiers] = useState({})
+  const [modifierErrors, setModifierErrors] = useState({})
 
+  // Inicializar modificadores cuando se abre el modal
   useEffect(() => {
     if (isOpen) {
       setQuantity(1)
       document.body.style.overflow = 'hidden'
+      // Inicializar estado de modificadores
+      if (product?.modifiers?.length > 0) {
+        const initial = {}
+        product.modifiers.forEach(mod => {
+          initial[mod.id] = []
+        })
+        setSelectedModifiers(initial)
+      } else {
+        setSelectedModifiers({})
+      }
+      setModifierErrors({})
     } else {
       document.body.style.overflow = 'unset'
     }
     return () => {
       document.body.style.overflow = 'unset'
     }
-  }, [isOpen])
+  }, [isOpen, product])
 
   if (!isOpen || !product) return null
+
+  const hasModifiers = product.modifiers?.length > 0
+
+  // Manejar selección de opción de modificador
+  const handleOptionToggle = (modifierId, optionId) => {
+    const modifier = product.modifiers.find(m => m.id === modifierId)
+    if (!modifier) return
+
+    setSelectedModifiers(prev => {
+      const current = prev[modifierId] || []
+      const isSelected = current.includes(optionId)
+
+      let updated
+      if (isSelected) {
+        updated = current.filter(id => id !== optionId)
+      } else {
+        if (modifier.maxSelection === 1) {
+          updated = [optionId]
+        } else if (current.length < (modifier.maxSelection || 99)) {
+          updated = [...current, optionId]
+        } else {
+          return prev
+        }
+      }
+
+      return { ...prev, [modifierId]: updated }
+    })
+
+    // Limpiar error
+    if (modifierErrors[modifierId]) {
+      setModifierErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors[modifierId]
+        return newErrors
+      })
+    }
+  }
+
+  // Calcular precio total con modificadores
+  const calculateTotalPrice = () => {
+    let total = product.price || 0
+    if (hasModifiers) {
+      Object.keys(selectedModifiers).forEach(modifierId => {
+        const modifier = product.modifiers.find(m => m.id === modifierId)
+        if (modifier) {
+          selectedModifiers[modifierId].forEach(optionId => {
+            const option = modifier.options?.find(o => o.id === optionId)
+            if (option?.priceAdjustment) {
+              total += option.priceAdjustment
+            }
+          })
+        }
+      })
+    }
+    return total
+  }
+
+  // Validar y agregar al carrito
+  const handleAddToCart = () => {
+    // Validar modificadores obligatorios
+    if (hasModifiers) {
+      const errors = {}
+      product.modifiers.forEach(mod => {
+        if (mod.required) {
+          const selected = selectedModifiers[mod.id] || []
+          if (selected.length === 0) {
+            errors[mod.id] = `Selecciona una opción`
+          }
+        }
+      })
+      if (Object.keys(errors).length > 0) {
+        setModifierErrors(errors)
+        return
+      }
+    }
+
+    // Preparar datos de modificadores para el carrito
+    let modifiersData = []
+    if (hasModifiers) {
+      modifiersData = product.modifiers
+        .map(mod => {
+          const selectedOptions = selectedModifiers[mod.id] || []
+          if (selectedOptions.length === 0) return null
+          return {
+            modifierId: mod.id,
+            modifierName: mod.name,
+            options: selectedOptions.map(optId => {
+              const opt = mod.options?.find(o => o.id === optId)
+              return {
+                optionId: optId,
+                optionName: opt?.name || '',
+                priceAdjustment: opt?.priceAdjustment || 0
+              }
+            })
+          }
+        })
+        .filter(Boolean)
+    }
+
+    const totalPrice = calculateTotalPrice()
+    onAddToCart(product, quantity, modifiersData, totalPrice)
+    onClose()
+  }
+
+  const unitPrice = calculateTotalPrice()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl">
+      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
         {/* Imagen */}
-        <div className="relative aspect-square bg-gray-100">
+        <div className="relative aspect-[4/3] bg-gray-100 flex-shrink-0">
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
@@ -84,8 +203,8 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           )}
         </div>
 
-        {/* Contenido */}
-        <div className="p-6">
+        {/* Contenido con scroll */}
+        <div className="p-6 overflow-y-auto flex-1">
           <div className="mb-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h2>
             {product.description && (
@@ -96,7 +215,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           <div className="flex items-center justify-between mb-6">
             {showPrices ? (
               <div className="text-3xl font-bold text-gray-900">
-                S/ {product.price?.toFixed(2)}
+                S/ {unitPrice.toFixed(2)}
               </div>
             ) : (
               <div className="text-lg text-gray-500">Consultar precio</div>
@@ -107,6 +226,64 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
               </span>
             )}
           </div>
+
+          {/* Modificadores */}
+          {hasModifiers && (
+            <div className="mb-6 space-y-4">
+              {product.modifiers.map(modifier => (
+                <div key={modifier.id} className="border rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{modifier.name}</h3>
+                      <p className="text-sm text-gray-500">
+                        {modifier.required ? 'Obligatorio' : 'Opcional'}
+                        {modifier.maxSelection > 1 && ` - Máx. ${modifier.maxSelection}`}
+                      </p>
+                    </div>
+                    {modifierErrors[modifier.id] && (
+                      <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">
+                        {modifierErrors[modifier.id]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {modifier.options?.map(option => {
+                      const isSelected = selectedModifiers[modifier.id]?.includes(option.id)
+                      return (
+                        <button
+                          key={option.id}
+                          onClick={() => handleOptionToggle(modifier.id, option.id)}
+                          className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
+                            isSelected
+                              ? 'border-emerald-500 bg-emerald-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className={isSelected ? 'text-emerald-700 font-medium' : 'text-gray-700'}>
+                            {option.name}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {showPrices && option.priceAdjustment > 0 && (
+                              <span className="text-sm text-gray-500">+S/ {option.priceAdjustment.toFixed(2)}</span>
+                            )}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                              isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Selector de cantidad */}
           <div className="flex items-center gap-4 mb-6">
@@ -130,14 +307,11 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
           {/* Botón agregar */}
           <button
-            onClick={() => {
-              onAddToCart(product, quantity)
-              onClose()
-            }}
+            onClick={handleAddToCart}
             className="w-full py-4 bg-gray-900 text-white rounded-2xl font-semibold text-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
           >
             <ShoppingBag className="w-5 h-5" />
-            {showPrices ? `Agregar al carrito - S/ ${(product.price * quantity).toFixed(2)}` : 'Agregar al carrito'}
+            {showPrices ? `Agregar al carrito - S/ ${(unitPrice * quantity).toFixed(2)}` : 'Agregar al carrito'}
           </button>
         </div>
       </div>
@@ -147,7 +321,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
 // Carrito lateral
 function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, business, onCheckout, showPrices = true }) {
-  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
   useEffect(() => {
     if (isOpen) {
@@ -203,7 +377,7 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
             ) : (
               <div className="space-y-4">
                 {cart.map((item) => (
-                  <div key={item.id} className="flex gap-4 bg-gray-50 rounded-2xl p-4">
+                  <div key={item.cartItemId || item.id} className="flex gap-4 bg-gray-50 rounded-2xl p-4">
                     {item.imageUrl ? (
                       <img
                         src={item.imageUrl}
@@ -217,23 +391,33 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
                     )}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-900 truncate">{item.name}</h3>
-                      {showPrices && <p className="text-gray-600">S/ {item.price?.toFixed(2)}</p>}
+                      {/* Mostrar modificadores seleccionados */}
+                      {item.selectedModifiers?.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {item.selectedModifiers.map((mod, idx) => (
+                            <p key={idx} className="text-xs text-gray-500">
+                              {mod.modifierName}: {mod.options.map(o => o.optionName).join(', ')}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {showPrices && <p className="text-gray-600 mt-1">S/ {(item.unitPrice || item.price)?.toFixed(2)}</p>}
                       <div className="flex items-center gap-2 mt-2">
                         <button
-                          onClick={() => onUpdateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                          onClick={() => onUpdateQuantity(item.cartItemId || item.id, Math.max(0, item.quantity - 1))}
                           className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
                         <span className="w-8 text-center font-medium">{item.quantity}</span>
                         <button
-                          onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => onUpdateQuantity(item.cartItemId || item.id, item.quantity + 1)}
                           className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
                         <button
-                          onClick={() => onRemove(item.id)}
+                          onClick={() => onRemove(item.cartItemId || item.id)}
                           className="ml-auto w-8 h-8 rounded-full text-red-500 hover:bg-red-50 flex items-center justify-center"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -395,6 +579,26 @@ export default function CatalogoPublico({ isDemo = false }) {
     }
   }, [slug, isDemo])
 
+  // Obtener categorías raíz (sin parentId) para mostrar en el catálogo
+  const rootCategories = useMemo(() => {
+    return categories.filter(cat => !cat.parentId)
+  }, [categories])
+
+  // Función para obtener todos los IDs de subcategorías de una categoría
+  const getAllDescendantCategoryIds = (parentId) => {
+    const descendants = []
+    const findChildren = (id) => {
+      categories.forEach(cat => {
+        if (cat.parentId === id) {
+          descendants.push(cat.id)
+          findChildren(cat.id) // Recursivo para subcategorías anidadas
+        }
+      })
+    }
+    findChildren(parentId)
+    return descendants
+  }
+
   // Filtrar productos
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -402,47 +606,65 @@ export default function CatalogoPublico({ isDemo = false }) {
         product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.description?.toLowerCase().includes(searchQuery.toLowerCase())
 
-      const matchesCategory = !selectedCategory || product.category === selectedCategory
+      // Incluir productos de la categoría seleccionada Y sus subcategorías
+      let matchesCategory = !selectedCategory
+      if (selectedCategory) {
+        const descendantIds = getAllDescendantCategoryIds(selectedCategory)
+        const allCategoryIds = [selectedCategory, ...descendantIds]
+        matchesCategory = allCategoryIds.includes(product.category)
+      }
 
       return matchesSearch && matchesCategory
     })
-  }, [products, searchQuery, selectedCategory])
+  }, [products, searchQuery, selectedCategory, categories])
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
 
   // Funciones del carrito
-  const addToCart = (product, quantity = 1) => {
+  const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null) => {
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id)
+      // Generar un ID único para el item del carrito basado en producto + modificadores
+      const modifiersKey = selectedModifiers.length > 0
+        ? JSON.stringify(selectedModifiers.map(m => ({ id: m.modifierId, opts: m.options.map(o => o.optionId).sort() })))
+        : ''
+      const cartItemId = `${product.id}-${modifiersKey}`
+
+      const existing = prev.find(item => item.cartItemId === cartItemId)
       if (existing) {
         return prev.map(item =>
-          item.id === product.id
+          item.cartItemId === cartItemId
             ? { ...item, quantity: item.quantity + quantity }
             : item
         )
       }
-      return [...prev, { ...product, quantity }]
+      return [...prev, {
+        ...product,
+        cartItemId,
+        quantity,
+        selectedModifiers,
+        unitPrice: unitPrice || product.price
+      }]
     })
   }
 
-  const updateCartQuantity = (productId, quantity) => {
+  const updateCartQuantity = (cartItemId, quantity) => {
     if (quantity <= 0) {
-      setCart(prev => prev.filter(item => item.id !== productId))
+      setCart(prev => prev.filter(item => (item.cartItemId || item.id) !== cartItemId))
     } else {
       setCart(prev => prev.map(item =>
-        item.id === productId ? { ...item, quantity } : item
+        (item.cartItemId || item.id) === cartItemId ? { ...item, quantity } : item
       ))
     }
   }
 
-  const removeFromCart = (productId) => {
-    setCart(prev => prev.filter(item => item.id !== productId))
+  const removeFromCart = (cartItemId) => {
+    setCart(prev => prev.filter(item => (item.cartItemId || item.id) !== cartItemId))
   }
 
   const getCartQuantity = (productId) => {
-    const item = cart.find(i => i.id === productId)
-    return item?.quantity || 0
+    // Sumar cantidad de todos los items de este producto (con diferentes modificadores)
+    return cart.filter(i => i.id === productId).reduce((sum, item) => sum + item.quantity, 0)
   }
 
   // Checkout por WhatsApp
@@ -453,10 +675,20 @@ export default function CatalogoPublico({ isDemo = false }) {
     }
 
     const phone = (business.whatsapp || business.phone).replace(/\D/g, '')
-    const items = cart.map(item =>
-      `• ${item.quantity}x ${item.name} - S/ ${(item.price * item.quantity).toFixed(2)}`
-    ).join('\n')
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    const items = cart.map(item => {
+      const price = item.unitPrice || item.price
+      let itemText = `• ${item.quantity}x ${item.name}`
+      // Agregar modificadores si existen
+      if (item.selectedModifiers?.length > 0) {
+        const modsText = item.selectedModifiers
+          .map(mod => `  - ${mod.modifierName}: ${mod.options.map(o => o.optionName).join(', ')}`)
+          .join('\n')
+        itemText += `\n${modsText}`
+      }
+      itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
+      return itemText
+    }).join('\n')
+    const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
     const message = encodeURIComponent(
       `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
@@ -583,8 +815,8 @@ export default function CatalogoPublico({ isDemo = false }) {
         </div>
       </div>
 
-      {/* Categorías */}
-      {categories.length > 0 && (
+      {/* Categorías - Solo mostrar categorías raíz */}
+      {rootCategories.length > 0 && (
         <div className="bg-white border-b sticky top-16 md:top-20 z-30">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center gap-2 py-4 overflow-x-auto scrollbar-hide">
@@ -598,7 +830,7 @@ export default function CatalogoPublico({ isDemo = false }) {
               >
                 Todos
               </button>
-              {categories.map(category => (
+              {rootCategories.map(category => (
                 <button
                   key={category.id}
                   onClick={() => setSelectedCategory(category.id)}
@@ -622,8 +854,8 @@ export default function CatalogoPublico({ isDemo = false }) {
         <div className="flex items-center justify-between mb-6">
           <p className="text-gray-600">
             {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
-            {selectedCategory && categories.find(c => c.id === selectedCategory) && (
-              <span> en <strong>{categories.find(c => c.id === selectedCategory).name}</strong></span>
+            {selectedCategory && rootCategories.find(c => c.id === selectedCategory) && (
+              <span> en <strong>{rootCategories.find(c => c.id === selectedCategory).name}</strong></span>
             )}
           </p>
           <div className="flex items-center gap-2">
@@ -693,7 +925,12 @@ export default function CatalogoPublico({ isDemo = false }) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          addToCart(product)
+                          // Si tiene modificadores, abrir modal; si no, agregar directo
+                          if (product.modifiers?.length > 0) {
+                            setSelectedProduct(product)
+                          } else {
+                            addToCart(product)
+                          }
                         }}
                         className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
                       >
@@ -752,7 +989,12 @@ export default function CatalogoPublico({ isDemo = false }) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          addToCart(product)
+                          // Si tiene modificadores, abrir modal; si no, agregar directo
+                          if (product.modifiers?.length > 0) {
+                            setSelectedProduct(product)
+                          } else {
+                            addToCart(product)
+                          }
                         }}
                         className="px-4 py-2 rounded-full bg-gray-900 text-white flex items-center gap-2 hover:bg-gray-800 transition-colors"
                       >
@@ -841,7 +1083,7 @@ export default function CatalogoPublico({ isDemo = false }) {
             Ver carrito ({cartItemsCount})
             {showPrices && (
               <span className="bg-white/20 px-3 py-1 rounded-full">
-                S/ {cart.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                S/ {cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0).toFixed(2)}
               </span>
             )}
           </button>
