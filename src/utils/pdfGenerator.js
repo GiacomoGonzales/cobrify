@@ -719,11 +719,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setLineWidth(0.5)
   doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
 
-  // RUC (texto blanco sobre fondo de color)
+  // Detectar si debe ocultar RUC e IGV en notas de venta
+  const isNotaVenta = invoice.documentType === 'nota_venta'
+  const hideRucIgvInNotaVenta = companySettings?.hideRucIgvInNotaVenta === true
+  const shouldHideRucIgv = isNotaVenta && hideRucIgvInNotaVenta
+
+  // RUC (texto blanco sobre fondo de color) - Ocultar en notas de venta si está configurado
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(255, 255, 255)
-  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+  if (!shouldHideRucIgv) {
+    doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+  }
   doc.setTextColor(...BLACK) // Restaurar color negro para el resto
 
   // Tipo de documento
@@ -732,7 +739,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   if (invoice.documentType === 'factura') {
     documentLine1 = 'FACTURA'
     documentLine2 = 'ELECTRÓNICA'
-  } else if (invoice.documentType === 'nota_venta') {
+  } else if (isNotaVenta) {
     documentLine1 = 'NOTA DE VENTA'
     documentLine2 = ''
   } else if (invoice.documentType === 'nota_credito') {
@@ -1290,76 +1297,96 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // --- TOTALES (derecha) con borde ---
   const totalsRowHeight = 15
   const totalsStartY = footerY
-  // 3 filas base (gravada, igv, total) + 1 si descuento + 1 si recargo consumo + 2 si detracción
-  const totalsSectionRows = 3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0)
 
-  // Borde exterior de totales
-  doc.setDrawColor(...BLACK)
-  doc.setLineWidth(0.5)
-  doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalsSectionRows + 6)
-
-  // Fila 1: OP. GRAVADA
-  doc.setFillColor(250, 250, 250)
-  doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-  doc.setDrawColor(200, 200, 200)
-  doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.setTextColor(...BLACK)
-  doc.text(labelGravada, totalsX + 5, footerY + 10)
-  doc.text('S/ ' + (invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-  footerY += totalsRowHeight
-
-  // Fila 2: DESCUENTO (solo si hay descuento)
-  if (HAS_DISCOUNT) {
-    doc.setFillColor(255, 245, 245)
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-    doc.setDrawColor(200, 200, 200)
-    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setTextColor(180, 0, 0)
-    doc.text('DESCUENTO', totalsX + 5, footerY + 10)
-    doc.text('- S/ ' + (invoice.discount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-    doc.setTextColor(...BLACK)
-    footerY += totalsRowHeight
-  }
-
-  // Fila: IGV
-  doc.setFillColor(255, 255, 255)
-  doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-  doc.setDrawColor(200, 200, 200)
-  doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-  doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
-  doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-  footerY += totalsRowHeight
-
-  // Fila: RECARGO AL CONSUMO (solo si aplica)
-  if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
-    doc.setFillColor(255, 255, 255) // Blanco como las otras filas
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-    doc.setDrawColor(200, 200, 200)
-    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.setTextColor(...BLACK)
-    doc.setFont('helvetica', 'normal')
+  // Si es nota de venta con ocultar IGV, solo mostrar TOTAL
+  if (shouldHideRucIgv) {
+    // Solo mostrar el TOTAL sin desglose
+    const totalRowHeight = totalsRowHeight + 6
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalRowHeight)
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(totalsX, footerY, totalsWidth, totalRowHeight, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
-    doc.text(`REC. CONSUMO (${invoice.recargoConsumoRate || 10}%)`, totalsX + 5, footerY + 10)
-    doc.text('S/ ' + (invoice.recargoConsumo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    doc.text('TOTAL', totalsX + 5, footerY + 14)
+    doc.setFontSize(11)
+    doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 14, { align: 'right' })
+    footerY += totalRowHeight
+  } else {
+    // Mostrar desglose completo: gravada, descuento, IGV, recargo, total, detracción
+    // 3 filas base (gravada, igv, total) + 1 si descuento + 1 si recargo consumo + 2 si detracción
+    const totalsSectionRows = 3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0)
+
+    // Borde exterior de totales
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight * totalsSectionRows + 6)
+
+    // Fila 1: OP. GRAVADA
+    doc.setFillColor(250, 250, 250)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...BLACK)
+    doc.text(labelGravada, totalsX + 5, footerY + 10)
+    doc.text('S/ ' + (invoice.subtotal || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
     footerY += totalsRowHeight
+
+    // Fila 2: DESCUENTO (solo si hay descuento)
+    if (HAS_DISCOUNT) {
+      doc.setFillColor(255, 245, 245)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setTextColor(180, 0, 0)
+      doc.text('DESCUENTO', totalsX + 5, footerY + 10)
+      doc.text('- S/ ' + (invoice.discount || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      doc.setTextColor(...BLACK)
+      footerY += totalsRowHeight
+    }
+
+    // Fila: IGV
+    doc.setFillColor(255, 255, 255)
+    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+    doc.setDrawColor(200, 200, 200)
+    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+    doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
+    doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+    footerY += totalsRowHeight
+
+    // Fila: RECARGO AL CONSUMO (solo si aplica)
+    if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {
+      doc.setFillColor(255, 255, 255) // Blanco como las otras filas
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setTextColor(...BLACK)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.text(`REC. CONSUMO (${invoice.recargoConsumoRate || 10}%)`, totalsX + 5, footerY + 10)
+      doc.text('S/ ' + (invoice.recargoConsumo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    }
+
+    // Fila: TOTAL (fondo oscuro) - Si hay detracción, no es la última fila
+    const totalRowHeight = HAS_DETRACTION ? totalsRowHeight : totalsRowHeight + 6
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(totalsX, footerY, totalsWidth, totalRowHeight, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('TOTAL', totalsX + 5, footerY + (HAS_DETRACTION ? 10 : 14))
+    doc.setFontSize(11)
+    doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + (HAS_DETRACTION ? 10 : 14), { align: 'right' })
+    footerY += totalRowHeight
   }
 
-  // Fila: TOTAL (fondo oscuro) - Si hay detracción, no es la última fila
-  const totalRowHeight = HAS_DETRACTION ? totalsRowHeight : totalsRowHeight + 6
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(totalsX, footerY, totalsWidth, totalRowHeight, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.text('TOTAL', totalsX + 5, footerY + (HAS_DETRACTION ? 10 : 14))
-  doc.setFontSize(11)
-  doc.text('S/ ' + (invoice.total || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + (HAS_DETRACTION ? 10 : 14), { align: 'right' })
-  footerY += totalRowHeight
-
-  // Filas de DETRACCIÓN (si aplica)
-  if (HAS_DETRACTION) {
+  // Filas de DETRACCIÓN (si aplica) - Solo si no se oculta el IGV
+  if (HAS_DETRACTION && !shouldHideRucIgv) {
     // Fila: DETRACCIÓN (estilo neutro como las otras filas)
     doc.setFillColor(250, 250, 250) // Gris claro neutro
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
