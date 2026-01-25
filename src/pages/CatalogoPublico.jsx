@@ -694,7 +694,17 @@ export default function CatalogoPublico({ isDemo = false }) {
       `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
     )
 
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
+    const whatsappUrl = `https://wa.me/${phone}?text=${message}`
+
+    // En móvil usar location.href para mejor compatibilidad
+    // window.open con _blank es bloqueado como popup en muchos navegadores móviles
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
+    if (isMobile) {
+      window.location.href = whatsappUrl
+    } else {
+      window.open(whatsappUrl, '_blank')
+    }
   }
 
   // Total items en carrito
