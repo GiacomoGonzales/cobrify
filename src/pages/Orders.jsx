@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck, Search } from 'lucide-react'
+import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -26,7 +26,6 @@ export default function Orders() {
   const [orders, setOrders] = useState([])
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
   const [updatingOrderId, setUpdatingOrderId] = useState(null)
   const [itemStatusTracking, setItemStatusTracking] = useState(false) // Config para modo de seguimiento
   const [requirePaymentBeforeKitchen, setRequirePaymentBeforeKitchen] = useState(false) // Config para pago obligatorio
@@ -669,51 +668,22 @@ export default function Orders() {
         </Card>
       </div>
 
-      {/* Buscador */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Buscar por mesa, cliente, número de orden..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-        />
-      </div>
-
       {/* Lista de Órdenes */}
-      {(() => {
-        const filteredOrders = orders.filter(order => {
-          if (!searchTerm.trim()) return true
-          const search = searchTerm.toLowerCase()
-          return (
-            order.tableNumber?.toLowerCase().includes(search) ||
-            order.tableName?.toLowerCase().includes(search) ||
-            order.customerName?.toLowerCase().includes(search) ||
-            order.orderNumber?.toString().includes(search) ||
-            order.id?.toLowerCase().includes(search) ||
-            order.type?.toLowerCase().includes(search)
-          )
-        })
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredOrders.length === 0 ? (
-              <div className="col-span-full">
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <ListOrdered className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {searchTerm ? 'No se encontraron órdenes' : 'No hay órdenes activas'}
-                    </h3>
-                    <p className="text-gray-600">
-                      {searchTerm ? 'Intenta con otro término de búsqueda' : 'Las órdenes aparecerán aquí cuando se ocupen las mesas'}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            ) : (
-              filteredOrders.map((order) => {
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        {orders.length === 0 ? (
+          <div className="col-span-full">
+            <Card>
+              <CardContent className="py-12 text-center">
+                <ListOrdered className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay órdenes activas</h3>
+                <p className="text-gray-600">
+                  Las órdenes aparecerán aquí cuando se ocupen las mesas
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          orders.map((order) => {
             const statusConfig = getStatusConfig(order.status)
             const StatusIcon = statusConfig.icon
             const elapsed = calculateElapsedTime(order.createdAt)
@@ -1024,11 +994,9 @@ export default function Orders() {
                 </CardContent>
               </Card>
             )
-              })
-            )}
-          </div>
-        )
-      })()}
+          })
+        )}
+      </div>
 
       {/* Modal para crear nueva orden */}
       <CreateOrderModal
