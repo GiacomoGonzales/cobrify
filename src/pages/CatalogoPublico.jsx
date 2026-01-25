@@ -696,15 +696,12 @@ export default function CatalogoPublico({ isDemo = false }) {
 
     const whatsappUrl = `https://wa.me/${phone}?text=${message}`
 
-    // En móvil usar location.href para mejor compatibilidad
-    // window.open con _blank es bloqueado como popup en muchos navegadores móviles
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-
-    if (isMobile) {
-      window.location.href = whatsappUrl
-    } else {
-      window.open(whatsappUrl, '_blank')
-    }
+    // Usar un enlace <a> igual que el botón flotante de WhatsApp
+    const link = document.createElement('a')
+    link.href = whatsappUrl
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    link.click()
   }
 
   // Total items en carrito
