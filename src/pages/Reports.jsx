@@ -28,7 +28,7 @@ import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { getInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases } from '@/services/firestoreService'
+import { getInvoices, getCustomersWithStats, getProducts, getProductCategories, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
 import {
@@ -136,6 +136,8 @@ export default function Reports() {
   const [recipes, setRecipes] = useState([])
   const [expenses, setExpenses] = useState([])
   const [purchases, setPurchases] = useState([])
+  const [financialMovements, setFinancialMovements] = useState([])
+  const [cashMovements, setCashMovements] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('month') // week, month, quarter, year, all, custom
   const [selectedReport, setSelectedReport] = useState('overview') // overview, sales, products, customers, expenses
@@ -230,6 +232,24 @@ export default function Reports() {
       } catch (error) {
         console.error('Error al cargar compras:', error)
         setPurchases([])
+      }
+
+      // Cargar movimientos financieros y de caja para otros ingresos/egresos
+      try {
+        const [financialResult, cashResult] = await Promise.all([
+          getFinancialMovements(getBusinessId()),
+          getAllCashMovements(getBusinessId())
+        ])
+        if (financialResult.success) {
+          setFinancialMovements(financialResult.data || [])
+        }
+        if (cashResult.success) {
+          setCashMovements(cashResult.data || [])
+        }
+      } catch (error) {
+        console.error('Error al cargar movimientos:', error)
+        setFinancialMovements([])
+        setCashMovements([])
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -1242,6 +1262,106 @@ export default function Reports() {
     return Object.values(combinedData)
   }, [salesByPeriod, expensesByPeriod])
 
+  // Filtrar movimientos financieros y de caja por fecha
+  const filteredOtherMovements = useMemo(() => {
+    const now = new Date()
+    const filterDate = new Date()
+
+    // Función para verificar si un movimiento está en el rango de fechas
+    const isInDateRange = (movement) => {
+      // Obtener fecha del movimiento
+      let movementDate
+      if (movement.date?.toDate) {
+        movementDate = movement.date.toDate()
+      } else if (movement.createdAt?.toDate) {
+        movementDate = movement.createdAt.toDate()
+      } else if (movement.date) {
+        movementDate = new Date(movement.date)
+      } else if (movement.createdAt) {
+        movementDate = new Date(movement.createdAt)
+      } else {
+        return false
+      }
+
+      if (dateRange === 'custom') {
+        if (!customStartDate || !customEndDate) return true
+        const startDate = parseLocalDate(customStartDate)
+        startDate.setHours(0, 0, 0, 0)
+        const endDate = parseLocalDate(customEndDate)
+        endDate.setHours(23, 59, 59, 999)
+        return movementDate >= startDate && movementDate <= endDate
+      }
+
+      const periodStart = new Date(filterDate)
+      switch (dateRange) {
+        case 'week':
+          periodStart.setDate(now.getDate() - 7)
+          break
+        case 'month':
+          periodStart.setMonth(now.getMonth() - 1)
+          break
+        case 'quarter':
+          periodStart.setMonth(now.getMonth() - 3)
+          break
+        case 'year':
+          periodStart.setFullYear(now.getFullYear() - 1)
+          break
+        case 'all':
+          return true
+        default:
+          periodStart.setMonth(now.getMonth() - 1)
+      }
+      return movementDate >= periodStart
+    }
+
+    // Función para filtrar por sucursal
+    const filterByBranch = (movement) => {
+      if (filterBranch === 'all') return true
+      if (filterBranch === 'main') {
+        return !movement.branchId
+      }
+      return movement.branchId === filterBranch
+    }
+
+    // Filtrar movimientos financieros (Aporte Capital, Venta Activo, Retiro Dueño, etc.)
+    const filteredFinancial = financialMovements.filter(m => isInDateRange(m) && filterByBranch(m))
+
+    // Filtrar movimientos de caja (Otros Ingresos, Préstamos, etc.) - Solo los que NO tienen sessionId
+    // Los que tienen sessionId son del Control de Caja diario y no deben duplicarse aquí
+    const filteredCash = cashMovements.filter(m => !m.sessionId && isInDateRange(m) && filterByBranch(m))
+
+    // Calcular totales de otros ingresos
+    const otrosIngresosFinancial = filteredFinancial
+      .filter(m => m.type === 'income')
+      .reduce((sum, m) => sum + (m.amount || 0), 0)
+
+    const otrosIngresosCash = filteredCash
+      .filter(m => m.type === 'income')
+      .reduce((sum, m) => sum + (m.amount || 0), 0)
+
+    // Calcular totales de otros egresos
+    const otrosEgresosFinancial = filteredFinancial
+      .filter(m => m.type === 'expense')
+      .reduce((sum, m) => sum + (m.amount || 0), 0)
+
+    const otrosEgresosCash = filteredCash
+      .filter(m => m.type === 'expense')
+      .reduce((sum, m) => sum + (m.amount || 0), 0)
+
+    return {
+      otrosIngresos: otrosIngresosFinancial + otrosIngresosCash,
+      otrosEgresos: otrosEgresosFinancial + otrosEgresosCash,
+      detalleIngresos: [
+        ...filteredFinancial.filter(m => m.type === 'income'),
+        ...filteredCash.filter(m => m.type === 'income')
+      ],
+      detalleEgresos: [
+        ...filteredFinancial.filter(m => m.type === 'expense'),
+        ...filteredCash.filter(m => m.type === 'expense')
+      ]
+    }
+  }, [financialMovements, cashMovements, dateRange, customStartDate, customEndDate, filterBranch])
+
   // Estadísticas de rentabilidad
   const profitabilityStats = useMemo(() => {
     const totalVentas = stats.totalRevenue
@@ -1251,15 +1371,24 @@ export default function Reports() {
     // Utilidad Bruta = Ventas - Costo de Ventas
     const utilidadBruta = totalVentas - costoVentas
 
-    // Utilidad Neta = Utilidad Bruta - Gastos Operativos
-    // Es decir: Ventas - Costo de Ventas - Gastos
-    const utilidadNeta = utilidadBruta - totalGastos
+    // Utilidad Operativa (Neta) = Utilidad Bruta - Gastos Operativos
+    const utilidadOperativa = utilidadBruta - totalGastos
+
+    // Otros ingresos y egresos del flujo de caja
+    const otrosIngresos = filteredOtherMovements.otrosIngresos
+    const otrosEgresos = filteredOtherMovements.otrosEgresos
+
+    // Utilidad Total = Utilidad Operativa + Otros Ingresos - Otros Egresos
+    const utilidadTotal = utilidadOperativa + otrosIngresos - otrosEgresos
 
     // Margen Bruto (%) = Utilidad Bruta / Ventas
     const margenBruto = totalVentas > 0 ? (utilidadBruta / totalVentas) * 100 : 0
 
-    // Margen Neto (%) = Utilidad Neta / Ventas
-    const margenNeto = totalVentas > 0 ? (utilidadNeta / totalVentas) * 100 : 0
+    // Margen Operativo (%) = Utilidad Operativa / Ventas
+    const margenOperativo = totalVentas > 0 ? (utilidadOperativa / totalVentas) * 100 : 0
+
+    // Margen Neto (%) = Utilidad Operativa / Ventas (mantener compatibilidad)
+    const margenNeto = margenOperativo
 
     // Calcular ratio gastos/ingresos (solo gastos operativos)
     const ratioGastos = totalVentas > 0 ? (totalGastos / totalVentas) * 100 : 0
@@ -1273,13 +1402,20 @@ export default function Reports() {
       costoVentas,
       utilidadBruta,
       totalGastos,
-      utilidadNeta,
+      utilidadNeta: utilidadOperativa, // Mantener compatibilidad (antes era utilidadNeta)
+      utilidadOperativa,
+      otrosIngresos,
+      otrosEgresos,
+      utilidadTotal,
       margenBruto,
       margenNeto,
+      margenOperativo,
       ratioGastos,
-      ratioCostoVentas
+      ratioCostoVentas,
+      detalleOtrosIngresos: filteredOtherMovements.detalleIngresos,
+      detalleOtrosEgresos: filteredOtherMovements.detalleEgresos
     }
-  }, [stats.totalRevenue, purchaseStats.total, expenseStats.total])
+  }, [stats.totalRevenue, purchaseStats.total, expenseStats.total, filteredOtherMovements])
 
   // Función para exportar reporte de rentabilidad
   const exportProfitabilityReport = async () => {
@@ -1292,10 +1428,15 @@ export default function Reports() {
       { 'Concepto': '---', 'Valor': '---' },
       { 'Concepto': 'Total Gastos Operativos', 'Valor': profitabilityStats.totalGastos },
       { 'Concepto': '---', 'Valor': '---' },
-      { 'Concepto': 'Utilidad Neta', 'Valor': profitabilityStats.utilidadNeta },
-      { 'Concepto': 'Margen Neto (%)', 'Valor': profitabilityStats.margenNeto.toFixed(2) + '%' },
+      { 'Concepto': 'Utilidad Operativa', 'Valor': profitabilityStats.utilidadOperativa },
+      { 'Concepto': 'Margen Operativo (%)', 'Valor': profitabilityStats.margenOperativo.toFixed(2) + '%' },
       { 'Concepto': '---', 'Valor': '---' },
-      { 'Concepto': 'Fórmula:', 'Valor': 'Ventas - Costo de Ventas - Gastos = Utilidad Neta' },
+      { 'Concepto': 'Otros Ingresos (Flujo de Caja)', 'Valor': profitabilityStats.otrosIngresos },
+      { 'Concepto': 'Otros Egresos (Flujo de Caja)', 'Valor': profitabilityStats.otrosEgresos },
+      { 'Concepto': '---', 'Valor': '---' },
+      { 'Concepto': 'UTILIDAD TOTAL', 'Valor': profitabilityStats.utilidadTotal },
+      { 'Concepto': '---', 'Valor': '---' },
+      { 'Concepto': 'Fórmula:', 'Valor': 'Utilidad Operativa + Otros Ingresos - Otros Egresos = Utilidad Total' },
     ]
 
     // Hoja 2: Detalle por período
@@ -2932,20 +3073,20 @@ export default function Reports() {
               </CardContent>
             </Card>
 
-            <Card className={`border-2 ${profitabilityStats.utilidadNeta >= 0 ? 'border-emerald-300' : 'border-red-300'}`}>
+            <Card className={`border-2 ${profitabilityStats.utilidadOperativa >= 0 ? 'border-teal-300' : 'border-red-300'}`}>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Utilidad Neta</p>
-                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {formatCurrency(profitabilityStats.utilidadNeta)}
+                    <p className="text-sm font-medium text-gray-600">Utilidad Operativa</p>
+                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
+                      {formatCurrency(profitabilityStats.utilidadOperativa)}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      U. Bruta - Gastos
+                      U. Bruta - Gastos ({profitabilityStats.margenOperativo.toFixed(1)}%)
                     </p>
                   </div>
-                  <div className={`p-3 rounded-lg ${profitabilityStats.utilidadNeta >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
-                    <DollarSign className={`w-6 h-6 ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
+                  <div className={`p-3 rounded-lg ${profitabilityStats.utilidadOperativa >= 0 ? 'bg-teal-100' : 'bg-red-100'}`}>
+                    <DollarSign className={`w-6 h-6 ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`} />
                   </div>
                 </div>
               </CardContent>
@@ -2955,23 +3096,23 @@ export default function Reports() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Margen Neto</p>
-                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-600' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      {profitabilityStats.margenNeto.toFixed(1)}%
+                    <p className="text-sm font-medium text-gray-600">Margen Operativo</p>
+                    <p className={`text-2xl font-bold mt-2 ${profitabilityStats.margenOperativo >= 20 ? 'text-emerald-600' : profitabilityStats.margenOperativo >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {profitabilityStats.margenOperativo.toFixed(1)}%
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
-                      Utilidad Neta / Ventas
+                      Utilidad Operativa / Ventas
                     </p>
                   </div>
-                  <div className={`p-3 rounded-lg ${profitabilityStats.margenNeto >= 20 ? 'bg-emerald-100' : profitabilityStats.margenNeto >= 0 ? 'bg-yellow-100' : 'bg-red-100'}`}>
-                    <PieChart className={`w-6 h-6 ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-600' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-600'}`} />
+                  <div className={`p-3 rounded-lg ${profitabilityStats.margenOperativo >= 20 ? 'bg-emerald-100' : profitabilityStats.margenOperativo >= 0 ? 'bg-yellow-100' : 'bg-red-100'}`}>
+                    <PieChart className={`w-6 h-6 ${profitabilityStats.margenOperativo >= 20 ? 'text-emerald-600' : profitabilityStats.margenOperativo >= 0 ? 'text-yellow-600' : 'text-red-600'}`} />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Resumen de fórmula */}
+          {/* Resumen de fórmula operativa */}
           <Card className="bg-gray-50">
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
@@ -2981,13 +3122,106 @@ export default function Reports() {
                 <span className="text-gray-400">−</span>
                 <span className="font-semibold text-red-600">{formatCurrency(profitabilityStats.totalGastos)}</span>
                 <span className="text-gray-400">=</span>
-                <span className={`font-bold ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {formatCurrency(profitabilityStats.utilidadNeta)}
+                <span className={`font-bold ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
+                  {formatCurrency(profitabilityStats.utilidadOperativa)}
                 </span>
-                <span className="text-gray-500 ml-2">(Utilidad Neta)</span>
+                <span className="text-gray-500 ml-2">(Utilidad Operativa)</span>
               </div>
             </CardContent>
           </Card>
+
+          {/* Sección de Otros Ingresos/Egresos - Solo mostrar si hay movimientos */}
+          {(profitabilityStats.otrosIngresos > 0 || profitabilityStats.otrosEgresos > 0) && (
+            <>
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                  <Receipt className="w-5 h-5" />
+                  Otros Ingresos y Egresos (Flujo de Caja)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Otros Ingresos */}
+                  <Card className="border-green-200 bg-green-50">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-700">Otros Ingresos</p>
+                          <p className="text-2xl font-bold text-green-600 mt-2">
+                            +{formatCurrency(profitabilityStats.otrosIngresos)}
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            {profitabilityStats.detalleOtrosIngresos?.length || 0} movimientos
+                          </p>
+                        </div>
+                        <div className="p-3 bg-green-100 rounded-lg">
+                          <ArrowUpRight className="w-6 h-6 text-green-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Otros Egresos */}
+                  <Card className="border-red-200 bg-red-50">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-red-700">Otros Egresos</p>
+                          <p className="text-2xl font-bold text-red-600 mt-2">
+                            -{formatCurrency(profitabilityStats.otrosEgresos)}
+                          </p>
+                          <p className="text-xs text-red-600 mt-1">
+                            {profitabilityStats.detalleOtrosEgresos?.length || 0} movimientos
+                          </p>
+                        </div>
+                        <div className="p-3 bg-red-100 rounded-lg">
+                          <ArrowDownRight className="w-6 h-6 text-red-600" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Utilidad Total */}
+                  <Card className={`border-2 ${profitabilityStats.utilidadTotal >= 0 ? 'border-emerald-400 bg-emerald-50' : 'border-red-400 bg-red-50'}`}>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">UTILIDAD TOTAL</p>
+                          <p className={`text-2xl font-bold mt-2 ${profitabilityStats.utilidadTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {formatCurrency(profitabilityStats.utilidadTotal)}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Operativa + Otros Ing. - Otros Egr.
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${profitabilityStats.utilidadTotal >= 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                          <DollarSign className={`w-6 h-6 ${profitabilityStats.utilidadTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`} />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Fórmula de Utilidad Total */}
+                <Card className="bg-emerald-50 mt-4">
+                  <CardContent className="p-4">
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+                      <span className={`font-semibold ${profitabilityStats.utilidadOperativa >= 0 ? 'text-teal-600' : 'text-red-600'}`}>
+                        {formatCurrency(profitabilityStats.utilidadOperativa)}
+                      </span>
+                      <span className="text-gray-400">+</span>
+                      <span className="font-semibold text-green-600">{formatCurrency(profitabilityStats.otrosIngresos)}</span>
+                      <span className="text-gray-400">−</span>
+                      <span className="font-semibold text-red-600">{formatCurrency(profitabilityStats.otrosEgresos)}</span>
+                      <span className="text-gray-400">=</span>
+                      <span className={`font-bold text-lg ${profitabilityStats.utilidadTotal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {formatCurrency(profitabilityStats.utilidadTotal)}
+                      </span>
+                      <span className="text-gray-500 ml-2">(Utilidad Total)</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
 
           {/* Gráfico Principal: Ingresos vs Gastos */}
           <Card>
