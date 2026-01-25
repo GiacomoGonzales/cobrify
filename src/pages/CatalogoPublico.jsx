@@ -320,8 +320,30 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 }
 
 // Carrito lateral
-function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, business, onCheckout, showPrices = true }) {
+function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, business, showPrices = true }) {
   const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
+
+  // Generar URL de WhatsApp con el pedido
+  const getWhatsAppUrl = () => {
+    if (!business?.phone && !business?.whatsapp) return null
+    const phone = (business.whatsapp || business.phone).replace(/\D/g, '')
+    const items = cart.map(item => {
+      const price = item.unitPrice || item.price
+      let itemText = `• ${item.quantity}x ${item.name}`
+      if (item.selectedModifiers?.length > 0) {
+        const modsText = item.selectedModifiers
+          .map(mod => `  - ${mod.modifierName}: ${mod.options.map(o => o.optionName).join(', ')}`)
+          .join('\n')
+        itemText += `\n${modsText}`
+      }
+      itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
+      return itemText
+    }).join('\n')
+    const message = encodeURIComponent(
+      `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
+    )
+    return `https://wa.me/${phone}?text=${message}`
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -439,13 +461,15 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
                   <span className="text-2xl font-bold">S/ {total.toFixed(2)}</span>
                 </div>
               )}
-              <button
-                onClick={onCheckout}
+              <a
+                href={getWhatsAppUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
               >
                 <MessageCircle className="w-5 h-5" />
                 Hacer pedido por WhatsApp
-              </button>
+              </a>
               <p className="text-center text-sm text-gray-500">
                 Te contactaremos para confirmar tu pedido
               </p>
@@ -667,42 +691,6 @@ export default function CatalogoPublico({ isDemo = false }) {
     return cart.filter(i => i.id === productId).reduce((sum, item) => sum + item.quantity, 0)
   }
 
-  // Checkout por WhatsApp
-  const handleCheckout = () => {
-    if (!business?.phone && !business?.whatsapp) {
-      alert('Este negocio no tiene WhatsApp configurado')
-      return
-    }
-
-    const phone = (business.whatsapp || business.phone).replace(/\D/g, '')
-    const items = cart.map(item => {
-      const price = item.unitPrice || item.price
-      let itemText = `• ${item.quantity}x ${item.name}`
-      // Agregar modificadores si existen
-      if (item.selectedModifiers?.length > 0) {
-        const modsText = item.selectedModifiers
-          .map(mod => `  - ${mod.modifierName}: ${mod.options.map(o => o.optionName).join(', ')}`)
-          .join('\n')
-        itemText += `\n${modsText}`
-      }
-      itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
-      return itemText
-    }).join('\n')
-    const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
-
-    const message = encodeURIComponent(
-      `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
-    )
-
-    const whatsappUrl = `https://wa.me/${phone}?text=${message}`
-
-    // Usar un enlace <a> igual que el botón flotante de WhatsApp
-    const link = document.createElement('a')
-    link.href = whatsappUrl
-    link.target = '_blank'
-    link.rel = 'noopener noreferrer'
-    link.click()
-  }
 
   // Total items en carrito
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0)
@@ -1115,7 +1103,6 @@ export default function CatalogoPublico({ isDemo = false }) {
         onUpdateQuantity={updateCartQuantity}
         onRemove={removeFromCart}
         business={business}
-        onCheckout={handleCheckout}
         showPrices={showPrices}
       />
     </div>
