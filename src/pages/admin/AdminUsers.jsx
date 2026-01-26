@@ -1271,31 +1271,24 @@ export default function AdminUsers() {
       // 3. Reenviar uno por uno con delay para no saturar
       for (let i = 0; i < rejectedInvoices.length; i++) {
         const invoice = rejectedInvoices[i]
+        const docNumber = `${invoice.series || 'S/N'}-${invoice.correlativeNumber || invoice.number || '?'}`
 
         try {
-          console.log(`📤 [${i + 1}/${rejectedInvoices.length}] Reenviando ${invoice.serie}-${invoice.numero}...`)
+          console.log(`📤 [${i + 1}/${rejectedInvoices.length}] Reenviando ${docNumber}...`)
 
-          // Primero cambiar el estado a pending para que se pueda reenviar
-          const invoiceRef = doc(db, 'businesses', userId, 'invoices', invoice.id)
-          await updateDoc(invoiceRef, {
-            sunatStatus: 'pending',
-            sunatResponse: null,
-            updatedAt: serverTimestamp()
-          })
-
-          // Enviar a SUNAT
+          // Enviar directamente a SUNAT (la Cloud Function maneja el reenvío de rechazados)
           const result = await sendInvoiceToSunat(userId, invoice.id)
 
           if (result.success) {
             successCount++
-            console.log(`✅ [${i + 1}/${rejectedInvoices.length}] ${invoice.serie}-${invoice.numero} enviado correctamente`)
+            console.log(`✅ [${i + 1}/${rejectedInvoices.length}] ${docNumber} enviado correctamente`)
           } else {
             failedCount++
-            console.error(`❌ [${i + 1}/${rejectedInvoices.length}] ${invoice.serie}-${invoice.numero} falló:`, result.error)
+            console.error(`❌ [${i + 1}/${rejectedInvoices.length}] ${docNumber} falló:`, result.error)
           }
         } catch (error) {
           failedCount++
-          console.error(`❌ [${i + 1}/${rejectedInvoices.length}] Error en ${invoice.serie}-${invoice.numero}:`, error)
+          console.error(`❌ [${i + 1}/${rejectedInvoices.length}] Error en ${docNumber}:`, error)
         }
 
         setResendProgress({
