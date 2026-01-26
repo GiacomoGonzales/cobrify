@@ -202,8 +202,8 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     if (isOpen && !referenceInvoice) {
       // Inicializar fecha de emisión con la fecha actual de Perú (hoy)
       setIssueDate(getLocalDateString(0))
-      // Inicializar fecha de traslado para mañana (+1 día)
-      setTransferDate(getTomorrowDateString())
+      // Inicializar fecha de traslado para hoy (el usuario puede cambiarla)
+      setTransferDate(getLocalDateString(0))
     }
   }, [isOpen, referenceInvoice])
 
@@ -288,7 +288,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
 
       // Pre-llenar fechas (usando hora de Perú)
       setIssueDate(getLocalDateString(0))  // Hoy
-      setTransferDate(getTomorrowDateString())  // Mañana
+      setTransferDate(getLocalDateString(0))  // Hoy (el usuario puede cambiar)
 
       // Pre-llenar datos del destinatario desde el cliente de la factura
       if (referenceInvoice.customer) {
@@ -353,60 +353,79 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }, [referenceInvoice])
 
-  // Cargar dirección de origen desde el negocio (solo una vez al abrir)
+  // Cargar configuración de envío automático al abrir el modal
   useEffect(() => {
-    const loadBusinessAddress = async () => {
+    const loadAutoSendConfig = async () => {
       const businessId = getBusinessId()
       if (!businessId) return
 
       try {
         const companyResult = await getCompanySettings(businessId)
-        if (!companyResult.success || !companyResult.data) return
-
-        const businessData = companyResult.data
-
-        // Cargar configuración de envío automático a SUNAT
-        setAutoSendToSunat(businessData.autoSendToSunat === true)
-
-        // Si no hay sucursal seleccionada, usar dirección del negocio principal
-        if (!selectedBranchId) {
-          if (businessData.address) {
-            setOriginAddress(businessData.address)
-          }
-          if (businessData.ubigeo && businessData.ubigeo.length === 6) {
-            setOriginDepartment(businessData.ubigeo.substring(0, 2))
-            setOriginProvince(businessData.ubigeo.substring(2, 4))
-            setOriginDistrict(businessData.ubigeo.substring(4, 6))
-          }
+        if (companyResult.success && companyResult.data) {
+          setAutoSendToSunat(companyResult.data.autoSendToSunat === true)
         }
       } catch (error) {
-        console.error('Error al cargar dirección del negocio:', error)
+        console.error('Error al cargar configuración:', error)
       }
     }
 
     if (isOpen) {
-      loadBusinessAddress()
+      loadAutoSendConfig()
     }
   }, [isOpen, getBusinessId])
 
   // Actualizar dirección de origen cuando cambia la sucursal seleccionada
   useEffect(() => {
-    if (selectedBranchId && branches.length > 0) {
-      const selectedBranchData = branches.find(b => b.id === selectedBranchId)
-      if (selectedBranchData) {
-        // Usar dirección de la sucursal
-        if (selectedBranchData.address) {
-          setOriginAddress(selectedBranchData.address)
+    const loadBranchOrBusinessAddress = async () => {
+      const businessId = getBusinessId()
+      if (!businessId) return
+
+      if (selectedBranchId && branches.length > 0) {
+        const selectedBranchData = branches.find(b => b.id === selectedBranchId)
+        if (selectedBranchData) {
+          // SIEMPRE usar la dirección de la sucursal seleccionada
+          setOriginAddress(selectedBranchData.address || '')
+
+          // Usar ubigeo de la sucursal
+          if (selectedBranchData.ubigeo && selectedBranchData.ubigeo.length === 6) {
+            setOriginDepartment(selectedBranchData.ubigeo.substring(0, 2))
+            setOriginProvince(selectedBranchData.ubigeo.substring(2, 4))
+            setOriginDistrict(selectedBranchData.ubigeo.substring(4, 6))
+          } else {
+            // Si no tiene ubigeo, limpiar para forzar al usuario a seleccionar
+            setOriginDepartment('')
+            setOriginProvince('')
+            setOriginDistrict('')
+          }
+          console.log(`📍 Dirección de sucursal "${selectedBranchData.name}":`, selectedBranchData.address, 'Ubigeo:', selectedBranchData.ubigeo)
+          return
         }
-        // Usar ubigeo de la sucursal si existe
-        if (selectedBranchData.ubigeo && selectedBranchData.ubigeo.length === 6) {
-          setOriginDepartment(selectedBranchData.ubigeo.substring(0, 2))
-          setOriginProvince(selectedBranchData.ubigeo.substring(2, 4))
-          setOriginDistrict(selectedBranchData.ubigeo.substring(4, 6))
+      }
+
+      // Si no hay sucursal seleccionada o no se encontró, usar dirección del negocio principal
+      if (!selectedBranchId) {
+        try {
+          const companyResult = await getCompanySettings(businessId)
+          if (companyResult.success && companyResult.data) {
+            const businessData = companyResult.data
+            setOriginAddress(businessData.address || '')
+            if (businessData.ubigeo && businessData.ubigeo.length === 6) {
+              setOriginDepartment(businessData.ubigeo.substring(0, 2))
+              setOriginProvince(businessData.ubigeo.substring(2, 4))
+              setOriginDistrict(businessData.ubigeo.substring(4, 6))
+            }
+            console.log('📍 Usando dirección del negocio principal:', businessData.address)
+          }
+        } catch (error) {
+          console.error('Error al cargar dirección del negocio:', error)
         }
       }
     }
-  }, [selectedBranchId, branches])
+
+    if (isOpen) {
+      loadBranchOrBusinessAddress()
+    }
+  }, [selectedBranchId, branches, isOpen, getBusinessId])
 
   // Sincronizar ubigeo y dirección del destinatario con el punto de llegada
   // (generalmente el punto de llegada es la dirección del destinatario)
@@ -736,7 +755,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col max-h-[calc(90vh-8rem)]">
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col max-h-[calc(90vh-8rem)]">
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
 
           {/* Selector de Sucursal (solo si hay múltiples sucursales) */}
