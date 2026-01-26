@@ -476,6 +476,42 @@ Gracias por tu preferencia.`
           }
         }
 
+        // Revertir métricas del vendedor si la venta tenía un vendedor asignado
+        if (voidingInvoice.sellerId) {
+          try {
+            const { doc, updateDoc, increment } = await import('firebase/firestore')
+            const { db } = await import('@/lib/firebase')
+
+            const sellerRef = doc(db, 'businesses', businessId, 'sellers', voidingInvoice.sellerId)
+            const saleTotal = voidingInvoice.total || voidingInvoice.amounts?.total || 0
+
+            // Verificar si la venta fue hoy para restar de todaySales/todayOrders
+            const saleDate = voidingInvoice.createdAt?.toDate?.() || voidingInvoice.createdAt
+            const today = new Date()
+            const isToday = saleDate &&
+              saleDate.getDate() === today.getDate() &&
+              saleDate.getMonth() === today.getMonth() &&
+              saleDate.getFullYear() === today.getFullYear()
+
+            const updateData = {
+              totalSales: increment(-saleTotal),
+              totalOrders: increment(-1),
+            }
+
+            // Solo restar de los contadores diarios si la venta fue hoy
+            if (isToday) {
+              updateData.todaySales = increment(-saleTotal)
+              updateData.todayOrders = increment(-1)
+            }
+
+            await updateDoc(sellerRef, updateData)
+            console.log(`✅ Métricas del vendedor ${voidingInvoice.sellerName || voidingInvoice.sellerId} actualizadas: -${saleTotal}`)
+          } catch (sellerError) {
+            console.warn('No se pudo actualizar métricas del vendedor:', sellerError)
+            // No fallar la anulación si no se puede actualizar las métricas
+          }
+        }
+
         toast.success('Nota de venta anulada y stock restaurado exitosamente')
         setVoidingInvoice(null)
         setVoidReason('')
@@ -579,6 +615,42 @@ Gracias por tu preferencia.`
                 console.warn(`No se pudo devolver stock para producto ${item.productId}:`, stockError)
               }
             }
+          }
+        }
+
+        // Revertir métricas del vendedor si la venta tenía un vendedor asignado
+        if (voidingSunatInvoice.sellerId) {
+          try {
+            const { doc, updateDoc, increment } = await import('firebase/firestore')
+            const { db } = await import('@/lib/firebase')
+
+            const sellerRef = doc(db, 'businesses', businessId, 'sellers', voidingSunatInvoice.sellerId)
+            const saleTotal = voidingSunatInvoice.total || voidingSunatInvoice.amounts?.total || 0
+
+            // Verificar si la venta fue hoy para restar de todaySales/todayOrders
+            const saleDate = voidingSunatInvoice.createdAt?.toDate?.() || voidingSunatInvoice.createdAt
+            const today = new Date()
+            const isToday = saleDate &&
+              saleDate.getDate() === today.getDate() &&
+              saleDate.getMonth() === today.getMonth() &&
+              saleDate.getFullYear() === today.getFullYear()
+
+            const updateData = {
+              totalSales: increment(-saleTotal),
+              totalOrders: increment(-1),
+            }
+
+            // Solo restar de los contadores diarios si la venta fue hoy
+            if (isToday) {
+              updateData.todaySales = increment(-saleTotal)
+              updateData.todayOrders = increment(-1)
+            }
+
+            await updateDoc(sellerRef, updateData)
+            console.log(`✅ Métricas del vendedor ${voidingSunatInvoice.sellerName || voidingSunatInvoice.sellerId} actualizadas: -${saleTotal}`)
+          } catch (sellerError) {
+            console.warn('No se pudo actualizar métricas del vendedor:', sellerError)
+            // No fallar la anulación si no se puede actualizar las métricas
           }
         }
 
