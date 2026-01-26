@@ -1200,7 +1200,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       value={carrierRuc}
                       onChange={(e) => setCarrierRuc(e.target.value.replace(/\D/g, ''))}
                       maxLength={11}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                        carrierRuc && carrierRuc.length !== 11
+                          ? 'border-red-500 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
                     />
                     <button
                       type="button"
@@ -1216,6 +1220,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                       )}
                     </button>
                   </div>
+                  {carrierRuc && carrierRuc.length !== 11 && (
+                    <p className="text-red-500 text-xs mt-1">
+                      El RUC debe tener 11 dígitos ({carrierRuc.length}/11)
+                    </p>
+                  )}
                 </div>
 
                 <Input
