@@ -449,7 +449,10 @@ export const sendInvoiceToSunat = onRequest(
           if (subscriptionDoc.exists) {
             const subscription = subscriptionDoc.data()
             const currentUsage = subscription.usage?.invoicesThisMonth || 0
-            const maxInvoices = subscription.limits?.maxInvoicesPerMonth || -1
+            const planLimit = subscription.limits?.maxInvoicesPerMonth || -1
+            const bonusInvoices = subscription.bonusInvoices || 0
+            // Sumar el bono al límite del plan (si no es ilimitado)
+            const maxInvoices = planLimit === -1 ? -1 : planLimit + bonusInvoices
 
             // Si hay límite (no es -1 = ilimitado) y ya lo alcanzó
             if (maxInvoices !== -1 && currentUsage >= maxInvoices) {

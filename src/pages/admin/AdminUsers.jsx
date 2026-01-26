@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
 import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { notifyPaymentReceived } from '@/services/notificationService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
@@ -45,7 +45,8 @@ import {
   Store,
   MapPin,
   Phone,
-  FileText
+  FileText,
+  PlusCircle
 } from 'lucide-react'
 import {
   getBranches,
@@ -138,6 +139,9 @@ export default function AdminUsers() {
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [paymentUserToEdit, setPaymentUserToEdit] = useState(null)
   const [processingPayment, setProcessingPayment] = useState(false)
+
+  // Estado para agregar comprobantes bonus
+  const [addingBonus, setAddingBonus] = useState(false)
 
   // Estados para modal de sucursales
   const [showBranchesModal, setShowBranchesModal] = useState(false)
@@ -313,7 +317,11 @@ export default function AdminUsers() {
           paymentHistory: data.paymentHistory || [],
           blockReason: data.blockReason || null,
           // Campos originales
-          limit: PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0, // -1 = ilimitado
+          planLimit: PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0, // Límite base del plan
+          bonusInvoices: data.bonusInvoices || 0, // Comprobantes extra dados manualmente
+          limit: (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) === -1
+            ? -1
+            : (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) + (data.bonusInvoices || 0), // Total (plan + bonus)
           accessBlocked: data.accessBlocked || false,
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
           subUsersCount: subUsersCountMap[doc.id] || 0,
@@ -1174,6 +1182,38 @@ export default function AdminUsers() {
     }
   }
 
+  // Función para agregar comprobantes de bono
+  async function handleAddBonusInvoices(userId, amount = 500) {
+    setAddingBonus(true)
+    try {
+      const subscriptionRef = doc(db, 'subscriptions', userId)
+
+      await updateDoc(subscriptionRef, {
+        bonusInvoices: increment(amount),
+        updatedAt: serverTimestamp()
+      })
+
+      toast.success(`Se agregaron ${amount} comprobantes extra al usuario`)
+
+      // Actualizar el usuario seleccionado si está abierto
+      if (selectedUser && selectedUser.id === userId) {
+        setSelectedUser(prev => ({
+          ...prev,
+          bonusInvoices: (prev.bonusInvoices || 0) + amount,
+          limit: prev.limit === -1 ? -1 : prev.limit + amount
+        }))
+      }
+
+      // Refrescar la lista de usuarios
+      loadUsers()
+    } catch (error) {
+      console.error('Error al agregar comprobantes de bono:', error)
+      toast.error('Error al agregar comprobantes extra')
+    } finally {
+      setAddingBonus(false)
+    }
+  }
+
   // Función para registrar pago
   async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null) {
     setProcessingPayment(true)
@@ -1891,26 +1931,62 @@ export default function AdminUsers() {
               </div>
 
               {/* Usage */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-500">Uso este mes</span>
-                  <span className="font-medium">
-                    {selectedUser.usage?.invoicesThisMonth || 0} / {selectedUser.limit === -1 || selectedUser.limit === 0 ? '∞' : selectedUser.limit} documentos
-                  </span>
-                </div>
-                <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      selectedUser.limit > 0 && (selectedUser.usage?.invoicesThisMonth || 0) / selectedUser.limit > 0.9
-                        ? 'bg-red-500'
-                        : selectedUser.limit > 0 && (selectedUser.usage?.invoicesThisMonth || 0) / selectedUser.limit > 0.7
-                          ? 'bg-yellow-500'
-                          : 'bg-green-500'
-                    }`}
-                    style={{ width: selectedUser.limit > 0 ? `${Math.min(((selectedUser.usage?.invoicesThisMonth || 0) / selectedUser.limit) * 100, 100)}%` : '5%' }}
-                  />
-                </div>
-              </div>
+              {(() => {
+                const planLimit = selectedUser.planLimit || selectedUser.limit || -1
+                const bonusInvoices = selectedUser.bonusInvoices || 0
+                const totalLimit = planLimit === -1 ? -1 : planLimit + bonusInvoices
+                const currentUsage = selectedUser.usage?.invoicesThisMonth || 0
+                const usagePercentage = totalLimit > 0 ? (currentUsage / totalLimit) * 100 : 0
+
+                return (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-gray-500">Uso este mes</span>
+                      <span className="font-medium">
+                        {currentUsage} / {totalLimit === -1 || totalLimit === 0 ? '∞' : totalLimit} documentos
+                      </span>
+                    </div>
+                    {bonusInvoices > 0 && totalLimit !== -1 && (
+                      <p className="text-xs text-amber-600 mb-2">
+                        (Plan: {planLimit} + Bonus: {bonusInvoices})
+                      </p>
+                    )}
+                    <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          totalLimit > 0 && usagePercentage > 90
+                            ? 'bg-red-500'
+                            : totalLimit > 0 && usagePercentage > 70
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                        }`}
+                        style={{ width: totalLimit > 0 ? `${Math.min(usagePercentage, 100)}%` : '5%' }}
+                      />
+                    </div>
+
+                    {/* Botón para agregar +500 comprobantes */}
+                    {totalLimit !== -1 && (
+                      <button
+                        onClick={() => handleAddBonusInvoices(selectedUser.id, 500)}
+                        disabled={addingBonus}
+                        className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 text-sm font-medium"
+                      >
+                        {addingBonus ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Agregando...
+                          </>
+                        ) : (
+                          <>
+                            <PlusCircle className="w-4 h-4" />
+                            Agregar +500 comprobantes
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Sub-usuarios */}
               {selectedUser.subUsers && selectedUser.subUsers.length > 0 && (

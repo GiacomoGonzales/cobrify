@@ -15,16 +15,19 @@ import {
   EyeOff,
   Save,
   CheckCircle,
-  Shield
+  Shield,
+  PlusCircle
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
 import { PLANS } from '@/services/subscriptionService';
-import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading, toast }) {
+export default function UserDetailsModal({ user, type, onClose, onRegisterPayment, onChangePlan, loading, toast, onUserUpdated }) {
   const [stats, setStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [addingBonus, setAddingBonus] = useState(false);
+  const [currentBonusInvoices, setCurrentBonusInvoices] = useState(user.bonusInvoices || 0);
   const [selectedPlanForPayment, setSelectedPlanForPayment] = useState('qpse_1_month');
   const [paymentAmount, setPaymentAmount] = useState(PLANS['qpse_1_month']?.totalPrice || 0);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
@@ -215,6 +218,37 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
     }
   };
 
+  // Función para agregar 500 comprobantes de bono
+  const handleAddBonusInvoices = async (amount = 500) => {
+    setAddingBonus(true);
+    try {
+      const subscriptionRef = doc(db, 'subscriptions', user.userId);
+
+      await updateDoc(subscriptionRef, {
+        bonusInvoices: increment(amount),
+        updatedAt: new Date()
+      });
+
+      setCurrentBonusInvoices(prev => prev + amount);
+
+      if (toast) {
+        toast.success(`Se agregaron ${amount} comprobantes extra al usuario`);
+      }
+
+      // Notificar al componente padre para refrescar la lista
+      if (onUserUpdated) {
+        onUserUpdated();
+      }
+    } catch (error) {
+      console.error('Error al agregar comprobantes de bono:', error);
+      if (toast) {
+        toast.error('Error al agregar comprobantes extra');
+      }
+    } finally {
+      setAddingBonus(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -298,71 +332,107 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   </h3>
 
                   {/* Contador Oficial de Documentos del Período */}
-                  {user.usage?.invoicesThisMonth !== undefined && (
-                    <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                            <FileText className="w-8 h-8" />
-                          </div>
-                          <div>
-                            <p className="text-sm opacity-90">Comprobantes Emitidos (SUNAT Aceptados)</p>
-                            <div className="flex items-baseline gap-2">
-                              <p className="text-4xl font-bold">{user.usage.invoicesThisMonth}</p>
-                              <p className="text-lg opacity-90">
-                                / {user.limits?.maxInvoicesPerMonth === -1 ? '∞' : user.limits?.maxInvoicesPerMonth}
-                              </p>
+                  {user.usage?.invoicesThisMonth !== undefined && (() => {
+                    const planLimit = user.limits?.maxInvoicesPerMonth || -1;
+                    const totalLimit = planLimit === -1 ? -1 : planLimit + currentBonusInvoices;
+                    const availableInvoices = totalLimit === -1 ? Infinity : Math.max(0, totalLimit - user.usage.invoicesThisMonth);
+                    const usagePercentage = totalLimit === -1 ? 0 : (user.usage.invoicesThisMonth / totalLimit) * 100;
+
+                    return (
+                      <div className="mb-6 p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="bg-white bg-opacity-20 p-3 rounded-lg">
+                              <FileText className="w-8 h-8" />
                             </div>
-                            {user.limits?.maxInvoicesPerMonth !== -1 && (
-                              <p className="text-sm mt-1 opacity-90">
-                                Disponibles: {Math.max(0, user.limits.maxInvoicesPerMonth - user.usage.invoicesThisMonth)}
+                            <div>
+                              <p className="text-sm opacity-90">Comprobantes Emitidos (SUNAT Aceptados)</p>
+                              <div className="flex items-baseline gap-2">
+                                <p className="text-4xl font-bold">{user.usage.invoicesThisMonth}</p>
+                                <p className="text-lg opacity-90">
+                                  / {totalLimit === -1 ? '∞' : totalLimit}
+                                </p>
+                              </div>
+                              {totalLimit !== -1 && (
+                                <div className="text-sm mt-1 opacity-90">
+                                  <p>Disponibles: {availableInvoices}</p>
+                                  {currentBonusInvoices > 0 && (
+                                    <p className="text-xs text-yellow-200">
+                                      (Plan: {planLimit} + Bonus: {currentBonusInvoices})
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs opacity-75">Periodo actual</p>
+                            <p className="text-sm font-medium">
+                              {user.currentPeriodStart
+                                ? format(user.currentPeriodStart.toDate(), "d MMM", { locale: es })
+                                : 'N/A'
+                              }
+                              {' - '}
+                              {periodEnd
+                                ? format(new Date(periodEnd), "d MMM", { locale: es })
+                                : 'N/A'
+                              }
+                            </p>
+                            {user.lastCounterReset && (
+                              <p className="text-xs opacity-75 mt-1">
+                                Último reseteo: {format(user.lastCounterReset.toDate(), "d MMM HH:mm", { locale: es })}
                               </p>
                             )}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-xs opacity-75">Periodo actual</p>
-                          <p className="text-sm font-medium">
-                            {user.currentPeriodStart
-                              ? format(user.currentPeriodStart.toDate(), "d MMM", { locale: es })
-                              : 'N/A'
-                            }
-                            {' - '}
-                            {periodEnd
-                              ? format(new Date(periodEnd), "d MMM", { locale: es })
-                              : 'N/A'
-                            }
-                          </p>
-                          {user.lastCounterReset && (
-                            <p className="text-xs opacity-75 mt-1">
-                              Último reseteo: {format(user.lastCounterReset.toDate(), "d MMM HH:mm", { locale: es })}
+                        {totalLimit !== -1 && (
+                          <div className="mt-3">
+                            <div className="w-full bg-white bg-opacity-30 rounded-full h-3">
+                              <div
+                                className={`h-3 rounded-full transition-all duration-300 ${
+                                  usagePercentage >= 90
+                                    ? 'bg-red-400'
+                                    : usagePercentage >= 70
+                                    ? 'bg-yellow-400'
+                                    : 'bg-green-400'
+                                }`}
+                                style={{
+                                  width: `${Math.min(usagePercentage, 100)}%`
+                                }}
+                              ></div>
+                            </div>
+                            <p className="text-xs mt-1 opacity-75 text-right">
+                              {usagePercentage.toFixed(1)}% usado
                             </p>
-                          )}
-                        </div>
-                      </div>
-                      {user.limits?.maxInvoicesPerMonth !== -1 && (
-                        <div className="mt-3">
-                          <div className="w-full bg-white bg-opacity-30 rounded-full h-3">
-                            <div
-                              className={`h-3 rounded-full transition-all duration-300 ${
-                                (user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) >= 0.9
-                                  ? 'bg-red-400'
-                                  : (user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) >= 0.7
-                                  ? 'bg-yellow-400'
-                                  : 'bg-green-400'
-                              }`}
-                              style={{
-                                width: `${Math.min((user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) * 100, 100)}%`
-                              }}
-                            ></div>
                           </div>
-                          <p className="text-xs mt-1 opacity-75 text-right">
-                            {((user.usage.invoicesThisMonth / user.limits.maxInvoicesPerMonth) * 100).toFixed(1)}% usado
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+
+                        {/* Botón para agregar comprobantes de bono */}
+                        {planLimit !== -1 && (
+                          <div className="mt-4 pt-3 border-t border-white border-opacity-30">
+                            <button
+                              type="button"
+                              onClick={() => handleAddBonusInvoices(500)}
+                              disabled={addingBonus}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-all disabled:opacity-50"
+                            >
+                              {addingBonus ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                  Agregando...
+                                </>
+                              ) : (
+                                <>
+                                  <PlusCircle className="w-5 h-5" />
+                                  Agregar +500 comprobantes
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Tarjetas de Estadísticas */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
