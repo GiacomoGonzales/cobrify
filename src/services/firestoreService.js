@@ -144,9 +144,22 @@ export const deleteInvoice = async (userId, invoiceId) => {
  */
 export const createCustomer = async (userId, customerData) => {
   try {
+    // Auto-corregir tipo de documento si hay mismatch con la longitud
+    let correctedData = { ...customerData }
+    if (customerData.documentNumber) {
+      const docLen = customerData.documentNumber.length
+      if (docLen === 11 && customerData.documentType === 'DNI') {
+        // RUC guardado como DNI - corregir
+        correctedData.documentType = 'RUC'
+      } else if (docLen === 8 && customerData.documentType === 'RUC') {
+        // DNI guardado como RUC - corregir
+        correctedData.documentType = 'DNI'
+      }
+    }
+
     // Usar subcolección: businesses/{userId}/customers
     const docRef = await addDoc(collection(db, 'businesses', userId, 'customers'), {
-      ...customerData,
+      ...correctedData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -180,9 +193,20 @@ export const getCustomers = async userId => {
  */
 export const updateCustomer = async (userId, customerId, updates) => {
   try {
+    // Auto-corregir tipo de documento si hay mismatch con la longitud
+    let correctedUpdates = { ...updates }
+    if (updates.documentNumber) {
+      const docLen = updates.documentNumber.length
+      if (docLen === 11 && updates.documentType === 'DNI') {
+        correctedUpdates.documentType = 'RUC'
+      } else if (docLen === 8 && updates.documentType === 'RUC') {
+        correctedUpdates.documentType = 'DNI'
+      }
+    }
+
     const docRef = doc(db, 'businesses', userId, 'customers', customerId)
     await updateDoc(docRef, {
-      ...updates,
+      ...correctedUpdates,
       updatedAt: serverTimestamp(),
     })
     return { success: true }
@@ -271,8 +295,10 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
       return { success: true, exists: true, id: existing.id }
     } else {
       // Cliente no existe - crearlo
+      // Auto-detectar tipo de documento si no viene especificado
+      const autoDocType = customerData.documentNumber?.length === 11 ? 'RUC' : 'DNI'
       const newCustomerData = {
-        documentType: customerData.documentType || 'DNI',
+        documentType: customerData.documentType || autoDocType,
         documentNumber: customerData.documentNumber,
         name: customerData.name || '',
         businessName: customerData.businessName || '',
