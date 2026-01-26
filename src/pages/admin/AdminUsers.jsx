@@ -46,7 +46,8 @@ import {
   MapPin,
   Phone,
   FileText,
-  PlusCircle
+  PlusCircle,
+  Send
 } from 'lucide-react'
 import {
   getBranches,
@@ -55,6 +56,7 @@ import {
   deleteBranch
 } from '@/services/branchService'
 import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/warehouseService'
+import { sendInvoiceToSunat } from '@/services/firestoreService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 
 const STATUS_COLORS = {
@@ -142,6 +144,10 @@ export default function AdminUsers() {
 
   // Estado para agregar comprobantes bonus
   const [addingBonus, setAddingBonus] = useState(false)
+
+  // Estado para reenvío masivo de comprobantes rechazados (solo DEV)
+  const [resendingInvoices, setResendingInvoices] = useState(false)
+  const [resendProgress, setResendProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 })
 
   // Estados para modal de sucursales
   const [showBranchesModal, setShowBranchesModal] = useState(false)
@@ -1214,6 +1220,110 @@ export default function AdminUsers() {
     }
   }
 
+  // Función para reenviar comprobantes rechazados por LIMIT_EXCEEDED (solo DEV)
+  async function handleResendRejectedInvoices(userId) {
+    if (!import.meta.env.DEV) {
+      toast.error('Esta función solo está disponible en desarrollo')
+      return
+    }
+
+    setResendingInvoices(true)
+    setResendProgress({ current: 0, total: 0, success: 0, failed: 0 })
+
+    try {
+      // 1. Obtener todos los comprobantes rechazados por LIMIT_EXCEEDED
+      const invoicesRef = collection(db, 'businesses', userId, 'invoices')
+      const invoicesSnapshot = await getDocs(invoicesRef)
+
+      const rejectedInvoices = []
+      invoicesSnapshot.forEach(doc => {
+        const data = doc.data()
+        // Filtrar solo los rechazados por límite excedido
+        if (
+          data.sunatStatus === 'rejected' &&
+          data.sunatResponse?.code === 'LIMIT_EXCEEDED'
+        ) {
+          rejectedInvoices.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate?.() || new Date(0)
+          })
+        }
+      })
+
+      if (rejectedInvoices.length === 0) {
+        toast.info('No hay comprobantes rechazados por límite excedido')
+        setResendingInvoices(false)
+        return
+      }
+
+      // 2. Ordenar de menor a mayor por fecha de creación
+      rejectedInvoices.sort((a, b) => a.createdAt - b.createdAt)
+
+      console.log(`📤 Reenviando ${rejectedInvoices.length} comprobantes rechazados...`)
+      toast.info(`Reenviando ${rejectedInvoices.length} comprobantes...`)
+
+      setResendProgress(prev => ({ ...prev, total: rejectedInvoices.length }))
+
+      let successCount = 0
+      let failedCount = 0
+
+      // 3. Reenviar uno por uno con delay para no saturar
+      for (let i = 0; i < rejectedInvoices.length; i++) {
+        const invoice = rejectedInvoices[i]
+
+        try {
+          console.log(`📤 [${i + 1}/${rejectedInvoices.length}] Reenviando ${invoice.serie}-${invoice.numero}...`)
+
+          // Primero cambiar el estado a pending para que se pueda reenviar
+          const invoiceRef = doc(db, 'businesses', userId, 'invoices', invoice.id)
+          await updateDoc(invoiceRef, {
+            sunatStatus: 'pending',
+            sunatResponse: null,
+            updatedAt: serverTimestamp()
+          })
+
+          // Enviar a SUNAT
+          const result = await sendInvoiceToSunat(userId, invoice.id)
+
+          if (result.success) {
+            successCount++
+            console.log(`✅ [${i + 1}/${rejectedInvoices.length}] ${invoice.serie}-${invoice.numero} enviado correctamente`)
+          } else {
+            failedCount++
+            console.error(`❌ [${i + 1}/${rejectedInvoices.length}] ${invoice.serie}-${invoice.numero} falló:`, result.error)
+          }
+        } catch (error) {
+          failedCount++
+          console.error(`❌ [${i + 1}/${rejectedInvoices.length}] Error en ${invoice.serie}-${invoice.numero}:`, error)
+        }
+
+        setResendProgress({
+          current: i + 1,
+          total: rejectedInvoices.length,
+          success: successCount,
+          failed: failedCount
+        })
+
+        // Pequeño delay entre envíos para no saturar
+        if (i < rejectedInvoices.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      }
+
+      toast.success(`Completado: ${successCount} exitosos, ${failedCount} fallidos de ${rejectedInvoices.length} total`)
+
+      // Refrescar datos del usuario
+      loadUsers()
+
+    } catch (error) {
+      console.error('Error al reenviar comprobantes:', error)
+      toast.error('Error al reenviar comprobantes')
+    } finally {
+      setResendingInvoices(false)
+    }
+  }
+
   // Función para registrar pago
   async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null) {
     setProcessingPayment(true)
@@ -2085,6 +2195,29 @@ export default function AdminUsers() {
                   >
                     <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
                     Reactivar
+                  </button>
+                )}
+
+                {/* Botón temporal para reenviar rechazados - SOLO DEV */}
+                {import.meta.env.DEV && (
+                  <button
+                    onClick={() => handleResendRejectedInvoices(selectedUser.id)}
+                    disabled={resendingInvoices}
+                    className="col-span-2 sm:col-span-3 flex items-center justify-center gap-2 px-4 py-3 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-sm font-medium disabled:opacity-50 border-2 border-dashed border-orange-300"
+                  >
+                    {resendingInvoices ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Reenviando... {resendProgress.current}/{resendProgress.total}
+                        <span className="text-green-600">({resendProgress.success} OK)</span>
+                        {resendProgress.failed > 0 && <span className="text-red-600">({resendProgress.failed} Error)</span>}
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5" />
+                        [DEV] Reenviar Rechazados por Límite
+                      </>
+                    )}
                   </button>
                 )}
 
