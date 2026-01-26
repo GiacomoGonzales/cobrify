@@ -9,6 +9,8 @@ import {
   TrendingUp,
   Loader2,
   Store,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
@@ -35,6 +37,13 @@ export default function Dashboard() {
   const [hideDashboardData, setHideDashboardData] = useState(false)
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
+  const [showAmounts, setShowAmounts] = useState(() => localStorage.getItem('dashboard_show_amounts') === 'true')
+
+  const toggleShowAmounts = () => {
+    const newValue = !showAmounts
+    setShowAmounts(newValue)
+    localStorage.setItem('dashboard_show_amounts', newValue.toString())
+  }
 
   // Determinar el prefijo de ruta según el contexto
   const getRoutePrefix = () => {
@@ -242,17 +251,19 @@ export default function Dashboard() {
     : todaysSales > 0 ? '+100.0' : '0.0'
 
   // Estadísticas
+  const hiddenAmount = 'S/ ****'
   const stats = [
     {
       title: 'Ventas del Día',
-      value: formatCurrency(todaysSales),
+      value: showAmounts ? formatCurrency(todaysSales) : hiddenAmount,
       icon: DollarSign,
       change: todaysSales > yesterdaySales ? `+${todayChange}%` : `${todayChange}%`,
       changeType: todaysSales >= yesterdaySales ? 'positive' : 'negative',
+      isSalesAmount: true,
     },
     {
       title: 'Ventas del Mes',
-      value: formatCurrency(monthSales),
+      value: showAmounts ? formatCurrency(monthSales) : hiddenAmount,
       icon: TrendingUp,
       change: `${validInvoicesForSales.filter(inv => {
         const invDate = getInvoiceDate(inv)
@@ -260,6 +271,7 @@ export default function Dashboard() {
         return invDate >= getStartOfMonth()
       }).length} comprobantes`,
       changeType: 'positive',
+      isSalesAmount: true,
     },
     {
       title: 'Facturas Pendientes',
@@ -355,7 +367,22 @@ export default function Dashboard() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">{stat.title}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">{stat.title}</p>
+                    {stat.isSalesAmount && (
+                      <button
+                        onClick={toggleShowAmounts}
+                        className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                        title={showAmounts ? 'Ocultar montos' : 'Mostrar montos'}
+                      >
+                        {showAmounts ? (
+                          <Eye className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                        ) : (
+                          <EyeOff className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                        )}
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-2">{stat.value}</p>
                   <p
                     className={`text-xs sm:text-sm mt-2 ${
