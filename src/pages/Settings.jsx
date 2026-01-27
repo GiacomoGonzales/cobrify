@@ -3834,6 +3834,49 @@ export default function Settings() {
                     </div>
                   )}
 
+                  {/* Carta Digital para Restaurantes */}
+                  {businessMode === 'restaurant' && catalogSlug && (
+                    <div className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <UtensilsCrossed className="w-5 h-5 text-orange-600" />
+                        <h4 className="font-medium text-gray-900">Carta Digital para tu Restaurante</h4>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Tus clientes pueden ver el menú y hacer pedidos directamente desde su celular. Los pedidos llegan automáticamente a tu sistema.
+                      </p>
+                      <div className="bg-white p-3 rounded-lg mb-3">
+                        <p className="text-xs text-gray-500 mb-1">URL de tu carta digital:</p>
+                        <p className="text-sm font-medium text-orange-600 break-all">
+                          {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/{catalogSlug}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/${catalogSlug}`)
+                            toast.success('Enlace de carta digital copiado')
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                        >
+                          <Copy className="w-4 h-4" />
+                          Copiar enlace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/${catalogSlug}`, '_blank')}
+                          className="flex items-center gap-2 px-3 py-2 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 transition-colors text-sm font-medium"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Ver carta
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">
+                        <strong>Tip:</strong> Genera un QR con esta URL y ponlo en cada mesa. Los clientes podrán hacer pedidos indicando su número de mesa: /menu/{catalogSlug}?mesa=5
+                      </p>
+                    </div>
+                  )}
+
                   <div className="border-t border-gray-200"></div>
 
                   {/* Personalización */}

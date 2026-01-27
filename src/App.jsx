@@ -141,12 +141,19 @@ function App() {
             <Route path="/catalogo/:slug" element={<CatalogoPublico />} />
             <Route path="/app/catalogo/:slug" element={<CatalogoPublico />} />
 
+            {/* Menú digital para restaurantes */}
+            <Route path="/menu/:slug" element={<CatalogoPublico isRestaurantMenu />} />
+            <Route path="/app/menu/:slug" element={<CatalogoPublico isRestaurantMenu />} />
+
             {/* Libro de Reclamaciones público */}
             <Route path="/reclamos/:slug" element={<LibroReclamaciones />} />
             <Route path="/app/reclamos/:slug" element={<LibroReclamaciones />} />
 
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />
+
+            {/* Menú Digital Demo */}
+            <Route path="/demo/menu" element={<CatalogoPublico isDemo isRestaurantMenu />} />
 
             {/* Página de prueba - Detector de notificaciones Yape (solo para testing) */}
             <Route path="/test-notifications" element={<NotificationTest />} />

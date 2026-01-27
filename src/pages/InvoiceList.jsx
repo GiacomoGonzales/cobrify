@@ -1260,11 +1260,13 @@ Gracias por tu preferencia.`
   }, [invoices, dateFilter, filterStartDate, filterEndDate])
 
   // Estadísticas (basadas en el período seleccionado)
+  // Excluir facturas anuladas del cálculo de monto total
+  const activeInvoices = dateFilteredInvoices.filter(i => i.status !== 'cancelled' && i.status !== 'voided')
   const stats = {
     total: dateFilteredInvoices.length,
     paid: dateFilteredInvoices.filter(i => i.status === 'paid').length,
     pending: dateFilteredInvoices.filter(i => i.status === 'pending').length,
-    totalAmount: dateFilteredInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
+    totalAmount: activeInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
     totalAll: invoices.length,
   }
 

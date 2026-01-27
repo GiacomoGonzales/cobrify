@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { collection, query, where, getDocs, doc, getDoc, addDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import {
   Search,
@@ -19,7 +19,14 @@ import {
   Store,
   Filter,
   Grid3X3,
-  List
+  List,
+  UtensilsCrossed,
+  ShoppingCart,
+  Bike,
+  User,
+  Hash,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react'
 
 // Componente de skeleton para carga
@@ -319,20 +326,253 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   )
 }
 
+// Tipos de orden para restaurante
+const ORDER_TYPES = [
+  { id: 'dine_in', label: 'Para mesa', icon: UtensilsCrossed, color: 'emerald' },
+  { id: 'takeaway', label: 'Para llevar', icon: ShoppingCart, color: 'blue' },
+  { id: 'delivery', label: 'Delivery', icon: Bike, color: 'orange' },
+]
+
 // Carrito lateral
-function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, business, onCheckout, showPrices = true }) {
+function CartDrawer({
+  isOpen,
+  onClose,
+  cart,
+  onUpdateQuantity,
+  onRemove,
+  business,
+  onCheckout,
+  showPrices = true,
+  isRestaurantMenu = false,
+  tableNumber: initialTableNumber = ''
+}) {
   const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
+
+  // Estados para modo restaurante
+  const [orderType, setOrderType] = useState(initialTableNumber ? 'dine_in' : 'takeaway')
+  const [tableNumber, setTableNumber] = useState(initialTableNumber)
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [orderSuccess, setOrderSuccess] = useState(false)
+  const [orderNumber, setOrderNumber] = useState('')
+  const [orderError, setOrderError] = useState('')
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
+      // Reset success state when opening
+      if (!orderSuccess) {
+        setOrderError('')
+      }
     } else {
       document.body.style.overflow = 'unset'
     }
     return () => {
       document.body.style.overflow = 'unset'
     }
-  }, [isOpen])
+  }, [isOpen, orderSuccess])
+
+  // Resetear formulario cuando se cierra
+  useEffect(() => {
+    if (!isOpen && orderSuccess) {
+      setTimeout(() => {
+        setOrderSuccess(false)
+        setOrderNumber('')
+        setOrderType(initialTableNumber ? 'dine_in' : 'takeaway')
+        setTableNumber(initialTableNumber)
+        setCustomerName('')
+        setCustomerPhone('')
+        setNotes('')
+      }, 300)
+    }
+  }, [isOpen, orderSuccess, initialTableNumber])
+
+  // Obtener siguiente número de orden
+  const getDailyOrderNumber = async (businessId) => {
+    try {
+      const today = new Date()
+      const dateKey = today.toISOString().split('T')[0]
+      const counterRef = doc(db, 'businesses', businessId, 'counters', `orders-${dateKey}`)
+      const counterSnap = await getDoc(counterRef)
+
+      let orderNum = 1
+      if (counterSnap.exists()) {
+        orderNum = (counterSnap.data().lastNumber || 0) + 1
+      }
+      if (orderNum > 999) orderNum = 1
+
+      await setDoc(counterRef, {
+        lastNumber: orderNum,
+        date: dateKey,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+
+      return `#${String(orderNum).padStart(3, '0')}`
+    } catch (error) {
+      console.error('Error getting order number:', error)
+      return `#${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`
+    }
+  }
+
+  // Enviar pedido al sistema de restaurante
+  const handleRestaurantOrder = async () => {
+    if (cart.length === 0) return
+
+    // Validaciones
+    if (orderType === 'dine_in' && !tableNumber.trim()) {
+      setOrderError('Ingresa el número de mesa')
+      return
+    }
+    if ((orderType === 'delivery' || orderType === 'takeaway') && !customerName.trim()) {
+      setOrderError('Ingresa tu nombre')
+      return
+    }
+    if (orderType === 'delivery' && !customerPhone.trim()) {
+      setOrderError('Ingresa tu teléfono para delivery')
+      return
+    }
+
+    setSubmitting(true)
+    setOrderError('')
+
+    try {
+      // En modo demo, simular envío de pedido
+      if (business.id === 'demo-restaurant' || business.id === 'demo') {
+        await new Promise(resolve => setTimeout(resolve, 1500)) // Simular delay
+        setOrderNumber('#DEMO')
+        setOrderSuccess(true)
+        cart.forEach(item => onRemove(item.cartItemId || item.id))
+        return
+      }
+
+      const ordersRef = collection(db, 'businesses', business.id, 'orders')
+      const orderNum = await getDailyOrderNumber(business.id)
+
+      // Preparar items de la orden
+      const items = cart.map(item => ({
+        itemId: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        productId: item.id,
+        name: item.name,
+        price: item.unitPrice || item.price,
+        quantity: item.quantity,
+        total: (item.unitPrice || item.price) * item.quantity,
+        modifiers: item.selectedModifiers || [],
+        notes: item.notes || '',
+        status: 'pending',
+        firedAt: new Date(),
+        readyAt: null,
+        deliveredAt: null,
+      }))
+
+      // Calcular totales
+      const orderTotal = items.reduce((sum, item) => sum + item.total, 0)
+      const igvRate = business.taxConfig?.igvRate || 18
+      const igvExempt = business.taxConfig?.igvExempt || false
+      let subtotal, tax
+
+      if (igvExempt) {
+        subtotal = orderTotal
+        tax = 0
+      } else {
+        subtotal = orderTotal / (1 + igvRate / 100)
+        tax = orderTotal - subtotal
+      }
+
+      const newOrder = {
+        orderNumber: orderNum,
+        orderType: orderType,
+        source: 'menu_digital', // Identificar que viene de la carta digital
+
+        // Mesa (solo si aplica)
+        ...(orderType === 'dine_in' && tableNumber && { tableNumber: tableNumber.trim() }),
+
+        // Info del cliente
+        ...(customerName && { customerName: customerName.trim() }),
+        ...(customerPhone && { customerPhone: customerPhone.trim() }),
+
+        // Items
+        items,
+
+        // Totales
+        subtotal,
+        tax,
+        total: orderTotal,
+
+        // Estado
+        status: 'pending',
+        overallStatus: 'active',
+        paid: false,
+        priority: 'normal',
+
+        // Notas
+        ...(notes && { notes: notes.trim() }),
+
+        // Timestamps
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        statusHistory: [{
+          status: 'pending',
+          timestamp: new Date(),
+          note: 'Pedido desde carta digital'
+        }]
+      }
+
+      await addDoc(ordersRef, newOrder)
+
+      setOrderNumber(orderNum)
+      setOrderSuccess(true)
+
+      // Limpiar carrito
+      cart.forEach(item => onRemove(item.cartItemId || item.id))
+
+    } catch (error) {
+      console.error('Error creating order:', error)
+      setOrderError('Error al enviar el pedido. Intenta nuevamente.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Pantalla de éxito
+  if (orderSuccess) {
+    return (
+      <>
+        <div
+          className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity duration-300 ${
+            isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={onClose}
+        />
+        <div className={`fixed right-0 top-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}>
+          <div className="flex flex-col h-full items-center justify-center p-8 text-center">
+            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Pedido enviado!</h2>
+            <p className="text-gray-600 mb-4">Tu pedido ha sido recibido</p>
+            <div className="text-4xl font-bold text-emerald-600 mb-6">{orderNumber}</div>
+            <p className="text-sm text-gray-500 mb-8">
+              {orderType === 'dine_in'
+                ? `Mesa ${tableNumber} - Te llevaremos tu pedido pronto`
+                : orderType === 'takeaway'
+                ? 'Te avisaremos cuando esté listo para recoger'
+                : 'Te contactaremos para confirmar la entrega'}
+            </p>
+            <button
+              onClick={onClose}
+              className="w-full py-4 bg-gray-900 text-white rounded-2xl font-semibold hover:bg-gray-800 transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
@@ -353,7 +593,7 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
           <div className="flex items-center justify-between p-6 border-b">
             <div className="flex items-center gap-3">
               <ShoppingBag className="w-6 h-6" />
-              <h2 className="text-xl font-bold">Tu carrito</h2>
+              <h2 className="text-xl font-bold">{isRestaurantMenu ? 'Tu pedido' : 'Tu carrito'}</h2>
               <span className="bg-gray-100 px-2 py-0.5 rounded-full text-sm">
                 {cart.reduce((sum, item) => sum + item.quantity, 0)}
               </span>
@@ -371,7 +611,7 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <ShoppingBag className="w-16 h-16 mb-4 opacity-50" />
-                <p className="text-lg">Tu carrito está vacío</p>
+                <p className="text-lg">{isRestaurantMenu ? 'Tu pedido está vacío' : 'Tu carrito está vacío'}</p>
                 <p className="text-sm mt-1">Agrega productos para comenzar</p>
               </div>
             ) : (
@@ -432,22 +672,156 @@ function CartDrawer({ isOpen, onClose, cart, onUpdateQuantity, onRemove, busines
 
           {/* Footer */}
           {cart.length > 0 && (
-            <div className="border-t p-6 space-y-4">
+            <div className="border-t p-6 space-y-4 max-h-[60vh] overflow-y-auto">
               {showPrices && (
                 <div className="flex items-center justify-between text-lg">
                   <span className="text-gray-600">Total</span>
                   <span className="text-2xl font-bold">S/ {total.toFixed(2)}</span>
                 </div>
               )}
-              <button
-                onClick={onCheckout}
-                className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="w-5 h-5" />
-                Hacer pedido por WhatsApp
-              </button>
+
+              {/* Opciones de restaurante */}
+              {isRestaurantMenu && (
+                <div className="space-y-4 pt-2">
+                  {/* Tipo de orden */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tipo de pedido
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {ORDER_TYPES.map((type) => {
+                        const Icon = type.icon
+                        const isSelected = orderType === type.id
+                        return (
+                          <button
+                            key={type.id}
+                            onClick={() => setOrderType(type.id)}
+                            className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
+                              isSelected
+                                ? `border-${type.color}-500 bg-${type.color}-50 text-${type.color}-700`
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            style={isSelected ? {
+                              borderColor: type.color === 'emerald' ? '#10B981' : type.color === 'blue' ? '#3B82F6' : '#F97316',
+                              backgroundColor: type.color === 'emerald' ? '#ECFDF5' : type.color === 'blue' ? '#EFF6FF' : '#FFF7ED'
+                            } : {}}
+                          >
+                            <Icon className="w-5 h-5" />
+                            <span className="text-xs font-medium">{type.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Mesa (solo para dine_in) */}
+                  {orderType === 'dine_in' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <Hash className="w-4 h-4 inline mr-1" />
+                        Número de mesa
+                      </label>
+                      <input
+                        type="text"
+                        value={tableNumber}
+                        onChange={(e) => setTableNumber(e.target.value)}
+                        placeholder="Ej: 5"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Nombre (para takeaway y delivery) */}
+                  {(orderType === 'takeaway' || orderType === 'delivery') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <User className="w-4 h-4 inline mr-1" />
+                        Tu nombre
+                      </label>
+                      <input
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Nombre para el pedido"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Teléfono (para delivery) */}
+                  {orderType === 'delivery' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <Phone className="w-4 h-4 inline mr-1" />
+                        Teléfono
+                      </label>
+                      <input
+                        type="tel"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="Para coordinar entrega"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+
+                  {/* Notas */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Notas adicionales (opcional)
+                    </label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Sin cebolla, extra salsa, etc."
+                      rows={2}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                    />
+                  </div>
+
+                  {/* Error */}
+                  {orderError && (
+                    <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl">
+                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm">{orderError}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botón de checkout */}
+              {isRestaurantMenu ? (
+                <button
+                  onClick={handleRestaurantOrder}
+                  disabled={submitting}
+                  className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <UtensilsCrossed className="w-5 h-5" />
+                      Enviar pedido
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={onCheckout}
+                  className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-semibold text-lg hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  Hacer pedido por WhatsApp
+                </button>
+              )}
+
               <p className="text-center text-sm text-gray-500">
-                Te contactaremos para confirmar tu pedido
+                {isRestaurantMenu
+                  ? 'Tu pedido llegará directamente a cocina'
+                  : 'Te contactaremos para confirmar tu pedido'}
               </p>
             </div>
           )}
@@ -498,9 +872,59 @@ const DEMO_CATALOG_DATA = {
   ]
 }
 
+// Datos demo para el menú de restaurante
+const DEMO_RESTAURANT_DATA = {
+  business: {
+    id: 'demo-restaurant',
+    businessName: 'RESTAURANTE DEMO',
+    name: 'La Buena Mesa',
+    ruc: '20123456789',
+    address: 'Av. Gastronómica 456, Lima',
+    phone: '01-9876543',
+    email: 'reservas@labuenamesa.com',
+    logoUrl: null,
+    catalogEnabled: true,
+    menuEnabled: true,
+    catalogSlug: 'demo',
+    menuSlug: 'demo',
+    catalogTagline: 'Sabores que enamoran',
+    catalogWelcome: '¡Bienvenido! Descubre nuestra carta y haz tu pedido.',
+    catalogColor: '#F97316',
+    catalogShowPrices: true,
+    taxConfig: { igvRate: 18, igvExempt: false }
+  },
+  products: [
+    // Entradas
+    { id: 'r1', code: 'ENT001', name: 'Ceviche Clásico', description: 'Pescado fresco marinado en limón con cebolla, camote y choclo', price: 38.00, category: 'cat-entradas', imageUrl: 'https://images.unsplash.com/photo-1535399831218-d5bd36d1a6b3?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r2', code: 'ENT002', name: 'Causa Limeña', description: 'Capas de papa amarilla con pollo, palta y mayonesa', price: 28.00, category: 'cat-entradas', imageUrl: 'https://images.unsplash.com/photo-1599974579688-8dbdd335c77f?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r3', code: 'ENT003', name: 'Tequeños de Queso', description: '6 unidades con salsa huancaína', price: 18.00, category: 'cat-entradas', imageUrl: 'https://images.unsplash.com/photo-1541014741259-de529411b96a?w=400&h=400&fit=crop', catalogVisible: true },
+    // Platos de fondo
+    { id: 'r4', code: 'PLT001', name: 'Lomo Saltado', description: 'Lomo fino salteado con cebolla, tomate, papas fritas y arroz', price: 42.00, category: 'cat-platos', imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r5', code: 'PLT002', name: 'Arroz con Mariscos', description: 'Arroz con camarones, pulpo, calamar y conchas', price: 48.00, category: 'cat-platos', imageUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r6', code: 'PLT003', name: 'Pollo a la Brasa', description: '1/4 de pollo con papas fritas, ensalada y cremas', price: 28.00, category: 'cat-platos', imageUrl: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r7', code: 'PLT004', name: 'Ají de Gallina', description: 'Pechuga deshilachada en crema de ají amarillo con arroz y papa', price: 32.00, category: 'cat-platos', imageUrl: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=400&fit=crop', catalogVisible: true },
+    // Bebidas
+    { id: 'r8', code: 'BEB001', name: 'Chicha Morada', description: 'Refresco tradicional de maíz morado (1 litro)', price: 12.00, category: 'cat-bebidas', imageUrl: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r9', code: 'BEB002', name: 'Pisco Sour', description: 'Cóctel clásico peruano con pisco, limón y clara de huevo', price: 22.00, category: 'cat-bebidas', imageUrl: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r10', code: 'BEB003', name: 'Limonada Frozen', description: 'Limonada helada refrescante', price: 10.00, category: 'cat-bebidas', imageUrl: 'https://images.unsplash.com/photo-1621263764928-df1444c5e859?w=400&h=400&fit=crop', catalogVisible: true },
+    // Postres
+    { id: 'r11', code: 'POS001', name: 'Suspiro a la Limeña', description: 'Dulce de leche con merengue de oporto', price: 15.00, category: 'cat-postres', imageUrl: 'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400&h=400&fit=crop', catalogVisible: true },
+    { id: 'r12', code: 'POS002', name: 'Picarones', description: '6 picarones con miel de chancaca', price: 18.00, category: 'cat-postres', imageUrl: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=400&fit=crop', catalogVisible: true },
+  ],
+  categories: [
+    { id: 'cat-entradas', name: 'Entradas' },
+    { id: 'cat-platos', name: 'Platos de Fondo' },
+    { id: 'cat-bebidas', name: 'Bebidas' },
+    { id: 'cat-postres', name: 'Postres' },
+  ]
+}
+
 // Componente principal
-export default function CatalogoPublico({ isDemo = false }) {
+export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false }) {
   const { slug } = useParams()
+  const [searchParams] = useSearchParams()
+  const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [business, setBusiness] = useState(null)
@@ -522,53 +946,97 @@ export default function CatalogoPublico({ isDemo = false }) {
 
         // Si es modo demo, usar datos estáticos
         if (isDemo) {
-          setBusiness(DEMO_CATALOG_DATA.business)
-          setProducts(DEMO_CATALOG_DATA.products)
-          setCategories(DEMO_CATALOG_DATA.categories)
+          const demoData = isRestaurantMenu ? DEMO_RESTAURANT_DATA : DEMO_CATALOG_DATA
+          setBusiness(demoData.business)
+          setProducts(demoData.products)
+          setCategories(demoData.categories)
           setLoading(false)
           return
         }
 
-        // Buscar negocio por slug
-        // IMPORTANTE: Incluir catalogEnabled==true para que las reglas de Firestore
-        // permitan el query desde usuarios no autenticados
-        const businessesQuery = query(
-          collection(db, 'businesses'),
-          where('catalogSlug', '==', slug),
-          where('catalogEnabled', '==', true)
-        )
-        const businessesSnap = await getDocs(businessesQuery)
+        // Para modo restaurante, buscar por menuSlug; para catálogo, por catalogSlug
+        let businessesQuery
+        if (isRestaurantMenu) {
+          // Primero intentar con menuSlug, si no existe usar catalogSlug
+          businessesQuery = query(
+            collection(db, 'businesses'),
+            where('menuSlug', '==', slug),
+            where('menuEnabled', '==', true)
+          )
+          let businessesSnap = await getDocs(businessesQuery)
 
-        if (businessesSnap.empty) {
-          setError('Catálogo no encontrado')
-          return
+          // Si no hay resultados con menuSlug, intentar con catalogSlug
+          if (businessesSnap.empty) {
+            businessesQuery = query(
+              collection(db, 'businesses'),
+              where('catalogSlug', '==', slug),
+              where('catalogEnabled', '==', true)
+            )
+            businessesSnap = await getDocs(businessesQuery)
+          }
+
+          if (businessesSnap.empty) {
+            setError('Menú no encontrado')
+            return
+          }
+
+          const businessDoc = businessesSnap.docs[0]
+          const businessData = { id: businessDoc.id, ...businessDoc.data() }
+          setBusiness(businessData)
+
+          // Cargar productos visibles en catálogo/menú
+          const productsQuery = query(
+            collection(db, 'businesses', businessDoc.id, 'products'),
+            where('catalogVisible', '==', true)
+          )
+          const productsSnap = await getDocs(productsQuery)
+          const productsData = productsSnap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          setProducts(productsData)
+
+          // Cargar categorías desde el campo productCategories del negocio
+          const categoriesData = businessData.productCategories || []
+          setCategories(categoriesData)
+        } else {
+          // Modo catálogo normal
+          businessesQuery = query(
+            collection(db, 'businesses'),
+            where('catalogSlug', '==', slug),
+            where('catalogEnabled', '==', true)
+          )
+          const businessesSnap = await getDocs(businessesQuery)
+
+          if (businessesSnap.empty) {
+            setError('Catálogo no encontrado')
+            return
+          }
+
+          const businessDoc = businessesSnap.docs[0]
+          const businessData = { id: businessDoc.id, ...businessDoc.data() }
+          setBusiness(businessData)
+
+          // Cargar productos visibles en catálogo
+          const productsQuery = query(
+            collection(db, 'businesses', businessDoc.id, 'products'),
+            where('catalogVisible', '==', true)
+          )
+          const productsSnap = await getDocs(productsQuery)
+          const productsData = productsSnap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          setProducts(productsData)
+
+          // Cargar categorías desde el campo productCategories del negocio
+          const categoriesData = businessData.productCategories || []
+          setCategories(categoriesData)
         }
-
-        const businessDoc = businessesSnap.docs[0]
-        const businessData = { id: businessDoc.id, ...businessDoc.data() }
-
-        // Ya no necesitamos verificar catalogEnabled porque el query ya lo filtra
-        setBusiness(businessData)
-
-        // Cargar productos visibles en catálogo
-        const productsQuery = query(
-          collection(db, 'businesses', businessDoc.id, 'products'),
-          where('catalogVisible', '==', true)
-        )
-        const productsSnap = await getDocs(productsQuery)
-        const productsData = productsSnap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
-        setProducts(productsData)
-
-        // Cargar categorías desde el campo productCategories del negocio
-        const categoriesData = businessData.productCategories || []
-        setCategories(categoriesData)
 
       } catch (err) {
         console.error('Error loading catalog:', err)
-        setError('Error al cargar el catálogo')
+        setError(isRestaurantMenu ? 'Error al cargar el menú' : 'Error al cargar el catálogo')
       } finally {
         setLoading(false)
       }
@@ -577,7 +1045,7 @@ export default function CatalogoPublico({ isDemo = false }) {
     if (slug || isDemo) {
       loadCatalog()
     }
-  }, [slug, isDemo])
+  }, [slug, isDemo, isRestaurantMenu])
 
   // Obtener categorías raíz (sin parentId) para mostrar en el catálogo
   const rootCategories = useMemo(() => {
@@ -728,10 +1196,16 @@ export default function CatalogoPublico({ isDemo = false }) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          {isRestaurantMenu ? (
+            <UtensilsCrossed className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          ) : (
+            <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          )}
           <h1 className="text-2xl font-bold text-gray-900 mb-2">{error}</h1>
           <p className="text-gray-600">
-            El catálogo que buscas no existe o no está disponible
+            {isRestaurantMenu
+              ? 'El menú que buscas no existe o no está disponible'
+              : 'El catálogo que buscas no existe o no está disponible'}
           </p>
         </div>
       </div>
@@ -740,6 +1214,14 @@ export default function CatalogoPublico({ isDemo = false }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Banner de mesa (si viene de QR con número de mesa) */}
+      {isRestaurantMenu && tableFromUrl && (
+        <div className="bg-emerald-600 text-white py-2 px-4 text-center text-sm font-medium">
+          <UtensilsCrossed className="w-4 h-4 inline mr-2" />
+          Mesa {tableFromUrl} - Haz tu pedido desde tu celular
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4">
@@ -757,7 +1239,11 @@ export default function CatalogoPublico({ isDemo = false }) {
                   className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center"
                   style={{ backgroundColor: business?.catalogColor || '#10B981' }}
                 >
-                  <Store className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                  {isRestaurantMenu ? (
+                    <UtensilsCrossed className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                  ) : (
+                    <Store className="w-5 h-5 md:w-6 md:h-6 text-white" />
+                  )}
                 </div>
               )}
               <div>
@@ -776,7 +1262,7 @@ export default function CatalogoPublico({ isDemo = false }) {
               className="relative flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
             >
               <ShoppingBag className="w-5 h-5" />
-              <span className="hidden md:inline font-medium">Carrito</span>
+              <span className="hidden md:inline font-medium">{isRestaurantMenu ? 'Pedido' : 'Carrito'}</span>
               {cartItemsCount > 0 && (
                 <span className="absolute -top-2 -right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-sm font-bold">
                   {cartItemsCount}
@@ -1077,10 +1563,12 @@ export default function CatalogoPublico({ isDemo = false }) {
         <div className="fixed bottom-6 left-4 right-4 md:hidden z-40">
           <button
             onClick={() => setCartOpen(true)}
-            className="w-full py-4 bg-gray-900 text-white rounded-2xl font-semibold shadow-2xl flex items-center justify-center gap-3"
+            className={`w-full py-4 text-white rounded-2xl font-semibold shadow-2xl flex items-center justify-center gap-3 ${
+              isRestaurantMenu ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-900'
+            }`}
           >
-            <ShoppingBag className="w-5 h-5" />
-            Ver carrito ({cartItemsCount})
+            {isRestaurantMenu ? <UtensilsCrossed className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
+            {isRestaurantMenu ? `Ver pedido (${cartItemsCount})` : `Ver carrito (${cartItemsCount})`}
             {showPrices && (
               <span className="bg-white/20 px-3 py-1 rounded-full">
                 S/ {cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0).toFixed(2)}
@@ -1110,6 +1598,8 @@ export default function CatalogoPublico({ isDemo = false }) {
         business={business}
         onCheckout={handleCheckout}
         showPrices={showPrices}
+        isRestaurantMenu={isRestaurantMenu}
+        tableNumber={tableFromUrl}
       />
     </div>
   )
