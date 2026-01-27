@@ -2413,6 +2413,542 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
 };
 
 /**
+ * Imprimir ticket de cierre de caja
+ * @param {Object} sessionData - Datos de la sesión de caja
+ * @param {Array} movements - Movimientos de la sesión
+ * @param {Object} business - Datos del negocio
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ * @param {string} branchName - Nombre de la sucursal (opcional)
+ */
+export const printCashClosureTicket = async (sessionData, movements = [], business, paperWidth = 58, branchName = null) => {
+  const isNative = Capacitor.isNativePlatform();
+
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+
+  // Si es conexión WiFi, usar la función específica para WiFi
+  if (connectionType === 'wifi') {
+    console.log('📶 Usando impresión WiFi para cierre de caja...');
+    return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName);
+  }
+
+  // Si usa el servicio BLE alternativo (iOS), usar printBLECashClosure
+  if (useAlternativeBLE) {
+    console.log('🔵 iOS: Usando impresión BLE alternativa para cierre de caja...');
+    return await printBLECashClosure(sessionData, movements, business, paperWidth, branchName);
+  }
+
+  // Bluetooth Android - comportamiento original
+  console.log('🔵 Android: Usando impresión Bluetooth para cierre de caja...');
+
+  try {
+    const format = getFormat(paperWidth);
+    const lineWidth = format.charsPerLine;
+
+    // Helper para convertir fechas
+    const getDateFromTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+      }
+      if (timestamp instanceof Date) {
+        return timestamp;
+      }
+      return new Date(timestamp);
+    };
+
+    // Formatear fecha y hora
+    const formatDateTime = (dateValue) => {
+      const date = getDateFromTimestamp(dateValue);
+      if (!date) return '-';
+      return date.toLocaleDateString('es-PE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+
+    // Formatear moneda
+    const formatCurrency = (value) => `S/ ${Number(value || 0).toFixed(2)}`;
+
+    // Calcular totales de movimientos
+    const totalIncome = movements
+      .filter(m => m.type === 'income')
+      .reduce((sum, m) => sum + (m.amount || 0), 0);
+
+    const totalExpense = movements
+      .filter(m => m.type === 'expense')
+      .reduce((sum, m) => sum + (m.amount || 0), 0);
+
+    // Datos de la sesión
+    const openingAmount = sessionData?.openingAmount || 0;
+    const totalSales = sessionData?.totalSales || 0;
+    const salesCash = sessionData?.salesCash || 0;
+    const salesCard = sessionData?.salesCard || 0;
+    const salesTransfer = sessionData?.salesTransfer || 0;
+    const salesYape = sessionData?.salesYape || 0;
+    const salesPlin = sessionData?.salesPlin || 0;
+    const expectedAmount = sessionData?.expectedAmount || 0;
+    const closingCash = sessionData?.closingCash || 0;
+    const closingCard = sessionData?.closingCard || 0;
+    const closingTransfer = sessionData?.closingTransfer || 0;
+    const closingAmount = sessionData?.closingAmount || 0;
+    const difference = sessionData?.difference || (closingAmount - expectedAmount);
+
+    // Helper para crear línea con valor alineado a la derecha
+    const createLine = (label, value) => {
+      const valueStr = value.toString();
+      const spaces = lineWidth - label.length - valueStr.length;
+      return `${label}${' '.repeat(Math.max(1, spaces))}${valueStr}`;
+    };
+
+    // Construir comando en cadena
+    let printer = CapacitorThermalPrinter.begin();
+
+    if (paperWidth === 80) {
+      printer = printer.lineSpacing(2);
+    }
+
+    // ========== HEADER ==========
+    printer = printer.align('center');
+
+    // Logo (si existe)
+    if (business?.logoUrl) {
+      try {
+        const logoConfig = await prepareLogoForPrinting(business.logoUrl, paperWidth);
+        if (logoConfig) {
+          printer = printer.bitmap(logoConfig.base64, logoConfig.width, logoConfig.height);
+        }
+      } catch (logoError) {
+        console.warn('No se pudo cargar el logo:', logoError);
+      }
+    }
+
+    // Nombre del negocio
+    printer = printer
+      .bold(true)
+      .text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA') + '\n')
+      .bold(false)
+      .text(`RUC: ${business?.ruc || '00000000000'}\n`);
+
+    if (business?.address) {
+      printer = printer.text(convertSpanishText(business.address) + '\n');
+    }
+
+    if (branchName) {
+      printer = printer.text(`Sucursal: ${convertSpanishText(branchName)}\n`);
+    }
+
+    // Título del documento
+    printer = printer
+      .text('\n')
+      .bold(true)
+      .doubleHeight(true)
+      .text('CIERRE DE CAJA\n')
+      .doubleHeight(false)
+      .bold(false)
+      .text(format.separator + '\n');
+
+    // ========== INFORMACIÓN DE LA SESIÓN ==========
+    printer = printer.align('left');
+    printer = printer.text(`Apertura: ${formatDateTime(sessionData?.openedAt)}\n`);
+    printer = printer.text(`Cierre:   ${formatDateTime(sessionData?.closedAt)}\n`);
+    printer = printer.text(`Comprobantes: ${sessionData?.invoiceCount || 0}\n`);
+    printer = printer.text(format.separator + '\n');
+
+    // ========== APERTURA ==========
+    printer = printer
+      .bold(true)
+      .text('APERTURA\n')
+      .bold(false)
+      .text(createLine('Monto Inicial:', formatCurrency(openingAmount)) + '\n')
+      .text(format.separator + '\n');
+
+    // ========== VENTAS DEL DÍA ==========
+    printer = printer
+      .bold(true)
+      .text('VENTAS DEL DIA\n')
+      .bold(false);
+
+    if (salesCash > 0) printer = printer.text(createLine('Efectivo:', formatCurrency(salesCash)) + '\n');
+    if (salesCard > 0) printer = printer.text(createLine('Tarjeta:', formatCurrency(salesCard)) + '\n');
+    if (salesTransfer > 0) printer = printer.text(createLine('Transferencia:', formatCurrency(salesTransfer)) + '\n');
+    if (salesYape > 0) printer = printer.text(createLine('Yape:', formatCurrency(salesYape)) + '\n');
+    if (salesPlin > 0) printer = printer.text(createLine('Plin:', formatCurrency(salesPlin)) + '\n');
+
+    printer = printer
+      .text(format.halfSeparator + '\n')
+      .bold(true)
+      .text(createLine('Total Ventas:', formatCurrency(totalSales)) + '\n')
+      .bold(false)
+      .text(format.separator + '\n');
+
+    // ========== OTROS MOVIMIENTOS ==========
+    if (totalIncome > 0 || totalExpense > 0) {
+      printer = printer
+        .bold(true)
+        .text('OTROS MOVIMIENTOS\n')
+        .bold(false);
+
+      if (totalIncome > 0) printer = printer.text(createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n');
+      if (totalExpense > 0) printer = printer.text(createLine('- Egresos:', formatCurrency(totalExpense)) + '\n');
+
+      printer = printer.text(format.separator + '\n');
+    }
+
+    // ========== CÁLCULO ==========
+    printer = printer
+      .bold(true)
+      .text('CALCULO\n')
+      .bold(false)
+      .text(createLine('Apertura:', formatCurrency(openingAmount)) + '\n')
+      .text(createLine('+ Ventas Efectivo:', formatCurrency(salesCash)) + '\n');
+
+    if (totalIncome > 0) printer = printer.text(createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n');
+    if (totalExpense > 0) printer = printer.text(createLine('- Egresos:', formatCurrency(totalExpense)) + '\n');
+
+    printer = printer
+      .text(format.halfSeparator + '\n')
+      .bold(true)
+      .text(createLine('Efectivo Esperado:', formatCurrency(expectedAmount)) + '\n')
+      .bold(false)
+      .text(format.separator + '\n');
+
+    // ========== CONTEO DE CIERRE ==========
+    printer = printer
+      .bold(true)
+      .text('CONTEO DE CIERRE\n')
+      .bold(false)
+      .text(createLine('Efectivo:', formatCurrency(closingCash)) + '\n')
+      .text(createLine('Tarjeta:', formatCurrency(closingCard)) + '\n')
+      .text(createLine('Transferencia:', formatCurrency(closingTransfer)) + '\n')
+      .text(format.halfSeparator + '\n')
+      .bold(true)
+      .text(createLine('Total Contado:', formatCurrency(closingAmount)) + '\n')
+      .bold(false)
+      .text(format.separator + '\n');
+
+    // ========== DIFERENCIA ==========
+    const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
+    printer = printer
+      .bold(true)
+      .doubleHeight(true)
+      .text(createLine(diffLabel, formatCurrency(difference)) + '\n')
+      .doubleHeight(false)
+      .bold(false)
+      .text(format.separator + '\n');
+
+    // ========== FOOTER ==========
+    printer = printer
+      .align('center')
+      .text('Documento interno\n')
+      .text('Sin valor tributario\n')
+      .text('\n')
+      .text(formatDateTime(new Date()) + '\n')
+      .feed(3)
+      .cut();
+
+    // Enviar a la impresora
+    await printer.write();
+
+    console.log('✅ Ticket de cierre de caja impreso correctamente');
+    return { success: true };
+
+  } catch (error) {
+    console.error('Error printing cash closure ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Imprimir cierre de caja vía WiFi
+ */
+const printWifiCashClosure = async (sessionData, movements, business, paperWidth, branchName) => {
+  try {
+    const format = getFormat(paperWidth);
+    const lineWidth = format.charsPerLine;
+    const builder = new EscPosBuilder();
+
+    // Helper para convertir fechas
+    const getDateFromTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+      }
+      return timestamp instanceof Date ? timestamp : new Date(timestamp);
+    };
+
+    const formatDateTime = (dateValue) => {
+      const date = getDateFromTimestamp(dateValue);
+      if (!date) return '-';
+      return date.toLocaleDateString('es-PE', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    };
+
+    const formatCurrency = (value) => `S/ ${Number(value || 0).toFixed(2)}`;
+
+    const totalIncome = movements.filter(m => m.type === 'income').reduce((sum, m) => sum + (m.amount || 0), 0);
+    const totalExpense = movements.filter(m => m.type === 'expense').reduce((sum, m) => sum + (m.amount || 0), 0);
+
+    const { openingAmount = 0, totalSales = 0, salesCash = 0, salesCard = 0, salesTransfer = 0,
+      salesYape = 0, salesPlin = 0, expectedAmount = 0, closingCash = 0, closingCard = 0,
+      closingTransfer = 0, closingAmount = 0 } = sessionData || {};
+    const difference = sessionData?.difference || (closingAmount - expectedAmount);
+
+    const createLine = (label, value) => {
+      const valueStr = value.toString();
+      const spaces = lineWidth - label.length - valueStr.length;
+      return `${label}${' '.repeat(Math.max(1, spaces))}${valueStr}`;
+    };
+
+    // Header
+    builder.alignCenter()
+      .bold(true)
+      .text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA'))
+      .newLine()
+      .bold(false)
+      .text(`RUC: ${business?.ruc || '00000000000'}`)
+      .newLine();
+
+    if (business?.address) {
+      builder.text(convertSpanishText(business.address)).newLine();
+    }
+    if (branchName) {
+      builder.text(`Sucursal: ${convertSpanishText(branchName)}`).newLine();
+    }
+
+    builder.newLine()
+      .bold(true)
+      .doubleWidth(true)
+      .doubleHeight(true)
+      .text('CIERRE DE CAJA')
+      .newLine()
+      .doubleWidth(false)
+      .doubleHeight(false)
+      .bold(false)
+      .text(format.separator)
+      .newLine();
+
+    // Info sesión
+    builder.alignLeft()
+      .text(`Apertura: ${formatDateTime(sessionData?.openedAt)}`)
+      .newLine()
+      .text(`Cierre:   ${formatDateTime(sessionData?.closedAt)}`)
+      .newLine()
+      .text(`Comprobantes: ${sessionData?.invoiceCount || 0}`)
+      .newLine()
+      .text(format.separator)
+      .newLine();
+
+    // Apertura
+    builder.bold(true).text('APERTURA').newLine().bold(false)
+      .text(createLine('Monto Inicial:', formatCurrency(openingAmount)))
+      .newLine()
+      .text(format.separator)
+      .newLine();
+
+    // Ventas
+    builder.bold(true).text('VENTAS DEL DIA').newLine().bold(false);
+    if (salesCash > 0) builder.text(createLine('Efectivo:', formatCurrency(salesCash))).newLine();
+    if (salesCard > 0) builder.text(createLine('Tarjeta:', formatCurrency(salesCard))).newLine();
+    if (salesTransfer > 0) builder.text(createLine('Transferencia:', formatCurrency(salesTransfer))).newLine();
+    if (salesYape > 0) builder.text(createLine('Yape:', formatCurrency(salesYape))).newLine();
+    if (salesPlin > 0) builder.text(createLine('Plin:', formatCurrency(salesPlin))).newLine();
+    builder.text(format.halfSeparator).newLine()
+      .bold(true).text(createLine('Total Ventas:', formatCurrency(totalSales))).newLine().bold(false)
+      .text(format.separator).newLine();
+
+    // Otros movimientos
+    if (totalIncome > 0 || totalExpense > 0) {
+      builder.bold(true).text('OTROS MOVIMIENTOS').newLine().bold(false);
+      if (totalIncome > 0) builder.text(createLine('+ Ingresos:', formatCurrency(totalIncome))).newLine();
+      if (totalExpense > 0) builder.text(createLine('- Egresos:', formatCurrency(totalExpense))).newLine();
+      builder.text(format.separator).newLine();
+    }
+
+    // Cálculo
+    builder.bold(true).text('CALCULO').newLine().bold(false)
+      .text(createLine('Apertura:', formatCurrency(openingAmount))).newLine()
+      .text(createLine('+ Ventas Efectivo:', formatCurrency(salesCash))).newLine();
+    if (totalIncome > 0) builder.text(createLine('+ Ingresos:', formatCurrency(totalIncome))).newLine();
+    if (totalExpense > 0) builder.text(createLine('- Egresos:', formatCurrency(totalExpense))).newLine();
+    builder.text(format.halfSeparator).newLine()
+      .bold(true).text(createLine('Efectivo Esperado:', formatCurrency(expectedAmount))).newLine().bold(false)
+      .text(format.separator).newLine();
+
+    // Conteo
+    builder.bold(true).text('CONTEO DE CIERRE').newLine().bold(false)
+      .text(createLine('Efectivo:', formatCurrency(closingCash))).newLine()
+      .text(createLine('Tarjeta:', formatCurrency(closingCard))).newLine()
+      .text(createLine('Transferencia:', formatCurrency(closingTransfer))).newLine()
+      .text(format.halfSeparator).newLine()
+      .bold(true).text(createLine('Total Contado:', formatCurrency(closingAmount))).newLine().bold(false)
+      .text(format.separator).newLine();
+
+    // Diferencia
+    const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
+    builder.bold(true)
+      .doubleHeight(true)
+      .text(createLine(diffLabel, formatCurrency(difference)))
+      .newLine()
+      .doubleHeight(false)
+      .bold(false)
+      .text(format.separator)
+      .newLine();
+
+    // Footer
+    builder.alignCenter()
+      .text('Documento interno')
+      .newLine()
+      .text('Sin valor tributario')
+      .newLine()
+      .newLine()
+      .text(formatDateTime(new Date()))
+      .newLine()
+      .feed(2)
+      .cut();
+
+    const base64Data = builder.toBase64();
+    const result = await TcpPrinter.print({ data: base64Data });
+
+    if (result && result.success) {
+      return { success: true };
+    }
+    return { success: false, error: 'Error al imprimir cierre de caja via WiFi' };
+  } catch (error) {
+    console.error('Error printing WiFi cash closure:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Imprimir cierre de caja vía BLE (iOS)
+ */
+const printBLECashClosure = async (sessionData, movements, business, paperWidth, branchName) => {
+  try {
+    const format = getFormat(paperWidth);
+    const lineWidth = format.charsPerLine;
+
+    const getDateFromTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') return timestamp.toDate();
+      return timestamp instanceof Date ? timestamp : new Date(timestamp);
+    };
+
+    const formatDateTime = (dateValue) => {
+      const date = getDateFromTimestamp(dateValue);
+      if (!date) return '-';
+      return date.toLocaleDateString('es-PE', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    };
+
+    const formatCurrency = (value) => `S/ ${Number(value || 0).toFixed(2)}`;
+
+    const totalIncome = movements.filter(m => m.type === 'income').reduce((sum, m) => sum + (m.amount || 0), 0);
+    const totalExpense = movements.filter(m => m.type === 'expense').reduce((sum, m) => sum + (m.amount || 0), 0);
+
+    const { openingAmount = 0, totalSales = 0, salesCash = 0, salesCard = 0, salesTransfer = 0,
+      salesYape = 0, salesPlin = 0, expectedAmount = 0, closingCash = 0, closingCard = 0,
+      closingTransfer = 0, closingAmount = 0 } = sessionData || {};
+    const difference = sessionData?.difference || (closingAmount - expectedAmount);
+
+    const createLine = (label, value) => {
+      const valueStr = value.toString();
+      const spaces = lineWidth - label.length - valueStr.length;
+      return `${label}${' '.repeat(Math.max(1, spaces))}${valueStr}`;
+    };
+
+    // Construir texto para BLE
+    let ticketText = '';
+
+    // Header
+    ticketText += `${convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA')}\n`;
+    ticketText += `RUC: ${business?.ruc || '00000000000'}\n`;
+    if (business?.address) ticketText += `${convertSpanishText(business.address)}\n`;
+    if (branchName) ticketText += `Sucursal: ${convertSpanishText(branchName)}\n`;
+    ticketText += '\n';
+    ticketText += '*** CIERRE DE CAJA ***\n';
+    ticketText += format.separator + '\n';
+
+    // Info
+    ticketText += `Apertura: ${formatDateTime(sessionData?.openedAt)}\n`;
+    ticketText += `Cierre:   ${formatDateTime(sessionData?.closedAt)}\n`;
+    ticketText += `Comprobantes: ${sessionData?.invoiceCount || 0}\n`;
+    ticketText += format.separator + '\n';
+
+    // Apertura
+    ticketText += 'APERTURA\n';
+    ticketText += createLine('Monto Inicial:', formatCurrency(openingAmount)) + '\n';
+    ticketText += format.separator + '\n';
+
+    // Ventas
+    ticketText += 'VENTAS DEL DIA\n';
+    if (salesCash > 0) ticketText += createLine('Efectivo:', formatCurrency(salesCash)) + '\n';
+    if (salesCard > 0) ticketText += createLine('Tarjeta:', formatCurrency(salesCard)) + '\n';
+    if (salesTransfer > 0) ticketText += createLine('Transferencia:', formatCurrency(salesTransfer)) + '\n';
+    if (salesYape > 0) ticketText += createLine('Yape:', formatCurrency(salesYape)) + '\n';
+    if (salesPlin > 0) ticketText += createLine('Plin:', formatCurrency(salesPlin)) + '\n';
+    ticketText += format.halfSeparator + '\n';
+    ticketText += createLine('Total Ventas:', formatCurrency(totalSales)) + '\n';
+    ticketText += format.separator + '\n';
+
+    // Otros movimientos
+    if (totalIncome > 0 || totalExpense > 0) {
+      ticketText += 'OTROS MOVIMIENTOS\n';
+      if (totalIncome > 0) ticketText += createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n';
+      if (totalExpense > 0) ticketText += createLine('- Egresos:', formatCurrency(totalExpense)) + '\n';
+      ticketText += format.separator + '\n';
+    }
+
+    // Cálculo
+    ticketText += 'CALCULO\n';
+    ticketText += createLine('Apertura:', formatCurrency(openingAmount)) + '\n';
+    ticketText += createLine('+ Ventas Efectivo:', formatCurrency(salesCash)) + '\n';
+    if (totalIncome > 0) ticketText += createLine('+ Ingresos:', formatCurrency(totalIncome)) + '\n';
+    if (totalExpense > 0) ticketText += createLine('- Egresos:', formatCurrency(totalExpense)) + '\n';
+    ticketText += format.halfSeparator + '\n';
+    ticketText += createLine('Efectivo Esperado:', formatCurrency(expectedAmount)) + '\n';
+    ticketText += format.separator + '\n';
+
+    // Conteo
+    ticketText += 'CONTEO DE CIERRE\n';
+    ticketText += createLine('Efectivo:', formatCurrency(closingCash)) + '\n';
+    ticketText += createLine('Tarjeta:', formatCurrency(closingCard)) + '\n';
+    ticketText += createLine('Transferencia:', formatCurrency(closingTransfer)) + '\n';
+    ticketText += format.halfSeparator + '\n';
+    ticketText += createLine('Total Contado:', formatCurrency(closingAmount)) + '\n';
+    ticketText += format.separator + '\n';
+
+    // Diferencia
+    const diffLabel = difference > 0 ? 'Diferencia (Sobrante):' : difference < 0 ? 'Diferencia (Faltante):' : 'Diferencia:';
+    ticketText += createLine(diffLabel, formatCurrency(difference)) + '\n';
+    ticketText += format.separator + '\n';
+
+    // Footer
+    ticketText += 'Documento interno\n';
+    ticketText += 'Sin valor tributario\n';
+    ticketText += '\n';
+    ticketText += formatDateTime(new Date()) + '\n';
+    ticketText += '\n\n\n';
+
+    // Enviar via BLE
+    const result = await BLEPrinter.printBLEText(ticketText);
+    return result;
+
+  } catch (error) {
+    console.error('Error printing BLE cash closure:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Exportar el builder para uso externo si se necesita
  */
 export { EscPosBuilder };

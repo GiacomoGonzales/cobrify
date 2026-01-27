@@ -24,6 +24,7 @@ import {
 } from '@/services/firestoreService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 import CashClosureTicket from '@/components/CashClosureTicket'
+import { Capacitor } from '@capacitor/core'
 
 export default function CashRegister() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches } = useAppContext()
@@ -93,6 +94,12 @@ export default function CashRegister() {
   const [printSessionData, setPrintSessionData] = useState(null)
   const [printMovements, setPrintMovements] = useState([])
 
+  // Estado para impresión térmica (Bluetooth/WiFi)
+  const [isPrinterConnected, setIsPrinterConnected] = useState(false)
+  const [printerConfig, setPrinterConfig] = useState(null)
+  const [isPrintingThermal, setIsPrintingThermal] = useState(false)
+  const isNative = Capacitor.isNativePlatform()
+
   useEffect(() => {
     if (user?.uid) {
       loadBranches()
@@ -105,6 +112,26 @@ export default function CashRegister() {
       loadData()
     }
   }, [user, selectedBranch])
+
+  // Cargar configuración de impresora térmica (para impresión Bluetooth/WiFi)
+  useEffect(() => {
+    const loadPrinterConfig = async () => {
+      if (!user?.uid || !isNative) return
+      try {
+        const { getPrinterConfig, connectPrinter } = await import('@/services/thermalPrinterService')
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+        if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          setPrinterConfig(printerConfigResult.config)
+          // Intentar conectar a la impresora
+          const connectResult = await connectPrinter(printerConfigResult.config.address)
+          setIsPrinterConnected(connectResult.success)
+        }
+      } catch (error) {
+        console.warn('No se pudo cargar config de impresora:', error)
+      }
+    }
+    loadPrinterConfig()
+  }, [user, isNative])
 
   // Cargar sucursales
   const loadBranches = async () => {
@@ -610,6 +637,104 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error al imprimir ticket:', error)
       toast.error('Error al imprimir el ticket')
+    }
+  }
+
+  // Imprimir por impresora térmica (Bluetooth/WiFi) - Cierre actual
+  const handlePrintThermal = async () => {
+    if (!isPrinterConnected || !printerConfig) {
+      toast.error('No hay impresora conectada. Configúrala en Ajustes.')
+      return
+    }
+
+    setIsPrintingThermal(true)
+    try {
+      const { printCashClosureTicket, connectPrinter } = await import('@/services/thermalPrinterService')
+
+      // Reconectar a la impresora
+      const connectResult = await connectPrinter(printerConfig.address)
+      if (!connectResult.success) {
+        toast.error('No se pudo conectar a la impresora')
+        setIsPrintingThermal(false)
+        return
+      }
+
+      // Obtener nombre de sucursal si aplica
+      const branchName = selectedBranch ? branches.find(b => b.id === selectedBranch)?.name : null
+
+      // Imprimir
+      const result = await printCashClosureTicket(
+        closedSessionData,
+        movements,
+        companySettings,
+        printerConfig.paperWidth || 58,
+        branchName
+      )
+
+      if (result.success) {
+        toast.success('Ticket impreso correctamente')
+      } else {
+        toast.error(result.error || 'Error al imprimir')
+      }
+    } catch (error) {
+      console.error('Error al imprimir ticket térmico:', error)
+      toast.error('Error al imprimir el ticket')
+    } finally {
+      setIsPrintingThermal(false)
+    }
+  }
+
+  // Imprimir por impresora térmica (Bluetooth/WiFi) - Historial
+  const handlePrintThermalHistory = async () => {
+    if (!isPrinterConnected || !printerConfig) {
+      toast.error('No hay impresora conectada. Configúrala en Ajustes.')
+      return
+    }
+
+    setIsPrintingThermal(true)
+    try {
+      const { printCashClosureTicket, connectPrinter } = await import('@/services/thermalPrinterService')
+
+      // Cargar datos del negocio si no están cargados
+      let businessData = companySettings
+      if (!businessData) {
+        const businessResult = await getCompanySettings(getBusinessId())
+        if (businessResult.success) {
+          businessData = businessResult.data
+          setCompanySettings(businessData)
+        }
+      }
+
+      // Reconectar a la impresora
+      const connectResult = await connectPrinter(printerConfig.address)
+      if (!connectResult.success) {
+        toast.error('No se pudo conectar a la impresora')
+        setIsPrintingThermal(false)
+        return
+      }
+
+      // Obtener nombre de sucursal si aplica
+      const branchName = selectedBranch ? branches.find(b => b.id === selectedBranch)?.name : null
+
+      // Imprimir
+      const result = await printCashClosureTicket(
+        selectedHistorySession,
+        historyMovements,
+        businessData,
+        printerConfig.paperWidth || 58,
+        branchName
+      )
+
+      if (result.success) {
+        toast.success('Ticket impreso correctamente')
+      } else {
+        toast.error(result.error || 'Error al imprimir')
+      }
+    } catch (error) {
+      console.error('Error al imprimir ticket térmico:', error)
+      toast.error('Error al imprimir el ticket')
+    } finally {
+      setIsPrintingThermal(false)
     }
   }
 
@@ -1826,6 +1951,19 @@ export default function CashRegister() {
                 <Printer className="w-4 h-4 mr-1" />
                 Ticket
               </Button>
+              {/* Botón de impresión térmica (solo en app móvil) */}
+              {isNative && isPrinterConnected && (
+                <Button
+                  variant="outline"
+                  onClick={handlePrintThermalHistory}
+                  disabled={isPrintingThermal}
+                  className="flex-1 min-w-[80px]"
+                  size="sm"
+                >
+                  <Printer className="w-4 h-4 mr-1" />
+                  {isPrintingThermal ? '...' : 'Impresora'}
+                </Button>
+              )}
               <Button
                 onClick={() => {
                   setShowHistoryDetailModal(false)
@@ -2103,6 +2241,19 @@ export default function CashRegister() {
                   <Printer className="w-4 h-4 mr-1" />
                   Ticket
                 </Button>
+                {/* Botón de impresión térmica (solo en app móvil) */}
+                {isNative && isPrinterConnected && (
+                  <Button
+                    variant="outline"
+                    onClick={handlePrintThermal}
+                    disabled={isPrintingThermal}
+                    className="w-full"
+                    size="sm"
+                  >
+                    <Printer className="w-4 h-4 mr-1" />
+                    {isPrintingThermal ? 'Imprimiendo...' : 'Impresora'}
+                  </Button>
+                )}
               </div>
             </div>
 
