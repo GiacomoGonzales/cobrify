@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Edit, Plus, Minus, Trash2, Loader2, X } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -6,14 +6,63 @@ import { removeOrderItem, updateOrderItemQuantity } from '@/services/orderServic
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess }) {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, business } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
 
   const [isUpdating, setIsUpdating] = useState(false)
   const [updatingItemIndex, setUpdatingItemIndex] = useState(null)
+  const [recargoConfig, setRecargoConfig] = useState({ enabled: false, rate: 10 })
+  const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
+
+  // Cargar configuración del negocio
+  useEffect(() => {
+    const loadConfig = async () => {
+      // Primero intentar usar los datos del contexto
+      if (business?.restaurantConfig) {
+        setRecargoConfig({
+          enabled: business.restaurantConfig.recargoConsumoEnabled ?? false,
+          rate: business.restaurantConfig.recargoConsumoRate ?? 10
+        })
+      }
+      if (business?.taxConfig) {
+        setTaxConfig(business.taxConfig)
+      }
+
+      // Si no hay datos en el contexto, cargar de Firestore
+      if (!business?.restaurantConfig && !demoContext) {
+        try {
+          const businessId = getBusinessId()
+          if (businessId) {
+            const businessRef = doc(db, 'businesses', businessId)
+            const businessSnap = await getDoc(businessRef)
+            if (businessSnap.exists()) {
+              const data = businessSnap.data()
+              if (data.restaurantConfig) {
+                setRecargoConfig({
+                  enabled: data.restaurantConfig.recargoConsumoEnabled ?? false,
+                  rate: data.restaurantConfig.recargoConsumoRate ?? 10
+                })
+              }
+              if (data.taxConfig) {
+                setTaxConfig(data.taxConfig)
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error loading business config:', error)
+        }
+      }
+    }
+
+    if (isOpen) {
+      loadConfig()
+    }
+  }, [isOpen, business, getBusinessId, demoContext])
 
   const handleUpdateQuantity = async (itemIndex, currentQuantity, delta) => {
     // Verificar si está en modo demo
@@ -73,12 +122,32 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   }
 
   const calculateTotals = () => {
-    if (!order || !order.items) return { subtotal: 0, igv: 0, total: 0 }
+    if (!order || !order.items) return { subtotal: 0, igv: 0, recargo: 0, total: 0 }
 
-    const total = order.items.reduce((sum, item) => sum + item.total, 0)
-    const subtotal = total / 1.18
-    const igv = total - subtotal
-    return { subtotal, igv, total }
+    const itemsTotal = order.items.reduce((sum, item) => sum + item.total, 0)
+
+    // Calcular recargo al consumo si está habilitado
+    let recargo = 0
+    if (recargoConfig.enabled) {
+      recargo = itemsTotal * (recargoConfig.rate / 100)
+    }
+
+    // Calcular IGV
+    const igvRate = taxConfig.igvRate || 18
+    const baseConRecargo = itemsTotal + recargo
+
+    let subtotal, igv, total
+    if (taxConfig.igvExempt) {
+      subtotal = baseConRecargo
+      igv = 0
+      total = baseConRecargo
+    } else {
+      subtotal = baseConRecargo / (1 + igvRate / 100)
+      igv = baseConRecargo - subtotal
+      total = baseConRecargo
+    }
+
+    return { subtotal, igv, recargo, total, itemsTotal }
   }
 
   if (!table || !order) return null
@@ -181,13 +250,21 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
         {order.items && order.items.length > 0 && (
           <div className="border-t pt-4 space-y-2 mb-4">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Subtotal:</span>
-              <span className="font-medium">S/ {totals.subtotal.toFixed(2)}</span>
+              <span className="text-gray-600">Subtotal productos:</span>
+              <span className="font-medium">S/ {(totals.itemsTotal || 0).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">IGV (18%):</span>
-              <span className="font-medium">S/ {totals.igv.toFixed(2)}</span>
-            </div>
+            {recargoConfig.enabled && totals.recargo > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Recargo al consumo ({recargoConfig.rate}%):</span>
+                <span className="font-medium">S/ {totals.recargo.toFixed(2)}</span>
+              </div>
+            )}
+            {!taxConfig.igvExempt && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">IGV ({taxConfig.igvRate || 18}%):</span>
+                <span className="font-medium">S/ {totals.igv.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-lg font-bold border-t pt-2">
               <span>Total:</span>
               <span className="text-primary-600">S/ {totals.total.toFixed(2)}</span>

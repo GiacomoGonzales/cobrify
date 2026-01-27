@@ -529,7 +529,12 @@ function CartDrawer({
 
     } catch (error) {
       console.error('Error creating order:', error)
-      setOrderError('Error al enviar el pedido. Intenta nuevamente.')
+      // Mostrar error específico para diagnóstico
+      if (error.code === 'permission-denied') {
+        setOrderError('Sin permisos para crear pedido. Contacta al restaurante.')
+      } else {
+        setOrderError(`Error: ${error.message || 'Error al enviar el pedido'}`)
+      }
     } finally {
       setSubmitting(false)
     }

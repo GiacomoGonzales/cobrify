@@ -311,12 +311,24 @@ service cloud.firestore {
       match /orders/{orderId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Permitir creación pública de órdenes desde carta digital
+        // Solo si el negocio tiene catálogo habilitado y el pedido viene de menu_digital
+        allow create: if get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true
+                      && request.resource.data.source == 'menu_digital'
+                      && request.resource.data.orderType != null
+                      && request.resource.data.items != null;
       }
 
       // Subcollection: Counters (Contadores - para números secuenciales)
       match /counters/{counterId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Permitir lectura y escritura pública de contadores de órdenes para carta digital
+        // Solo para contadores que empiezan con "orders-" (ej: orders-2026-01-27)
+        allow read, write: if counterId[0:7] == 'orders-'
+                          && get(/databases/$(database)/documents/businesses/$(userId)).data.catalogEnabled == true;
       }
 
       // Subcollection: Emission Config (Configuración de emisión electrónica)

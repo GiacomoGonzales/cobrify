@@ -2252,6 +2252,9 @@ Gracias por tu preferencia.`
                 {viewingInvoice.igv > 0 && (
                   <div className="flex justify-between"><span className="text-gray-600">IGV ({viewingInvoice.taxConfig?.igvRate || 18}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
                 )}
+                {viewingInvoice.recargoConsumo > 0 && (
+                  <div className="flex justify-between text-green-600"><span>Recargo al Consumo ({viewingInvoice.recargoConsumoRate || 10}%)</span><span>{formatCurrency(viewingInvoice.recargoConsumo)}</span></div>
+                )}
                 {viewingInvoice.detractionAmount > 0 && (
                   <div className="flex justify-between text-orange-600 pt-2 border-t"><span>Detracción ({viewingInvoice.detractionPercentage}%)</span><span>-{formatCurrency(viewingInvoice.detractionAmount)}</span></div>
                 )}
