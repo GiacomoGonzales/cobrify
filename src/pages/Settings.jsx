@@ -193,6 +193,11 @@ export default function Settings() {
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
 
+  // Estados para QR de mesas (carta digital restaurante)
+  const [tableQrCount, setTableQrCount] = useState(10)
+  const [tableQrCodes, setTableQrCodes] = useState([])
+  const [generatingTableQrs, setGeneratingTableQrs] = useState(false)
+
   // Estados para modo de negocio
   const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
   const [restaurantConfig, setRestaurantConfig] = useState({
@@ -3850,7 +3855,7 @@ export default function Settings() {
                           {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/menu/{catalogSlug}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 mb-4">
                         <button
                           type="button"
                           onClick={() => {
@@ -3871,9 +3876,118 @@ export default function Settings() {
                           Ver carta
                         </button>
                       </div>
-                      <p className="text-xs text-gray-500 mt-3">
-                        <strong>Tip:</strong> Genera un QR con esta URL y ponlo en cada mesa. Los clientes podrán hacer pedidos indicando su número de mesa: /menu/{catalogSlug}?mesa=5
-                      </p>
+
+                      {/* Generador de QR por Mesa */}
+                      <div className="border-t border-orange-200 pt-4 mt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <QrCode className="w-5 h-5 text-orange-600" />
+                          <h5 className="font-medium text-gray-900">Códigos QR por Mesa</h5>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Genera códigos QR para cada mesa. Al escanear, el cliente verá la carta con su número de mesa pre-cargado.
+                        </p>
+
+                        <div className="flex items-center gap-3 mb-4">
+                          <label className="text-sm text-gray-700">Cantidad de mesas:</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={tableQrCount}
+                            onChange={(e) => setTableQrCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                            className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          />
+                          <button
+                            type="button"
+                            disabled={generatingTableQrs}
+                            onClick={async () => {
+                              setGeneratingTableQrs(true)
+                              try {
+                                const baseUrl = resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL
+                                const qrs = []
+                                for (let i = 1; i <= tableQrCount; i++) {
+                                  const url = `${baseUrl}/menu/${catalogSlug}?mesa=${i}`
+                                  const dataUrl = await QRCode.toDataURL(url, {
+                                    width: 300,
+                                    margin: 2,
+                                    color: { dark: '#000000', light: '#ffffff' }
+                                  })
+                                  qrs.push({ table: i, url, dataUrl })
+                                }
+                                setTableQrCodes(qrs)
+                                toast.success(`${tableQrCount} códigos QR generados`)
+                              } catch (error) {
+                                console.error('Error generating QR codes:', error)
+                                toast.error('Error al generar códigos QR')
+                              } finally {
+                                setGeneratingTableQrs(false)
+                              }
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium disabled:opacity-50"
+                          >
+                            {generatingTableQrs ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Generando...
+                              </>
+                            ) : (
+                              <>
+                                <QrCode className="w-4 h-4" />
+                                Generar QRs
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {/* QRs Generados */}
+                        {tableQrCodes.length > 0 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">{tableQrCodes.length} códigos generados</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Descargar todos como ZIP usando una técnica simple
+                                  tableQrCodes.forEach((qr, index) => {
+                                    setTimeout(() => {
+                                      const link = document.createElement('a')
+                                      link.download = `mesa-${qr.table}-qr.png`
+                                      link.href = qr.dataUrl
+                                      link.click()
+                                    }, index * 200) // Pequeño delay entre descargas
+                                  })
+                                  toast.success('Descargando todos los QRs...')
+                                }}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+                              >
+                                <Download className="w-4 h-4" />
+                                Descargar todos
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-96 overflow-y-auto p-2 bg-white rounded-lg">
+                              {tableQrCodes.map((qr) => (
+                                <div key={qr.table} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
+                                  <img src={qr.dataUrl} alt={`Mesa ${qr.table}`} className="w-24 h-24" />
+                                  <span className="text-sm font-semibold text-gray-900 mt-1">Mesa {qr.table}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const link = document.createElement('a')
+                                      link.download = `mesa-${qr.table}-qr.png`
+                                      link.href = qr.dataUrl
+                                      link.click()
+                                    }}
+                                    className="mt-1 text-xs text-orange-600 hover:text-orange-700"
+                                  >
+                                    Descargar
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
