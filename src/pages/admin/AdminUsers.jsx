@@ -319,9 +319,12 @@ export default function AdminUsers() {
           // Campos originales
           planLimit: PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0, // Límite base del plan
           bonusInvoices: data.bonusInvoices || 0, // Comprobantes extra dados manualmente
-          limit: (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) === -1
-            ? -1
-            : (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) + (data.bonusInvoices || 0), // Total (plan + bonus)
+          // Usar el límite real de la BD si existe, sino calcular con plan + bonus
+          limit: (data.limits?.maxInvoicesPerMonth !== undefined && data.limits?.maxInvoicesPerMonth !== null)
+            ? data.limits.maxInvoicesPerMonth
+            : (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) === -1
+              ? -1
+              : (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) + (data.bonusInvoices || 0),
           accessBlocked: data.accessBlocked || false,
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
           subUsersCount: subUsersCountMap[doc.id] || 0,
