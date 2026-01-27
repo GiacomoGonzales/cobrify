@@ -522,14 +522,6 @@ function Sidebar() {
       menuId: 'loans',
     },
     {
-      path: '/certificados',
-      icon: Award,
-      label: 'Certificados',
-      pageId: 'certificates',
-      menuId: 'certificates',
-      requiresFeature: 'certificates',
-    },
-    {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',
