@@ -16,7 +16,8 @@ import {
   Save,
   CheckCircle,
   Shield,
-  PlusCircle
+  PlusCircle,
+  Plus
 } from 'lucide-react';
 import { getUserStats } from '@/services/userStatsService';
 import { PLANS } from '@/services/subscriptionService';
@@ -709,7 +710,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 </div>
 
                 {/* Planes SUNAT Directo */}
-                <div>
+                <div className="mb-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-600" />
                     Planes SUNAT Directo (Comprobantes ILIMITADOS)
@@ -747,19 +748,62 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                     ))}
                   </div>
                 </div>
+
+                {/* Add-ons (Paquetes adicionales) */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                    <Plus className="w-4 h-4 text-purple-600" />
+                    Paquetes Adicionales (No cambia plan ni fechas)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'addon').map(([key, plan]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedPlanForPayment(key)}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          selectedPlanForPayment === key
+                            ? 'border-purple-600 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <p className="font-bold text-gray-900">{plan.name}</p>
+                          <p className="text-2xl font-bold text-purple-600 my-2">
+                            S/ {plan.totalPrice}
+                          </p>
+                          <p className="text-xs text-purple-600 font-medium mt-1">
+                            +{plan.addonAmount} comprobantes
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Se suma al límite actual
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Monto Total */}
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className={`p-4 border rounded-lg ${selectedPlanConfig?.isAddon ? 'bg-purple-50 border-purple-200' : 'bg-green-50 border-green-200'}`}>
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-green-900">Monto Total a Cobrar:</span>
-                  <span className="text-3xl font-bold text-green-600">
+                  <span className={`font-semibold ${selectedPlanConfig?.isAddon ? 'text-purple-900' : 'text-green-900'}`}>Monto Total a Cobrar:</span>
+                  <span className={`text-3xl font-bold ${selectedPlanConfig?.isAddon ? 'text-purple-600' : 'text-green-600'}`}>
                     S/ {paymentAmount}
                   </span>
                 </div>
-                <p className="text-sm text-green-700 mt-1">
-                  Plan de {selectedPlanConfig?.months} {selectedPlanConfig?.months === 1 ? 'mes' : 'meses'} -
-                  S/ {selectedPlanConfig?.pricePerMonth}/mes
+                <p className={`text-sm mt-1 ${selectedPlanConfig?.isAddon ? 'text-purple-700' : 'text-green-700'}`}>
+                  {selectedPlanConfig?.isAddon ? (
+                    <>
+                      {selectedPlanConfig.name} - Se agregarán +{selectedPlanConfig.addonAmount} comprobantes al límite actual
+                    </>
+                  ) : (
+                    <>
+                      Plan de {selectedPlanConfig?.months} {selectedPlanConfig?.months === 1 ? 'mes' : 'meses'} -
+                      S/ {selectedPlanConfig?.pricePerMonth}/mes
+                    </>
+                  )}
                 </p>
               </div>
 

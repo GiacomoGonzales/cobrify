@@ -88,6 +88,55 @@ export const PLANS = {
       multiUser: true
     }
   },
+  qpse_1_month_3_branches: {
+    name: "Plan QPse - 1 Mes (3 Sucursales)",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 29.90,
+    totalPrice: 29.90,
+    emissionMethod: "qpse",
+    limits: {
+      maxInvoicesPerMonth: 500,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 3, // 3 sucursales incluidas
+      sunatIntegration: true,
+      multiUser: true
+    }
+  },
+  qpse_1_month_1000: {
+    name: "Plan QPse 1000 - 1 Mes",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 29.90,
+    totalPrice: 29.90,
+    emissionMethod: "qpse",
+    limits: {
+      maxInvoicesPerMonth: 1000, // 1000 comprobantes/mes
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    }
+  },
+
+  // ============================================
+  // ADD-ONS (Paquetes adicionales)
+  // ============================================
+  addon_500_comprobantes: {
+    name: "+500 Comprobantes",
+    category: "addon",
+    months: 0, // No extiende tiempo
+    pricePerMonth: 10.00,
+    totalPrice: 10.00,
+    emissionMethod: "qpse",
+    isAddon: true, // Flag para identificar que es un add-on
+    addonType: "invoices",
+    addonAmount: 500, // Cantidad de comprobantes a agregar
+    limits: null // No modifica límites del plan base
+  },
+
   qpse_6_months: {
     name: "Plan QPse - 6 Meses",
     category: "qpse",
@@ -469,6 +518,42 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
 
     // Obtener configuración del plan
     const planConfig = PLANS[selectedPlan];
+
+    // Verificar si es un add-on (paquete adicional)
+    if (planConfig?.isAddon) {
+      // Para add-ons: solo registrar pago y aumentar límite de comprobantes
+      const paymentRecord = {
+        date: Timestamp.fromDate(now),
+        amount,
+        method,
+        plan: selectedPlan,
+        planName: planConfig.name,
+        months: 0,
+        addonType: planConfig.addonType,
+        addonAmount: planConfig.addonAmount,
+        status: 'completed',
+        registeredBy: 'admin'
+      };
+
+      const updatedHistory = [...(subscription.paymentHistory || []), paymentRecord];
+
+      // Calcular nuevo límite de comprobantes
+      const currentLimit = subscription.limits?.maxInvoicesPerMonth || 500;
+      const newLimit = currentLimit + (planConfig.addonAmount || 0);
+
+      await updateDoc(subscriptionRef, {
+        'limits.maxInvoicesPerMonth': newLimit,
+        lastPaymentDate: Timestamp.fromDate(now),
+        paymentHistory: updatedHistory,
+        updatedAt: serverTimestamp()
+      });
+
+      // Enviar notificación
+      await notifyPaymentReceived(userId, amount, planConfig.name, null);
+      return;
+    }
+
+    // Para planes normales: extender suscripción
     const monthsToAdd = planConfig?.months || 3;
 
     let newPeriodEnd;
