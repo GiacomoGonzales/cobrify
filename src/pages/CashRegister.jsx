@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -23,6 +23,7 @@ import {
   updateCashSession, // TEMPORAL: Para editar historial
 } from '@/services/firestoreService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
+import CashClosureTicket from '@/components/CashClosureTicket'
 
 export default function CashRegister() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches } = useAppContext()
@@ -85,6 +86,12 @@ export default function CashRegister() {
   // Estados para editar/eliminar movimientos
   const [editingMovement, setEditingMovement] = useState(null)
   const [showDeleteMovementConfirm, setShowDeleteMovementConfirm] = useState(null)
+
+  // Estado para datos del negocio (para impresión de ticket)
+  const [companySettings, setCompanySettings] = useState(null)
+  // Estado para la sesión que se va a imprimir (puede ser cierre actual o historial)
+  const [printSessionData, setPrintSessionData] = useState(null)
+  const [printMovements, setPrintMovements] = useState([])
 
   useEffect(() => {
     if (user?.uid) {
@@ -471,6 +478,11 @@ export default function CashRegister() {
     const transfer = parseFloat(closingCounts.transfer) || 0
 
     try {
+      // Cargar datos del negocio para la impresión del ticket
+      const businessResult = await getCompanySettings(getBusinessId())
+      if (businessResult.success) {
+        setCompanySettings(businessResult.data)
+      }
       // Guardar datos de la sesión cerrada con hora de cierre
       const closedData = {
         ...currentSession,
@@ -490,6 +502,7 @@ export default function CashRegister() {
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
+        invoiceCount: todayInvoices.length,
       }
 
       // MODO DEMO: Simular cierre sin guardar en Firebase
@@ -518,6 +531,7 @@ export default function CashRegister() {
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
+        invoiceCount: todayInvoices.length,
       })
       if (result.success) {
         // Guardar datos y mostrar pantalla de éxito
@@ -564,6 +578,38 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error al generar PDF:', error)
       toast.error('Error al generar el reporte PDF')
+    }
+  }
+
+  const handlePrintTicket = () => {
+    // Configurar datos para impresión del cierre actual
+    setPrintSessionData(closedSessionData)
+    setPrintMovements(movements)
+    // Esperar a que se actualice el estado y luego imprimir
+    setTimeout(() => {
+      window.print()
+    }, 100)
+  }
+
+  const handlePrintHistoryTicket = async () => {
+    try {
+      // Cargar datos del negocio si no están cargados
+      if (!companySettings) {
+        const businessResult = await getCompanySettings(getBusinessId())
+        if (businessResult.success) {
+          setCompanySettings(businessResult.data)
+        }
+      }
+      // Configurar datos para impresión del historial
+      setPrintSessionData(selectedHistorySession)
+      setPrintMovements(historyMovements)
+      // Esperar a que se actualice el estado y luego imprimir
+      setTimeout(() => {
+        window.print()
+      }, 100)
+    } catch (error) {
+      console.error('Error al imprimir ticket:', error)
+      toast.error('Error al imprimir el ticket')
     }
   }
 
@@ -1734,7 +1780,7 @@ export default function CashRegister() {
             )}
 
             {/* Botones */}
-            <div className="flex gap-3 pt-4 border-t border-gray-200">
+            <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
               <Button
                 variant="outline"
                 onClick={async () => {
@@ -1747,9 +1793,10 @@ export default function CashRegister() {
                     toast.error('Error al generar PDF')
                   }
                 }}
-                className="flex-1"
+                className="flex-1 min-w-[80px]"
+                size="sm"
               >
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="w-4 h-4 mr-1" />
                 PDF
               </Button>
               <Button
@@ -1764,10 +1811,20 @@ export default function CashRegister() {
                     toast.error('Error al generar Excel')
                   }
                 }}
-                className="flex-1"
+                className="flex-1 min-w-[80px]"
+                size="sm"
               >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                <FileSpreadsheet className="w-4 h-4 mr-1" />
                 Excel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handlePrintHistoryTicket}
+                className="flex-1 min-w-[80px]"
+                size="sm"
+              >
+                <Printer className="w-4 h-4 mr-1" />
+                Ticket
               </Button>
               <Button
                 onClick={() => {
@@ -1775,7 +1832,8 @@ export default function CashRegister() {
                   setSelectedHistorySession(null)
                   setHistoryMovements([])
                 }}
-                className="flex-1"
+                className="flex-1 min-w-[80px]"
+                size="sm"
               >
                 Cerrar
               </Button>
@@ -2014,25 +2072,36 @@ export default function CashRegister() {
               </div>
             </div>
 
-            {/* Botones de descarga */}
+            {/* Botones de descarga e impresión */}
             <div className="space-y-3">
-              <p className="text-sm text-gray-600 text-center">Descarga el reporte de cierre de caja:</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <p className="text-sm text-gray-600 text-center">Descarga o imprime el reporte de cierre:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Button
                   variant="outline"
                   onClick={handleDownloadExcel}
                   className="w-full"
+                  size="sm"
                 >
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  Descargar Excel
+                  <FileSpreadsheet className="w-4 h-4 mr-1" />
+                  Excel
                 </Button>
                 <Button
                   variant="outline"
                   onClick={handleDownloadPDF}
                   className="w-full"
+                  size="sm"
                 >
-                  <Download className="w-4 h-4 mr-2" />
-                  Descargar PDF
+                  <Download className="w-4 h-4 mr-1" />
+                  PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handlePrintTicket}
+                  className="w-full"
+                  size="sm"
+                >
+                  <Printer className="w-4 h-4 mr-1" />
+                  Ticket
                 </Button>
               </div>
             </div>
@@ -2215,6 +2284,20 @@ export default function CashRegister() {
           </div>
         </div>
       </Modal>
+
+      {/* Ticket Oculto para Impresión */}
+      {printSessionData && companySettings && (
+        <div className="hidden print:block">
+          <CashClosureTicket
+            sessionData={printSessionData}
+            movements={printMovements}
+            invoices={printSessionData === closedSessionData ? todayInvoices : []}
+            companySettings={companySettings}
+            paperWidth={80}
+            branchName={selectedBranch?.name || null}
+          />
+        </div>
+      )}
     </div>
   )
 }

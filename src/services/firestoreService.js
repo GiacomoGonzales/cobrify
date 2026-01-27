@@ -1405,7 +1405,7 @@ export const openCashRegister = async (userId, openingAmount, branchId = null) =
  */
 export const closeCashRegister = async (userId, sessionId, closingData) => {
   try {
-    const { cash, card, transfer, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, totalIncome, totalExpense, expectedAmount, difference } = closingData
+    const { cash, card, transfer, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, totalIncome, totalExpense, expectedAmount, difference, invoiceCount } = closingData
     const closingAmount = cash + card + transfer
 
     await updateDoc(doc(db, 'businesses', userId, 'cashSessions', sessionId), {
@@ -1427,6 +1427,7 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
       totalExpense: totalExpense || 0,
       expectedAmount: expectedAmount || 0,
       difference: difference || 0,
+      invoiceCount: invoiceCount || 0,
     })
 
     return { success: true }
