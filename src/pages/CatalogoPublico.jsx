@@ -954,85 +954,39 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           return
         }
 
-        // Para modo restaurante, buscar por menuSlug; para catálogo, por catalogSlug
-        let businessesQuery
-        if (isRestaurantMenu) {
-          // Primero intentar con menuSlug, si no existe usar catalogSlug
-          businessesQuery = query(
-            collection(db, 'businesses'),
-            where('menuSlug', '==', slug),
-            where('menuEnabled', '==', true)
-          )
-          let businessesSnap = await getDocs(businessesQuery)
+        // Buscar negocio por catalogSlug (tanto para catálogo como para menú digital)
+        // El menú digital usa la misma configuración del catálogo, solo cambia la interfaz
+        const businessesQuery = query(
+          collection(db, 'businesses'),
+          where('catalogSlug', '==', slug),
+          where('catalogEnabled', '==', true)
+        )
+        const businessesSnap = await getDocs(businessesQuery)
 
-          // Si no hay resultados con menuSlug, intentar con catalogSlug
-          if (businessesSnap.empty) {
-            businessesQuery = query(
-              collection(db, 'businesses'),
-              where('catalogSlug', '==', slug),
-              where('catalogEnabled', '==', true)
-            )
-            businessesSnap = await getDocs(businessesQuery)
-          }
-
-          if (businessesSnap.empty) {
-            setError('Menú no encontrado')
-            return
-          }
-
-          const businessDoc = businessesSnap.docs[0]
-          const businessData = { id: businessDoc.id, ...businessDoc.data() }
-          setBusiness(businessData)
-
-          // Cargar productos visibles en catálogo/menú
-          const productsQuery = query(
-            collection(db, 'businesses', businessDoc.id, 'products'),
-            where('catalogVisible', '==', true)
-          )
-          const productsSnap = await getDocs(productsQuery)
-          const productsData = productsSnap.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }))
-          setProducts(productsData)
-
-          // Cargar categorías desde el campo productCategories del negocio
-          const categoriesData = businessData.productCategories || []
-          setCategories(categoriesData)
-        } else {
-          // Modo catálogo normal
-          businessesQuery = query(
-            collection(db, 'businesses'),
-            where('catalogSlug', '==', slug),
-            where('catalogEnabled', '==', true)
-          )
-          const businessesSnap = await getDocs(businessesQuery)
-
-          if (businessesSnap.empty) {
-            setError('Catálogo no encontrado')
-            return
-          }
-
-          const businessDoc = businessesSnap.docs[0]
-          const businessData = { id: businessDoc.id, ...businessDoc.data() }
-          setBusiness(businessData)
-
-          // Cargar productos visibles en catálogo
-          const productsQuery = query(
-            collection(db, 'businesses', businessDoc.id, 'products'),
-            where('catalogVisible', '==', true)
-          )
-          const productsSnap = await getDocs(productsQuery)
-          const productsData = productsSnap.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }))
-          setProducts(productsData)
-
-          // Cargar categorías desde el campo productCategories del negocio
-          const categoriesData = businessData.productCategories || []
-          setCategories(categoriesData)
+        if (businessesSnap.empty) {
+          setError(isRestaurantMenu ? 'Menú no encontrado' : 'Catálogo no encontrado')
+          return
         }
+
+        const businessDoc = businessesSnap.docs[0]
+        const businessData = { id: businessDoc.id, ...businessDoc.data() }
+        setBusiness(businessData)
+
+        // Cargar productos visibles en catálogo/menú
+        const productsQuery = query(
+          collection(db, 'businesses', businessDoc.id, 'products'),
+          where('catalogVisible', '==', true)
+        )
+        const productsSnap = await getDocs(productsQuery)
+        const productsData = productsSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        setProducts(productsData)
+
+        // Cargar categorías desde el campo productCategories del negocio
+        const categoriesData = businessData.productCategories || []
+        setCategories(categoriesData)
 
       } catch (err) {
         console.error('Error loading catalog:', err)
