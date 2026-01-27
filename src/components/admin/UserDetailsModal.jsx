@@ -952,7 +952,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   onChange={(e) => setSelectedPlan(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
-                  {Object.entries(PLANS).map(([key, plan]) => (
+                  {Object.entries(PLANS).filter(([key, plan]) => !plan.isAddon).map(([key, plan]) => (
                     <option key={key} value={key}>
                       {plan.name} - S/ {plan.pricePerMonth}/mes
                     </option>
@@ -961,7 +961,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
               </div>
 
               {/* Mostrar características del plan seleccionado */}
-              {PLANS[selectedPlan] && (
+              {PLANS[selectedPlan] && PLANS[selectedPlan].limits && (
                 <div className={`p-4 border-2 rounded-lg ${
                   PLANS[selectedPlan].category === 'qpse' ? 'bg-blue-50 border-blue-200' :
                   PLANS[selectedPlan].category === 'sunat_direct' ? 'bg-green-50 border-green-200' :
