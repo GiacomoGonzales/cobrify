@@ -2845,6 +2845,27 @@ export const sendDispatchGuideToSunatFn = onRequest(
 
       console.log('📋 [GRE] Resultado de emisión:', JSON.stringify(result, null, 2))
 
+      // ========== VERIFICAR SI ES "DOCUMENTO YA REGISTRADO" ==========
+      // Código 1033 = "El comprobante fue registrado previamente"
+      // Código 4000 = "El documento ya existe" (variante para GRE)
+      // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
+      const isAlreadyRegistered = result.responseCode === '1033' ||
+        result.responseCode === '4000' ||
+        (result.description && (
+          result.description.toLowerCase().includes('registrado previamente') ||
+          result.description.toLowerCase().includes('ya ha sido registrado') ||
+          result.description.toLowerCase().includes('documento ya existe') ||
+          result.description.toLowerCase().includes('already registered')
+        ))
+
+      if (isAlreadyRegistered && !result.accepted) {
+        console.log('📋 [GRE] Documento ya registrado en SUNAT - tratando como ACEPTADO')
+        console.log(`   Código: ${result.responseCode}`)
+        console.log(`   Descripción: ${result.description}`)
+        result.accepted = true
+        result.description = (result.description || '') + ' (Documento ya existía en SUNAT)'
+      }
+
       // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (GRE REMITENTE) ==========
       let xmlStorageUrl = null
       let cdrStorageUrl = null
@@ -3170,6 +3191,27 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
       const result = await emitirGuiaRemisionTransportista(guideForEmission, businessData)
 
       console.log('📋 [GRE-T] Resultado de emisión:', JSON.stringify(result, null, 2))
+
+      // ========== VERIFICAR SI ES "DOCUMENTO YA REGISTRADO" ==========
+      // Código 1033 = "El comprobante fue registrado previamente"
+      // Código 4000 = "El documento ya existe" (variante para GRE)
+      // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
+      const isAlreadyRegistered = result.responseCode === '1033' ||
+        result.responseCode === '4000' ||
+        (result.description && (
+          result.description.toLowerCase().includes('registrado previamente') ||
+          result.description.toLowerCase().includes('ya ha sido registrado') ||
+          result.description.toLowerCase().includes('documento ya existe') ||
+          result.description.toLowerCase().includes('already registered')
+        ))
+
+      if (isAlreadyRegistered && !result.accepted) {
+        console.log('📋 [GRE-T] Documento ya registrado en SUNAT - tratando como ACEPTADO')
+        console.log(`   Código: ${result.responseCode}`)
+        console.log(`   Descripción: ${result.description}`)
+        result.accepted = true
+        result.description = (result.description || '') + ' (Documento ya existía en SUNAT)'
+      }
 
       // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (GRE TRANSPORTISTA) ==========
       let xmlStorageUrl = null
