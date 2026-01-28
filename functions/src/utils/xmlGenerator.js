@@ -2661,9 +2661,24 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     }).txt('10') // 10 = Tarjeta Única de Circulación
   }
 
-  // === NOTA: Para GRE Transportista NO se incluyen las líneas de detalle (DespatchLine) ===
-  // Warning 4434: "No corresponde consignar el detalle de los bienes a transportar"
-  // El transportista NO debe detallar los items, eso es responsabilidad de la GRE Remitente
+  // === LÍNEA DE DESPACHO (DespatchLine) - OBLIGATORIA según esquema UBL 2.1 ===
+  // Aunque SUNAT da warning 4434 sobre detalles de bienes, el esquema XSD requiere al menos un DespatchLine
+  // Para GRE Transportista se usa una línea genérica sin detalles específicos
+  const despatchLine = root.ele('cac:DespatchLine')
+  despatchLine.ele('cbc:ID').txt('1')
+
+  // Cantidad (obligatorio según esquema) - usar 1 como valor genérico
+  despatchLine.ele('cbc:DeliveredQuantity', {
+    'unitCode': 'ZZ' // ZZ = Unidad de servicio/no aplica
+  }).txt('1')
+
+  // Referencia de línea de orden (obligatorio)
+  const orderLineRef = despatchLine.ele('cac:OrderLineReference')
+  orderLineRef.ele('cbc:LineID').txt('1')
+
+  // Item genérico (obligatorio según esquema)
+  const itemEle = despatchLine.ele('cac:Item')
+  itemEle.ele('cbc:Description').txt('SERVICIO DE TRANSPORTE DE CARGA')
 
   // Retornar XML como string
   return root.end({ prettyPrint: true })
