@@ -344,8 +344,9 @@ export default function POS() {
     addIgv: false // Si true, se agrega IGV al precio ingresado
   })
 
-  // Estado para configuración de impresión web legible
+  // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [compactPrint, setCompactPrint] = useState(false)
 
   // Price editing
   const [editingPriceItemId, setEditingPriceItemId] = useState(null)
@@ -510,6 +511,7 @@ export default function POS() {
         const printerConfigResult = await getPrinterConfig(getBusinessId())
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+          setCompactPrint(printerConfigResult.config.compactPrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -5579,6 +5581,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             companySettings={companySettings}
             paperWidth={80}
             webPrintLegible={webPrintLegible}
+            compactPrint={compactPrint}
           />
         </div>
       )}

@@ -44,15 +44,16 @@ export default function Orders() {
   const [orderToPrint, setOrderToPrint] = useState(null)
   const kitchenTicketRef = useRef()
 
-  // Estado para configuración de impresión web legible
+  // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [compactPrint, setCompactPrint] = useState(false)
 
   // Estado para modal de cierre de orden
   const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
   const [orderToClose, setOrderToClose] = useState(null)
   const [isClosingOrder, setIsClosingOrder] = useState(false)
 
-  // Cargar configuración de impresora para webPrintLegible
+  // Cargar configuración de impresora para webPrintLegible y compactPrint
   useEffect(() => {
     const loadPrinterConfig = async () => {
       if (!user?.uid) return
@@ -60,6 +61,7 @@ export default function Orders() {
         const printerConfigResult = await getPrinterConfig(getBusinessId())
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+          setCompactPrint(printerConfigResult.config.compactPrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -1034,6 +1036,7 @@ export default function Orders() {
             order={orderToPrint}
             companySettings={companySettings}
             webPrintLegible={webPrintLegible}
+            compactPrint={compactPrint}
           />
         </div>
       )}

@@ -10,7 +10,7 @@
  * @param {Array} itemFilter - Items a mostrar (opcional, si es null muestra todos)
  * @param {string} personLabel - Etiqueta de persona (ej: "Persona 1 de 3")
  */
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false) => {
   console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel })
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
@@ -309,6 +309,80 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           margin-bottom: ${is58mm ? '1mm' : '1.5mm'};
           text-transform: none;
         }
+
+        ${compactPrint ? `
+        /* === MODO COMPACTO === */
+        body {
+          font-size: ${is58mm ? '6pt' : '6.5pt'} !important;
+          line-height: 1.1 !important;
+          padding: ${is58mm ? '1mm' : '1mm'} !important;
+        }
+        .header {
+          margin-bottom: 1mm !important;
+          padding-bottom: 1mm !important;
+        }
+        .business-name {
+          font-size: ${is58mm ? '8pt' : '10pt'} !important;
+        }
+        .business-info, .branch-name {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 0 !important;
+        }
+        .logo {
+          max-width: ${is58mm ? '100px' : '140px'} !important;
+          max-height: ${is58mm ? '40px' : '55px'} !important;
+        }
+        .title {
+          font-size: ${is58mm ? '8pt' : '9pt'} !important;
+          margin: 1mm 0 !important;
+          padding: 1mm 0 !important;
+        }
+        .table-info {
+          font-size: ${is58mm ? '7pt' : '8pt'} !important;
+          margin-bottom: 1mm !important;
+        }
+        .info-row {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 0 !important;
+        }
+        .items-header {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          padding: 0.5mm 0 !important;
+          margin: 0.5mm 0 !important;
+        }
+        .item-row {
+          padding: 0.5mm 0 !important;
+          margin: 0 !important;
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+        }
+        .item-name {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+        }
+        .totals {
+          margin-top: 1mm !important;
+          padding-top: 1mm !important;
+        }
+        .total-row {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 0 !important;
+        }
+        .total-row.final {
+          font-size: ${is58mm ? '8pt' : '9pt'} !important;
+          margin-top: 0.5mm !important;
+          padding: 1mm !important;
+        }
+        .footer {
+          margin-top: 1mm !important;
+          padding-top: 1mm !important;
+          font-size: ${is58mm ? '5pt' : '5.5pt'} !important;
+        }
+        @media print {
+          body {
+            font-size: ${is58mm ? '5.5pt' : '6pt'} !important;
+            line-height: 1.1 !important;
+          }
+        }
+        ` : ''}
       </style>
     </head>
     <body>

@@ -146,10 +146,11 @@ export default function InvoiceList() {
     documentNumber: '',
   })
 
-  // Estado para configuración de impresión web legible
+  // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [compactPrint, setCompactPrint] = useState(false)
 
-  // Cargar configuración de impresora para webPrintLegible
+  // Cargar configuración de impresora para webPrintLegible y compactPrint
   useEffect(() => {
     const loadPrinterConfig = async () => {
       if (!user?.uid) return
@@ -159,6 +160,7 @@ export default function InvoiceList() {
         const webPrintValue = printerConfigResult.config.webPrintLegible || false
         console.log('📄 InvoiceList - webPrintLegible cargado:', webPrintValue)
         setWebPrintLegible(webPrintValue)
+        setCompactPrint(printerConfigResult.config.compactPrint || false)
       }
     }
     loadPrinterConfig()
@@ -3202,7 +3204,7 @@ Gracias por tu preferencia.`
       {/* Ticket Oculto para Impresión */}
       {viewingInvoice && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} />
         </div>
       )}
 

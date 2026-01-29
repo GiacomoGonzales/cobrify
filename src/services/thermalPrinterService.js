@@ -373,6 +373,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
       enabled: printerConfig.enabled !== false,
       webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
+      compactPrint: printerConfig.compactPrint || false, // Modo compacto para ahorro de papel
       updatedAt: new Date().toISOString()
     };
 

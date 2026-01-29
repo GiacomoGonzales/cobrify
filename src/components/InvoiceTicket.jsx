@@ -14,7 +14,7 @@ import { QRCodeSVG } from 'qrcode.react'
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible = false, compactPrint = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -525,6 +525,113 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           max-width: ${is58mm ? '60px' : '80px'};
           height: auto;
         }
+
+        ${compactPrint ? `
+        /* === MODO COMPACTO === */
+        .ticket-container {
+          font-size: ${is58mm ? '6pt' : '6.5pt'} !important;
+          line-height: 1.1 !important;
+          padding: ${is58mm ? '1mm 6mm' : '1mm 6mm'} !important;
+        }
+        .ticket-header {
+          margin-bottom: 1px !important;
+          padding-bottom: 1px !important;
+        }
+        .company-name {
+          font-size: ${is58mm ? '7.5pt' : '9pt'} !important;
+          margin-bottom: 0 !important;
+        }
+        .company-info {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 0 !important;
+        }
+        .company-logo {
+          max-width: ${is58mm ? '100px' : '140px'} !important;
+          max-height: ${is58mm ? '50px' : '70px'} !important;
+        }
+        .company-logo.square-logo {
+          max-width: ${is58mm ? '50px' : '70px'} !important;
+          max-height: ${is58mm ? '50px' : '70px'} !important;
+        }
+        .document-type {
+          font-size: ${is58mm ? '6.5pt' : '7.5pt'} !important;
+          margin: 1px 0 !important;
+          padding: 1px 2px !important;
+        }
+        .document-number {
+          font-size: ${is58mm ? '7.5pt' : '8.5pt'} !important;
+          margin: 1px 0 !important;
+        }
+        .ticket-section {
+          margin: 1px 0 !important;
+          padding-bottom: 1px !important;
+        }
+        .section-title {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin-bottom: 0 !important;
+        }
+        .info-row {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 0 !important;
+          line-height: 1.1 !important;
+        }
+        .items-table {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 1px 0 !important;
+        }
+        .item-row {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .item-desc {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin-bottom: 0 !important;
+        }
+        .item-details {
+          font-size: ${is58mm ? '5pt' : '6pt'} !important;
+          line-height: 1.1 !important;
+        }
+        .item-code {
+          font-size: ${is58mm ? '5pt' : '5.5pt'} !important;
+          margin-top: 0 !important;
+        }
+        .totals-section {
+          margin-top: 1px !important;
+          padding: 1px 0 !important;
+        }
+        .total-row {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+          margin: 0 !important;
+          line-height: 1.1 !important;
+        }
+        .total-row.final {
+          font-size: ${is58mm ? '7.5pt' : '8.5pt'} !important;
+          margin-top: 1px !important;
+          padding: 2px 1px !important;
+        }
+        .ticket-footer {
+          margin-top: 2px !important;
+          padding-top: 1px !important;
+          font-size: ${is58mm ? '5pt' : '5.5pt'} !important;
+        }
+        .representation-text {
+          font-size: ${is58mm ? '5pt' : '5.5pt'} !important;
+          margin-top: 1px !important;
+        }
+        .qr-container {
+          margin: 1px auto !important;
+        }
+        .qr-code {
+          max-width: ${is58mm ? '50px' : '65px'} !important;
+        }
+        @media print {
+          .ticket-container {
+            font-size: ${is58mm ? '5.5pt' : '6pt'} !important;
+            line-height: 1.1 !important;
+            padding: ${is58mm ? '1mm 6mm' : '1mm 6mm'} !important;
+          }
+        }
+        ` : ''}
       `}</style>
 
       {/* HEADER - Datos del Emisor */}

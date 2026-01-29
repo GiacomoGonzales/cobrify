@@ -5583,7 +5583,8 @@ export default function Settings() {
                     onChange={async (e) => {
                       const newConfig = {
                         ...printerConfig,
-                        webPrintLegible: e.target.checked
+                        webPrintLegible: e.target.checked,
+                        ...(e.target.checked && { compactPrint: false })
                       }
                       setPrinterConfig(newConfig)
                       await savePrinterConfig(getBusinessId(), newConfig)
@@ -5597,6 +5598,36 @@ export default function Settings() {
                     </label>
                     <p className="text-xs text-gray-600 mt-1">
                       Activa esta opción para hacer las letras más grandes y gruesas al imprimir desde el navegador web (comprobantes, precuentas, comandas). No afecta la impresión térmica Bluetooth.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modo compacto para impresión web */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-green-50">
+                <div className="flex items-start space-x-3">
+                  <input
+                    type="checkbox"
+                    id="compactPrint"
+                    checked={printerConfig.compactPrint || false}
+                    onChange={async (e) => {
+                      const newConfig = {
+                        ...printerConfig,
+                        compactPrint: e.target.checked,
+                        ...(e.target.checked && { webPrintLegible: false })
+                      }
+                      setPrinterConfig(newConfig)
+                      await savePrinterConfig(getBusinessId(), newConfig)
+                      toast.success(e.target.checked ? 'Modo compacto activado' : 'Modo compacto desactivado')
+                    }}
+                    className="mt-1 h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="compactPrint" className="block text-sm font-medium text-gray-900 cursor-pointer">
+                      Impresión Compacta (Ahorro de papel)
+                    </label>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Reduce el tamaño de letra, espaciado y márgenes para ahorrar papel. Ideal para tickets más cortos. No es compatible con el modo legible.
                     </p>
                   </div>
                 </div>

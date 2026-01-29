@@ -76,6 +76,7 @@ export default function Tables() {
   const [companySettings, setCompanySettings] = useState(null)
   const [orderToPrint, setOrderToPrint] = useState(null)
   const [webPrintLegible, setWebPrintLegible] = useState(false)
+  const [compactPrint, setCompactPrint] = useState(false)
   const kitchenTicketRef = useRef()
 
   // Form state
@@ -123,6 +124,7 @@ export default function Tables() {
         const printerConfigResult = await getPrinterConfig(getBusinessId())
         if (printerConfigResult.success && printerConfigResult.config) {
           setWebPrintLegible(printerConfigResult.config.webPrintLegible || false)
+          setCompactPrint(printerConfigResult.config.compactPrint || false)
         }
       } catch (error) {
         console.error('Error loading printer config:', error)
@@ -614,7 +616,8 @@ export default function Tables() {
       const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
       console.log('🖨️ Tables - webPrintLegible:', webPrintLegible)
       const paperWidth = printerConfigResult.config?.paperWidth || 80
-      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig)
+      const compactPrintValue = printerConfigResult.config?.compactPrint || false
+      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)
@@ -1298,6 +1301,7 @@ export default function Tables() {
             order={orderToPrint}
             companySettings={companySettings}
             webPrintLegible={webPrintLegible}
+            compactPrint={compactPrint}
           />
         </div>
       )}

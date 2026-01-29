@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false }, ref) => {
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -311,6 +311,65 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           margin: 4px 0;
           font-weight: 900;
         }
+
+        ${compactPrint ? `
+        /* === MODO COMPACTO === */
+        @media print {
+          .kitchen-ticket-container {
+            font-size: 7pt !important;
+            line-height: 1.1 !important;
+            padding: 1mm 1mm !important;
+          }
+        }
+        .kitchen-ticket-container {
+          font-size: 10px !important;
+          line-height: 1.2 !important;
+          padding: 4px !important;
+        }
+        .kitchen-header {
+          margin-bottom: 4px !important;
+          padding-bottom: 4px !important;
+        }
+        .kitchen-title {
+          font-size: 14pt !important;
+        }
+        .kitchen-subtitle {
+          font-size: 8pt !important;
+        }
+        .order-number-big {
+          font-size: 18pt !important;
+        }
+        .info-row {
+          font-size: 8pt !important;
+          margin: 0 !important;
+        }
+        .section-title {
+          font-size: 9pt !important;
+          margin: 2px 0 !important;
+          padding: 1px 0 !important;
+        }
+        .item-header {
+          font-size: 10pt !important;
+        }
+        .item-qty {
+          font-size: 12pt !important;
+          min-width: 24px !important;
+          padding: 1px 4px !important;
+        }
+        .kitchen-item {
+          margin-bottom: 2px !important;
+          padding-bottom: 2px !important;
+        }
+        .item-modifiers, .item-notes {
+          font-size: 8pt !important;
+          margin-top: 0 !important;
+          padding: 1px 2px !important;
+        }
+        .footer-time {
+          font-size: 8pt !important;
+          margin: 2px 0 !important;
+        }
+        ` : ''}
       `}</style>
 
       {/* HEADER */}
