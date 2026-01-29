@@ -189,9 +189,13 @@ export default function InventoryCountModal({
   // Filtrar productos
   const filteredProducts = useMemo(() => {
     return Object.values(countData).filter(item => {
-      const matchesSearch =
-        item.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.productCode.toLowerCase().includes(searchTerm.toLowerCase())
+      // Búsqueda flexible: dividir en palabras y verificar que TODAS estén presentes
+      const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
+      const searchableText = [
+        item.productName || '',
+        item.productCode || ''
+      ].join(' ').toLowerCase()
+      const matchesSearch = searchWords.length === 0 || searchWords.every(word => searchableText.includes(word))
 
       const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter
 
