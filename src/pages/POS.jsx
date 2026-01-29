@@ -5494,12 +5494,22 @@ ${companySettings?.businessName || 'Tu Empresa'}`
               ))}
             </div>
 
-            {/* Info de stock */}
+            {/* Info de stock por presentación */}
             {productForPresentationSelection.stock !== null && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-600">
-                  Stock disponible: <span className="font-semibold">{getCurrentWarehouseStock(productForPresentationSelection)} unidades</span>
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg space-y-1">
+                <p className="text-xs font-medium text-gray-700">Stock disponible:</p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold">{getCurrentWarehouseStock(productForPresentationSelection)}</span> unidades
                 </p>
+                {productForPresentationSelection.presentations?.map((pres, idx) => {
+                  const warehouseStock = getCurrentWarehouseStock(productForPresentationSelection)
+                  const equivalentQty = Math.floor(warehouseStock / pres.factor)
+                  return (
+                    <p key={idx} className="text-sm text-gray-600">
+                      <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} unid.)</span>
+                    </p>
+                  )
+                })}
               </div>
             )}
           </div>

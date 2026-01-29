@@ -1710,6 +1710,24 @@ export default function CreateQuotation() {
             ))}
           </div>
 
+          {/* Info de stock por presentación */}
+          {pendingProductSelection?.product?.stock != null && (
+            <div className="p-3 bg-gray-50 rounded-lg space-y-1">
+              <p className="text-xs font-medium text-gray-700">Stock disponible:</p>
+              <p className="text-sm text-gray-600">
+                <span className="font-semibold">{pendingProductSelection.product.stock}</span> unidades
+              </p>
+              {pendingProductSelection.product.presentations?.map((pres, idx) => {
+                const equivalentQty = Math.floor(pendingProductSelection.product.stock / pres.factor)
+                return (
+                  <p key={idx} className="text-sm text-gray-600">
+                    <span className="font-semibold">{equivalentQty}</span> {pres.name} <span className="text-gray-400">(x{pres.factor} unid.)</span>
+                  </p>
+                )
+              })}
+            </div>
+          )}
+
           <div className="flex justify-end pt-2">
             <Button variant="outline" onClick={cancelPendingSelection}>
               Cancelar
