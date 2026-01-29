@@ -2445,9 +2445,12 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
         // Atributos correctos para documento relacionado según catálogo 61
         additionalDoc.ele('cbc:DocumentTypeCode', {
           'listAgencyName': 'PE:SUNAT',
-          'listName': 'SUNAT:Identificador de guía relacionada',
+          'listName': 'Documento relacionado al transporte',
           'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61'
         }).txt('09') // 09 = GRE Remitente
+
+        // Descripción del tipo de documento relacionado (Warning 4371)
+        additionalDoc.ele('cbc:DocumentType').txt('Guía de Remisión Remitente')
 
         // Datos del emisor de la GRE Remitente
         if (related.ruc) {
@@ -2559,8 +2562,18 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   // === INDICADOR DE PAGADOR DE FLETE (DEBE ir antes de ShipmentStage según UBL 2.1) ===
   // Warning 4388: "Debe consignar el Indicador de pagador de flete"
-  // Valores catálogo D37: 1=Remitente, 2=Destinatario, 3=Tercero
-  const freightPayerIndicator = guideData.freightPayer || guideData.pagadorFlete || '1' // Default: Remitente
+  // Formato: SUNAT_Envio_IndicadorPagadorFlete_[Pagador]
+  const freightPayerRaw = guideData.freightPayer || guideData.pagadorFlete || 'remitente'
+  const freightPayerMap = {
+    'remitente': 'SUNAT_Envio_IndicadorPagadorFlete_Remitente',
+    '1': 'SUNAT_Envio_IndicadorPagadorFlete_Remitente',
+    'destinatario': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratante',
+    'subcontratante': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratante',
+    '2': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratante',
+    'tercero': 'SUNAT_Envio_IndicadorPagadorFlete_Tercero',
+    '3': 'SUNAT_Envio_IndicadorPagadorFlete_Tercero',
+  }
+  const freightPayerIndicator = freightPayerMap[freightPayerRaw] || 'SUNAT_Envio_IndicadorPagadorFlete_Remitente'
   shipment.ele('cbc:SpecialInstructions').txt(freightPayerIndicator)
 
   // === DATOS DE TRANSPORTE (ShipmentStage DEBE ir ANTES de TransportHandlingUnit según UBL 2.1) ===
@@ -2650,35 +2663,30 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   // Certificado de Habilitación Vehicular o TUC (Tarjeta Única de Circulación)
   // Warning 4399: "No ha consignado el Numero de Constancia de Inscripcion Vehicular o Certificado de Habilitacion Vehicular o la TUC"
-  const vehicleCertificate = vehicleData.certificate || vehicleData.tuc || vehicleData.habilitacionVehicular || ''
+  const vehicleCertificate = vehicleData.certificate || vehicleData.tuce || vehicleData.tuc || vehicleData.habilitacionVehicular || ''
   if (vehicleCertificate) {
+    const vehicleEntity = vehicleData.mtcEntity || vehicleData.codEmisor || 'MTC'
     const shipmentDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
-    shipmentDocRef.ele('cbc:ID').txt(vehicleCertificate)
-    shipmentDocRef.ele('cbc:DocumentTypeCode', {
-      'listAgencyName': 'PE:SUNAT',
-      'listName': 'SUNAT: Identificador de documento relacionado',
-      'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61'
-    }).txt('10') // 10 = Tarjeta Única de Circulación
+    shipmentDocRef.ele('cbc:ID', {
+      'schemeID': vehicleEntity,
+      'schemeName': 'Entidad Autorizadora',
+      'schemeAgencyName': 'PE:SUNAT'
+    }).txt(vehicleCertificate)
   }
 
-  // === LÍNEA DE DESPACHO (DespatchLine) - OBLIGATORIA según esquema UBL 2.1 ===
-  // Aunque SUNAT da warning 4434 sobre detalles de bienes, el esquema XSD requiere al menos un DespatchLine
-  // Para GRE Transportista se usa una línea genérica sin detalles específicos
+  // === LÍNEA DE DESPACHO (DespatchLine) - Mínima para GRE Transportista ===
+  // Warning 4434: "No corresponde consignar el detalle de los bienes a transportar"
+  // Para GRE Transportista NO se deben incluir detalles de bienes,
+  // pero el esquema XSD requiere al menos un DespatchLine con estructura mínima
   const despatchLine = root.ele('cac:DespatchLine')
   despatchLine.ele('cbc:ID').txt('1')
-
-  // Cantidad (obligatorio según esquema) - usar 1 como valor genérico
   despatchLine.ele('cbc:DeliveredQuantity', {
-    'unitCode': 'ZZ' // ZZ = Unidad de servicio/no aplica
-  }).txt('1')
-
-  // Referencia de línea de orden (obligatorio)
+    'unitCode': 'ZZ'
+  }).txt('0')
   const orderLineRef = despatchLine.ele('cac:OrderLineReference')
   orderLineRef.ele('cbc:LineID').txt('1')
-
-  // Item genérico (obligatorio según esquema)
   const itemEle = despatchLine.ele('cac:Item')
-  itemEle.ele('cbc:Description').txt('SERVICIO DE TRANSPORTE DE CARGA')
+  itemEle.ele('cbc:Description').txt('-')
 
   // Retornar XML como string
   return root.end({ prettyPrint: true })
