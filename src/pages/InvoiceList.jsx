@@ -1262,14 +1262,16 @@ Gracias por tu preferencia.`
   }, [invoices, dateFilter, filterStartDate, filterEndDate])
 
   // Estadísticas (basadas en el período seleccionado)
-  // Excluir facturas anuladas del cálculo de monto total
-  const activeInvoices = dateFilteredInvoices.filter(i => i.status !== 'cancelled' && i.status !== 'voided')
+  // Excluir facturas anuladas y notas de venta convertidas (para evitar doble conteo)
+  const isConvertedNota = (i) => i.documentType === 'nota_venta' && i.convertedTo
+  const statsInvoices = dateFilteredInvoices.filter(i => !isConvertedNota(i))
+  const activeInvoices = statsInvoices.filter(i => i.status !== 'cancelled' && i.status !== 'voided')
   const stats = {
-    total: dateFilteredInvoices.length,
-    paid: dateFilteredInvoices.filter(i => i.status === 'paid').length,
-    pending: dateFilteredInvoices.filter(i => i.status === 'pending').length,
+    total: statsInvoices.length,
+    paid: statsInvoices.filter(i => i.status === 'paid').length,
+    pending: statsInvoices.filter(i => i.status === 'pending').length,
     totalAmount: activeInvoices.reduce((sum, i) => sum + (i.total || 0), 0),
-    totalAll: invoices.length,
+    totalAll: invoices.filter(i => !isConvertedNota(i)).length,
   }
 
   if (isLoading) {

@@ -2591,6 +2591,15 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
   transitPeriod.ele('cbc:StartDate').txt(transferDate)
 
+  // Número de Registro MTC del transportista (ROW 37-40, OBS 4391 si falta)
+  // XPath: /DespatchAdvice/cac:Shipment/cac:ShipmentStage/cac:CarrierParty/cac:PartyLegalEntity/cbc:CompanyID
+  const mtcRegistration = guideData.mtcRegistration || ''
+  if (mtcRegistration) {
+    const carrierParty = shipmentStage.ele('cac:CarrierParty')
+    const carrierLegalEntity = carrierParty.ele('cac:PartyLegalEntity')
+    carrierLegalEntity.ele('cbc:CompanyID').txt(mtcRegistration)
+  }
+
   // === CONDUCTOR (obligatorio en GRE Transportista) ===
   const driverData = guideData.driver || guideData.transport?.driver || {}
   console.log('🚗 [GRE-T XML] Datos del conductor:', JSON.stringify(driverData))
@@ -2661,11 +2670,43 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const transportEquipment = transportHandlingUnit.ele('cac:TransportEquipment')
   transportEquipment.ele('cbc:ID').txt(vehiclePlate || 'AAA000')
 
-  // Certificado de Habilitación Vehicular o TUC (Tarjeta Única de Circulación)
-  // Warning 4399: "No ha consignado el Numero de Constancia de Inscripcion Vehicular o Certificado de Habilitacion Vehicular o la TUC"
+  // TUCE del vehículo principal en ApplicableTransportMeans (ROW 185-187)
+  // SUNAT busca el TUCE aquí (OBS 4399 si falta)
   const vehicleCertificate = vehicleData.certificate || vehicleData.tuce || vehicleData.tuc || vehicleData.habilitacionVehicular || ''
   if (vehicleCertificate) {
-    const vehicleEntity = vehicleData.mtcEntity || vehicleData.codEmisor || 'MTC'
+    const applicableTransportMeans = transportEquipment.ele('cac:ApplicableTransportMeans')
+    applicableTransportMeans.ele('cbc:RegistrationNationalityID').txt(vehicleCertificate)
+  }
+
+  // === VEHÍCULOS SECUNDARIOS (AttachedTransportEquipment) - Hasta 2 según SUNAT ===
+  // Según UBL 2.1, AttachedTransportEquipment es hijo de TransportEquipment
+  // y DEBE ir ANTES de ShipmentDocumentReference en el orden del esquema XSD
+  const secondaryVehicles = (guideData.vehicles || []).filter((v, idx) => idx > 0 && v.plate?.trim())
+  secondaryVehicles.slice(0, 2).forEach(secVehicle => {
+    const secPlate = (secVehicle.plate || '').replace(/[-\s]/g, '').toUpperCase()
+    const attachedEquipment = transportEquipment.ele('cac:AttachedTransportEquipment')
+    attachedEquipment.ele('cbc:ID').txt(secPlate)
+
+    // TUCE del vehículo secundario (ROW 199-201: ApplicableTransportMeans/RegistrationNationalityID)
+    const secCertificate = secVehicle.certificate || secVehicle.tuce || secVehicle.tuc || secVehicle.mtcAuthorization || ''
+    if (secCertificate) {
+      const secMeans = attachedEquipment.ele('cac:ApplicableTransportMeans')
+      secMeans.ele('cbc:RegistrationNationalityID').txt(secCertificate)
+    }
+  })
+
+  // Autorización del vehículo principal emitida por entidad (ROW 188-194)
+  // ShipmentDocumentReference DEBE ir DESPUÉS de AttachedTransportEquipment en UBL 2.1
+  // schemeID usa Catálogo D-37: "06" = MTC, "01" = SUCAMEC, etc. (OBS 4407 si valor incorrecto)
+  if (vehicleCertificate) {
+    const rawEntity = vehicleData.mtcEntity || vehicleData.codEmisor || 'MTC'
+    // Mapear abreviatura a código del Catálogo D-37 si es necesario
+    const entityCodeMap = {
+      'SUCAMEC': '01', 'DIGEMID': '02', 'DIGESA': '03', 'SENASA': '04',
+      'SERFOR': '05', 'MTC': '06', 'PRODUCE': '07', 'MIN. AMBIENTE': '08',
+      'SANIPES': '09', 'MML': '10', 'MINSA': '11', 'GR': '12',
+    }
+    const vehicleEntity = entityCodeMap[rawEntity.toUpperCase()] || rawEntity
     const shipmentDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
     shipmentDocRef.ele('cbc:ID', {
       'schemeID': vehicleEntity,
@@ -2674,19 +2715,39 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     }).txt(vehicleCertificate)
   }
 
-  // === LÍNEA DE DESPACHO (DespatchLine) - Mínima para GRE Transportista ===
-  // Warning 4434: "No corresponde consignar el detalle de los bienes a transportar"
-  // Para GRE Transportista NO se deben incluir detalles de bienes,
-  // pero el esquema XSD requiere al menos un DespatchLine con estructura mínima
-  const despatchLine = root.ele('cac:DespatchLine')
-  despatchLine.ele('cbc:ID').txt('1')
-  despatchLine.ele('cbc:DeliveredQuantity', {
-    'unitCode': 'ZZ'
-  }).txt('0')
-  const orderLineRef = despatchLine.ele('cac:OrderLineReference')
-  orderLineRef.ele('cbc:LineID').txt('1')
-  const itemEle = despatchLine.ele('cac:Item')
-  itemEle.ele('cbc:Description').txt('-')
+  // === LÍNEAS DE DESPACHO (DespatchLine) ===
+  // Siempre incluir items reales cuando existan. La OBS 4434 (cuando hay GRE Remitente
+  // electrónica referenciada) es solo un warning inofensivo. En cambio, usar ID="0"
+  // (anotación) con GRE electrónica causa ERROR 3458 (rechazo).
+  // SUNAT valida que DeliveredQuantity sea > 0 (ERROR 2780 si es 0).
+  if (guideData.items && guideData.items.length > 0) {
+    guideData.items.forEach((item, index) => {
+      const despatchLine = root.ele('cac:DespatchLine')
+      despatchLine.ele('cbc:ID').txt(String(index + 1))
+      despatchLine.ele('cbc:DeliveredQuantity', {
+        'unitCode': mapUnitToSunatCode(item.unit)
+      }).txt(String(item.quantity || 1))
+      const orderLineRef = despatchLine.ele('cac:OrderLineReference')
+      orderLineRef.ele('cbc:LineID').txt(String(index + 1))
+      const itemEle = despatchLine.ele('cac:Item')
+      itemEle.ele('cbc:Description').txt(item.description || 'CARGA')
+      if (item.code) {
+        const sellersItemId = itemEle.ele('cac:SellersItemIdentification')
+        sellersItemId.ele('cbc:ID').txt(item.code)
+      }
+    })
+  } else {
+    // Fallback: DespatchLine mínimo cuando no hay items
+    const despatchLine = root.ele('cac:DespatchLine')
+    despatchLine.ele('cbc:ID').txt('1')
+    despatchLine.ele('cbc:DeliveredQuantity', {
+      'unitCode': 'ZZ'
+    }).txt('1')
+    const orderLineRef = despatchLine.ele('cac:OrderLineReference')
+    orderLineRef.ele('cbc:LineID').txt('1')
+    const itemEle = despatchLine.ele('cac:Item')
+    itemEle.ele('cbc:Description').txt('CARGA')
+  }
 
   // Retornar XML como string
   return root.end({ prettyPrint: true })

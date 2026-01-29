@@ -588,6 +588,7 @@ export default function Settings() {
           province: businessData.province || '',
           department: businessData.department || '',
           ubigeo: businessData.ubigeo || '',
+          mtcRegistration: businessData.mtcRegistration || '',
         })
 
         // Extraer códigos de ubigeo para los selects
@@ -1105,6 +1106,7 @@ export default function Settings() {
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
+        mtcRegistration: data.mtcRegistration || '',
         updatedAt: serverTimestamp(),
       }, { merge: true })
 
@@ -1859,6 +1861,14 @@ export default function Settings() {
                 placeholder="https://miempresa.com"
                 error={errors.website?.message}
                 {...register('website')}
+              />
+
+              <Input
+                label="N° Registro MTC"
+                placeholder="Ej: 0001234"
+                error={errors.mtcRegistration?.message}
+                {...register('mtcRegistration')}
+                helperText="Para guías de remisión transportista (opcional)"
               />
 
               <div className="md:col-span-2">

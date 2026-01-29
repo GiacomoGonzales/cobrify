@@ -180,6 +180,7 @@ const ProductFormModal = ({
       price3: '',
       price4: '',
       cost: '',
+      weight: '',
       unit: 'NIU',
       category: '',
       stock: '',
@@ -224,6 +225,7 @@ const ProductFormModal = ({
           price3: initialData.price3?.toString() || '',
           price4: initialData.price4?.toString() || '',
           cost: initialData.cost?.toString() || '',
+          weight: initialData.weight?.toString() || '',
           unit: initialData.unit || 'NIU',
           category: initialData.category || '',
           stock: initialData.stock?.toString() || '',
@@ -599,6 +601,18 @@ const ProductFormModal = ({
                 placeholder="0.00"
                 error={errors.cost?.message}
                 {...register('cost')}
+              />
+              <p className="text-xs text-gray-500 mt-1">Opcional</p>
+            </div>
+
+            <div>
+              <Input
+                label="Peso (kg)"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                error={errors.weight?.message}
+                {...register('weight')}
               />
               <p className="text-xs text-gray-500 mt-1">Opcional</p>
             </div>

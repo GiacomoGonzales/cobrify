@@ -178,6 +178,21 @@ export const productSchema = z.object({
         })
     )
     .optional(),
+  weight: z
+    .number()
+    .nonnegative('El peso no puede ser negativo')
+    .or(
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseFloat(val)
+          return isNaN(num) ? null : num
+        })
+        .nullable()
+    )
+    .nullable()
+    .optional(),
   unit: z.string().default('UNIDAD'),
   category: z.string().optional(),
   stock: z

@@ -310,6 +310,7 @@ export default function Products() {
       price3: '',
       price4: '',
       cost: '',
+      weight: '',
       unit: 'NIU',
       category: '',
       stock: '',
@@ -455,6 +456,7 @@ export default function Products() {
       description: '',
       price: '',
       cost: '',
+      weight: '',
       unit: 'NIU',
       category: '',
       stock: '',
@@ -558,6 +560,7 @@ export default function Products() {
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
       cost: product.cost?.toString() || '',
+      weight: product.weight?.toString() || '',
       unit: product.unit || 'NIU',
       category: product.category || '',
       // Si no tiene initialStock definido, usar 0 (productos creados antes de esta feature o desde compras)
@@ -641,6 +644,7 @@ export default function Products() {
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
       cost: product.cost?.toString() || '',
+      weight: product.weight?.toString() || '',
       unit: product.unit || 'NIU',
       category: product.category || '', // Mantener la categoría
       initialStock: '', // Stock inicial vacío para el nuevo producto
@@ -743,6 +747,7 @@ export default function Products() {
         unit: data.unit,
         category: data.category || '',
         cost: data.cost && data.cost !== '' ? parseFloat(data.cost) : null,
+        weight: data.weight && data.weight !== '' ? parseFloat(data.weight) : null,
         hasVariants: hasVariants,
         trackExpiration: trackExpiration,
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
@@ -3117,6 +3122,18 @@ export default function Products() {
                 <p className="text-xs text-gray-500 mt-1">Opcional</p>
               </div>
 
+              <div>
+                <Input
+                  label="Peso (kg)"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  error={errors.weight?.message}
+                  {...register('weight')}
+                />
+                <p className="text-xs text-gray-500 mt-1">Opcional</p>
+              </div>
+
               <Input
                 label={businessSettings?.multiplePricesEnabled ? (businessSettings?.priceLabels?.price1 || 'Precio 1') : "Precio de Venta"}
                 type="number"
@@ -4039,6 +4056,12 @@ export default function Products() {
                   <label className="text-xs font-medium text-gray-500">Costo</label>
                   <p className="text-lg text-orange-600 font-bold mt-1">
                     {viewingProduct.cost ? formatCurrency(viewingProduct.cost) : '-'}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Peso (kg)</label>
+                  <p className="text-lg text-gray-900 font-bold mt-1">
+                    {viewingProduct.weight ? `${viewingProduct.weight} kg` : '-'}
                   </p>
                 </div>
                 {viewingProduct.price && viewingProduct.cost && (
