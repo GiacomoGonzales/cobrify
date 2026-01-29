@@ -70,6 +70,7 @@ export default function Purchases() {
   // Estado para registrar pagos parciales (abonos) - nuevo sistema
   const [registeringPayment, setRegisteringPayment] = useState(null) // La compra a la que se registra el pago
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [paymentNotes, setPaymentNotes] = useState('')
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [viewingPayments, setViewingPayments] = useState(null) // Para ver historial de pagos
@@ -344,10 +345,14 @@ export default function Purchases() {
     setIsRegisteringPayment(true)
     try {
       // Crear el nuevo pago
+      // Convertir fecha seleccionada a Date (mediodía para evitar problemas de zona horaria)
+      const [year, month, day] = paymentDate.split('-').map(Number)
+      const selectedDate = new Date(year, month - 1, day, 12, 0, 0)
+
       const newPayment = {
         id: `payment-${Date.now()}`,
         amount: amount,
-        date: new Date(),
+        date: selectedDate,
         notes: paymentNotes.trim() || '',
         registeredBy: user.uid
       }
@@ -393,6 +398,7 @@ export default function Purchases() {
     const remaining = (purchase.total || 0) - (purchase.paidAmount || 0)
     setRegisteringPayment(purchase)
     setPaymentAmount(remaining.toFixed(2)) // Sugerir el saldo pendiente
+    setPaymentDate(new Date().toISOString().split('T')[0]) // Fecha de hoy por defecto
     setPaymentNotes('')
   }
 
@@ -1398,6 +1404,20 @@ export default function Purchases() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha de pago
+                </label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={e => setPaymentDate(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Selecciona la fecha en que se realizó el pago
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notas (opcional)
                 </label>
                 <input
@@ -1417,6 +1437,7 @@ export default function Purchases() {
                 onClick={() => {
                   setRegisteringPayment(null)
                   setPaymentAmount('')
+                  setPaymentDate(new Date().toISOString().split('T')[0])
                   setPaymentNotes('')
                 }}
                 disabled={isRegisteringPayment}
