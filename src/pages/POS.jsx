@@ -4451,6 +4451,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                 ) : (
                                   <div className="flex items-center gap-1">
                                     <div className="text-right">
+                                      {item.quantity > 1 && (
+                                        <p className="text-sm text-gray-500">
+                                          {item.quantity} x {formatCurrency(item.price)}
+                                        </p>
+                                      )}
                                       {item.itemDiscount > 0 ? (
                                         <>
                                           <p className="text-sm text-gray-400 line-through">
