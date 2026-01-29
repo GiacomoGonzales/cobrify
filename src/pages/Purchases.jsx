@@ -74,6 +74,7 @@ export default function Purchases() {
   const [paymentNotes, setPaymentNotes] = useState('')
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [viewingPayments, setViewingPayments] = useState(null) // Para ver historial de pagos
+  const [editingPaymentDate, setEditingPaymentDate] = useState(null) // { purchaseId, paymentIndex, date }
 
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
@@ -400,6 +401,37 @@ export default function Purchases() {
     setPaymentAmount(remaining.toFixed(2)) // Sugerir el saldo pendiente
     setPaymentDate(new Date().toISOString().split('T')[0]) // Fecha de hoy por defecto
     setPaymentNotes('')
+  }
+
+  // Guardar fecha editada de un pago existente
+  const handleSavePaymentDate = async (purchase, paymentIndex, newDateStr) => {
+    try {
+      const [year, month, day] = newDateStr.split('-').map(Number)
+      const newDate = new Date(year, month - 1, day, 12, 0, 0)
+
+      const updatedPayments = [...(purchase.payments || [])]
+      updatedPayments[paymentIndex] = {
+        ...updatedPayments[paymentIndex],
+        date: newDate
+      }
+
+      const result = await updatePurchase(getBusinessId(), purchase.id, {
+        payments: updatedPayments
+      })
+
+      if (result.success) {
+        toast.success('Fecha de pago actualizada')
+        setEditingPaymentDate(null)
+        // Actualizar el estado local para reflejar el cambio
+        setViewingPayments(prev => prev ? { ...prev, payments: updatedPayments } : null)
+        loadPurchases()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al actualizar fecha de pago:', error)
+      toast.error('Error al actualizar la fecha')
+    }
   }
 
   // Función para cambiar ordenamiento
@@ -1530,26 +1562,66 @@ export default function Purchases() {
                       ? payment.date.toDate()
                       : new Date(payment.date)
 
+                    const isEditing = editingPaymentDate?.paymentIndex === idx
+
                     return (
                       <div
                         key={payment.id || idx}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-white border-gray-200"
+                        className="p-3 rounded-lg border bg-white border-gray-200 space-y-2"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-                            <CheckCircle className="w-4 h-4 text-white" />
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                              <CheckCircle className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="font-medium">Abono #{idx + 1}</p>
+                              <p className="text-sm text-gray-500">
+                                {formatDate(paymentDate)}
+                              </p>
+                              {payment.notes && (
+                                <p className="text-xs text-gray-400 mt-0.5">{payment.notes}</p>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium">Abono #{idx + 1}</p>
-                            <p className="text-sm text-gray-500">
-                              {formatDate(paymentDate)}
-                            </p>
-                            {payment.notes && (
-                              <p className="text-xs text-gray-400 mt-0.5">{payment.notes}</p>
-                            )}
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-green-600">+{formatCurrency(payment.amount)}</span>
+                            <button
+                              onClick={() => {
+                                const dateStr = paymentDate instanceof Date
+                                  ? paymentDate.toISOString().split('T')[0]
+                                  : new Date(paymentDate).toISOString().split('T')[0]
+                                setEditingPaymentDate({ paymentIndex: idx, date: dateStr })
+                              }}
+                              className="text-gray-400 hover:text-primary-600 p-1 rounded transition-colors"
+                              title="Editar fecha"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-                        <span className="font-bold text-green-600">+{formatCurrency(payment.amount)}</span>
+                        {isEditing && (
+                          <div className="flex items-center gap-2 pl-11">
+                            <input
+                              type="date"
+                              value={editingPaymentDate.date}
+                              onChange={e => setEditingPaymentDate(prev => ({ ...prev, date: e.target.value }))}
+                              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                            <button
+                              onClick={() => handleSavePaymentDate(viewingPayments, idx, editingPaymentDate.date)}
+                              className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              onClick={() => setEditingPaymentDate(null)}
+                              className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
