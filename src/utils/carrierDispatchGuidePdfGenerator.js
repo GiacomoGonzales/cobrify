@@ -519,7 +519,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.setFont('helvetica', 'bold')
   doc.text('Fecha emisión:', MARGIN_LEFT + 310, currentY)
   doc.setFont('helvetica', 'normal')
-  doc.text(formatDate(guide.createdAt || guide.transferDate), MARGIN_LEFT + 380, currentY)
+  doc.text(formatDate(guide.issueDate || guide.createdAt || guide.transferDate), MARGIN_LEFT + 380, currentY)
 
   currentY += 14
 
@@ -1163,7 +1163,7 @@ export const generateCarrierDispatchGuidePDF = async (guide, companySettings, do
   doc.text('www.sunat.gob.pe', sealX + sealWidth/2, sealY + 34, { align: 'center' })
 
   // Fecha de emisión en el sello
-  const emissionDate = formatDate(guide.createdAt || guide.transferDate)
+  const emissionDate = formatDate(guide.issueDate || guide.createdAt || guide.transferDate)
   doc.setFontSize(5)
   doc.text(`Emitido: ${emissionDate}`, sealX + sealWidth/2, sealY + 44, { align: 'center' })
 
