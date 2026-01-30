@@ -395,8 +395,32 @@ export default function Inventory() {
       const settingsResult = await getCompanySettings(getBusinessId());
       const businessData = settingsResult.success ? settingsResult.data : null;
 
+      // Determinar nombre de sucursal filtrada
+      let branchLabel = null
+      if (filterBranch === 'main') {
+        branchLabel = 'Sucursal Principal'
+      } else if (filterBranch !== 'all') {
+        const branch = branches.find(b => b.id === filterBranch)
+        branchLabel = branch ? branch.name : null
+      }
+
+      // Determinar nombres de almacenes filtrados
+      let warehouseLabel = null
+      if (filterWarehouses.length > 0) {
+        const names = filterWarehouses
+          .map(wId => filteredWarehouses.find(w => w.id === wId)?.name)
+          .filter(Boolean)
+        warehouseLabel = names.join(', ')
+      }
+
+      // Preparar productos con stock ajustado según filtro de sucursal/almacén
+      const productsWithBranchStock = products.map(p => ({
+        ...p,
+        stock: getStockForBranch(p) ?? p.stock ?? 0,
+      }))
+
       // Generar Excel
-      await generateProductsExcel(products, productCategories, businessData);
+      await generateProductsExcel(productsWithBranchStock, productCategories, businessData, branchLabel, warehouseLabel);
       toast.success(`${products.length} producto(s) exportado(s) exitosamente`);
     } catch (error) {
       console.error('Error al exportar inventario:', error);

@@ -167,7 +167,7 @@ export const exportProductsForImport = async (products, categories, businessMode
 /**
  * Generar reporte de productos en Excel (formato detallado con estadísticas)
  */
-export const generateProductsExcel = async (products, categories, businessData) => {
+export const generateProductsExcel = async (products, categories, businessData, branchLabel = null, warehouseLabel = null) => {
   const workbook = XLSX.utils.book_new();
 
   // Helper para obtener nombre de categoría por ID
@@ -200,6 +200,8 @@ export const generateProductsExcel = async (products, categories, businessData) 
     [''],
     ['Negocio:', businessData?.name || 'N/A'],
     ['RUC:', businessData?.ruc || 'N/A'],
+    ['Sucursal:', branchLabel || 'Todas'],
+    ['Almacén:', warehouseLabel || 'Todos'],
     ['Fecha de Generación:', format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })],
     ['Total de Productos:', products.length],
     [''],

@@ -431,6 +431,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       return
     }
 
+    // Validar formato de TUCE (alfanumérico de 10 a 15 caracteres según SUNAT)
+    const tuceRegex = /^[A-Z0-9]{10,15}$/i
+    const invalidTuce = validVehicles.find(v => v.tuce && !tuceRegex.test(v.tuce.trim()))
+    if (invalidTuce) {
+      toast.error(`TUCE inválido: "${invalidTuce.tuce}". Debe tener entre 10 y 15 caracteres alfanuméricos (solo letras y números)`)
+      return
+    }
+
     // Validar al menos un conductor completo
     const validDrivers = drivers.filter(d => d.documentNumber && d.name && d.lastName && d.license)
     if (validDrivers.length === 0) {
