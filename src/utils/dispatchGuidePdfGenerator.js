@@ -1062,7 +1062,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.text('www.sunat.gob.pe', sealX + sealWidth/2, sealY + 34, { align: 'center' })
 
   // Fecha de emisión en el sello
-  const emissionDate = formatDate(guide.createdAt || guide.transferDate)
+  const emissionDate = formatDate(guide.issueDate || guide.createdAt || guide.transferDate)
   doc.setFontSize(5)
   doc.text(`Emitido: ${emissionDate}`, sealX + sealWidth/2, sealY + 44, { align: 'center' })
 
