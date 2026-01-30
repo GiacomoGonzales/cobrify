@@ -3530,10 +3530,10 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   <input
                     type="date"
                     value={emissionDate}
-                    max={getLocalDateString()}
-                    min={(() => {
+                    max={documentType === 'nota_venta' ? undefined : getLocalDateString()}
+                    min={documentType === 'nota_venta' ? undefined : (() => {
                       const today = new Date()
-                      const maxDaysBack = documentType === 'factura' ? 3 : documentType === 'boleta' ? 7 : 30
+                      const maxDaysBack = documentType === 'factura' ? 3 : 7
                       const minDate = new Date(today)
                       minDate.setDate(today.getDate() - maxDaysBack)
                       return getLocalDateString(minDate)
