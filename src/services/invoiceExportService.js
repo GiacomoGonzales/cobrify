@@ -76,7 +76,7 @@ const formatPaymentMethods = (invoice) => {
 /**
  * Generar reporte de facturas en Excel
  */
-export const generateInvoicesExcel = async (invoices, filters, businessData) => {
+export const generateInvoicesExcel = async (invoices, filters, businessData, branchLabel = null) => {
   const workbook = XLSX.utils.book_new();
 
   // Preparar datos de las facturas
@@ -85,6 +85,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData) => 
     [''],
     ['Negocio:', businessData?.name || 'N/A'],
     ['RUC:', businessData?.ruc || 'N/A'],
+    ['Sucursal:', branchLabel || 'Todas'],
     ['Fecha de Generación:', format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })],
     [''],
   ];

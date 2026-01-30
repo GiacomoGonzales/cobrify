@@ -884,13 +884,32 @@ Gracias por tu preferencia.`
         });
       }
 
+      // Filtrar por sucursal seleccionada en la página
+      if (filterBranch !== 'all') {
+        filteredInvoices = filteredInvoices.filter(inv => {
+          if (filterBranch === 'main') {
+            return !inv.branchId
+          }
+          return inv.branchId === filterBranch
+        })
+      }
+
       if (filteredInvoices.length === 0) {
         toast.error('No hay comprobantes que coincidan con los filtros seleccionados');
         return;
       }
 
+      // Determinar nombre de sucursal para el Excel
+      let branchLabel = null
+      if (filterBranch === 'main') {
+        branchLabel = 'Sucursal Principal'
+      } else if (filterBranch !== 'all') {
+        const branch = branches.find(b => b.id === filterBranch)
+        branchLabel = branch ? branch.name : null
+      }
+
       // Generar Excel
-      await generateInvoicesExcel(filteredInvoices, exportFilters, companySettings);
+      await generateInvoicesExcel(filteredInvoices, exportFilters, companySettings, branchLabel);
       toast.success(`${filteredInvoices.length} comprobante(s) exportado(s) exitosamente`);
       setShowExportModal(false);
     } catch (error) {
