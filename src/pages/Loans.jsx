@@ -194,7 +194,7 @@ export default function Loans() {
     const lastInstallmentAmount = Math.round((totalWithInterest - (installmentAmount * (numInstallments - 1))) * 100) / 100
 
     const installments = []
-    let currentDate = new Date(firstDueDate)
+    let currentDate = new Date(firstDueDate + 'T12:00:00')
 
     for (let i = 0; i < numInstallments; i++) {
       installments.push({
@@ -257,7 +257,7 @@ export default function Loans() {
         paidInstallments: 0,
         paidAmount: 0,
         status: 'active', // 'active' o 'paid'
-        issueDate: formData.issueDate ? new Date(formData.issueDate).toISOString() : new Date().toISOString(),
+        issueDate: formData.issueDate ? new Date(formData.issueDate + 'T12:00:00').toISOString() : new Date().toISOString(),
         frequency: formData.frequency, // Guardar frecuencia para referencia
       }
 
