@@ -1417,10 +1417,23 @@ export default function Reports() {
     }
   }, [stats.totalRevenue, purchaseStats.total, expenseStats.total, filteredOtherMovements])
 
+  // Determinar nombre de sucursal para los reportes Excel
+  const getBranchLabel = () => {
+    if (filterBranch === 'main') return 'Sucursal Principal'
+    if (filterBranch !== 'all') {
+      const branch = branches.find(b => b.id === filterBranch)
+      return branch ? branch.name : null
+    }
+    return null
+  }
+
   // Función para exportar reporte de rentabilidad
   const exportProfitabilityReport = async () => {
+    const branchLabel = getBranchLabel()
     // Hoja 1: Resumen con fórmula completa
     const summaryData = [
+      { 'Concepto': 'Sucursal', 'Valor': branchLabel || 'Todas' },
+      { 'Concepto': '---', 'Valor': '---' },
       { 'Concepto': 'Total Ventas', 'Valor': profitabilityStats.totalVentas },
       { 'Concepto': 'Costo de Ventas (Compras)', 'Valor': profitabilityStats.costoVentas },
       { 'Concepto': 'Utilidad Bruta', 'Valor': profitabilityStats.utilidadBruta },
@@ -1477,6 +1490,11 @@ export default function Reports() {
 
   // Función para exportar reporte de gastos
   const exportExpensesReport = async () => {
+    const branchLabel = getBranchLabel()
+    const headerData = [
+      { 'Fecha': 'Sucursal:', 'Descripción': branchLabel || 'Todas', 'Categoría': '', 'Proveedor': '', 'Referencia': '', 'Método de Pago': '', 'Monto': '' },
+      { 'Fecha': '', 'Descripción': '', 'Categoría': '', 'Proveedor': '', 'Referencia': '', 'Método de Pago': '', 'Monto': '' },
+    ]
     const data = filteredExpenses.map(e => ({
       'Fecha': e.date instanceof Date ? e.date.toLocaleDateString('es-PE') : new Date(e.date).toLocaleDateString('es-PE'),
       'Descripción': e.description || '',
@@ -1498,7 +1516,7 @@ export default function Reports() {
       'Monto': expenseStats.total
     })
 
-    const ws = XLSX.utils.json_to_sheet(data)
+    const ws = XLSX.utils.json_to_sheet([...headerData, ...data])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Gastos')
 
@@ -1704,7 +1722,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate })}
+              onClick={async () => await exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -1964,7 +1982,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate })}
+              onClick={async () => await exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -2249,7 +2267,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, dateRange, customStartDate, customEndDate })}
+              onClick={async () => await exportProductsReport({ topProducts, salesByCategory, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -2448,7 +2466,7 @@ export default function Reports() {
           {/* Botón de exportación */}
           <div className="flex justify-end">
             <button
-              onClick={async () => await exportCustomersReport({ topCustomers, dateRange, customStartDate, customEndDate })}
+              onClick={async () => await exportCustomersReport({ topCustomers, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel() })}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download className="w-4 h-4" />

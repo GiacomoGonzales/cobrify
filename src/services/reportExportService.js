@@ -60,7 +60,7 @@ const saveAndShareExcel = async (workbook, fileName) => {
  * Exportar reporte general a Excel
  */
 export const exportGeneralReport = async (data) => {
-  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate } = data
+  const { stats, salesByMonth, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel } = data
 
   // Crear un nuevo workbook
   const wb = XLSX.utils.book_new()
@@ -69,6 +69,7 @@ export const exportGeneralReport = async (data) => {
   const summaryData = [
     ['REPORTE GENERAL DE VENTAS'],
     ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
+    ['Sucursal:', branchLabel || 'Todas'],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['KPIs PRINCIPALES'],
@@ -223,7 +224,7 @@ export const exportGeneralReport = async (data) => {
  * Exportar reporte de ventas a Excel
  */
 export const exportSalesReport = async (data) => {
-  const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate } = data
+  const { stats, salesByMonth, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel } = data
 
   const wb = XLSX.utils.book_new()
 
@@ -231,6 +232,7 @@ export const exportSalesReport = async (data) => {
   const summaryData = [
     ['REPORTE DE VENTAS'],
     ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
+    ['Sucursal:', branchLabel || 'Todas'],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['RESUMEN FINANCIERO'],
@@ -346,7 +348,7 @@ export const exportSalesReport = async (data) => {
  * Exportar reporte de productos a Excel
  */
 export const exportProductsReport = async (data) => {
-  const { topProducts, salesByCategory, dateRange, customStartDate, customEndDate } = data
+  const { topProducts, salesByCategory, dateRange, customStartDate, customEndDate, branchLabel } = data
 
   const wb = XLSX.utils.book_new()
   const periodo = getRangeLabel(dateRange, customStartDate, customEndDate)
@@ -364,6 +366,7 @@ export const exportProductsReport = async (data) => {
     ['REPORTE DE PRODUCTOS Y CATEGORÍAS'],
     [],
     ['Período:', periodo],
+    ['Sucursal:', branchLabel || 'Todas'],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['═══════════════════════════════════════════════════════'],
@@ -522,7 +525,7 @@ export const exportProductsReport = async (data) => {
  * Exportar reporte de clientes a Excel
  */
 export const exportCustomersReport = async (data) => {
-  const { topCustomers, dateRange, customStartDate, customEndDate } = data
+  const { topCustomers, dateRange, customStartDate, customEndDate, branchLabel } = data
 
   const wb = XLSX.utils.book_new()
 
@@ -530,6 +533,7 @@ export const exportCustomersReport = async (data) => {
   const customersData = [
     ['REPORTE DE CLIENTES TOP'],
     ['Período:', getRangeLabel(dateRange, customStartDate, customEndDate)],
+    ['Sucursal:', branchLabel || 'Todas'],
     ['Fecha de generación:', new Date().toLocaleString('es-PE')],
     [],
     ['Posición', 'Cliente', 'Tipo Doc', 'Número Documento', 'Email', 'Teléfono', 'Cantidad Pedidos', 'Total Gastado', 'Ticket Promedio'],
