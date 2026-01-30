@@ -206,8 +206,6 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   if (hasDetraction && detractionAccount) {
     paymentMeansXml = `
   <cac:PaymentMeans>
-    <cbc:ID>Detraccion</cbc:ID>
-    <cbc:PaymentMeansCode>001</cbc:PaymentMeansCode>
     <cac:PayeeFinancialAccount>
       <cbc:ID>${detractionAccount}</cbc:ID>
     </cac:PayeeFinancialAccount>
@@ -260,8 +258,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   if (hasDetraction) {
     paymentTermsXml += `
   <cac:PaymentTerms>
-    <cbc:ID>Detraccion</cbc:ID>
-    <cbc:PaymentMeansID>${invoiceData.detractionType}</cbc:PaymentMeansID>
+    <cbc:ID schemeName="SUNAT:Codigo de detraccion" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo54">${invoiceData.detractionType}</cbc:ID>
     <cbc:PaymentPercent>${invoiceData.detractionRate || 0}</cbc:PaymentPercent>
     <cbc:Amount currencyID="${currency}">${parseFloat(invoiceData.detractionAmount).toFixed(2)}</cbc:Amount>
   </cac:PaymentTerms>`
