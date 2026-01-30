@@ -122,10 +122,22 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     ? `${series}-${String(correlativeNumber).padStart(8, '0')}`
     : number
 
-  // Tipo de documento del cliente
-  const customerDocType = customer.documentType === 'ruc'
-    ? ID_TYPE_CODES.RUC
-    : ID_TYPE_CODES.DNI
+  // Tipo de documento del cliente (mapeo completo según Catálogo 06 SUNAT)
+  const docTypeMap = { 'DNI': '1', 'RUC': '6', 'CE': '4', 'PASSPORT': '7', 'CEDULA_DIPLOMATICA': 'A' }
+  const customerDocType = docTypeMap[customer.documentType] || (customer.documentType === 'ruc' ? '6' : '1')
+
+  // Moneda
+  const currency = invoiceData.currency || 'PEN'
+
+  // Detracción
+  const hasDetraction = invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0
+
+  // Cuenta de detracciones
+  let detractionAccount = invoiceData.detractionBankAccount || ''
+  if (!detractionAccount && companySettings.bankAccountsList && Array.isArray(companySettings.bankAccountsList)) {
+    const detrBankAccount = companySettings.bankAccountsList.find(acc => acc.accountType === 'detracciones')
+    if (detrBankAccount) detractionAccount = detrBankAccount.accountNumber
+  }
 
   // Generar líneas de items
   const invoiceLines = items.map((item, index) => {
@@ -136,6 +148,9 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     const priceWithTax = unitPrice * (1 + igvMultiplier)
     const lineIgv = lineExtensionAmount * igvMultiplier
 
+    // Unidad de medida del item (usar la del item si existe, sino NIU por defecto)
+    const unitCode = item.unit || item.unitCode || UNIT_CODES.UNIDAD
+
     // Si está exonerado y hay motivo, incluirlo en el XML
     const exemptionReasonTag = igvExempt && exemptionReason
       ? `<cbc:TaxExemptionReason><![CDATA[${exemptionReason}]]></cbc:TaxExemptionReason>`
@@ -144,19 +159,19 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     return `
     <cac:InvoiceLine>
       <cbc:ID>${index + 1}</cbc:ID>
-      <cbc:InvoicedQuantity unitCode="${UNIT_CODES.UNIDAD}">${item.quantity}</cbc:InvoicedQuantity>
-      <cbc:LineExtensionAmount currencyID="${CURRENCY_CODES.PEN}">${lineExtensionAmount.toFixed(2)}</cbc:LineExtensionAmount>
+      <cbc:InvoicedQuantity unitCode="${unitCode}" unitCodeListID="UN/ECE rec 20" unitCodeListAgencyName="United Nations Economic Commission for Europe">${item.quantity}</cbc:InvoicedQuantity>
+      <cbc:LineExtensionAmount currencyID="${currency}">${lineExtensionAmount.toFixed(2)}</cbc:LineExtensionAmount>
       <cac:PricingReference>
         <cac:AlternativeConditionPrice>
-          <cbc:PriceAmount currencyID="${CURRENCY_CODES.PEN}">${priceWithTax.toFixed(2)}</cbc:PriceAmount>
+          <cbc:PriceAmount currencyID="${currency}">${priceWithTax.toFixed(2)}</cbc:PriceAmount>
           <cbc:PriceTypeCode listName="Tipo de Precio" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
         </cac:AlternativeConditionPrice>
       </cac:PricingReference>
       <cac:TaxTotal>
-        <cbc:TaxAmount currencyID="${CURRENCY_CODES.PEN}">${lineIgv.toFixed(2)}</cbc:TaxAmount>
+        <cbc:TaxAmount currencyID="${currency}">${lineIgv.toFixed(2)}</cbc:TaxAmount>
         <cac:TaxSubtotal>
-          <cbc:TaxableAmount currencyID="${CURRENCY_CODES.PEN}">${lineExtensionAmount.toFixed(2)}</cbc:TaxableAmount>
-          <cbc:TaxAmount currencyID="${CURRENCY_CODES.PEN}">${lineIgv.toFixed(2)}</cbc:TaxAmount>
+          <cbc:TaxableAmount currencyID="${currency}">${lineExtensionAmount.toFixed(2)}</cbc:TaxableAmount>
+          <cbc:TaxAmount currencyID="${currency}">${lineIgv.toFixed(2)}</cbc:TaxAmount>
           <cac:TaxCategory>
             <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
             <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>
@@ -176,10 +191,81 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
         </cac:SellersItemIdentification>
       </cac:Item>
       <cac:Price>
-        <cbc:PriceAmount currencyID="${CURRENCY_CODES.PEN}">${unitPrice.toFixed(2)}</cbc:PriceAmount>
+        <cbc:PriceAmount currencyID="${currency}">${unitPrice.toFixed(2)}</cbc:PriceAmount>
       </cac:Price>
     </cac:InvoiceLine>`
   }).join('\n')
+
+  // === Leyenda SPOT (detracción) ===
+  const spotLegend = hasDetraction
+    ? `\n  <cbc:Note languageLocaleID="2006">Operación sujeta al Sistema de Pago de Obligaciones Tributarias con el Gobierno Central</cbc:Note>`
+    : ''
+
+  // === PaymentMeans (detracción - cuenta Banco de la Nación) ===
+  let paymentMeansXml = ''
+  if (hasDetraction && detractionAccount) {
+    paymentMeansXml = `
+  <cac:PaymentMeans>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansCode>001</cbc:PaymentMeansCode>
+    <cac:PayeeFinancialAccount>
+      <cbc:ID>${detractionAccount}</cbc:ID>
+    </cac:PayeeFinancialAccount>
+  </cac:PaymentMeans>`
+  }
+
+  // === PaymentTerms (forma de pago) ===
+  const paymentType = invoiceData.paymentType || 'contado'
+  const paymentDueDate = invoiceData.paymentDueDate || null
+  const paymentInstallments = invoiceData.paymentInstallments || []
+  const paymentTotalAmount = parseFloat(total) || 0
+
+  let paymentTermsXml = ''
+  if (paymentType === 'credito') {
+    paymentTermsXml += `
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="${currency}">${paymentTotalAmount.toFixed(2)}</cbc:Amount>
+  </cac:PaymentTerms>`
+
+    if (paymentInstallments.length > 0) {
+      paymentInstallments.forEach((cuota, index) => {
+        paymentTermsXml += `
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Cuota${String(index + 1).padStart(3, '0')}</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="${currency}">${parseFloat(cuota.amount || 0).toFixed(2)}</cbc:Amount>${cuota.dueDate ? `
+    <cbc:PaymentDueDate>${cuota.dueDate}</cbc:PaymentDueDate>` : ''}
+  </cac:PaymentTerms>`
+      })
+    } else if (paymentDueDate) {
+      paymentTermsXml += `
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="${currency}">${paymentTotalAmount.toFixed(2)}</cbc:Amount>
+    <cbc:PaymentDueDate>${paymentDueDate}</cbc:PaymentDueDate>
+  </cac:PaymentTerms>`
+    }
+  } else {
+    paymentTermsXml += `
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>
+  </cac:PaymentTerms>`
+  }
+
+  // === PaymentTerms de detracción ===
+  if (hasDetraction) {
+    paymentTermsXml += `
+  <cac:PaymentTerms>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansID>${invoiceData.detractionType}</cbc:PaymentMeansID>
+    <cbc:PaymentPercent>${invoiceData.detractionRate || 0}</cbc:PaymentPercent>
+    <cbc:Amount currencyID="${currency}">${parseFloat(invoiceData.detractionAmount).toFixed(2)}</cbc:Amount>
+  </cac:PaymentTerms>`
+  }
 
   // Generar el XML completo
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -200,8 +286,8 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   <cbc:ID>${documentNumber}</cbc:ID>
   <cbc:IssueDate>${issueDate}</cbc:IssueDate>
   <cbc:IssueTime>${issueTime}</cbc:IssueTime>
-  <cbc:InvoiceTypeCode listID="0101">${documentTypeCode}</cbc:InvoiceTypeCode>
-  <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha">${CURRENCY_CODES.PEN}</cbc:DocumentCurrencyCode>
+  <cbc:InvoiceTypeCode listID="0101">${documentTypeCode}</cbc:InvoiceTypeCode>${spotLegend}
+  <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha">${currency}</cbc:DocumentCurrencyCode>
   <cac:Signature>
     <cbc:ID>SignatureSP</cbc:ID>
     <cac:SignatoryParty>
@@ -253,12 +339,12 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
         <cbc:RegistrationName><![CDATA[${customer.businessName || customer.name}]]></cbc:RegistrationName>
       </cac:PartyLegalEntity>
     </cac:Party>
-  </cac:AccountingCustomerParty>
+  </cac:AccountingCustomerParty>${paymentMeansXml}${paymentTermsXml}
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="${CURRENCY_CODES.PEN}">${igv.toFixed(2)}</cbc:TaxAmount>
+    <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>
     <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="${CURRENCY_CODES.PEN}">${subtotal.toFixed(2)}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="${CURRENCY_CODES.PEN}">${igv.toFixed(2)}</cbc:TaxAmount>
+      <cbc:TaxableAmount currencyID="${currency}">${subtotal.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>
       <cac:TaxCategory>
         <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
         <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>${igvExempt && exemptionReason ? `
@@ -272,9 +358,9 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     </cac:TaxSubtotal>
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="${CURRENCY_CODES.PEN}">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
-    <cbc:TaxInclusiveAmount currencyID="${CURRENCY_CODES.PEN}">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="${CURRENCY_CODES.PEN}">${total.toFixed(2)}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="${currency}">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxInclusiveAmount currencyID="${currency}">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="${currency}">${total.toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
 ${invoiceLines}
 </Invoice>`
