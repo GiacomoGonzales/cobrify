@@ -194,7 +194,8 @@ const ProductFormModal = ({
   const [allowDecimalQuantity, setAllowDecimalQuantity] = useState(false)
   const [trackExpiration, setTrackExpiration] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
-  const [taxAffectation, setTaxAffectation] = useState('10')
+  const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
+  const [taxAffectation, setTaxAffectation] = useState(isIgvExempt ? '20' : '10')
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
 
@@ -263,7 +264,7 @@ const ProductFormModal = ({
         setAllowDecimalQuantity(false)
         setTrackExpiration(false)
         setCatalogVisible(false)
-        setTaxAffectation('10')
+        setTaxAffectation(isIgvExempt ? '20' : '10')
         setWarehouseInitialStocks({})
         setPresentations([])
         setProductImage(null)

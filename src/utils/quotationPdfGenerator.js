@@ -917,10 +917,36 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setLineWidth(0.5)
 
   if (hideIgv) {
-    // Solo mostrar TOTAL cuando hideIgv está activo
-    doc.rect(totalsX, totalsStartY, totalsWidth, totalsRowHeight + 6)
+    // Mostrar descuento (si hay) + TOTAL cuando hideIgv está activo
+    const hasDiscount = (quotation.discount || 0) > 0
+    const discountRowCount = hasDiscount ? 1 : 0
+    const totalRows = discountRowCount + 1
+    const totalBoxHeight = discountRowCount * totalsRowHeight + totalsRowHeight + 6
 
-    // Fila única: TOTAL
+    doc.rect(totalsX, totalsStartY, totalsWidth, totalBoxHeight)
+
+    if (hasDiscount) {
+      // Fila de descuento
+      const discountLabel = quotation.discountType === 'percentage'
+        ? `DESCUENTO (${quotation.discount}%)`
+        : 'DESCUENTO'
+      const discountAmount = quotation.discountType === 'percentage'
+        ? (quotation.subtotal || quotation.total || 0) * (quotation.discount / 100)
+        : quotation.discount
+
+      doc.setFillColor(255, 245, 245)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(220, 38, 38)
+      doc.text(discountLabel, totalsX + 5, footerY + 10)
+      doc.text('- S/ ' + discountAmount.toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    }
+
+    // Fila: TOTAL
     doc.setFillColor(...ACCENT_COLOR)
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight + 6, 'F')
     doc.setTextColor(255, 255, 255)

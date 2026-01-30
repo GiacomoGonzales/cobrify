@@ -128,7 +128,8 @@ export default function CreateQuotation() {
   const [discountType, setDiscountType] = useState('fixed')
   const [terms, setTerms] = useState('')
   const [notes, setNotes] = useState('')
-  const [hideIgv, setHideIgv] = useState(false)
+  const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
+  const [hideIgv, setHideIgv] = useState(isIgvExempt)
 
   // Serie y número personalizado
   const [customSeries, setCustomSeries] = useState('')
@@ -148,6 +149,13 @@ export default function CreateQuotation() {
 
   // Buscador de productos
   const [showProductSearch, setShowProductSearch] = useState(null) // índice del item activo
+
+  // Auto-set hideIgv when businessSettings loads (only for new quotations)
+  useEffect(() => {
+    if (!quotationId && isIgvExempt) {
+      setHideIgv(true)
+    }
+  }, [isIgvExempt, quotationId])
 
   useEffect(() => {
     loadData()
@@ -1372,30 +1380,32 @@ export default function CreateQuotation() {
             <CardContent>
               <div className="space-y-4">
                 <div className="space-y-2 text-sm">
+                  {discount > 0 && (
+                    <>
+                      {!hideIgv && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">{formatCurrency(baseAmounts.subtotal)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-red-600">
+                        <span>
+                          Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
+                        </span>
+                        <span className="font-medium">- {formatCurrency(discountAmount)}</span>
+                      </div>
+                    </>
+                  )}
                   {!hideIgv && (
                     <>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Subtotal:</span>
-                        <span className="font-medium">{formatCurrency(baseAmounts.subtotal)}</span>
-                      </div>
-
                       {discount > 0 && (
-                        <>
-                          <div className="flex justify-between text-red-600">
-                            <span>
-                              Descuento {discountType === 'percentage' ? `(${discount}%)` : ''}:
-                            </span>
-                            <span className="font-medium">- {formatCurrency(discountAmount)}</span>
-                          </div>
-                          <div className="flex justify-between pt-2 border-t">
-                            <span className="text-gray-600">Subtotal con descuento:</span>
-                            <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
-                          </div>
-                        </>
+                        <div className="flex justify-between pt-2 border-t">
+                          <span className="text-gray-600">Subtotal con descuento:</span>
+                          <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
+                        </div>
                       )}
-
                       <div className="flex justify-between">
-                        <span className="text-gray-600">IGV (18%):</span>
+                        <span className="text-gray-600">{isIgvExempt ? 'OP. EXONERADA:' : 'IGV (18%):'}</span>
                         <span className="font-medium">{formatCurrency(finalIgv)}</span>
                       </div>
                     </>
