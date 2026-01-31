@@ -44,7 +44,7 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
-import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, convertNotaVentaToComprobante } from '@/services/firestoreService'
+import { getInvoices, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
@@ -136,17 +136,6 @@ export default function InvoiceList() {
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [newPaymentAmount, setNewPaymentAmount] = useState('')
   const [newPaymentMethod, setNewPaymentMethod] = useState('Efectivo')
-
-  // Estados para conversión de Nota de Venta a Boleta/Factura
-  const [convertingInvoice, setConvertingInvoice] = useState(null)
-  const [isConverting, setIsConverting] = useState(false)
-  const [convertTargetType, setConvertTargetType] = useState('boleta')
-  const [convertCustomerData, setConvertCustomerData] = useState({
-    name: '',
-    businessName: '',
-    documentType: 'DNI',
-    documentNumber: '',
-  })
 
   // Estado para configuración de impresión web legible y compacta
   const [webPrintLegible, setWebPrintLegible] = useState(false)
@@ -686,95 +675,31 @@ Gracias por tu preferencia.`
     }
   }
 
-  // Función para abrir modal de conversión
-  const handleOpenConvertModal = (invoice) => {
-    // Pre-llenar con datos del cliente de la nota de venta
-    setConvertTargetType('boleta')
-    setConvertCustomerData({
-      name: invoice.customer?.name || '',
-      businessName: invoice.customer?.businessName || '',
-      documentType: invoice.customer?.documentType || 'DNI',
-      documentNumber: invoice.customer?.documentNumber || '',
-    })
-    setConvertingInvoice(invoice)
-  }
-
-  // Función para convertir Nota de Venta a Boleta o Factura
-  const handleConvertToComprobante = async () => {
-    if (!convertingInvoice || !user?.uid) return
+  // Función para convertir nota de venta navegando al POS con datos precargados
+  const handleConvertInPOS = (invoice) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
 
-    const tipoLabel = convertTargetType === 'factura' ? 'Factura' : 'Boleta'
+    setViewingInvoice(null)
 
-    // Validar documento según tipo de comprobante
-    if (convertTargetType === 'factura') {
-      if (!convertCustomerData.documentNumber || convertCustomerData.documentNumber.length !== 11) {
-        toast.error('Debe ingresar un RUC válido (11 dígitos) para generar la factura')
-        return
+    navigate('/app/pos', {
+      state: {
+        fromNotaVenta: true,
+        notaVentaId: invoice.id,
+        notaVentaNumber: invoice.number,
+        items: invoice.items || [],
+        customer: invoice.customer || null,
+        paymentMethod: invoice.paymentMethod || 'Efectivo',
+        payments: invoice.payments || null,
+        notes: invoice.notes || '',
+        sellerId: invoice.sellerId || null,
+        sellerName: invoice.sellerName || null,
+        discount: invoice.discount || 0,
+        discountPercentage: invoice.discountPercentage || 0,
       }
-      if (!convertCustomerData.businessName?.trim()) {
-        toast.error('Debe ingresar la Razón Social para generar la factura')
-        return
-      }
-    } else {
-      if (!convertCustomerData.documentNumber || convertCustomerData.documentNumber.length < 8) {
-        toast.error('Debe ingresar un DNI válido (8 dígitos) para generar la boleta')
-        return
-      }
-    }
-
-    const businessId = getBusinessId()
-    setIsConverting(true)
-
-    try {
-      const result = await convertNotaVentaToComprobante(
-        businessId,
-        convertingInvoice.id,
-        convertCustomerData,
-        convertTargetType
-      )
-
-      if (result.success) {
-        toast.success(`${tipoLabel} ${result.comprobanteNumber} generada exitosamente`)
-
-        // Preguntar si desea enviar a SUNAT
-        const sendToSunat = window.confirm(
-          `La ${tipoLabel.toLowerCase()} ${result.comprobanteNumber} ha sido creada.\n\n¿Deseas enviarla a SUNAT ahora?`
-        )
-
-        if (sendToSunat) {
-          setSendingToSunat(result.comprobanteId)
-          try {
-            const sunatResult = await sendInvoiceToSunat(businessId, result.comprobanteId)
-            if (sunatResult.success) {
-              toast.success(`${tipoLabel} enviada a SUNAT exitosamente`)
-            } else {
-              toast.error('Error al enviar a SUNAT: ' + (sunatResult.error || 'Error desconocido'))
-            }
-          } catch (sunatError) {
-            console.error('Error al enviar a SUNAT:', sunatError)
-            toast.error('Error al enviar a SUNAT. Puedes reintentarlo más tarde.')
-          } finally {
-            setSendingToSunat(null)
-          }
-        }
-
-        // Cerrar modal y recargar lista
-        setConvertingInvoice(null)
-        setViewingInvoice(null)
-        loadInvoices()
-      } else {
-        toast.error('Error: ' + result.error)
-      }
-    } catch (error) {
-      console.error('Error al convertir nota de venta:', error)
-      toast.error('Error al convertir la nota de venta')
-    } finally {
-      setIsConverting(false)
-    }
+    })
   }
 
   const handleRegisterPayment = async () => {
@@ -2436,197 +2361,12 @@ Gracias por tu preferencia.`
                  viewingInvoice.sunatStatus === 'not_applicable' &&
                  !viewingInvoice.convertedTo &&
                  viewingInvoice.status !== 'voided' && (
-                  <Button size="sm" variant="success" className="flex-1" onClick={() => handleOpenConvertModal(viewingInvoice)}>
+                  <Button size="sm" variant="success" className="flex-1" onClick={() => handleConvertInPOS(viewingInvoice)}>
                     <Receipt className="w-4 h-4 mr-1" />
                     Convertir a Comprobante
                   </Button>
                 )}
               </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-            {/* Modal de Conversión de Nota de Venta a Boleta/Factura */}
-      <Modal
-        isOpen={!!convertingInvoice}
-        onClose={() => !isConverting && setConvertingInvoice(null)}
-        title={`Convertir Nota de Venta a ${convertTargetType === 'factura' ? 'Factura' : 'Boleta'}`}
-        size="md"
-      >
-        {convertingInvoice && (
-          <div className="space-y-6">
-            {/* Selector de tipo de comprobante */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tipo de Comprobante
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  className={`p-3 rounded-lg border-2 text-center font-medium transition-colors ${
-                    convertTargetType === 'boleta'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                  onClick={() => {
-                    setConvertTargetType('boleta')
-                    setConvertCustomerData(prev => ({
-                      ...prev,
-                      documentType: 'DNI',
-                      documentNumber: '',
-                    }))
-                  }}
-                >
-                  Boleta
-                </button>
-                <button
-                  type="button"
-                  className={`p-3 rounded-lg border-2 text-center font-medium transition-colors ${
-                    convertTargetType === 'factura'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                  }`}
-                  onClick={() => {
-                    setConvertTargetType('factura')
-                    setConvertCustomerData(prev => ({
-                      ...prev,
-                      documentType: 'RUC',
-                      documentNumber: '',
-                    }))
-                  }}
-                >
-                  Factura
-                </button>
-              </div>
-            </div>
-
-            {/* Info de la nota de venta */}
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-600">Nota de Venta</p>
-                  <p className="font-semibold">{convertingInvoice.number}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Total</p>
-                  <p className="font-semibold text-lg">{formatCurrency(convertingInvoice.total)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Aviso importante */}
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-800">
-                  <p className="font-medium mb-1">Importante:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Se generará una <strong>{convertTargetType === 'factura' ? 'Factura electrónica' : 'Boleta electrónica'}</strong> que se enviará a SUNAT</li>
-                    <li>El stock <strong>NO</strong> se descontará nuevamente</li>
-                    <li>La nota de venta quedará marcada como convertida</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Datos del cliente */}
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Datos del Cliente para la {convertTargetType === 'factura' ? 'Factura' : 'Boleta'}</h4>
-
-              {convertTargetType === 'factura' ? (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Razón Social *
-                    </label>
-                    <Input
-                      value={convertCustomerData.businessName}
-                      onChange={e => setConvertCustomerData(prev => ({ ...prev, businessName: e.target.value }))}
-                      placeholder="Razón Social de la empresa"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      RUC *
-                    </label>
-                    <Input
-                      value={convertCustomerData.documentNumber}
-                      onChange={e => setConvertCustomerData(prev => ({ ...prev, documentNumber: e.target.value }))}
-                      placeholder="Ej: 20123456789"
-                      maxLength={11}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nombre / Razón Social
-                    </label>
-                    <Input
-                      value={convertCustomerData.name}
-                      onChange={e => setConvertCustomerData(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="Nombre del cliente"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tipo de Documento
-                      </label>
-                      <Select
-                        value={convertCustomerData.documentType}
-                        onChange={e => setConvertCustomerData(prev => ({ ...prev, documentType: e.target.value }))}
-                      >
-                        <option value="DNI">DNI</option>
-                        <option value="CE">Carnet de Extranjería</option>
-                        <option value="PASAPORTE">Pasaporte</option>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Número de Documento *
-                      </label>
-                      <Input
-                        value={convertCustomerData.documentNumber}
-                        onChange={e => setConvertCustomerData(prev => ({ ...prev, documentNumber: e.target.value }))}
-                        placeholder="Ej: 12345678"
-                        maxLength={convertCustomerData.documentType === 'DNI' ? 8 : 12}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Botones */}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button
-                variant="outline"
-                onClick={() => setConvertingInvoice(null)}
-                disabled={isConverting}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="success"
-                onClick={handleConvertToComprobante}
-                disabled={isConverting || !convertCustomerData.documentNumber || (convertTargetType === 'factura' && !convertCustomerData.businessName?.trim())}
-              >
-                {isConverting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Convirtiendo...
-                  </>
-                ) : (
-                  <>
-                    <Receipt className="w-4 h-4 mr-2" />
-                    Generar {convertTargetType === 'factura' ? 'Factura' : 'Boleta'}
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         )}

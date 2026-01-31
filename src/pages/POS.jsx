@@ -68,6 +68,7 @@ import { releaseTable } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
+import { markNotaVentaAsConverted } from '@/services/firestoreService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -287,6 +288,9 @@ export default function POS() {
   // Estado para cotización (para marcar como convertida al completar)
   const [pendingQuotationId, setPendingQuotationId] = useState(null)
 
+  // Estado para nota de venta (para marcar como convertida y skip stock al completar)
+  const [pendingNotaVentaId, setPendingNotaVentaId] = useState(null)
+
   // Barcode Scanner
   const [isScanning, setIsScanning] = useState(false)
 
@@ -412,8 +416,8 @@ export default function POS() {
   useEffect(() => {
     if (!user?.uid || draftLoadedRef.current) return
 
-    // No cargar borrador si viene de una mesa o una orden
-    if (location.state?.fromTable || location.state?.fromOrder) return
+    // No cargar borrador si viene de una mesa, orden o nota de venta
+    if (location.state?.fromTable || location.state?.fromOrder || location.state?.fromNotaVenta) return
 
     try {
       const savedDraft = localStorage.getItem(getDraftKey())
@@ -524,6 +528,7 @@ export default function POS() {
   const tableLoadedRef = useRef(false)
   const orderLoadedRef = useRef(false)
   const quotationLoadedRef = useRef(false)
+  const notaVentaLoadedRef = useRef(false)
 
   // Detectar si viene de una mesa y cargar items
   useEffect(() => {
@@ -535,6 +540,12 @@ export default function POS() {
 
       setTableData(tableInfo)
       setOrderType('dine-in') // Establecer automáticamente como "En Mesa"
+
+      // Si la mesa tiene una orden asociada, guardarla para marcarla como pagada al completar
+      if (tableInfo.orderId) {
+        setPendingOrderId(tableInfo.orderId)
+        setMarkOrderPaidOnComplete(true)
+      }
 
       // Cargar items de la mesa al carrito
       if (tableInfo.items && tableInfo.items.length > 0) {
@@ -637,6 +648,116 @@ export default function POS() {
       }
 
       toast.success(`Cotización ${quotationInfo.quotationNumber} cargada - ${quotationInfo.items?.length || 0} items. Revisa y completa la venta.`)
+
+      // Limpiar el state de navegación para evitar recarga
+      navigate(location.pathname, { replace: true, state: null })
+    }
+
+    // Detectar si viene de una nota de venta y cargar items
+    if (location.state?.fromNotaVenta && !notaVentaLoadedRef.current) {
+      const notaVentaInfo = location.state
+
+      // Marcar como cargado para evitar duplicados
+      notaVentaLoadedRef.current = true
+
+      // Guardar info de la nota de venta para marcar como convertida al completar
+      if (notaVentaInfo.notaVentaId) {
+        setPendingNotaVentaId(notaVentaInfo.notaVentaId)
+      }
+
+      // Cargar items de la nota de venta al carrito
+      if (notaVentaInfo.items && notaVentaInfo.items.length > 0) {
+        const cartItems = notaVentaInfo.items.map(item => ({
+          id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
+          productId: item.productId || '',
+          name: item.name || '',
+          description: item.description || '',
+          price: item.unitPrice || item.price || 0,
+          quantity: item.quantity || 1,
+          unit: item.unit || 'NIU',
+          code: item.code || '',
+          observations: item.observations || '',
+          taxAffectation: item.taxAffectation || '10',
+          itemDiscount: item.itemDiscount || 0,
+          notes: item.notes || '',
+          presentationName: item.presentationName || '',
+          presentationFactor: item.presentationFactor || 1,
+          batchNumber: item.batchNumber || '',
+          batchExpiryDate: item.batchExpiryDate || '',
+        }))
+        setCart(cartItems)
+      }
+
+      // Cargar datos del cliente en el formulario (customerData)
+      if (notaVentaInfo.customer) {
+        const customer = notaVentaInfo.customer
+        // Buscar si el cliente existe en la lista
+        const existingCustomer = customers.find(
+          c => c.documentNumber === customer.documentNumber
+        )
+        if (existingCustomer) {
+          setSelectedCustomer(existingCustomer)
+        }
+        // Siempre llenar los campos del formulario
+        setCustomerData({
+          documentType: customer.documentType || 'DNI',
+          documentNumber: customer.documentNumber || '',
+          name: customer.name || '',
+          businessName: customer.businessName || '',
+          address: customer.address || '',
+          email: customer.email || '',
+          phone: customer.phone || '',
+          studentName: customer.studentName || '',
+          studentSchedule: customer.studentSchedule || '',
+          vehiclePlate: customer.vehiclePlate || '',
+          originAddress: customer.originAddress || '',
+          destinationAddress: customer.destinationAddress || '',
+          tripDetail: customer.tripDetail || '',
+          serviceReferenceValue: customer.serviceReferenceValue || '',
+          effectiveLoadValue: customer.effectiveLoadValue || '',
+          usefulLoadValue: customer.usefulLoadValue || '',
+        })
+      }
+
+      // Cargar método de pago (convertir del formato guardado al formato del formulario)
+      if (notaVentaInfo.payments && notaVentaInfo.payments.length > 0) {
+        const formPayments = notaVentaInfo.payments.map(p => ({
+          method: p.methodKey || Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === p.method) || '',
+          amount: p.amount ? p.amount.toString() : '',
+        }))
+        setPayments(formPayments)
+      } else if (notaVentaInfo.paymentMethod) {
+        const methodKey = Object.keys(PAYMENT_METHODS).find(k => PAYMENT_METHODS[k] === notaVentaInfo.paymentMethod) || ''
+        setPayments([{ method: methodKey, amount: '' }])
+      }
+
+      // Cargar notas generales
+      if (notaVentaInfo.notes) {
+        setGeneralNotes(notaVentaInfo.notes)
+      }
+
+      // Cargar descuento global (solo si hay porcentaje de descuento global)
+      // NOTA: invoice.discount incluye item discounts + global, no sirve para esto.
+      // Los descuentos por ítem ya se cargan en cada item del carrito (itemDiscount).
+      // Solo cargamos el descuento general si discountPercentage > 0.
+      if (notaVentaInfo.discountPercentage && notaVentaInfo.discountPercentage > 0) {
+        setDiscountPercentage(notaVentaInfo.discountPercentage.toString())
+        const subtotal = (notaVentaInfo.items || []).reduce((sum, item) => sum + ((item.unitPrice || item.price || 0) * (item.quantity || 1)), 0)
+        if (subtotal > 0) {
+          const amount = ((subtotal * notaVentaInfo.discountPercentage) / 100).toFixed(2)
+          setDiscountAmount(amount)
+        }
+      }
+
+      // Cargar vendedor si existe
+      if (notaVentaInfo.sellerId) {
+        const seller = sellers.find(s => s.id === notaVentaInfo.sellerId)
+        if (seller) {
+          setSelectedSeller(seller)
+        }
+      }
+
+      toast.success(`Nota de Venta ${notaVentaInfo.notaVentaNumber} cargada - ${notaVentaInfo.items?.length || 0} items. Selecciona Boleta o Factura y completa la venta.`)
 
       // Limpiar el state de navegación para evitar recarga
       navigate(location.pathname, { replace: true, state: null })
@@ -2378,6 +2499,14 @@ export default function POS() {
             netPayable: Number((amounts.total - (amounts.total * (DETRACTION_TYPES.find(t => t.code === detractionType)?.rate || 0)) / 100).toFixed(2)),
           }),
         }),
+        // Si viene de una nota de venta, marcar para no descontar stock de nuevo
+        ...(pendingNotaVentaId && {
+          skipStockDeduction: true,
+          convertedFrom: {
+            type: 'nota_venta',
+            id: pendingNotaVentaId,
+          },
+        }),
       }
 
       // MODO OFFLINE: Si no hay conexión, guardar en cola local
@@ -2504,8 +2633,8 @@ export default function POS() {
       }
 
       // 4. Actualizar stock de productos por almacén (con FEFO para farmacias)
-      // NOTA: En modo edición NO actualizamos stock (ya fue descontado en la factura original)
-      if (!isEditMode) {
+      // NOTA: En modo edición o conversión de nota de venta NO actualizamos stock (ya fue descontado)
+      if (!isEditMode && !pendingNotaVentaId) {
       const stockUpdates = cart
         .filter(item => !item.isCustom) // Excluir solo productos personalizados
         .map(async item => {
@@ -2659,7 +2788,7 @@ export default function POS() {
           console.warn(`⚠️ No se pudo descontar ingredientes para ${item.name}:`, error)
         }
       }
-      } // Fin del if (!isEditMode) - No actualizar stock en modo edición
+      } // Fin del if (!isEditMode && !pendingNotaVentaId) - No actualizar stock en edición o conversión de nota de venta
 
       // 5. Actualizar métricas del mozo (si la venta fue atendida por un mozo)
       if (tableData?.waiterId) {
@@ -2745,7 +2874,7 @@ export default function POS() {
       // 6.2. Si viene de una cotización, marcar como convertida
       if (pendingQuotationId) {
         try {
-          const markConvertedResult = await markQuotationAsConverted(businessId, pendingQuotationId, createResult.id)
+          const markConvertedResult = await markQuotationAsConverted(businessId, pendingQuotationId, invoiceId)
           if (markConvertedResult.success) {
             console.log('✅ Cotización marcada como convertida:', pendingQuotationId)
           } else {
@@ -2756,6 +2885,28 @@ export default function POS() {
         } finally {
           // Limpiar estado de cotización pendiente
           setPendingQuotationId(null)
+        }
+      }
+
+      // 6.3. Si viene de una nota de venta, marcar como convertida
+      if (pendingNotaVentaId) {
+        try {
+          const markConvertedResult = await markNotaVentaAsConverted(
+            businessId,
+            pendingNotaVentaId,
+            documentType,
+            invoiceId,
+            numberResult.number
+          )
+          if (markConvertedResult.success) {
+            console.log('✅ Nota de venta marcada como convertida:', pendingNotaVentaId)
+          } else {
+            console.warn('⚠️ No se pudo marcar la nota de venta como convertida:', markConvertedResult.error)
+          }
+        } catch (error) {
+          console.error('Error al marcar nota de venta como convertida:', error)
+        } finally {
+          setPendingNotaVentaId(null)
         }
       }
 

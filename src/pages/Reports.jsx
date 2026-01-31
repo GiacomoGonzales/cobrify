@@ -282,12 +282,12 @@ export default function Reports() {
     const filterDate = new Date()
 
     // Primero filtrar facturas para evitar duplicados:
-    // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar ingresos)
+    // - Excluir notas de venta que ya fueron convertidas a boleta/factura (para no duplicar ingresos)
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
     // - Filtrar por sucursal si está seleccionada
     const validInvoices = invoices.filter(invoice => {
-      // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
-      if (invoice.convertedFrom) {
+      // Si es una nota de venta ya convertida a comprobante, no contar (se cuenta la boleta/factura)
+      if (invoice.convertedTo) {
         return false
       }
       // Si el documento está anulado, no contar

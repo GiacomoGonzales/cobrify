@@ -746,6 +746,28 @@ export const convertNotaVentaToComprobante = async (userId, notaVentaId, custome
 export const convertNotaVentaToBoleta = convertNotaVentaToComprobante
 
 /**
+ * Marcar una nota de venta como convertida a comprobante
+ */
+export const markNotaVentaAsConverted = async (businessId, notaVentaId, comprobanteType, comprobanteId, comprobanteNumber) => {
+  try {
+    const notaRef = doc(db, 'businesses', businessId, 'invoices', notaVentaId)
+    await updateDoc(notaRef, {
+      convertedTo: {
+        type: comprobanteType,
+        id: comprobanteId,
+        number: comprobanteNumber,
+        convertedAt: serverTimestamp(),
+      },
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al marcar nota de venta como convertida:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Obtener siguiente número de documento
  * @param {string} userId - ID del negocio
  * @param {string} documentType - Tipo de documento (factura, boleta, etc.)
