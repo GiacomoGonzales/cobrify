@@ -755,6 +755,28 @@ export const completeOrder = async (businessId, orderId) => {
       updatedAt: serverTimestamp(),
     })
 
+    // Si la orden tiene mesa asociada, liberarla
+    if (orderData.tableId) {
+      try {
+        const tableRef = doc(db, 'businesses', businessId, 'tables', orderData.tableId)
+        const tableSnap = await getDoc(tableRef)
+        if (tableSnap.exists() && tableSnap.data().currentOrder === orderId) {
+          await updateDoc(tableRef, {
+            status: 'available',
+            currentOrder: null,
+            waiter: null,
+            waiterId: null,
+            startTime: null,
+            amount: 0,
+            updatedAt: serverTimestamp(),
+          })
+          console.log(`Mesa ${orderData.tableId} liberada al completar orden ${orderId}`)
+        }
+      } catch (tableError) {
+        console.warn('No se pudo liberar la mesa:', tableError)
+      }
+    }
+
     return { success: true }
   } catch (error) {
     console.error('Error al completar orden:', error)
