@@ -526,12 +526,12 @@ export default function CreatePurchase() {
     }
   }, [])
 
-  // Calcular subtotal de un item usando costo sin IGV para evitar errores de redondeo
+  // Calcular subtotal de un item usando costo con IGV directamente para evitar errores de redondeo
   const calculateItemSubtotal = (item) => {
     const quantity = parseFloat(item.quantity) || 0
-    const costWithoutIGV = parseFloat(item.costWithoutIGV) || 0
-    // Calcular: (cantidad × costo sin IGV) × 1.18, redondeado a 2 decimales
-    return Math.round(quantity * costWithoutIGV * 1.18 * 100) / 100
+    const costWithIGV = parseFloat(item.cost) || 0
+    // Calcular: cantidad × costo con IGV, redondeado a 2 decimales
+    return Math.round(quantity * costWithIGV * 100) / 100
   }
 
   const calculateAmounts = () => {
