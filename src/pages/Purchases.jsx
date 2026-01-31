@@ -1097,11 +1097,11 @@ export default function Purchases() {
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Fecha:</span>
                   <span className="text-sm font-medium">
-                    {viewingPurchase.createdAt
+                    {(viewingPurchase.invoiceDate || viewingPurchase.createdAt)
                       ? formatDate(
-                          viewingPurchase.createdAt.toDate
-                            ? viewingPurchase.createdAt.toDate()
-                            : viewingPurchase.createdAt
+                          (viewingPurchase.invoiceDate || viewingPurchase.createdAt).toDate
+                            ? (viewingPurchase.invoiceDate || viewingPurchase.createdAt).toDate()
+                            : (viewingPurchase.invoiceDate || viewingPurchase.createdAt)
                         )
                       : '-'}
                   </span>
