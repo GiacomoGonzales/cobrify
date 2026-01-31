@@ -3849,10 +3849,11 @@ export const voidInvoice = onRequest(
       const invoiceData = invoiceDoc.data()
 
       // 2. Validar que se puede anular
+      // Priorizar emissionDate (fecha del POS) sobre issueDate
       const validationResult = canVoidDocument({
         sunatStatus: invoiceData.sunatStatus,
         delivered: invoiceData.delivered || false,
-        issueDate: invoiceData.issueDate,
+        issueDate: invoiceData.emissionDate || invoiceData.issueDate,
         documentType: invoiceData.documentType
       })
 
@@ -3933,44 +3934,40 @@ export const voidInvoice = onRequest(
       console.log(`📄 Generando comunicación de baja: ${voidedDocId}`)
 
       // 5. Generar XML de baja
-      // Manejar diferentes formatos de fecha de la factura
-      let issueDate
-      console.log('📅 invoiceData.issueDate:', invoiceData.issueDate, 'tipo:', typeof invoiceData.issueDate)
+      // Priorizar emissionDate (fecha elegida por usuario en POS) sobre issueDate y createdAt
+      const dateSource = invoiceData.emissionDate || invoiceData.issueDate
+      let referenceDateStr
+      console.log('📅 emissionDate:', invoiceData.emissionDate, 'issueDate:', invoiceData.issueDate)
 
-      if (invoiceData.issueDate?.toDate) {
+      if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
+        // String YYYY-MM-DD directo (formato guardado por el POS) - usar tal cual
+        referenceDateStr = dateSource
+        console.log('📅 Usando fecha de emisión directa (string):', referenceDateStr)
+      } else if (dateSource?.toDate) {
         // Firestore Timestamp
-        issueDate = invoiceData.issueDate.toDate()
-      } else if (invoiceData.issueDate?._seconds) {
+        const d = dateSource.toDate()
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
+        console.log('📅 Usando fecha de emisión (Timestamp):', referenceDateStr)
+      } else if (dateSource?._seconds) {
         // Firestore Timestamp serializado
-        issueDate = new Date(invoiceData.issueDate._seconds * 1000)
-      } else if (typeof invoiceData.issueDate === 'string') {
-        // String de fecha
-        issueDate = new Date(invoiceData.issueDate)
-      } else if (invoiceData.issueDate instanceof Date) {
-        issueDate = invoiceData.issueDate
+        const d = new Date(dateSource._seconds * 1000)
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
+        console.log('📅 Usando fecha de emisión (Timestamp serializado):', referenceDateStr)
       } else if (invoiceData.createdAt?.toDate) {
-        // Fallback a createdAt si issueDate no está disponible
+        // Fallback a createdAt
         console.log('⚠️ Usando createdAt como fecha de emisión')
-        issueDate = invoiceData.createdAt.toDate()
+        const d = invoiceData.createdAt.toDate()
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
       } else {
-        // Último fallback: usar la fecha actual (no debería llegar aquí)
+        // Último fallback: fecha actual en Perú
         console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
-        issueDate = new Date()
+        referenceDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       }
 
-      // Validar que la fecha sea válida
-      if (isNaN(issueDate.getTime())) {
-        console.error('❌ Fecha inválida:', invoiceData.issueDate)
-        res.status(400).json({ error: 'Fecha de emisión de la factura inválida' })
-        return
-      }
-
-      // IMPORTANTE: Convertir fecha de emisión del documento a zona horaria de Perú
-      // para que coincida con la fecha mostrada al usuario cuando emitió el documento
-      const issueDatePeru = new Date(issueDate.getTime() + (peruOffset - issueDate.getTimezoneOffset()) * 60000)
-      console.log('📅 Fecha emisión documento UTC:', issueDate.toISOString(), '-> Perú:', issueDatePeru.toISOString())
-
-      const referenceDateStr = `${issueDatePeru.getFullYear()}-${String(issueDatePeru.getMonth() + 1).padStart(2, '0')}-${String(issueDatePeru.getDate()).padStart(2, '0')}`
+      console.log('📅 referenceDate final:', referenceDateStr)
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       console.log('📅 Fechas generadas - referenceDate (doc):', referenceDateStr, 'issueDate (comunicación):', issueDateStr)
 
@@ -5462,10 +5459,11 @@ export const voidInvoiceQPse = onRequest(
       }
 
       // 3. Validar que se puede anular
+      // Priorizar emissionDate (fecha del POS) sobre issueDate
       const validationResult = canVoidDocument({
         sunatStatus: invoiceData.sunatStatus,
         delivered: invoiceData.delivered || false,
-        issueDate: invoiceData.issueDate,
+        issueDate: invoiceData.emissionDate || invoiceData.issueDate,
         documentType: invoiceData.documentType || 'factura'
       })
 
@@ -5543,38 +5541,36 @@ export const voidInvoiceQPse = onRequest(
       console.log(`📄 [QPse] Generando comunicación de baja: ${voidedDocId}`)
 
       // 6. Preparar fecha de referencia (fecha de emisión de la factura)
-      let issueDate
-      console.log('📅 invoiceData.issueDate:', invoiceData.issueDate, 'tipo:', typeof invoiceData.issueDate)
+      // Priorizar emissionDate (fecha elegida por usuario en POS) sobre issueDate y createdAt
+      const dateSource = invoiceData.emissionDate || invoiceData.issueDate
+      let referenceDateStr
+      console.log('📅 emissionDate:', invoiceData.emissionDate, 'issueDate:', invoiceData.issueDate)
 
-      if (invoiceData.issueDate?.toDate) {
-        issueDate = invoiceData.issueDate.toDate()
-      } else if (invoiceData.issueDate?._seconds) {
-        issueDate = new Date(invoiceData.issueDate._seconds * 1000)
-      } else if (typeof invoiceData.issueDate === 'string') {
-        issueDate = new Date(invoiceData.issueDate)
-      } else if (invoiceData.issueDate instanceof Date) {
-        issueDate = invoiceData.issueDate
+      if (typeof dateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateSource)) {
+        // String YYYY-MM-DD directo (formato guardado por el POS) - usar tal cual
+        referenceDateStr = dateSource
+        console.log('📅 Usando fecha de emisión directa (string):', referenceDateStr)
+      } else if (dateSource?.toDate) {
+        const d = dateSource.toDate()
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
+        console.log('📅 Usando fecha de emisión (Timestamp):', referenceDateStr)
+      } else if (dateSource?._seconds) {
+        const d = new Date(dateSource._seconds * 1000)
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
+        console.log('📅 Usando fecha de emisión (Timestamp serializado):', referenceDateStr)
       } else if (invoiceData.createdAt?.toDate) {
         console.log('⚠️ Usando createdAt como fecha de emisión')
-        issueDate = invoiceData.createdAt.toDate()
+        const d = invoiceData.createdAt.toDate()
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
       } else {
         console.log('⚠️ No se encontró fecha de emisión, usando fecha actual')
-        issueDate = new Date()
+        referenceDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       }
 
-      if (isNaN(issueDate.getTime())) {
-        console.error('❌ Fecha inválida:', invoiceData.issueDate)
-        res.status(400).json({ error: 'Fecha de emisión de la factura inválida' })
-        return
-      }
-
-      // IMPORTANTE: Convertir la fecha de emisión UTC a hora de Perú para obtener la fecha correcta
-      // Esto evita el error 2375 de SUNAT cuando la factura se emitió cerca de medianoche
-      const issueDatePeru = new Date(issueDate.getTime() + (peruOffset - issueDate.getTimezoneOffset()) * 60000)
-      console.log('📅 issueDate original (UTC):', issueDate.toISOString())
-      console.log('📅 issueDate en Perú:', issueDatePeru.toISOString())
-
-      const referenceDateStr = `${issueDatePeru.getFullYear()}-${String(issueDatePeru.getMonth() + 1).padStart(2, '0')}-${String(issueDatePeru.getDate()).padStart(2, '0')}`
+      console.log('📅 referenceDate final:', referenceDateStr)
       const issueDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       console.log('📅 Fechas generadas - referenceDate:', referenceDateStr, 'issueDate (comunicación):', issueDateStr)
 
