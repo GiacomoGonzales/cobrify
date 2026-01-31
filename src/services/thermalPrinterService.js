@@ -14,10 +14,13 @@ import * as BLEPrinter from './blePrinterService';
 // Plugin TCP para impresión WiFi/LAN
 const TcpPrinter = registerPlugin('TcpPrinter');
 
+// Plugin para impresora interna iMin
+const IminPrinter = registerPlugin('IminPrinter');
+
 // Estado de la impresora
 let isPrinterConnected = false;
 let connectedPrinterAddress = null;
-let connectionType = 'bluetooth'; // 'bluetooth' o 'wifi'
+let connectionType = 'bluetooth'; // 'bluetooth', 'wifi' o 'internal'
 let useAlternativeBLE = false; // Usar servicio alternativo BLE en iOS
 
 /**
@@ -177,11 +180,31 @@ export const scanPrinters = async () => {
 };
 
 /**
- * Detectar si una dirección es IP o MAC
+ * Detectar si el dispositivo actual es un dispositivo iMin con impresora interna
+ * @returns {Promise<boolean>}
+ */
+export const isIminDevice = async () => {
+  try {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return false;
+    }
+    const result = await IminPrinter.isIminDevice();
+    return result && result.isImin === true;
+  } catch (error) {
+    console.warn('Error detecting iMin device:', error);
+    return false;
+  }
+};
+
+/**
+ * Detectar si una dirección es IP, MAC o interna
  * @param {string} address - Dirección a verificar
- * @returns {'wifi' | 'bluetooth'} Tipo de conexión
+ * @returns {'wifi' | 'bluetooth' | 'internal'} Tipo de conexión
  */
 const detectConnectionType = (address) => {
+  if (address === 'internal') {
+    return 'internal';
+  }
   // Patrón de IP: xxx.xxx.xxx.xxx o xxx.xxx.xxx.xxx:port
   const ipPattern = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
   // Patrón de MAC: XX:XX:XX:XX:XX:XX
@@ -210,6 +233,18 @@ const parseIpAddress = (address) => {
 };
 
 /**
+ * Enviar datos ESC/POS al plugin correspondiente (WiFi o interno)
+ * @param {string} base64Data - Datos en base64
+ * @returns {Promise<Object>}
+ */
+const sendEscPosData = async (base64Data) => {
+  if (connectionType === 'internal') {
+    return await IminPrinter.print({ data: base64Data });
+  }
+  return await sendEscPosData(base64Data);
+};
+
+/**
  * Desconectar impresora
  */
 export const disconnectPrinter = async () => {
@@ -223,7 +258,9 @@ export const disconnectPrinter = async () => {
     console.log('🔌 Desconectando impresora...');
 
     // Desconectar según el tipo de conexión actual
-    if (connectionType === 'wifi') {
+    if (connectionType === 'internal') {
+      await IminPrinter.disconnect();
+    } else if (connectionType === 'wifi') {
       await TcpPrinter.disconnect();
     } else if (useAlternativeBLE) {
       await BLEPrinter.disconnectBLEPrinter();
@@ -270,7 +307,24 @@ export const connectPrinter = async (address) => {
     // Pequeña espera para asegurar que la desconexión se complete
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    if (detectedType === 'wifi') {
+    if (detectedType === 'internal') {
+      // Conexión a impresora interna iMin
+      console.log('🖨️ Conectando a impresora interna iMin...');
+
+      const result = await IminPrinter.connect();
+      console.log('📋 Resultado de conexión interna:', result);
+
+      if (result && result.success) {
+        isPrinterConnected = true;
+        connectedPrinterAddress = 'internal';
+        connectionType = 'internal';
+        console.log('✅ Impresora interna conectada');
+        return { success: true, address: 'internal', type: 'internal' };
+      } else {
+        console.error('❌ Conexión interna falló');
+        return { success: false, error: 'No se pudo conectar a la impresora interna' };
+      }
+    } else if (detectedType === 'wifi') {
       // Conexión WiFi/LAN via TCP
       console.log('📶 Conectando via WiFi/LAN...');
       const { ip, port } = parseIpAddress(address);
@@ -369,7 +423,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
     const configData = {
       address: printerConfig.address,
       name: printerConfig.name,
-      type: printerConfig.type || 'bluetooth', // bluetooth o wifi
+      type: printerConfig.type || 'bluetooth', // bluetooth, wifi o internal
       paperWidth: printerConfig.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
       enabled: printerConfig.enabled !== false,
       webPrintLegible: printerConfig.webPrintLegible || false, // Modo legible para impresión web
@@ -460,9 +514,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     return { success: false, error: 'Printer not connected' };
   }
 
-  // Si es conexión WiFi, usar la función específica para WiFi
-  if (connectionType === 'wifi') {
-    console.log('📶 Usando impresión WiFi para ticket...');
+  // Si es conexión WiFi o interna, usar la función específica con ESC/POS builder
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    console.log(`📶 Usando impresión ${connectionType} para ticket...`);
     return await printWifiTicket(invoice, business, paperWidth);
   }
 
@@ -1080,9 +1134,9 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
     return { success: false, error: 'Impresora no conectada. Conéctala primero desde Ajustes.' };
   }
 
-  // Si es conexión WiFi, usar función específica
-  if (connectionType === 'wifi') {
-    console.log('📶 Usando impresión WiFi para comanda...');
+  // Si es conexión WiFi o interna, usar función específica con ESC/POS builder
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    console.log(`📶 Usando impresión ${connectionType} para comanda...`);
     return await printWifiKitchenOrder(order, table, paperWidth);
   }
 
@@ -1188,9 +1242,9 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     return { success: false, error: 'Printer not connected' };
   }
 
-  // Si es conexión WiFi, usar función específica
-  if (connectionType === 'wifi') {
-    console.log('📶 Usando impresión WiFi para precuenta...');
+  // Si es conexión WiFi o interna, usar función específica con ESC/POS builder
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    console.log(`📶 Usando impresión ${connectionType} para precuenta...`);
     return await printWifiPreBill(order, table, business, taxConfig, paperWidth, recargoConsumoConfig);
   }
 
@@ -1468,6 +1522,20 @@ export const testPrinter = async (paperWidth = 58) => {
     console.log('✅ Iniciando impresión de prueba...');
     const format = getFormat(paperWidth);
     console.log('📐 Formato seleccionado:', format);
+
+    // Si es impresora interna iMin
+    if (connectionType === 'internal') {
+      console.log('🖨️ Usando impresora interna iMin...');
+      const result = await IminPrinter.printTest({ paperWidth });
+      console.log('📋 Resultado de impresión interna:', result);
+
+      if (result && result.success) {
+        console.log('🎉 Impresión de prueba interna completada exitosamente');
+        return { success: true };
+      } else {
+        return { success: false, error: 'Error al imprimir via impresora interna' };
+      }
+    }
 
     // Si es WiFi, usar el plugin TCP
     if (connectionType === 'wifi') {
@@ -1770,8 +1838,8 @@ class EscPosBuilder {
  * Imprimir ticket vía WiFi usando comandos ESC/POS
  */
 export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
-  if (connectionType !== 'wifi' || !isPrinterConnected) {
-    return { success: false, error: 'No hay conexión WiFi activa' };
+  if ((connectionType !== 'wifi' && connectionType !== 'internal') || !isPrinterConnected) {
+    return { success: false, error: 'No hay conexión WiFi/interna activa' };
   }
 
   try {
@@ -2004,7 +2072,7 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 
     // Enviar a impresora
     const base64Data = builder.toBase64();
-    const result = await TcpPrinter.print({ data: base64Data });
+    const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {
       return { success: true };
@@ -2088,7 +2156,7 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58) => {
       .cut();
 
     const base64Data = builder.toBase64();
-    const result = await TcpPrinter.print({ data: base64Data });
+    const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {
       return { success: true };
@@ -2400,7 +2468,7 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
       .cut();
 
     const base64Data = builder.toBase64();
-    const result = await TcpPrinter.print({ data: base64Data });
+    const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {
       return { success: true };
@@ -2428,9 +2496,9 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
     return { success: false, error: 'Impresora no conectada' };
   }
 
-  // Si es conexión WiFi, usar la función específica para WiFi
-  if (connectionType === 'wifi') {
-    console.log('📶 Usando impresión WiFi para cierre de caja...');
+  // Si es conexión WiFi o interna, usar la función específica con ESC/POS builder
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    console.log(`📶 Usando impresión ${connectionType} para cierre de caja...`);
     return await printWifiCashClosure(sessionData, movements, business, paperWidth, branchName);
   }
 
@@ -2815,7 +2883,7 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       .cut();
 
     const base64Data = builder.toBase64();
-    const result = await TcpPrinter.print({ data: base64Data });
+    const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {
       return { success: true };

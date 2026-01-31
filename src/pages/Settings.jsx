@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench } from 'lucide-react'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Pill, Home, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Warehouse, Edit, MapPin, Plus, Bell, Truck, Bike, ShoppingBag, BookOpen, RefreshCw, Wrench, Monitor } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -25,7 +25,8 @@ import {
   savePrinterConfig,
   getPrinterConfig,
   testPrinter,
-  getConnectionType
+  getConnectionType,
+  isIminDevice
 } from '@/services/thermalPrinterService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories } from '@/services/firestoreService'
@@ -274,6 +275,7 @@ export default function Settings() {
   const [wifiIp, setWifiIp] = useState('')
   const [wifiPort, setWifiPort] = useState('9100')
   const [wifiName, setWifiName] = useState('')
+  const [isImin, setIsImin] = useState(false) // Dispositivo iMin con impresora interna
 
   // Estado para búsqueda de RUC
   const [isLookingUpRuc, setIsLookingUpRuc] = useState(false)
@@ -753,6 +755,14 @@ export default function Settings() {
             ...prev,
             ...localPrinterConfig.config
           }))
+        }
+
+        // Detectar si es dispositivo iMin
+        try {
+          const iminResult = await isIminDevice()
+          setIsImin(iminResult)
+        } catch (e) {
+          console.warn('Error detecting iMin device:', e)
         }
       }
     } catch (error) {
@@ -1611,6 +1621,53 @@ export default function Settings() {
     } catch (error) {
       console.error('Error connecting WiFi printer:', error)
       toast.error('Error al conectar impresora WiFi')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  // Conectar impresora interna iMin
+  const handleInternalConnect = async () => {
+    setIsConnecting(true)
+    try {
+      // Primero verificar si es dispositivo iMin y mostrar info
+      let deviceInfo = null
+      try {
+        const { IminPrinter } = await import('@capacitor/core').then(m => ({ IminPrinter: m.registerPlugin('IminPrinter') }))
+        deviceInfo = await IminPrinter.isIminDevice()
+        console.log('📱 Device info:', JSON.stringify(deviceInfo))
+      } catch (e) {
+        console.warn('Error checking device:', e)
+      }
+
+      if (deviceInfo && !deviceInfo.isImin) {
+        toast.error(
+          `No es dispositivo iMin. Marca: ${deviceInfo.manufacturer}, Modelo: ${deviceInfo.model}`,
+          { duration: 6000 }
+        )
+        // Intentar conectar igual para ver los logs
+        console.log('⚠️ No es iMin pero intentando conectar para debug...')
+      }
+
+      const result = await connectPrinter('internal')
+
+      if (result.success) {
+        const newConfig = {
+          enabled: true,
+          address: 'internal',
+          name: 'Impresora Interna iMin',
+          type: 'internal',
+          paperWidth: printerConfig.paperWidth || 58
+        }
+        setPrinterConfig(newConfig)
+        await savePrinterConfig(getBusinessId(), newConfig)
+        toast.success('Impresora interna conectada exitosamente')
+      } else {
+        toast.error(result.error || 'Error al conectar impresora interna')
+      }
+    } catch (error) {
+      console.error('Error connecting internal printer:', error)
+      toast.error(`Error: ${error.message || 'Error al conectar impresora interna'}`, { duration: 6000 })
     } finally {
       setIsConnecting(false)
     }
@@ -5247,8 +5304,10 @@ export default function Settings() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-900">{printerConfig.name || 'Impresora Térmica'}</p>
-                            <p className="text-sm text-gray-600 break-all">Dirección: {printerConfig.address}</p>
-                            <p className="text-sm text-gray-600">Tipo: {printerConfig.type === 'bluetooth' ? 'Bluetooth' : 'WiFi'}</p>
+                            {printerConfig.type !== 'internal' && (
+                              <p className="text-sm text-gray-600 break-all">Dirección: {printerConfig.address}</p>
+                            )}
+                            <p className="text-sm text-gray-600">Tipo: {printerConfig.type === 'internal' ? 'Impresora Interna' : printerConfig.type === 'bluetooth' ? 'Bluetooth' : 'WiFi'}</p>
                           </div>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2">
@@ -5325,7 +5384,24 @@ export default function Settings() {
                 {(!printerConfig.enabled || !printerConfig.address) && (
                   <div className="space-y-4">
                     {/* Opciones de conexión */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <Button
+                        onClick={handleInternalConnect}
+                        disabled={isConnecting}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700"
+                      >
+                        {isConnecting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Conectando...
+                          </>
+                        ) : (
+                          <>
+                            <Monitor className="w-4 h-4 mr-2" />
+                            Imp. Interna
+                          </>
+                        )}
+                      </Button>
                       <Button
                         onClick={handleScanPrinters}
                         disabled={isScanning}
@@ -5390,7 +5466,7 @@ export default function Settings() {
                         ? 'Ingresa la dirección MAC de tu impresora Bluetooth'
                         : showWifiConnect
                         ? 'Conecta tu impresora térmica por red WiFi/LAN'
-                        : 'Selecciona el método de conexión para tu impresora térmica'
+                        : 'Usa "Imp. Interna" para dispositivos iMin con impresora integrada'
                       }
                     </p>
 
