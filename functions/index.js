@@ -4117,21 +4117,42 @@ export const voidInvoice = onRequest(
       }
 
       if (statusResult.success && statusResult.accepted) {
-        // Baja aceptada
+        // Baja aceptada - guardar XML y CDR en Storage
+        let voidXmlStorageUrl = null
+        let voidCdrStorageUrl = null
+
+        try {
+          // Guardar XML firmado de la comunicación de baja
+          voidXmlStorageUrl = await saveToStorage(userId, invoiceId, `${voidedDocId}-BAJA.xml`, signedXml)
+          console.log(`📁 XML de baja guardado en Storage: ${voidXmlStorageUrl ? 'OK' : 'NO'}`)
+
+          // Guardar CDR de la baja
+          if (statusResult.cdrData) {
+            voidCdrStorageUrl = await saveToStorage(userId, invoiceId, `${voidedDocId}-CDR-BAJA.xml`, statusResult.cdrData)
+            console.log(`📁 CDR de baja guardado en Storage: ${voidCdrStorageUrl ? 'OK' : 'NO'}`)
+          }
+        } catch (storageError) {
+          console.error('⚠️ Error guardando archivos de baja en Storage:', storageError.message)
+        }
+
         await voidedDocsRef.doc(voidedDocRef.id).update({
           status: 'accepted',
           cdrData: statusResult.cdrData || null,
           responseCode: statusResult.code || null,
           responseDescription: statusResult.description || null,
+          voidXmlStorageUrl: voidXmlStorageUrl || null,
+          voidCdrStorageUrl: voidCdrStorageUrl || null,
           processedAt: FieldValue.serverTimestamp()
         })
 
         // Actualizar factura: estado SUNAT y estado de pago
         await invoiceRef.update({
           sunatStatus: 'voided',
-          status: 'voided', // Cambiar estado de pago a anulado
+          status: 'voided',
           voidedAt: FieldValue.serverTimestamp(),
-          voidCdrData: statusResult.cdrData || null
+          voidCdrData: statusResult.cdrData || null,
+          voidXmlStorageUrl: voidXmlStorageUrl || null,
+          voidCdrStorageUrl: voidCdrStorageUrl || null,
         })
 
         // Si es una Nota de Crédito, restaurar la factura/boleta original
@@ -5640,12 +5661,48 @@ export const voidInvoiceQPse = onRequest(
 
       // 11. Actualizar factura según resultado
       if (qpseResult.accepted) {
+        // Anulación aceptada - guardar XML y CDR en Storage
+        let voidXmlStorageUrl = null
+        let voidCdrStorageUrl = null
+
+        try {
+          // Guardar XML de la comunicación de baja
+          voidXmlStorageUrl = await saveToStorage(userId, invoiceId, `${voidedDocId}-BAJA.xml`, voidedXml)
+          console.log(`📁 [QPse] XML de baja guardado en Storage: ${voidXmlStorageUrl ? 'OK' : 'NO'}`)
+
+          // Guardar CDR de la baja (desde cdrData o descargando desde cdrUrl)
+          if (qpseResult.cdrData) {
+            voidCdrStorageUrl = await saveToStorage(userId, invoiceId, `${voidedDocId}-CDR-BAJA.xml`, qpseResult.cdrData)
+            console.log(`📁 [QPse] CDR de baja guardado en Storage: ${voidCdrStorageUrl ? 'OK' : 'NO'}`)
+          } else if (qpseResult.cdrUrl) {
+            try {
+              const cdrContent = await downloadFromUrl(qpseResult.cdrUrl)
+              if (cdrContent) {
+                voidCdrStorageUrl = await saveToStorage(userId, invoiceId, `${voidedDocId}-CDR-BAJA.xml`, cdrContent)
+                console.log(`📁 [QPse] CDR de baja descargado y guardado en Storage: ${voidCdrStorageUrl ? 'OK' : 'NO'}`)
+              }
+            } catch (dlErr) {
+              console.error('⚠️ [QPse] Error descargando CDR desde URL:', dlErr.message)
+            }
+          }
+        } catch (storageError) {
+          console.error('⚠️ [QPse] Error guardando archivos de baja en Storage:', storageError.message)
+        }
+
+        // Actualizar documento de baja con URLs
+        await voidedDocsRef.doc(voidedDocRef.id).update({
+          voidXmlStorageUrl: voidXmlStorageUrl || null,
+          voidCdrStorageUrl: voidCdrStorageUrl || null,
+        })
+
         // Anulación aceptada
         await invoiceRef.update({
           sunatStatus: 'voided',
           status: 'voided',
           voidedAt: FieldValue.serverTimestamp(),
-          voidedDocumentId: voidedDocRef.id
+          voidedDocumentId: voidedDocRef.id,
+          voidXmlStorageUrl: voidXmlStorageUrl || null,
+          voidCdrStorageUrl: voidCdrStorageUrl || null,
         })
 
         // Si es una Nota de Crédito, restaurar la factura/boleta original

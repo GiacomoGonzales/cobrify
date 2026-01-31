@@ -1931,6 +1931,33 @@ Gracias por tu preferencia.`
                     </button>
                   )}
 
+                  {/* Descargar CDR de Baja - Solo si fue anulado en SUNAT y tiene CDR de baja */}
+                  {invoice.sunatStatus === 'voided' && (invoice.voidCdrStorageUrl || invoice.voidCdrData) && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        if (invoice.voidCdrStorageUrl) {
+                          window.open(invoice.voidCdrStorageUrl, '_blank')
+                        } else if (invoice.voidCdrData) {
+                          const blob = new Blob([invoice.voidCdrData], { type: 'application/xml' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `CDR-BAJA-${invoice.series}-${invoice.correlativeNumber}.xml`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        }
+                        toast.success('Descargando CDR de baja')
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <FileCheck className="w-4 h-4 text-red-600" />
+                      <span>CDR Baja SUNAT</span>
+                    </button>
+                  )}
+
                   {/* Registrar Pago - Solo para notas de venta con saldo pendiente */}
                   {invoice.documentType === 'nota_venta' &&
                    invoice.status !== 'cancelled' &&
@@ -2316,6 +2343,37 @@ Gracias por tu preferencia.`
                       }
                     }}>
                       <FileCheck className="w-4 h-4 mr-2" />Descargar CDR
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ========== ARCHIVOS BAJA SUNAT ========== */}
+            {viewingInvoice.sunatStatus === 'voided' && (viewingInvoice.voidXmlStorageUrl || viewingInvoice.voidCdrStorageUrl || viewingInvoice.voidCdrData) && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileCheck className="w-4 h-4 text-red-600" />
+                  <h4 className="font-semibold text-red-800">Archivos de Baja SUNAT</h4>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {viewingInvoice.voidXmlStorageUrl && (
+                    <Button size="sm" variant="outline" onClick={() => window.open(viewingInvoice.voidXmlStorageUrl, '_blank')}>
+                      <Code className="w-4 h-4 mr-2" />XML Comunicación de Baja
+                    </Button>
+                  )}
+                  {(viewingInvoice.voidCdrStorageUrl || viewingInvoice.voidCdrData) && (
+                    <Button size="sm" variant="outline" onClick={() => {
+                      if (viewingInvoice.voidCdrStorageUrl) {
+                        window.open(viewingInvoice.voidCdrStorageUrl, '_blank')
+                      } else if (viewingInvoice.voidCdrData) {
+                        const blob = new Blob([viewingInvoice.voidCdrData], { type: 'application/xml' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a'); a.href = url; a.download = `CDR-BAJA-${viewingInvoice.number}.xml`; a.click()
+                        URL.revokeObjectURL(url)
+                      }
+                    }}>
+                      <FileCheck className="w-4 h-4 mr-2" />CDR de Baja
                     </Button>
                   )}
                 </div>
