@@ -513,11 +513,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
             logoHeight = logoWidth / aspectRatio
           }
         } else if (aspectRatio >= 1) {
-          // Logo cuadrado o casi cuadrado
-          logoHeight = maxLogoHeight * 0.85
+          // Logo cuadrado o casi cuadrado (20% más grande)
+          logoHeight = maxLogoHeight
           logoWidth = logoHeight * aspectRatio
-          if (logoWidth > defaultLogoWidth + 10) {
-            logoWidth = defaultLogoWidth + 10
+          if (logoWidth > defaultLogoWidth + 32) {
+            logoWidth = defaultLogoWidth + 32
             logoHeight = logoWidth / aspectRatio
           }
         } else {
