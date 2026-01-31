@@ -2133,13 +2133,20 @@ export default function POS() {
       }]
     } else {
       // Filtrar pagos válidos del formulario
+      // Limitar montos para que la suma no exceda el total (el excedente es vuelto, no ingreso)
+      let remainingToPay = amountToPay
       allPayments = payments
         .filter(p => p.method && parseFloat(p.amount) > 0)
-        .map(p => ({
-          method: PAYMENT_METHODS[p.method],
-          methodKey: p.method,
-          amount: parseFloat(p.amount)
-        }))
+        .map(p => {
+          const paid = parseFloat(p.amount)
+          const effectiveAmount = Math.min(paid, remainingToPay)
+          remainingToPay = Math.round((remainingToPay - effectiveAmount) * 100) / 100
+          return {
+            method: PAYMENT_METHODS[p.method],
+            methodKey: p.method,
+            amount: effectiveAmount
+          }
+        })
     }
 
     // Validar que haya al menos un método de pago
