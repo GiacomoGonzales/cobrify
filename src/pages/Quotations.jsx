@@ -242,7 +242,7 @@ export default function Quotations() {
     }
   }
 
-  const handleDownloadPDF = (quotation) => {
+  const handleDownloadPDF = async (quotation) => {
     if (!companySettings || !companySettings.ruc || !companySettings.businessName) {
       toast.error(
         'Debes configurar los datos de tu empresa primero. Ve a Configuración > Información de la Empresa',
@@ -252,10 +252,10 @@ export default function Quotations() {
     }
 
     try {
-      generateQuotationPDF(quotation, companySettings)
+      await generateQuotationPDF(quotation, companySettings)
 
       if (!isDemoMode) {
-        markQuotationAsSent(getBusinessId(), quotation.id, 'manual')
+        await markQuotationAsSent(getBusinessId(), quotation.id, 'manual')
         loadQuotations()
       } else {
         // En modo demo, actualizar estado local
