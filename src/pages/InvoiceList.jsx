@@ -69,8 +69,15 @@ export default function InvoiceList() {
   const [companySettings, setCompanySettings] = useState(null)
   const ticketRef = useRef()
 
-  // Helper para manejar fechas (Firestore Timestamp o Date)
+  // Helper para manejar fechas - priorizar fecha de emisión sobre fecha de creación
   const getInvoiceDate = (invoice) => {
+    // Usar emissionDate si existe (fecha de emisión configurada en el POS)
+    if (invoice?.emissionDate) {
+      if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
+      if (typeof invoice.emissionDate === 'string') return new Date(invoice.emissionDate + 'T00:00:00')
+      return new Date(invoice.emissionDate)
+    }
+    // Fallback a createdAt
     if (!invoice?.createdAt) return null
     return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
   }
@@ -1509,7 +1516,7 @@ Gracias por tu preferencia.`
                   <TableHead className="py-2.5 px-3">Número</TableHead>
                   <TableHead className="py-2.5 px-3">Tipo</TableHead>
                   <TableHead className="py-2.5 px-3">Cliente</TableHead>
-                  <TableHead className="py-2.5 px-3">Fecha</TableHead>
+                  <TableHead className="py-2.5 px-3">Fecha Emisión</TableHead>
                   <TableHead className="py-2.5 px-3">Total</TableHead>
                   <TableHead className="py-2.5 px-2">Estado</TableHead>
                   <TableHead className="py-2.5 px-1 w-20">SUNAT</TableHead>
@@ -1860,44 +1867,36 @@ Gracias por tu preferencia.`
                     <span>Descargar PDF</span>
                   </button>
 
-                  {/* Descargar XML - Para facturas, boletas, notas de crédito y débito (comprobantes con validez fiscal) */}
+                  {/* Descargar XML - Prioriza el XML real firmado de Storage, fallback al generador frontend */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' ||
                     invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') && (
                     <button
                       onClick={async () => {
                         setOpenMenuId(null)
                         try {
+                          // Si tiene XML real guardado en Storage (firmado, enviado a SUNAT), usar ese
+                          if (invoice.sunatResponse?.xmlStorageUrl) {
+                            window.open(invoice.sunatResponse.xmlStorageUrl, '_blank')
+                            toast.success('XML descargado exitosamente')
+                            return
+                          }
+                          // Fallback: generar XML desde datos del documento (no firmado, para previsualización)
                           const result = await prepareInvoiceXML(invoice, companySettings)
                           if (result.success) {
                             await downloadCompressedXML(result.xml, result.fileName)
-                            toast.success('XML descargado exitosamente')
+                            toast.success('XML generado (no enviado a SUNAT aún)')
                           } else {
                             toast.error(result.error || 'Error al generar el XML')
                           }
                         } catch (error) {
-                          console.error('Error al generar XML:', error)
-                          toast.error('Error al generar el XML')
+                          console.error('Error al descargar XML:', error)
+                          toast.error('Error al descargar el XML')
                         }
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                     >
                       <Code className="w-4 h-4 text-blue-600" />
                       <span>Descargar XML</span>
-                    </button>
-                  )}
-
-                  {/* Descargar XML SUNAT - Solo si el comprobante fue enviado a SUNAT y tiene XML guardado */}
-                  {invoice.sunatStatus === 'accepted' && invoice.sunatResponse?.xmlStorageUrl && (
-                    <button
-                      onClick={() => {
-                        setOpenMenuId(null)
-                        window.open(invoice.sunatResponse.xmlStorageUrl, '_blank')
-                        toast.success('Descargando XML enviado a SUNAT')
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                    >
-                      <Code className="w-4 h-4 text-indigo-600" />
-                      <span>XML SUNAT</span>
                     </button>
                   )}
 

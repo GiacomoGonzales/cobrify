@@ -107,49 +107,90 @@ export default function CloseTableModal({
         </div>
 
         {/* Opciones de cierre */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            ¿Cómo desea cerrar la cuenta?
-          </label>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={handleCreateReceipt}
-              className="p-6 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-center"
-            >
-              <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-primary-600" />
-              <div className="font-semibold text-gray-900 mb-1">Crear Comprobante</div>
-              <div className="text-xs text-gray-600">
-                Ir al POS para generar Boleta, Factura o Nota de Venta
+        {order.paid ? (
+          <>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-green-800">Esta orden ya fue cobrada</p>
+                  <p className="text-sm text-green-700">El comprobante ya fue generado desde la opción Cobrar.</p>
+                </div>
               </div>
-            </button>
-            <button
-              onClick={handleCloseWithoutReceipt}
-              disabled={isProcessing}
-              className="p-6 border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <X className="w-10 h-10 mx-auto mb-3 text-gray-600" />
-              <div className="font-semibold text-gray-900 mb-1">
-                {isProcessing ? 'Cerrando...' : 'Cerrar sin Comprobante'}
+            </div>
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                className="flex-1"
+                disabled={isProcessing}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleCloseWithoutReceipt}
+                disabled={isProcessing}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cerrando...
+                  </>
+                ) : (
+                  'Liberar Mesa'
+                )}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                ¿Cómo desea cerrar la cuenta?
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={handleCreateReceipt}
+                  className="p-6 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-center"
+                >
+                  <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-primary-600" />
+                  <div className="font-semibold text-gray-900 mb-1">Crear Comprobante</div>
+                  <div className="text-xs text-gray-600">
+                    Ir al POS para generar Boleta, Factura o Nota de Venta
+                  </div>
+                </button>
+                <button
+                  onClick={handleCloseWithoutReceipt}
+                  disabled={isProcessing}
+                  className="p-6 border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <X className="w-10 h-10 mx-auto mb-3 text-gray-600" />
+                  <div className="font-semibold text-gray-900 mb-1">
+                    {isProcessing ? 'Cerrando...' : 'Cerrar sin Comprobante'}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    Liberar la mesa sin generar comprobante
+                  </div>
+                </button>
               </div>
-              <div className="text-xs text-gray-600">
-                Liberar la mesa sin generar comprobante
-              </div>
-            </button>
-          </div>
-        </div>
+            </div>
 
-        {/* Botón cancelar */}
-        <div className="flex gap-3 pt-4 border-t">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleClose}
-            className="w-full"
-            disabled={isProcessing}
-          >
-            Cancelar
-          </Button>
-        </div>
+            {/* Botón cancelar */}
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                className="w-full"
+                disabled={isProcessing}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   )
