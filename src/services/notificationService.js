@@ -174,14 +174,30 @@ export const saveFCMToken = async (userId, token) => {
   }
 };
 
-// Remover todos los listeners cuando el usuario cierra sesión
-export const cleanupPushNotifications = async () => {
+// Remover todos los listeners y eliminar token FCM del usuario al cerrar sesión
+export const cleanupPushNotifications = async (userId) => {
   const isNative = Capacitor.isNativePlatform();
   if (!isNative) return;
 
   try {
+    // Eliminar el token FCM del usuario en Firestore para que no reciba más push
+    if (userId) {
+      try {
+        const fcmToken = await FCM.getToken();
+        const token = fcmToken?.token;
+        if (token) {
+          console.log('🔔 [PUSH] Removing FCM token from user:', userId);
+          const tokenRef = doc(db, 'users', userId, 'fcmTokens', token);
+          await deleteDoc(tokenRef);
+          console.log('🔔 [PUSH] ✅ FCM token removed from Firestore');
+        }
+      } catch (tokenError) {
+        console.warn('🔔 [PUSH] ⚠️ Could not remove FCM token:', tokenError.message);
+      }
+    }
+
     await PushNotifications.removeAllListeners();
-    listenersRegistered = false; // Resetear la bandera
+    listenersRegistered = false;
     console.log('Push notification listeners removed');
   } catch (error) {
     console.error('Error cleaning up notifications:', error);

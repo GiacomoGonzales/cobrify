@@ -400,8 +400,8 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Limpiar listeners de notificaciones push antes de cerrar sesión
-      await cleanupPushNotifications()
+      // Limpiar listeners y eliminar token FCM del usuario antes de cerrar sesión
+      await cleanupPushNotifications(user?.uid)
 
       // Limpiar businessInfo del almacenamiento nativo
       try {
