@@ -1145,6 +1145,13 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
     let itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    // Concatenar atributos de variante si existen (talla, color, etc.)
+    if (item.isVariant && item.variantAttributes) {
+      const attrs = Object.entries(item.variantAttributes)
+        .map(([key, value]) => `${key.charAt(0).toUpperCase() + key.slice(1)}: ${value}`)
+        .join(', ')
+      if (attrs) itemDesc += ` (${attrs})`
+    }
     // Concatenar información del lote si existe (modo farmacia)
     if (item.batchNumber) {
       const expiryStr = item.batchExpiryDate

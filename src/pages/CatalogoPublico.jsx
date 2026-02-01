@@ -48,11 +48,15 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   const [quantity, setQuantity] = useState(1)
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [modifierErrors, setModifierErrors] = useState({})
+  const [selectedVariant, setSelectedVariant] = useState(null)
+  const [variantError, setVariantError] = useState(false)
 
   // Inicializar modificadores cuando se abre el modal
   useEffect(() => {
     if (isOpen) {
       setQuantity(1)
+      setSelectedVariant(null)
+      setVariantError(false)
       document.body.style.overflow = 'hidden'
       // Inicializar estado de modificadores
       if (product?.modifiers?.length > 0) {
@@ -112,9 +116,11 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     }
   }
 
-  // Calcular precio total con modificadores
+  const hasVariants = product.hasVariants && product.variants?.length > 0
+
+  // Calcular precio total con modificadores y variante
   const calculateTotalPrice = () => {
-    let total = product.price || 0
+    let total = hasVariants ? (selectedVariant?.price || product.basePrice || 0) : (product.price || 0)
     if (hasModifiers) {
       Object.keys(selectedModifiers).forEach(modifierId => {
         const modifier = product.modifiers.find(m => m.id === modifierId)
@@ -133,6 +139,12 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
   // Validar y agregar al carrito
   const handleAddToCart = () => {
+    // Validar selección de variante
+    if (hasVariants && !selectedVariant) {
+      setVariantError(true)
+      return
+    }
+
     // Validar modificadores obligatorios
     if (hasModifiers) {
       const errors = {}
@@ -174,7 +186,18 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     }
 
     const totalPrice = calculateTotalPrice()
-    onAddToCart(product, quantity, modifiersData, totalPrice)
+    // Si tiene variante, pasar producto con datos de variante
+    if (hasVariants && selectedVariant) {
+      const variantProduct = {
+        ...product,
+        variantSku: selectedVariant.sku,
+        variantAttributes: selectedVariant.attributes,
+        isVariant: true,
+      }
+      onAddToCart(variantProduct, quantity, modifiersData, totalPrice)
+    } else {
+      onAddToCart(product, quantity, modifiersData, totalPrice)
+    }
     onClose()
   }
 
@@ -222,17 +245,81 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           <div className="flex items-center justify-between mb-6">
             {showPrices ? (
               <div className="text-3xl font-bold text-gray-900">
-                S/ {unitPrice.toFixed(2)}
+                {hasVariants && !selectedVariant
+                  ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                  : `S/ ${unitPrice.toFixed(2)}`
+                }
               </div>
             ) : (
               <div className="text-lg text-gray-500">Consultar precio</div>
             )}
-            {product.stock !== undefined && product.stock > 0 && (
+            {!hasVariants && product.stock !== undefined && product.stock > 0 && (
               <span className="text-sm text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
                 {product.stock} disponibles
               </span>
             )}
           </div>
+
+          {/* Variantes */}
+          {hasVariants && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">
+                  {product.variantAttributes?.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(' / ')}
+                </h3>
+                {variantError && (
+                  <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">
+                    Selecciona una opción
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {product.variants.map((variant, index) => {
+                  const isSelected = selectedVariant?.sku === variant.sku
+                  const outOfStock = variant.stock !== null && variant.stock <= 0
+                  const attrsLabel = Object.values(variant.attributes).join(' / ')
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        if (!outOfStock) {
+                          setSelectedVariant(variant)
+                          setVariantError(false)
+                        }
+                      }}
+                      disabled={outOfStock}
+                      className={`flex items-center justify-between p-3 rounded-lg border-2 transition-colors ${
+                        outOfStock
+                          ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
+                          : isSelected
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className={isSelected ? 'text-emerald-700 font-medium' : 'text-gray-700'}>
+                        {attrsLabel}
+                        {outOfStock && <span className="ml-2 text-xs text-gray-400">(Agotado)</span>}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {showPrices && (
+                          <span className="text-sm font-medium text-gray-600">S/ {variant.price.toFixed(2)}</span>
+                        )}
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
+                        }`}>
+                          {isSelected && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Modificadores */}
           {hasModifiers && (
@@ -459,6 +546,7 @@ function CartDrawer({
         quantity: item.quantity,
         total: (item.unitPrice || item.price) * item.quantity,
         modifiers: item.selectedModifiers || [],
+        ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         notes: item.notes || '',
         status: 'pending',
         firedAt: new Date(),
@@ -636,6 +724,14 @@ function CartDrawer({
                     )}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-gray-900 truncate">{item.name}</h3>
+                      {/* Mostrar variante seleccionada */}
+                      {item.isVariant && item.variantAttributes && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {Object.entries(item.variantAttributes).map(([key, value]) => (
+                            <span key={key} className="mr-2">{key.charAt(0).toUpperCase() + key.slice(1)}: {value}</span>
+                          ))}
+                        </p>
+                      )}
                       {/* Mostrar modificadores seleccionados */}
                       {item.selectedModifiers?.length > 0 && (
                         <div className="mt-1 space-y-0.5">
@@ -1080,11 +1176,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null) => {
     setCart(prev => {
-      // Generar un ID único para el item del carrito basado en producto + modificadores
+      // Generar un ID único para el item del carrito basado en producto + variante + modificadores
+      const variantKey = product.isVariant ? product.variantSku : ''
       const modifiersKey = selectedModifiers.length > 0
         ? JSON.stringify(selectedModifiers.map(m => ({ id: m.modifierId, opts: m.options.map(o => o.optionId).sort() })))
         : ''
-      const cartItemId = `${product.id}-${modifiersKey}`
+      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}`
 
       const existing = prev.find(item => item.cartItemId === cartItemId)
       if (existing) {
@@ -1134,6 +1231,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     const items = cart.map(item => {
       const price = item.unitPrice || item.price
       let itemText = `• ${item.quantity}x ${item.name}`
+      // Agregar variante si existe
+      if (item.isVariant && item.variantAttributes) {
+        const attrs = Object.entries(item.variantAttributes).map(([k, v]) => `${k}: ${v}`).join(', ')
+        itemText += ` (${attrs})`
+      }
       // Agregar modificadores si existen
       if (item.selectedModifiers?.length > 0) {
         const modsText = item.selectedModifiers
@@ -1425,7 +1527,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     <div className="flex items-center justify-between">
                       {showPrices ? (
                         <span className="text-lg font-bold text-gray-900">
-                          S/ {product.price?.toFixed(2)}
+                          {product.hasVariants && product.variants?.length > 0
+                            ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                            : `S/ ${product.price?.toFixed(2)}`
+                          }
                         </span>
                       ) : (
                         <span className="text-sm text-gray-500">Consultar</span>
@@ -1433,8 +1538,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          // Si tiene modificadores, abrir modal; si no, agregar directo
-                          if (product.modifiers?.length > 0) {
+                          // Si tiene variantes o modificadores, abrir modal; si no, agregar directo
+                          if (product.hasVariants || product.modifiers?.length > 0) {
                             setSelectedProduct(product)
                           } else {
                             addToCart(product)
@@ -1489,7 +1594,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     <div className="flex items-center justify-between mt-2">
                       {showPrices ? (
                         <span className="text-xl font-bold text-gray-900">
-                          S/ {product.price?.toFixed(2)}
+                          {product.hasVariants && product.variants?.length > 0
+                            ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
+                            : `S/ ${product.price?.toFixed(2)}`
+                          }
                         </span>
                       ) : (
                         <span className="text-sm text-gray-500">Consultar precio</span>
@@ -1497,8 +1605,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          // Si tiene modificadores, abrir modal; si no, agregar directo
-                          if (product.modifiers?.length > 0) {
+                          // Si tiene variantes o modificadores, abrir modal; si no, agregar directo
+                          if (product.hasVariants || product.modifiers?.length > 0) {
                             setSelectedProduct(product)
                           } else {
                             addToCart(product)
