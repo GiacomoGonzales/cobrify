@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -242,6 +242,7 @@ export default function Products() {
   const [newCategoryName, setNewCategoryName] = useState('')
   const [parentCategoryId, setParentCategoryId] = useState(null)
   const [editingCategory, setEditingCategory] = useState(null)
+  const [categoryShowInCatalog, setCategoryShowInCatalog] = useState(true)
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all')
   const [selectedCategories, setSelectedCategories] = useState(new Set())
   const [isDeletingCategories, setIsDeletingCategories] = useState(false)
@@ -1437,6 +1438,7 @@ export default function Products() {
     setNewCategoryName('')
     setParentCategoryId(null)
     setEditingCategory(null)
+    setCategoryShowInCatalog(true)
     setIsCategoryModalOpen(true)
   }
 
@@ -1448,6 +1450,7 @@ export default function Products() {
         id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: newCategoryName.trim(),
         parentId: parentCategoryId,
+        showInCatalog: categoryShowInCatalog,
       }
 
       const updatedCategories = [...categories, newCategory]
@@ -1471,6 +1474,7 @@ export default function Products() {
     setEditingCategory(category)
     setNewCategoryName(category.name)
     setParentCategoryId(category.parentId)
+    setCategoryShowInCatalog(category.showInCatalog !== false)
   }
 
   const handleUpdateCategory = async () => {
@@ -1479,7 +1483,7 @@ export default function Products() {
     try {
       const updatedCategories = categories.map(cat =>
         cat.id === editingCategory.id
-          ? { ...cat, name: newCategoryName.trim(), parentId: parentCategoryId }
+          ? { ...cat, name: newCategoryName.trim(), parentId: parentCategoryId, showInCatalog: categoryShowInCatalog }
           : cat
       )
       setCategories(updatedCategories)
@@ -4538,6 +4542,20 @@ export default function Products() {
               )}
             </div>
 
+            {/* Show in Catalog Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={categoryShowInCatalog}
+                onChange={e => setCategoryShowInCatalog(e.target.checked)}
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700">Mostrar en catálogo</span>
+              {!categoryShowInCatalog && (
+                <EyeOff className="w-4 h-4 text-gray-400" />
+              )}
+            </label>
+
             <div className="flex gap-2">
               <Button
                 onClick={editingCategory ? handleUpdateCategory : handleAddCategory}
@@ -4563,6 +4581,7 @@ export default function Products() {
                     setEditingCategory(null)
                     setNewCategoryName('')
                     setParentCategoryId(null)
+                    setCategoryShowInCatalog(true)
                   }}
                 >
                   Cancelar
@@ -4598,9 +4617,12 @@ export default function Products() {
                             <Square className={`w-5 h-5 ${isDeletable ? 'text-gray-400 hover:text-gray-600' : 'text-gray-300'}`} />
                           )}
                         </button>
-                        <Folder className="w-5 h-5 text-primary-600" />
+                        <Folder className={`w-5 h-5 ${category.showInCatalog === false ? 'text-gray-400' : 'text-primary-600'}`} />
                         <div>
-                          <p className="font-medium text-gray-900">{category.name}</p>
+                          <p className={`font-medium ${category.showInCatalog === false ? 'text-gray-400' : 'text-gray-900'}`}>
+                            {category.name}
+                            {category.showInCatalog === false && <EyeOff className="w-3.5 h-3.5 inline ml-1.5 text-gray-400" />}
+                          </p>
                           <p className="text-xs text-gray-500">
                             {productCount} {productCount === 1 ? 'producto' : 'productos'}
                             {subcategories.length > 0 && ` • ${subcategories.length} subcategoría${subcategories.length === 1 ? '' : 's'}`}
@@ -4653,9 +4675,12 @@ export default function Products() {
                                 <div className="w-5 flex items-center justify-center">
                                   <div className="w-3 h-3 border-l-2 border-b-2 border-gray-300"></div>
                                 </div>
-                                <Folder className="w-4 h-4 text-gray-500" />
+                                <Folder className={`w-4 h-4 ${subcategory.showInCatalog === false ? 'text-gray-300' : 'text-gray-500'}`} />
                                 <div>
-                                  <p className="text-sm font-medium text-gray-900">{subcategory.name}</p>
+                                  <p className={`text-sm font-medium ${subcategory.showInCatalog === false ? 'text-gray-400' : 'text-gray-900'}`}>
+                                    {subcategory.name}
+                                    {subcategory.showInCatalog === false && <EyeOff className="w-3 h-3 inline ml-1 text-gray-400" />}
+                                  </p>
                                   <p className="text-xs text-gray-500">
                                     {subProductCount} {subProductCount === 1 ? 'producto' : 'productos'}
                                   </p>

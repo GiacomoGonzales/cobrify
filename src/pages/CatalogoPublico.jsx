@@ -1008,7 +1008,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   // Obtener categorías raíz (sin parentId) para mostrar en el catálogo
   const rootCategories = useMemo(() => {
-    return categories.filter(cat => !cat.parentId)
+    return categories.filter(cat => !cat.parentId && cat.showInCatalog !== false)
   }, [categories])
 
   // Función para obtener todos los IDs de subcategorías de una categoría
@@ -1027,11 +1027,27 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   }
 
   // Filtrar productos
+  // IDs de categorías ocultas en el catálogo
+  const hiddenCategoryIds = useMemo(() => {
+    const hidden = new Set()
+    categories.forEach(cat => {
+      if (cat.showInCatalog === false) {
+        hidden.add(cat.id)
+      }
+    })
+    return hidden
+  }, [categories])
+
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const matchesSearch = !searchQuery ||
         product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+
+      // Excluir productos de categorías ocultas
+      if (product.category && hiddenCategoryIds.has(product.category)) {
+        return false
+      }
 
       // Incluir productos de la categoría seleccionada Y sus subcategorías
       let matchesCategory = !selectedCategory
@@ -1043,7 +1059,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       return matchesSearch && matchesCategory
     })
-  }, [products, searchQuery, selectedCategory, categories])
+  }, [products, searchQuery, selectedCategory, categories, hiddenCategoryIds])
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
