@@ -477,6 +477,7 @@ export default function Products() {
       presentation: '',
       laboratoryId: '',
       laboratoryName: '',
+      marca: '',
       batchNumber: '',
       activeIngredient: '',
       therapeuticAction: '',
@@ -4206,6 +4207,12 @@ export default function Products() {
                       <p className="text-sm text-gray-900 font-medium mt-1">
                         {laboratories.find(l => l.id === viewingProduct.laboratoryId)?.name || 'No especificado'}
                       </p>
+                    </div>
+                  )}
+                  {viewingProduct.marca && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500">Marca</label>
+                      <p className="text-sm text-gray-900 font-medium mt-1">{viewingProduct.marca}</p>
                     </div>
                   )}
                   {viewingProduct.activeIngredient && (

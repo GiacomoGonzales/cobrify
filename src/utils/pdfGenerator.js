@@ -1119,11 +1119,11 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     dcto: CONTENT_WIDTH * 0.13,
     total: CONTENT_WIDTH * 0.18
   } : {
-    cant: CONTENT_WIDTH * 0.08,
-    um: CONTENT_WIDTH * 0.08,
+    cant: CONTENT_WIDTH * 0.07,
+    um: CONTENT_WIDTH * 0.07,
     desc: isPharmacy ? CONTENT_WIDTH * 0.34 : CONTENT_WIDTH * 0.49,
     lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
-    pu: CONTENT_WIDTH * 0.17,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.17 : CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: CONTENT_WIDTH * 0.18
   }
