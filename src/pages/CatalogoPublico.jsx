@@ -207,17 +207,16 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
-        {/* Imagen - limitada a 40% del viewport para dejar espacio al contenido */}
-        <div className="relative bg-gray-100 flex-shrink-0" style={{ maxHeight: '40vh' }}>
+        {/* Imagen cuadrada - limitada a 40vh para dejar espacio al contenido */}
+        <div className="relative bg-gray-100 flex-shrink-0 aspect-square" style={{ maxHeight: '40vh' }}>
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
               alt={product.name}
               className="w-full h-full object-cover"
-              style={{ maxHeight: '40vh' }}
             />
           ) : (
-            <div className="w-full flex items-center justify-center py-8">
+            <div className="w-full h-full flex items-center justify-center">
               <Package className="w-24 h-24 text-gray-300" />
             </div>
           )}
