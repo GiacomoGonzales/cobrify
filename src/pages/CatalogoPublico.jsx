@@ -206,9 +206,22 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
-        {/* Imagen cuadrada - limitada a 40vh para dejar espacio al contenido */}
-        <div className="relative bg-gray-100 flex-shrink-0 aspect-square" style={{ maxHeight: '40vh' }}>
+      <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Botón cerrar flotante */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+        {cartQuantity > 0 && (
+          <div className="absolute top-4 left-4 z-10 bg-emerald-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+            {cartQuantity} en carrito
+          </div>
+        )}
+
+        {/* Imagen cuadrada 1:1 */}
+        <div className="relative bg-gray-100 aspect-square">
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
@@ -220,21 +233,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
               <Package className="w-24 h-24 text-gray-300" />
             </div>
           )}
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          {cartQuantity > 0 && (
-            <div className="absolute top-4 left-4 bg-emerald-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-              {cartQuantity} en carrito
-            </div>
-          )}
         </div>
 
-        {/* Contenido con scroll */}
-        <div className="p-6 overflow-y-auto flex-1">
+        {/* Contenido */}
+        <div className="p-6">
           <div className="mb-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{product.name}</h2>
             {product.description && (
