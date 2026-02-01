@@ -2119,6 +2119,19 @@ export const updateCarrierDispatchGuide = async (businessId, guideId, updates) =
 }
 
 /**
+ * Eliminar una guía de remisión transportista (borradores)
+ */
+export const deleteCarrierDispatchGuide = async (businessId, guideId) => {
+  try {
+    await deleteDoc(doc(db, 'businesses', businessId, 'carrierDispatchGuides', guideId))
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar guía de remisión transportista:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Enviar Guía de Remisión Transportista a SUNAT
  *
  * @param {string} businessId - ID del negocio

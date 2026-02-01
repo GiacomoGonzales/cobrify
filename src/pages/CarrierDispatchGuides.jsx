@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide } from '@/services/firestoreService'
+import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide, deleteCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
 import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
 
@@ -47,6 +47,9 @@ export default function CarrierDispatchGuides() {
   const [editingGuide, setEditingGuide] = useState(null)
   const [newCorrelative, setNewCorrelative] = useState('')
   const [isUpdatingNumber, setIsUpdatingNumber] = useState(false)
+
+  // Estado para borrador que se está editando
+  const [editingDraftGuide, setEditingDraftGuide] = useState(null)
 
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -115,6 +118,7 @@ export default function CarrierDispatchGuides() {
 
   const handleCloseModal = () => {
     setShowCreateModal(false)
+    setEditingDraftGuide(null)
     loadGuides()
   }
 
@@ -256,6 +260,31 @@ export default function CarrierDispatchGuides() {
     }
   }
 
+  // Eliminar borrador
+  const handleDeleteDraft = async (guide) => {
+    if (!confirm('¿Estás seguro de eliminar este borrador? Esta acción no se puede deshacer.')) return
+
+    try {
+      const businessId = getBusinessId()
+      const result = await deleteCarrierDispatchGuide(businessId, guide.id)
+      if (result.success) {
+        toast.success('Borrador eliminado')
+        setGuides(prev => prev.filter(g => g.id !== guide.id))
+      } else {
+        throw new Error(result.error || 'Error al eliminar')
+      }
+    } catch (error) {
+      console.error('Error al eliminar borrador:', error)
+      toast.error(error.message || 'Error al eliminar el borrador')
+    }
+  }
+
+  // Continuar emisión de borrador
+  const handleContinueDraft = (guide) => {
+    setEditingDraftGuide(guide)
+    setShowCreateModal(true)
+  }
+
   // Filtrar guías
   const filteredGuides = guides.filter(guide => {
     const search = searchTerm.toLowerCase()
@@ -280,6 +309,15 @@ export default function CarrierDispatchGuides() {
   }
 
   const getStatusBadge = (status, sunatStatus) => {
+    if (status === 'draft') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+          <FileText className="w-3 h-3" />
+          Borrador
+        </span>
+      )
+    }
+
     if (sunatStatus === 'accepted') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
@@ -482,8 +520,8 @@ export default function CarrierDispatchGuides() {
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-orange-400" />
-                          <span className="text-sm font-medium text-gray-900">
-                            {guide.number}
+                          <span className={`text-sm font-medium ${guide.status === 'draft' ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+                            {guide.number || 'Sin número'}
                           </span>
                         </div>
                       </td>
@@ -572,6 +610,20 @@ export default function CarrierDispatchGuides() {
 
               return (
                 <>
+                  {/* Continuar Emisión - Solo para borradores */}
+                  {guide.status === 'draft' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        handleContinueDraft(guide)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                    >
+                      <PlayCircle className="w-4 h-4" />
+                      <span>Continuar Emisión</span>
+                    </button>
+                  )}
+
                   {/* Ver detalles */}
                   <button
                     onClick={() => {
@@ -682,12 +734,12 @@ export default function CarrierDispatchGuides() {
                   )}
 
                   {/* Separador antes de acciones SUNAT */}
-                  {guide.sunatStatus !== 'accepted' && (
+                  {guide.sunatStatus !== 'accepted' && guide.status !== 'draft' && (
                     <div className="border-t border-gray-100 my-1" />
                   )}
 
-                  {/* Enviar a SUNAT - Solo si no está aceptada */}
-                  {guide.sunatStatus !== 'accepted' && (
+                  {/* Enviar a SUNAT - Solo si no está aceptada y no es borrador */}
+                  {guide.sunatStatus !== 'accepted' && guide.status !== 'draft' && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -718,6 +770,23 @@ export default function CarrierDispatchGuides() {
                       >
                         <Edit3 className="w-4 h-4" />
                         <span>Cambiar número</span>
+                      </button>
+                    </>
+                  )}
+
+                  {/* Eliminar borrador */}
+                  {guide.status === 'draft' && (
+                    <>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          handleDeleteDraft(guide)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Eliminar borrador</span>
                       </button>
                     </>
                   )}
@@ -783,6 +852,7 @@ export default function CarrierDispatchGuides() {
       <CreateCarrierDispatchGuideModal
         isOpen={showCreateModal}
         onClose={handleCloseModal}
+        draftGuide={editingDraftGuide}
       />
 
       {/* Edit Number Modal */}

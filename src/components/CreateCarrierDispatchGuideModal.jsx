@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
+import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo } from '@/data/peruUbigeos'
 
@@ -65,7 +65,7 @@ const getTomorrowDateString = () => {
   return getLocalDateString(1)
 }
 
-export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
+export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draftGuide = null }) {
   const toast = useToast()
   const { getBusinessId } = useAppContext()
 
@@ -164,7 +164,9 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
         if (result.success && result.data) {
           setCarrierRuc(result.data.ruc || '')
           setCarrierName(result.data.businessName || result.data.name || '')
-          setMtcRegistration(result.data.mtcRegistration || '')
+          if (!draftGuide) {
+            setMtcRegistration(result.data.mtcRegistration || '')
+          }
           // Cargar configuración de envío automático a SUNAT
           setAutoSendToSunat(result.data.autoSendToSunat === true)
         }
@@ -174,11 +176,107 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
     }
     if (isOpen) {
       loadCarrierData()
-      // Establecer fechas por defecto (hoy)
-      setIssueDate(getLocalDateString())
-      setTransferDate(getLocalDateString())
+
+      if (draftGuide) {
+        // Precargar datos del borrador
+        setMtcRegistration(draftGuide.mtcRegistration || '')
+        setShipperRuc(draftGuide.shipper?.ruc || '')
+        setShipperName(draftGuide.shipper?.businessName || '')
+        setShipperAddress(draftGuide.shipper?.address || '')
+        setShipperCity(draftGuide.shipper?.city || '')
+        setRecipientDocType(draftGuide.recipient?.documentType || '6')
+        setRecipientDocNumber(draftGuide.recipient?.documentNumber || '')
+        setRecipientName(draftGuide.recipient?.name || '')
+        setRecipientAddress(draftGuide.recipient?.address || '')
+        setRecipientCity(draftGuide.recipient?.city || '')
+        setFreightPayer(draftGuide.freightPayer || 'remitente')
+        if (draftGuide.thirdPartyPayer) {
+          setThirdPartyPayer(draftGuide.thirdPartyPayer)
+        }
+        setTransportType(draftGuide.transportType || '02')
+        setIsM1OrLVehicle(draftGuide.isM1OrLVehicle || false)
+        setTransferReason(draftGuide.transferReason || '01')
+        setIssueDate(draftGuide.issueDate || getLocalDateString())
+        setTransferDate(draftGuide.transferDate || getLocalDateString())
+        setTotalWeight(draftGuide.totalWeight ? String(draftGuide.totalWeight) : '')
+        setTransferDescription(draftGuide.transferDescription || '')
+        setObservations(draftGuide.observations || '')
+
+        // Origen - ubigeo
+        setOriginAddress(draftGuide.origin?.address || '')
+        if (draftGuide.origin?.departamento) {
+          setOriginDepartamento(draftGuide.origin.departamento)
+          setOriginProvincia(draftGuide.origin.provincia || '')
+          setOriginDistrito(draftGuide.origin.distrito || '')
+        } else if (draftGuide.origin?.ubigeo && draftGuide.origin.ubigeo.length === 6) {
+          // Parsear ubigeo de 6 dígitos
+          const ubigeo = draftGuide.origin.ubigeo
+          setOriginDepartamento(ubigeo.substring(0, 2))
+          setOriginProvincia(ubigeo.substring(0, 4))
+          setOriginDistrito(ubigeo)
+        }
+
+        // Destino - ubigeo
+        setDestinationAddress(draftGuide.destination?.address || '')
+        if (draftGuide.destination?.departamento) {
+          setDestinationDepartamento(draftGuide.destination.departamento)
+          setDestinationProvincia(draftGuide.destination.provincia || '')
+          setDestinationDistrito(draftGuide.destination.distrito || '')
+        } else if (draftGuide.destination?.ubigeo && draftGuide.destination.ubigeo.length === 6) {
+          const ubigeo = draftGuide.destination.ubigeo
+          setDestinationDepartamento(ubigeo.substring(0, 2))
+          setDestinationProvincia(ubigeo.substring(0, 4))
+          setDestinationDistrito(ubigeo)
+        }
+
+        // Vehículos
+        if (draftGuide.vehicles && draftGuide.vehicles.length > 0) {
+          setVehicles(draftGuide.vehicles.map(v => ({
+            plate: v.plate || '',
+            mtcAuthorization: v.mtcAuthorization || '',
+            mtcEntity: v.mtcEntity || '',
+            tuce: v.tuce || '',
+          })))
+        }
+
+        // Conductores
+        if (draftGuide.drivers && draftGuide.drivers.length > 0) {
+          setDrivers(draftGuide.drivers.map(d => ({
+            documentType: d.documentType || '1',
+            documentNumber: d.documentNumber || '',
+            name: d.name || '',
+            lastName: d.lastName || '',
+            license: d.license || '',
+          })))
+        }
+
+        // Items
+        if (draftGuide.items && draftGuide.items.length > 0) {
+          setItems(draftGuide.items.map(item => ({
+            description: item.description || '',
+            quantity: item.quantity || 1,
+            unit: item.unit || 'NIU',
+            code: item.code || '',
+            sunatCode: item.sunatCode || '',
+            gtin: item.gtin || '',
+          })))
+        }
+
+        // Guías relacionadas
+        if (draftGuide.relatedGuides && draftGuide.relatedGuides.length > 0) {
+          setRelatedGuides(draftGuide.relatedGuides.map(g => ({
+            number: g.number || '',
+            ruc: g.ruc || '',
+            error: '',
+          })))
+        }
+      } else {
+        // Valores por defecto para nueva guía
+        setIssueDate(getLocalDateString())
+        setTransferDate(getLocalDateString())
+      }
     }
-  }, [isOpen, getBusinessId])
+  }, [isOpen, getBusinessId, draftGuide])
 
   // Buscar datos del remitente por RUC
   const handleLookupShipper = async () => {
@@ -530,6 +628,14 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
       const result = await createCarrierDispatchGuide(businessId, carrierDispatchGuide)
 
       if (result.success) {
+        // Si venía de un borrador, eliminar el borrador
+        if (draftGuide?.id) {
+          try {
+            await deleteCarrierDispatchGuide(businessId, draftGuide.id)
+          } catch (err) {
+            console.error('Error al eliminar borrador después de emitir:', err)
+          }
+        }
         toast.success(`GRE Transportista ${result.number} creada exitosamente`)
 
         // Envío automático a SUNAT si está configurado (fire & forget)
@@ -650,7 +756,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
         })),
       }
 
-      const result = await saveCarrierDispatchGuideDraft(businessId, carrierDispatchGuide)
+      const result = await saveCarrierDispatchGuideDraft(businessId, carrierDispatchGuide, draftGuide?.id || null)
 
       if (result.success) {
         toast.success('Borrador guardado exitosamente')
@@ -676,7 +782,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose }) {
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              Nueva GRE Transportista
+              {draftGuide ? 'Editar GRE Transportista' : 'Nueva GRE Transportista'}
             </h2>
             <p className="text-sm text-gray-600">
               Serie V001 - Guía de Remisión Electrónica del Transportista
