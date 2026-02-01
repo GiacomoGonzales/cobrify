@@ -2349,6 +2349,8 @@ export default function POS() {
         ...(item.batchNumber && { batchNumber: item.batchNumber }),
         ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
+        ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
+        ...(item.marca && { marca: item.marca }),
       }))
 
       // 3. Crear factura

@@ -270,6 +270,7 @@ export default function Products() {
     presentation: '',          // Ej: Tabletas x 100, Jarabe 120ml
     laboratoryId: '',          // ID del laboratorio
     laboratoryName: '',        // Nombre del laboratorio (para mostrar)
+    marca: '',                 // Marca del producto
     batchNumber: '',           // Número de lote
     activeIngredient: '',      // Principio activo
     therapeuticAction: '',     // Acción terapéutica (Analgésico, Antibiótico, etc.)
@@ -525,6 +526,7 @@ export default function Products() {
       presentation: product.presentation || '',
       laboratoryId: product.laboratoryId || '',
       laboratoryName: product.laboratoryName || '',
+      marca: product.marca || '',
       batchNumber: product.batchNumber || '',
       activeIngredient: product.activeIngredient || '',
       therapeuticAction: product.therapeuticAction || '',
@@ -612,6 +614,7 @@ export default function Products() {
       presentation: product.presentation || '',
       laboratoryId: product.laboratoryId || '',
       laboratoryName: product.laboratoryName || '',
+      marca: product.marca || '',
       batchNumber: '', // Limpiar lote para el producto clonado
       activeIngredient: product.activeIngredient || '',
       therapeuticAction: product.therapeuticAction || '',
@@ -766,6 +769,7 @@ export default function Products() {
           presentation: pharmacyData.presentation || null,
           laboratoryId: pharmacyData.laboratoryId || null,
           laboratoryName: pharmacyData.laboratoryName || null,
+          marca: pharmacyData.marca || null,
           batchNumber: pharmacyData.batchNumber || null,
           activeIngredient: pharmacyData.activeIngredient || null,
           therapeuticAction: pharmacyData.therapeuticAction || null,
@@ -3605,6 +3609,20 @@ export default function Products() {
                   {laboratories.length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">No hay laboratorios registrados. Agrégalos desde el menú Laboratorios.</p>
                   )}
+                </div>
+
+                {/* Marca */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Marca
+                  </label>
+                  <input
+                    type="text"
+                    value={pharmacyData.marca}
+                    onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
+                    placeholder="Ej: Panadol, Aspirina"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  />
                 </div>
 
                 {/* Número de Lote */}

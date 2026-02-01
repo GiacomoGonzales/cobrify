@@ -740,11 +740,15 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const headerRowHeight = 18
   const productRowHeight = 15
 
+  // Detectar modo farmacia para mostrar columna LABORATORIO
+  const isPharmacy = companySettings?.businessMode === 'pharmacy'
+
   const colWidths = {
     cant: CONTENT_WIDTH * 0.08,
     um: CONTENT_WIDTH * 0.08,
-    desc: CONTENT_WIDTH * 0.44,
-    pu: CONTENT_WIDTH * 0.20,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.30 : CONTENT_WIDTH * 0.44,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.17 : CONTENT_WIDTH * 0.20,
     total: CONTENT_WIDTH * 0.20
   }
 
@@ -753,7 +757,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     cant: colX,
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
-    pu: colX += colWidths.desc,
+    lab: colX += colWidths.desc,
+    pu: colX += colWidths.lab,
     total: colX += colWidths.pu
   }
 
@@ -810,6 +815,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
+  if (isPharmacy) {
+    doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+  }
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
   doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
 
@@ -868,6 +876,17 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
         currentDescY += 9
       })
       doc.setTextColor(...BLACK)
+    }
+
+    // Laboratorio (solo modo farmacia) - centrado verticalmente
+    if (isPharmacy) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      const labText = item.laboratoryName || ''
+      if (labText) {
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
+        doc.text(labLines[0], cols.lab + colWidths.lab / 2, textY, { align: 'center' })
+      }
     }
 
     doc.setFont('helvetica', 'normal')

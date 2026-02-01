@@ -402,11 +402,15 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   const headerRowHeight = 18
   const productRowHeight = 15
 
+  // Detectar modo farmacia para mostrar columna LABORATORIO
+  const isPharmacy = companySettings?.businessMode === 'pharmacy'
+
   const colWidths = {
     cant: CONTENT_WIDTH * 0.08,
     um: CONTENT_WIDTH * 0.08,
-    desc: CONTENT_WIDTH * 0.49,
-    pu: CONTENT_WIDTH * 0.17,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.34 : CONTENT_WIDTH * 0.49,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.15 : CONTENT_WIDTH * 0.17,
     total: CONTENT_WIDTH * 0.18
   }
 
@@ -415,7 +419,8 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     cant: colX,
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
-    pu: colX += colWidths.desc,
+    lab: colX += colWidths.desc,
+    pu: colX += colWidths.lab,
     total: colX += colWidths.pu
   }
 
@@ -431,6 +436,9 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
+  if (isPharmacy) {
+    doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+  }
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
   doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
 
@@ -470,7 +478,19 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
     doc.text(descLines[0], cols.desc + 4, textY)
 
+    // Laboratorio (solo modo farmacia)
+    if (isPharmacy) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      const labText = item.laboratoryName || ''
+      if (labText) {
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
+        doc.text(labLines[0], cols.lab + colWidths.lab / 2, textY, { align: 'center' })
+      }
+    }
+
     doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
     doc.text(precio.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.pu + colWidths.pu - 5, textY, { align: 'right' })
     doc.text(importe.toLocaleString('es-PE', { minimumFractionDigits: 2 }), cols.total + colWidths.total - 5, textY, { align: 'right' })
 

@@ -241,6 +241,8 @@ export default function CreatePurchaseOrderModal({ isOpen, onClose, onSuccess })
         unitPrice: unitPrice,
         unit: product.unit || 'NIU',
         searchTerm: product.name,
+        laboratoryName: product.laboratoryName || '',
+        marca: product.marca || '',
       } : item
     ))
     setShowProductSearch(null)

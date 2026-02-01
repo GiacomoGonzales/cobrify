@@ -340,6 +340,8 @@ export default function CreateQuotation() {
     newItems[index].searchTerm = finalName
     newItems[index].presentationName = presentationInfo
     newItems[index].presentationFactor = selectedPresentation?.factor || 1
+    newItems[index].laboratoryName = product.laboratoryName || ''
+    newItems[index].marca = product.marca || ''
     setQuotationItems(newItems)
     setShowProductSearch(null)
     setPendingProductSelection(null)

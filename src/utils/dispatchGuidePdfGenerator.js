@@ -658,9 +658,18 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   // Encabezado de tabla
   const tableX = MARGIN_LEFT
   const tableWidth = CONTENT_WIDTH
-  const colWidths = {
+  const isPharmacy = companySettings?.businessMode === 'pharmacy'
+  const colWidths = isPharmacy ? {
+    num: 25,
+    code: 70,
+    marca: 70,
+    desc: tableWidth - 25 - 70 - 70 - 55 - 65,
+    qty: 55,
+    unit: 65
+  } : {
     num: 30,
     code: 80,
+    marca: 0,
     desc: tableWidth - 30 - 80 - 60 - 70,
     qty: 60,
     unit: 70
@@ -700,6 +709,12 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text('CÓDIGO', hColX + colWidths.code/2, currentY + 12, { align: 'center' })
     doc.line(hColX + colWidths.code, currentY, hColX + colWidths.code, currentY + 18)
     hColX += colWidths.code
+
+    if (isPharmacy) {
+      doc.text('MARCA', hColX + colWidths.marca/2, currentY + 12, { align: 'center' })
+      doc.line(hColX + colWidths.marca, currentY, hColX + colWidths.marca, currentY + 18)
+      hColX += colWidths.marca
+    }
 
     doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + 12, { align: 'center' })
     doc.line(hColX + colWidths.desc, currentY, hColX + colWidths.desc, currentY + 18)
@@ -746,6 +761,17 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     // Línea vertical Código
     doc.line(itemColX + colWidths.code, currentY, itemColX + colWidths.code, currentY + rowHeight)
     itemColX += colWidths.code
+
+    // Marca (solo modo farmacia)
+    if (isPharmacy) {
+      const marcaText = product?.marca || ''
+      if (marcaText) {
+        const marcaLines = doc.splitTextToSize(marcaText, colWidths.marca - 6)
+        doc.text(marcaLines[0], itemColX + colWidths.marca/2, centerYRow, { align: 'center' })
+      }
+      doc.line(itemColX + colWidths.marca, currentY, itemColX + colWidths.marca, currentY + rowHeight)
+      itemColX += colWidths.marca
+    }
 
     // Descripción - múltiples líneas
     const descStartY = currentY + 10

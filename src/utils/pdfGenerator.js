@@ -1102,20 +1102,27 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Verificar si algún item tiene descuento para mostrar la columna DCTO
   const hasAnyItemDiscount = items.some(item => (item.itemDiscount || 0) > 0)
 
-  // Definir columnas dinámicamente según si hay descuentos
-  // Con descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | DCTO. | IMPORTE
-  // Sin descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
+  // Detectar modo farmacia para mostrar columna LABORATORIO
+  const isPharmacy = companySettings?.businessMode === 'pharmacy'
+
+  // Definir columnas dinámicamente según si hay descuentos y modo farmacia
+  // Farmacia con descuento: CANT(7%) | U.M.(7%) | DESCRIPCIÓN(27%) | LABORATORIO(15%) | P.UNIT.(13%) | DCTO(13%) | IMPORTE(18%)
+  // Farmacia sin descuento: CANT(7%) | U.M.(7%) | DESCRIPCIÓN(34%) | LABORATORIO(17%) | P.UNIT.(17%) | IMPORTE(18%)
+  // Normal con descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | DCTO. | IMPORTE
+  // Normal sin descuento: CANT. | U.M. | DESCRIPCIÓN | P. UNIT. | IMPORTE
   const colWidths = hasAnyItemDiscount ? {
     cant: CONTENT_WIDTH * 0.07,
     um: CONTENT_WIDTH * 0.07,
-    desc: CONTENT_WIDTH * 0.40,
-    pu: CONTENT_WIDTH * 0.15,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.27 : CONTENT_WIDTH * 0.40,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.15 : 0,
+    pu: isPharmacy ? CONTENT_WIDTH * 0.13 : CONTENT_WIDTH * 0.15,
     dcto: CONTENT_WIDTH * 0.13,
     total: CONTENT_WIDTH * 0.18
   } : {
     cant: CONTENT_WIDTH * 0.08,
     um: CONTENT_WIDTH * 0.08,
-    desc: CONTENT_WIDTH * 0.49,
+    desc: isPharmacy ? CONTENT_WIDTH * 0.34 : CONTENT_WIDTH * 0.49,
+    lab: isPharmacy ? CONTENT_WIDTH * 0.17 : 0,
     pu: CONTENT_WIDTH * 0.17,
     dcto: 0,
     total: CONTENT_WIDTH * 0.18
@@ -1126,14 +1133,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     cant: colX,
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
-    pu: colX += colWidths.desc,
+    lab: colX += colWidths.desc,
+    pu: colX += colWidths.lab,
     dcto: colX += colWidths.pu,
     total: colX += colWidths.dcto
   } : {
     cant: colX,
     um: colX += colWidths.cant,
     desc: colX += colWidths.um,
-    pu: colX += colWidths.desc,
+    lab: colX += colWidths.desc,
+    pu: colX += colWidths.lab,
     dcto: 0,
     total: colX += colWidths.pu
   }
@@ -1195,6 +1204,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
+  if (isPharmacy) {
+    doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+  }
   doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
   if (hasAnyItemDiscount) {
     doc.text('DCTO.', cols.dcto + colWidths.dcto / 2, headerTextY, { align: 'center' })
@@ -1246,6 +1258,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     descLines.forEach((line, lineIdx) => {
       doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
     })
+
+    // Laboratorio (solo modo farmacia) - centrado verticalmente
+    if (isPharmacy) {
+      doc.setFontSize(7)
+      const labText = item.laboratoryName || ''
+      if (labText) {
+        const labLines = doc.splitTextToSize(labText, colWidths.lab - 6)
+        doc.text(labLines[0], cols.lab + colWidths.lab / 2, centerY, { align: 'center' })
+      }
+    }
 
     // Precio unitario - centrado verticalmente
     doc.setFontSize(8)

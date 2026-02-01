@@ -42,6 +42,7 @@ export const exportProductsForImport = async (products, categories, businessMode
       concentracion: product.concentration || '',
       presentacion: product.presentation || '',
       laboratorio: product.laboratoryName || '',
+      marca: product.marca || '',
       principio_activo: product.activeIngredient || '',
       accion_terapeutica: product.therapeuticAction || '',
       condicion_venta: product.saleCondition || '',
