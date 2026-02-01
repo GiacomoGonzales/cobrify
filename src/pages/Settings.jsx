@@ -190,6 +190,7 @@ export default function Settings() {
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
+  const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -721,6 +722,7 @@ export default function Settings() {
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
+        setCatalogWhatsapp(businessData.catalogWhatsapp || '')
 
         // Cargar configuración de Libro de Reclamaciones
         setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
@@ -4165,6 +4167,23 @@ export default function Settings() {
                     </label>
                   </div>
 
+                  {/* WhatsApp del catálogo */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      WhatsApp para pedidos del catálogo
+                    </label>
+                    <input
+                      type="text"
+                      value={catalogWhatsapp}
+                      onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
+                      placeholder="Ej: 51987654321"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
+                    </p>
+                  </div>
+
                   <div className="border-t border-gray-200"></div>
 
                   {/* Productos en el catálogo */}
@@ -4209,6 +4228,7 @@ export default function Settings() {
                       catalogWelcome,
                       catalogTagline,
                       catalogShowPrices,
+                      catalogWhatsapp: catalogWhatsapp.trim(),
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')

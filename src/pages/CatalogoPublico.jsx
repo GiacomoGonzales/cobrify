@@ -1125,12 +1125,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   // Checkout por WhatsApp
   const handleCheckout = () => {
-    if (!business?.phone && !business?.whatsapp) {
+    if (!business?.catalogWhatsapp && !business?.whatsapp && !business?.phone) {
       alert('Este negocio no tiene WhatsApp configurado')
       return
     }
 
-    const phone = (business.whatsapp || business.phone).replace(/\D/g, '')
+    const phone = (business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')
     const items = cart.map(item => {
       const price = item.unitPrice || item.price
       let itemText = `• ${item.quantity}x ${item.name}`
@@ -1551,9 +1551,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
 
             <div className="flex items-center gap-4">
-              {(business?.whatsapp || business?.phone) && (
+              {(business?.catalogWhatsapp || business?.whatsapp || business?.phone) && (
                 <a
-                  href={`https://wa.me/${(business.whatsapp || business.phone).replace(/\D/g, '')}`}
+                  href={`https://wa.me/${(business.catalogWhatsapp || business.whatsapp || business.phone).replace(/\D/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 transition-colors"
