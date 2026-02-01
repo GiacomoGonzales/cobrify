@@ -9,8 +9,51 @@ import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import { useYapeListener } from '@/hooks/useYapeListener'
 
+// Mapeo de rutas a pageIds para verificación de permisos
+const routeToPageId = {
+  '/app/dashboard': 'dashboard',
+  '/app/pos': 'pos',
+  '/app/facturas': 'invoices',
+  '/app/clientes': 'customers',
+  '/app/productos': 'products',
+  '/app/caja': 'cash-register',
+  '/app/reportes': 'reports',
+  '/app/gastos': 'expenses',
+  '/app/flujo-caja': 'cash-flow',
+  '/app/configuracion': 'settings',
+  '/app/vendedores': 'sellers',
+  '/app/cotizaciones': 'quotations',
+  '/app/guias-remision': 'dispatch-guides',
+  '/app/guias-transportista': 'carrier-dispatch-guides',
+  '/app/inventario': 'inventory',
+  '/app/almacenes': 'warehouses',
+  '/app/movimientos': 'stock-movements',
+  '/app/compras': 'purchases',
+  '/app/ordenes-compra': 'purchase-orders',
+  '/app/proveedores': 'suppliers',
+  '/app/reclamos': 'complaints',
+  '/app/mesas': 'tables',
+  '/app/ordenes': 'orders',
+  '/app/cocina': 'kitchen',
+  '/app/mozos': 'waiters',
+  '/app/prestamos': 'loans',
+  '/app/certificados': 'certificates',
+  '/app/ingredientes': 'ingredients',
+  '/app/recetas': 'recipes',
+  '/app/laboratorios': 'laboratories',
+  '/app/alertas-vencimiento': 'expiry-alerts',
+  '/app/control-lotes': 'batch-control',
+  '/app/propiedades': 'properties',
+  '/app/agentes': 'agents',
+  '/app/operaciones': 'operations',
+  '/app/comisiones': 'commissions',
+  '/app/control-pagos-alumnos': 'student-payment-control',
+  '/app/nota-credito': 'invoices',
+  '/app/nota-debito': 'invoices',
+}
+
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const location = useLocation()
@@ -137,6 +180,32 @@ export default function MainLayout() {
   // if (hasBusiness === false && location.pathname !== '/business/new' && !isAdmin) {
   //   return <Navigate to="/business/new" replace />
   // }
+
+  // Verificar permisos de página para sub-usuarios
+  if (!isAdmin && !isBusinessOwner && hasPageAccess) {
+    // Obtener el pageId de la ruta actual
+    const basePath = location.pathname.replace(/\/[^/]+$/, '') // Para sub-rutas como /cotizaciones/nueva
+    const pageId = routeToPageId[location.pathname] || routeToPageId[basePath]
+
+    if (pageId && !hasPageAccess(pageId)) {
+      // Redirigir a la primera página permitida
+      const pageRouteMap = {
+        'pos': '/app/pos',
+        'dashboard': '/app/dashboard',
+        'invoices': '/app/facturas',
+        'customers': '/app/clientes',
+        'products': '/app/productos',
+        'cash-register': '/app/caja',
+        'reports': '/app/reportes',
+        'sellers': '/app/vendedores',
+      }
+      let redirectTo = '/app/pos'
+      if (allowedPages && allowedPages.length > 0) {
+        redirectTo = pageRouteMap[allowedPages[0]] || '/app/pos'
+      }
+      return <Navigate to={redirectTo} replace />
+    }
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>

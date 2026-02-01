@@ -388,7 +388,51 @@ export const AuthProvider = ({ children }) => {
         }
 
         // El onAuthChange se encargará de actualizar el estado
-        navigate('/app/dashboard')
+        // Redirigir según tipo de usuario - sub-usuarios van al POS por defecto
+        const userDataCheck = await getUserData(result.user.uid)
+        if (userDataCheck.success && userDataCheck.data && userDataCheck.data.allowedPages) {
+          const pages = userDataCheck.data.allowedPages
+          if (pages.includes('pos')) {
+            navigate('/app/pos')
+          } else if (pages.length > 0) {
+            // Ir a la primera página permitida
+            const pageRouteMap = {
+              'dashboard': '/app/dashboard',
+              'pos': '/app/pos',
+              'invoices': '/app/facturas',
+              'customers': '/app/clientes',
+              'products': '/app/productos',
+              'cash-register': '/app/caja',
+              'reports': '/app/reportes',
+              'expenses': '/app/gastos',
+              'cash-flow': '/app/flujo-caja',
+              'settings': '/app/configuracion',
+              'sellers': '/app/vendedores',
+              'quotations': '/app/cotizaciones',
+              'dispatch-guides': '/app/guias-remision',
+              'carrier-dispatch-guides': '/app/guias-transportista',
+              'inventory': '/app/inventario',
+              'warehouses': '/app/almacenes',
+              'stock-movements': '/app/movimientos',
+              'purchases': '/app/compras',
+              'purchase-orders': '/app/ordenes-compra',
+              'suppliers': '/app/proveedores',
+              'complaints': '/app/reclamos',
+              'tables': '/app/mesas',
+              'orders': '/app/ordenes',
+              'kitchen': '/app/cocina',
+              'waiters': '/app/mozos',
+              'loans': '/app/prestamos',
+              'certificates': '/app/certificados',
+            }
+            const firstRoute = pageRouteMap[pages[0]] || '/app/pos'
+            navigate(firstRoute)
+          } else {
+            navigate('/app/dashboard')
+          }
+        } else {
+          navigate('/app/dashboard')
+        }
         return { success: true }
       } else {
         return { success: false, error: result.error }
