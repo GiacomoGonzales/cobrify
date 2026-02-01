@@ -937,6 +937,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [cart, setCart] = useState([])
   const [cartOpen, setCartOpen] = useState(false)
@@ -1011,6 +1012,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     return categories.filter(cat => !cat.parentId && cat.showInCatalog !== false)
   }, [categories])
 
+  // Obtener subcategorías visibles de la categoría raíz seleccionada
+  const activeSubcategories = useMemo(() => {
+    if (!selectedCategory) return []
+    return categories.filter(cat => cat.parentId === selectedCategory && cat.showInCatalog !== false)
+  }, [categories, selectedCategory])
+
   // Función para obtener todos los IDs de subcategorías de una categoría
   const getAllDescendantCategoryIds = (parentId) => {
     const descendants = []
@@ -1049,9 +1056,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         return false
       }
 
-      // Incluir productos de la categoría seleccionada Y sus subcategorías
+      // Incluir productos de la categoría/subcategoría seleccionada
       let matchesCategory = !selectedCategory
-      if (selectedCategory) {
+      if (selectedSubcategory) {
+        // Si hay subcategoría seleccionada, filtrar solo por esa subcategoría y sus descendientes
+        const descendantIds = getAllDescendantCategoryIds(selectedSubcategory)
+        const allCategoryIds = [selectedSubcategory, ...descendantIds]
+        matchesCategory = allCategoryIds.includes(product.category)
+      } else if (selectedCategory) {
+        // Si solo hay categoría raíz, incluir todos sus descendientes
         const descendantIds = getAllDescendantCategoryIds(selectedCategory)
         const allCategoryIds = [selectedCategory, ...descendantIds]
         matchesCategory = allCategoryIds.includes(product.category)
@@ -1059,7 +1072,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       return matchesSearch && matchesCategory
     })
-  }, [products, searchQuery, selectedCategory, categories, hiddenCategoryIds])
+  }, [products, searchQuery, selectedCategory, selectedSubcategory, categories, hiddenCategoryIds])
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
@@ -1276,13 +1289,14 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       </div>
 
-      {/* Categorías - Solo mostrar categorías raíz */}
+      {/* Categorías */}
       {rootCategories.length > 0 && (
         <div className="bg-white border-b sticky top-16 md:top-20 z-30">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="flex items-center gap-2 py-4 overflow-x-auto scrollbar-hide">
+            {/* Categorías raíz */}
+            <div className="flex items-center gap-2 py-3 overflow-x-auto scrollbar-hide">
               <button
-                onClick={() => setSelectedCategory(null)}
+                onClick={() => { setSelectedCategory(null); setSelectedSubcategory(null) }}
                 className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                   !selectedCategory
                     ? 'bg-gray-900 text-white'
@@ -1294,7 +1308,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               {rootCategories.map(category => (
                 <button
                   key={category.id}
-                  onClick={() => setSelectedCategory(category.id)}
+                  onClick={() => { setSelectedCategory(category.id); setSelectedSubcategory(null) }}
                   className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                     selectedCategory === category.id
                       ? 'bg-gray-900 text-white'
@@ -1305,6 +1319,34 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </button>
               ))}
             </div>
+            {/* Subcategorías de la categoría seleccionada */}
+            {activeSubcategories.length > 0 && (
+              <div className="flex items-center gap-2 pb-3 overflow-x-auto scrollbar-hide">
+                <button
+                  onClick={() => setSelectedSubcategory(null)}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    !selectedSubcategory
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-primary-50 text-primary-700 hover:bg-primary-100'
+                  }`}
+                >
+                  Todas
+                </button>
+                {activeSubcategories.map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setSelectedSubcategory(sub.id)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      selectedSubcategory === sub.id
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-primary-50 text-primary-700 hover:bg-primary-100'
+                    }`}
+                  >
+                    {sub.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1316,7 +1358,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <p className="text-gray-600">
             {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
             {selectedCategory && rootCategories.find(c => c.id === selectedCategory) && (
-              <span> en <strong>{rootCategories.find(c => c.id === selectedCategory).name}</strong></span>
+              <span> en <strong>
+                {rootCategories.find(c => c.id === selectedCategory).name}
+                {selectedSubcategory && activeSubcategories.find(c => c.id === selectedSubcategory) && (
+                  <> &rsaquo; {activeSubcategories.find(c => c.id === selectedSubcategory).name}</>
+                )}
+              </strong></span>
             )}
           </p>
           <div className="flex items-center gap-2">
