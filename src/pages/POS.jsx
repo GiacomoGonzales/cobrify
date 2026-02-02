@@ -4058,6 +4058,14 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               if (!e.target.checked) {
                                 setDetractionType('')
                                 setDetractionBankAccount('')
+                              } else {
+                                // Auto-rellenar cuenta BN desde configuración del negocio
+                                if (!detractionBankAccount && companySettings?.bankAccountsList && Array.isArray(companySettings.bankAccountsList)) {
+                                  const bnAccount = companySettings.bankAccountsList.find(acc => acc.accountType === 'detracciones')
+                                  if (bnAccount?.accountNumber) {
+                                    setDetractionBankAccount(bnAccount.accountNumber)
+                                  }
+                                }
                               }
                             }}
                             className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
