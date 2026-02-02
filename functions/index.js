@@ -9,7 +9,7 @@ import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemis
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
-import { sendSummary, getStatus } from './src/utils/sunatClient.js'
+import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse } from './src/services/qpseService.js'
 
 // Initialize Firebase Admin
@@ -69,6 +69,69 @@ async function downloadFromUrl(url) {
   } catch (error) {
     console.error(`❌ Error descargando desde URL: ${error.message}`)
     return null
+  }
+}
+
+/**
+ * Intenta recuperar CDR desde SUNAT usando getStatusCdr
+ * Solo funciona para facturas (01), notas de crédito (07) y notas de débito (08).
+ * NO funciona para boletas (03).
+ *
+ * @param {Object} params
+ * @param {Object} params.businessData - Datos del negocio (con sunat config)
+ * @param {string} params.ruc - RUC del emisor
+ * @param {string} params.docTypeCode - Código de tipo: '01', '07', '08'
+ * @param {string} params.series - Serie del documento
+ * @param {string|number} params.number - Número correlativo
+ * @param {string} params.businessId - ID del negocio (para Storage)
+ * @param {string} params.documentId - ID del documento en Firestore
+ * @param {string} params.documentNumber - Número completo (ej: 'F001-00000001')
+ * @returns {Object} { cdrData, cdrStorageUrl } o { cdrData: null, cdrStorageUrl: null }
+ */
+async function tryRecoverCdr({ businessData, ruc, docTypeCode, series, number, businessId, documentId, documentNumber }) {
+  try {
+    // Solo funciona para facturas, NC y ND
+    if (!['01', '07', '08'].includes(docTypeCode)) {
+      console.log(`📋 getStatusCdr no aplica para tipo ${docTypeCode} - omitiendo`)
+      return { cdrData: null, cdrStorageUrl: null }
+    }
+
+    // Solo para sunat_direct (necesitamos credenciales SOL)
+    if (!businessData.sunat?.enabled) {
+      return { cdrData: null, cdrStorageUrl: null }
+    }
+
+    console.log(`🔍 Intentando recuperar CDR via getStatusCdr para ${ruc}-${docTypeCode}-${series}-${number}...`)
+
+    const cdrResult = await getStatusCdr({
+      ruc,
+      solUser: businessData.sunat.solUser,
+      solPassword: businessData.sunat.solPassword,
+      environment: businessData.sunat.environment || 'beta',
+      documentType: docTypeCode,
+      series,
+      number: String(number)
+    })
+
+    if (cdrResult.success && cdrResult.cdrData) {
+      console.log(`✅ CDR recuperado exitosamente via getStatusCdr`)
+
+      // Guardar CDR en Storage
+      let cdrStorageUrl = null
+      try {
+        cdrStorageUrl = await saveToStorage(businessId, documentId, `${documentNumber}-CDR.xml`, cdrResult.cdrData)
+      } catch (storageErr) {
+        console.error('⚠️ Error guardando CDR recuperado en Storage:', storageErr.message)
+      }
+
+      return { cdrData: cdrResult.cdrData, cdrStorageUrl }
+    }
+
+    console.log(`⚠️ No se pudo recuperar CDR via getStatusCdr: ${cdrResult.error || 'sin CDR en respuesta'}`)
+    return { cdrData: null, cdrStorageUrl: null }
+  } catch (err) {
+    console.error('⚠️ Error en tryRecoverCdr (no bloquea flujo):', err.message)
+    return { cdrData: null, cdrStorageUrl: null }
   }
 }
 
@@ -516,11 +579,14 @@ export const sendInvoiceToSunat = onRequest(
         // Verificar si SUNAT dice que el documento ya fue registrado o aceptado (puede venir como SOAP Fault)
         // Esto pasa en reintentos cuando el primer envío sí llegó a SUNAT
         // El código puede venir como "1033" o "soap-env:Client.1033"
+        // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const errorMsgLower = (errorMessage || '').toLowerCase()
-        const isAlreadyRegisteredError = errorCode === '1033' || errorCode.includes('1033') ||
+        const hasConOtrosDatos = errorMsgLower.includes('con otros datos')
+        const isAlreadyRegisteredError = !hasConOtrosDatos && (
+          errorCode === '1033' || errorCode.includes('1033') ||
           errorMsgLower.includes('registrado previamente') ||
           errorMsgLower.includes('ha sido aceptada') ||
-          errorMsgLower.includes('ha sido aceptado')
+          errorMsgLower.includes('ha sido aceptado'))
 
         if (isAlreadyRegisteredError) {
           console.log('📋 Documento ya registrado en SUNAT (detectado en error path) - tratando como ACEPTADO')
@@ -539,6 +605,22 @@ export const sendInvoiceToSunat = onRequest(
             }
           } catch (storageErr) {
             console.error('⚠️ Error guardando archivos en Storage (error path):', storageErr.message)
+          }
+
+          // Si no tenemos CDR, intentar recuperarlo via getStatusCdr (solo factura, no boleta)
+          if (!emissionResult.cdrData && !errCdrStorageUrl) {
+            const docTypeCode = invoiceData.documentType === 'factura' ? '01' : '03'
+            if (docTypeCode !== '03') {
+              const recovered = await tryRecoverCdr({
+                businessData, ruc: businessData.ruc, docTypeCode,
+                series: invoiceData.series, number: invoiceData.correlativeNumber,
+                businessId: userId, documentId: invoiceId, documentNumber
+              })
+              if (recovered.cdrData) {
+                emissionResult.cdrData = recovered.cdrData
+                errCdrStorageUrl = recovered.cdrStorageUrl
+              }
+            }
           }
 
           const updateObj = {
@@ -632,12 +714,15 @@ export const sendInvoiceToSunat = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
       // Esto puede pasar en reintentos o cuando SUNAT tuvo problemas temporales
+      // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const descLower = (emissionResult.description || '').toLowerCase()
-      const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
+      const descHasConOtrosDatos = descLower.includes('con otros datos')
+      const isAlreadyRegistered = !descHasConOtrosDatos && (
+        emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         descLower.includes('registrado previamente') ||
         descLower.includes('ha sido aceptada') ||
-        descLower.includes('ha sido aceptado')
+        descLower.includes('ha sido aceptado'))
 
       if (isAlreadyRegistered) {
         // Verificar si este documento tiene historial de envío desde nuestro sistema
@@ -680,12 +765,32 @@ export const sendInvoiceToSunat = onRequest(
 
       let finalStatus
       if (emissionResult.accepted) {
-        // Validar que realmente tenemos prueba del CDR
-        if (!hasCDRProof) {
+        // Si no hay CDR, intentar recuperarlo via getStatusCdr (solo factura, no boleta)
+        if (!hasCDRProof && emissionResult.method === 'sunat_direct') {
+          const docTypeCode = invoiceData.documentType === 'factura' ? '01' : '03'
+          if (docTypeCode !== '03') {
+            const documentNumber = `${invoiceData.series}-${invoiceData.correlativeNumber}`
+            console.log('🔍 Documento aceptado sin CDR - intentando recuperar via getStatusCdr...')
+            const recovered = await tryRecoverCdr({
+              businessData, ruc: businessData.ruc, docTypeCode,
+              series: invoiceData.series, number: invoiceData.correlativeNumber,
+              businessId: userId, documentId: invoiceId, documentNumber
+            })
+            if (recovered.cdrData) {
+              emissionResult.cdrData = recovered.cdrData
+            }
+          }
+        }
+
+        // Re-evaluar si ahora tenemos CDR
+        const hasCDRProofNow = !!(
+          emissionResult.cdrData || emissionResult.cdrUrl ||
+          emissionResult.nubefactResponse?.enlace_del_cdr ||
+          emissionResult.qpseResponse?.cdrUrl
+        )
+        if (!hasCDRProofNow) {
           console.warn('⚠️ ALERTA: Documento marcado como aceptado pero SIN CDR')
           console.warn('   Esto podría indicar un problema con el proveedor de facturación')
-          // Aún así marcamos como accepted porque el proveedor dijo que fue aceptado
-          // pero dejamos registro del problema
         }
         finalStatus = 'accepted'
       } else if (isTransientError || isPendingManual) {
@@ -1249,11 +1354,14 @@ export const sendCreditNoteToSunat = onRequest(
         const ncErrorCode = emissionResult.responseCode || 'ERROR'
 
         // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
+        // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const ncMsgLower = (ncErrorMessage || '').toLowerCase()
-        const ncAlreadyRegistered = ncErrorCode === '1033' || (ncErrorCode || '').includes('1033') ||
+        const ncHasConOtrosDatos = ncMsgLower.includes('con otros datos')
+        const ncAlreadyRegistered = !ncHasConOtrosDatos && (
+          ncErrorCode === '1033' || (ncErrorCode || '').includes('1033') ||
           ncMsgLower.includes('registrado previamente') ||
           ncMsgLower.includes('ha sido aceptada') ||
-          ncMsgLower.includes('ha sido aceptado')
+          ncMsgLower.includes('ha sido aceptado'))
 
         if (ncAlreadyRegistered) {
           console.log('📋 NC ya registrada en SUNAT (detectado en error path) - tratando como ACEPTADA')
@@ -1271,6 +1379,19 @@ export const sendCreditNoteToSunat = onRequest(
             }
           } catch (storageErr) {
             console.error('⚠️ Error guardando archivos NC en Storage (error path):', storageErr.message)
+          }
+
+          // Si no tenemos CDR, intentar recuperarlo via getStatusCdr (NC = tipo 07)
+          if (!emissionResult.cdrData && !errCdrStorageUrl) {
+            const recovered = await tryRecoverCdr({
+              businessData, ruc: businessData.ruc, docTypeCode: '07',
+              series: creditNoteData.series, number: creditNoteData.correlativeNumber,
+              businessId: userId, documentId: creditNoteId, documentNumber
+            })
+            if (recovered.cdrData) {
+              emissionResult.cdrData = recovered.cdrData
+              errCdrStorageUrl = recovered.cdrStorageUrl
+            }
           }
 
           await creditNoteRef.update({
@@ -1321,12 +1442,15 @@ export const sendCreditNoteToSunat = onRequest(
 
       // 5. Actualizar estado en Firestore
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
+      // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const ncDescLower = (emissionResult.description || '').toLowerCase()
-      const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
+      const ncDescHasConOtrosDatos = ncDescLower.includes('con otros datos')
+      const isAlreadyRegistered = !ncDescHasConOtrosDatos && (
+        emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         ncDescLower.includes('registrado previamente') ||
         ncDescLower.includes('ha sido aceptada') ||
-        ncDescLower.includes('ha sido aceptado')
+        ncDescLower.includes('ha sido aceptado'))
 
       if (isAlreadyRegistered) {
         // Si el documento está en estado pending, signed, rejected o sending,
@@ -1392,6 +1516,18 @@ export const sendCreditNoteToSunat = onRequest(
                 `${documentNumber}-CDR.xml`,
                 emissionResult.cdrData
               )
+            }
+            // Si no hay CDR, intentar recuperarlo via getStatusCdr (NC = tipo 07)
+            if (!emissionResult.cdrData && !cdrStorageUrl && emissionResult.accepted) {
+              const recovered = await tryRecoverCdr({
+                businessData, ruc: businessData.ruc, docTypeCode: '07',
+                series: creditNoteData.series, number: creditNoteData.correlativeNumber,
+                businessId: userId, documentId: creditNoteId, documentNumber
+              })
+              if (recovered.cdrData) {
+                emissionResult.cdrData = recovered.cdrData
+                cdrStorageUrl = recovered.cdrStorageUrl
+              }
             }
           }
 
@@ -1866,11 +2002,14 @@ export const sendDebitNoteToSunat = onRequest(
         const ndErrorCode = emissionResult.responseCode || 'ERROR'
 
         // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
+        // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const ndMsgLower = (ndErrorMessage || '').toLowerCase()
-        const ndAlreadyRegistered = ndErrorCode === '1033' || (ndErrorCode || '').includes('1033') ||
+        const ndHasConOtrosDatos = ndMsgLower.includes('con otros datos')
+        const ndAlreadyRegistered = !ndHasConOtrosDatos && (
+          ndErrorCode === '1033' || (ndErrorCode || '').includes('1033') ||
           ndMsgLower.includes('registrado previamente') ||
           ndMsgLower.includes('ha sido aceptada') ||
-          ndMsgLower.includes('ha sido aceptado')
+          ndMsgLower.includes('ha sido aceptado'))
 
         if (ndAlreadyRegistered) {
           console.log('📋 ND ya registrada en SUNAT (detectado en error path) - tratando como ACEPTADA')
@@ -1888,6 +2027,19 @@ export const sendDebitNoteToSunat = onRequest(
             }
           } catch (storageErr) {
             console.error('⚠️ Error guardando archivos ND en Storage (error path):', storageErr.message)
+          }
+
+          // Si no tenemos CDR, intentar recuperarlo via getStatusCdr (ND = tipo 08)
+          if (!emissionResult.cdrData && !errCdrStorageUrl) {
+            const recovered = await tryRecoverCdr({
+              businessData, ruc: businessData.ruc, docTypeCode: '08',
+              series: debitNoteData.series, number: debitNoteData.correlativeNumber,
+              businessId: userId, documentId: debitNoteId, documentNumber
+            })
+            if (recovered.cdrData) {
+              emissionResult.cdrData = recovered.cdrData
+              errCdrStorageUrl = recovered.cdrStorageUrl
+            }
           }
 
           await debitNoteRef.update({
@@ -1938,12 +2090,15 @@ export const sendDebitNoteToSunat = onRequest(
 
       // 5. Actualizar estado en Firestore
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
+      // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const ndDescLower = (emissionResult.description || '').toLowerCase()
-      const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
+      const ndDescHasConOtrosDatos = ndDescLower.includes('con otros datos')
+      const isAlreadyRegistered = !ndDescHasConOtrosDatos && (
+        emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         ndDescLower.includes('registrado previamente') ||
         ndDescLower.includes('ha sido aceptada') ||
-        ndDescLower.includes('ha sido aceptado')
+        ndDescLower.includes('ha sido aceptado'))
 
       if (isAlreadyRegistered) {
         const allowedStatuses = ['pending', 'signed', 'rejected', 'sending']
@@ -2005,6 +2160,18 @@ export const sendDebitNoteToSunat = onRequest(
                 `${documentNumber}-CDR.xml`,
                 emissionResult.cdrData
               )
+            }
+            // Si no hay CDR, intentar recuperarlo via getStatusCdr (ND = tipo 08)
+            if (!emissionResult.cdrData && !cdrStorageUrl && emissionResult.accepted) {
+              const recovered = await tryRecoverCdr({
+                businessData, ruc: businessData.ruc, docTypeCode: '08',
+                series: debitNoteData.series, number: debitNoteData.correlativeNumber,
+                businessId: userId, documentId: debitNoteId, documentNumber
+              })
+              if (recovered.cdrData) {
+                emissionResult.cdrData = recovered.cdrData
+                cdrStorageUrl = recovered.cdrStorageUrl
+              }
             }
           }
 
@@ -3018,14 +3185,18 @@ export const sendDispatchGuideToSunatFn = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente"
       // Código 4000 = "El documento ya existe" (variante para GRE)
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
-      const isAlreadyRegistered = result.responseCode === '1033' ||
+      // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
+      const greDescLower = (result.description || '').toLowerCase()
+      const greHasConOtrosDatos = greDescLower.includes('con otros datos')
+      const isAlreadyRegistered = !greHasConOtrosDatos && (
+        result.responseCode === '1033' ||
         result.responseCode === '4000' ||
         (result.description && (
-          result.description.toLowerCase().includes('registrado previamente') ||
-          result.description.toLowerCase().includes('ya ha sido registrado') ||
-          result.description.toLowerCase().includes('documento ya existe') ||
-          result.description.toLowerCase().includes('already registered')
-        ))
+          greDescLower.includes('registrado previamente') ||
+          greDescLower.includes('ya ha sido registrado') ||
+          greDescLower.includes('documento ya existe') ||
+          greDescLower.includes('already registered')
+        )))
 
       if (isAlreadyRegistered && !result.accepted) {
         console.log('📋 [GRE] Documento ya registrado en SUNAT - tratando como ACEPTADO')
@@ -3365,14 +3536,18 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente"
       // Código 4000 = "El documento ya existe" (variante para GRE)
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
-      const isAlreadyRegistered = result.responseCode === '1033' ||
+      // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
+      const greTDescLower = (result.description || '').toLowerCase()
+      const greTHasConOtrosDatos = greTDescLower.includes('con otros datos')
+      const isAlreadyRegistered = !greTHasConOtrosDatos && (
+        result.responseCode === '1033' ||
         result.responseCode === '4000' ||
         (result.description && (
-          result.description.toLowerCase().includes('registrado previamente') ||
-          result.description.toLowerCase().includes('ya ha sido registrado') ||
-          result.description.toLowerCase().includes('documento ya existe') ||
-          result.description.toLowerCase().includes('already registered')
-        ))
+          greTDescLower.includes('registrado previamente') ||
+          greTDescLower.includes('ya ha sido registrado') ||
+          greTDescLower.includes('documento ya existe') ||
+          greTDescLower.includes('already registered')
+        )))
 
       if (isAlreadyRegistered && !result.accepted) {
         console.log('📋 [GRE-T] Documento ya registrado en SUNAT - tratando como ACEPTADO')

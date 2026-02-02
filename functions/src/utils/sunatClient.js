@@ -19,6 +19,12 @@ const SUNAT_URLS = {
   production: 'https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billService'
 }
 
+// URLs de consulta CDR (billConsultService) - diferente endpoint que billService
+const SUNAT_CONSULT_URLS = {
+  beta: 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billConsultService',
+  production: 'https://e-factura.sunat.gob.pe/ol-ti-itcpfegem/billConsultService'
+}
+
 /**
  * Envía XML firmado a SUNAT
  */
@@ -203,10 +209,13 @@ async function parseSunatResponse(soapResponse) {
 
       // Detectar si el SOAP Fault indica que el documento fue ACEPTADO
       // SUNAT a veces retorna Fault con mensajes como "ha sido aceptada" o "registrado previamente"
+      // IMPORTANTE: "con otros datos" significa que la serie-número ya fue usada con datos DIFERENTES → NO es aceptación
       const faultLower = faultstring.toLowerCase()
-      const isAcceptedFault = faultLower.includes('ha sido aceptada') ||
+      const hasConOtrosDatos = faultLower.includes('con otros datos')
+      const isAcceptedFault = !hasConOtrosDatos && (
+                              faultLower.includes('ha sido aceptada') ||
                               faultLower.includes('ha sido aceptado') ||
-                              (numericCode === '1033' && !faultLower.includes('rechaz'))
+                              (numericCode === '1033' && !faultLower.includes('rechaz')))
 
       if (isAcceptedFault) {
         console.log(`✅ SOAP Fault indica aceptación: [${faultcode}] ${faultstring}`)
@@ -367,10 +376,13 @@ function parseSunatError(soapResponse) {
       const numericCode = faultcode.match(/\.(\d+)$/)?.[1] || faultcode
 
       // Detectar si el SOAP Fault indica que el documento fue ACEPTADO
+      // IMPORTANTE: "con otros datos" significa conflicto de datos → NO es aceptación
       const faultLower = faultstring.toLowerCase()
-      const isAcceptedFault = faultLower.includes('ha sido aceptada') ||
+      const hasConOtrosDatos = faultLower.includes('con otros datos')
+      const isAcceptedFault = !hasConOtrosDatos && (
+                              faultLower.includes('ha sido aceptada') ||
                               faultLower.includes('ha sido aceptado') ||
-                              (numericCode === '1033' && !faultLower.includes('rechaz'))
+                              (numericCode === '1033' && !faultLower.includes('rechaz')))
 
       if (isAcceptedFault) {
         console.log(`✅ SOAP Fault (error path) indica aceptación: [${faultcode}] ${faultstring}`)
@@ -409,13 +421,244 @@ function parseSunatError(soapResponse) {
 }
 
 /**
- * Verifica el estado de un comprobante en SUNAT
+ * Consulta el CDR de un comprobante en SUNAT usando getStatusCdr
+ *
+ * IMPORTANTE: Solo funciona para facturas (01), notas de crédito (07) y notas de débito (08).
+ * NO funciona para boletas (03).
+ *
+ * @param {Object} config
+ * @param {string} config.ruc - RUC del emisor
+ * @param {string} config.solUser - Usuario SOL
+ * @param {string} config.solPassword - Contraseña SOL
+ * @param {string} config.environment - 'beta' o 'production'
+ * @param {string} config.documentType - Código de tipo de documento: '01', '07', '08'
+ * @param {string} config.series - Serie del documento (ej: 'F001')
+ * @param {number|string} config.number - Número correlativo del documento
+ * @returns {Object} { success, accepted, code, description, cdrData } o { success: false, error }
  */
-export async function checkInvoiceStatus(config) {
-  // TODO: Implementar consulta de estado
-  // Endpoint: consultaCDR
-  console.log('⚠️ checkInvoiceStatus not implemented yet')
-  return null
+export async function getStatusCdr(config) {
+  try {
+    const { ruc, solUser, solPassword, environment, documentType, series, number } = config
+
+    // Validar que no sea boleta
+    if (documentType === '03') {
+      console.log('⚠️ getStatusCdr no soporta boletas (03)')
+      return { success: false, error: 'getStatusCdr no soporta boletas' }
+    }
+
+    // Validar tipo de documento soportado
+    if (!['01', '07', '08'].includes(documentType)) {
+      console.log(`⚠️ getStatusCdr: tipo de documento no soportado: ${documentType}`)
+      return { success: false, error: `Tipo de documento no soportado: ${documentType}` }
+    }
+
+    const url = environment === 'production' ? SUNAT_CONSULT_URLS.production : SUNAT_CONSULT_URLS.beta
+
+    console.log(`🌐 Endpoint SUNAT (getStatusCdr): ${url}`)
+    console.log(`📋 Consultando CDR: ${ruc}-${documentType}-${series}-${number}`)
+
+    const soapEnvelope = createGetStatusCdrEnvelope(ruc, documentType, series, String(number), solUser, solPassword)
+
+    const response = await axios.post(url, soapEnvelope, {
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': 'urn:getStatusCdr'
+      },
+      timeout: 60000
+    })
+
+    console.log('✅ Respuesta de getStatusCdr recibida')
+
+    const result = await parseGetStatusCdrResponse(response.data)
+    return result
+
+  } catch (error) {
+    console.error('❌ Error al consultar CDR:', error.message)
+
+    if (error.response?.data) {
+      console.log('📄 Respuesta de error SUNAT (getStatusCdr):', String(error.response.data).substring(0, 500))
+      const errorResult = parseSunatError(error.response.data)
+      return {
+        success: false,
+        error: errorResult.description || 'Error al consultar CDR'
+      }
+    }
+
+    return {
+      success: false,
+      error: `Error de conexión: ${error.message}`
+    }
+  }
+}
+
+/**
+ * Crea SOAP envelope para getStatusCdr
+ */
+function createGetStatusCdrEnvelope(ruc, documentType, series, number, solUser, solPassword) {
+  const fullUser = `${ruc}${solUser}`
+  const escapedUser = escapeXml(fullUser)
+  const escapedPassword = escapeXml(solPassword)
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:ser="http://service.sunat.gob.pe"
+                  xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+  <soapenv:Header>
+    <wsse:Security>
+      <wsse:UsernameToken>
+        <wsse:Username>${escapedUser}</wsse:Username>
+        <wsse:Password>${escapedPassword}</wsse:Password>
+      </wsse:UsernameToken>
+    </wsse:Security>
+  </soapenv:Header>
+  <soapenv:Body>
+    <ser:getStatusCdr>
+      <rucComprobante>${escapeXml(ruc)}</rucComprobante>
+      <tipoComprobante>${escapeXml(documentType)}</tipoComprobante>
+      <serieComprobante>${escapeXml(series)}</serieComprobante>
+      <numeroComprobante>${escapeXml(number)}</numeroComprobante>
+    </ser:getStatusCdr>
+  </soapenv:Body>
+</soapenv:Envelope>`
+}
+
+/**
+ * Parsea la respuesta de getStatusCdr
+ * La respuesta contiene statusCode, statusMessage y content (CDR en base64 ZIP)
+ */
+async function parseGetStatusCdrResponse(soapResponse) {
+  try {
+    console.log('📥 Respuesta getStatusCdr (primeros 500 chars):', soapResponse.substring(0, 500))
+
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      removeNSPrefix: true
+    })
+
+    const parsed = parser.parse(soapResponse)
+
+    const envelope = parsed.Envelope || parsed['soap:Envelope'] || parsed['soapenv:Envelope'] || parsed['soap-env:Envelope']
+    if (!envelope) {
+      return { success: false, error: 'Respuesta SOAP inválida - no se encontró Envelope' }
+    }
+
+    const body = envelope.Body || envelope['soap:Body'] || envelope['soapenv:Body'] || envelope['soap-env:Body']
+    if (!body) {
+      return { success: false, error: 'Respuesta SOAP inválida - no se encontró Body' }
+    }
+
+    // Verificar fault
+    const fault = body.Fault || body['soap-env:Fault'] || body['soap:Fault'] || body['soapenv:Fault']
+    if (fault) {
+      const faultString = fault.faultstring || 'Error desconocido de SUNAT'
+      console.log('❌ getStatusCdr SOAP Fault:', faultString)
+      return { success: false, error: faultString }
+    }
+
+    // Buscar getStatusCdrResponse
+    const statusCdrResponse = body.getStatusCdrResponse || body['br:getStatusCdrResponse'] || body['ns2:getStatusCdrResponse']
+
+    if (!statusCdrResponse) {
+      console.log('❌ No se encontró getStatusCdrResponse. Body keys:', Object.keys(body))
+      return { success: false, error: 'Respuesta de getStatusCdr no encontrada' }
+    }
+
+    const statusCode = statusCdrResponse.status?.statusCode ?? statusCdrResponse.statusCode
+    const statusMessage = statusCdrResponse.status?.statusMessage ?? statusCdrResponse.statusMessage
+    const cdrBase64 = statusCdrResponse.status?.content ?? statusCdrResponse.content
+
+    console.log(`📋 getStatusCdr: statusCode=${statusCode}, statusMessage=${statusMessage}, hasCDR=${!!cdrBase64}`)
+
+    // Código 0 = Encontrado con CDR, 98 = en proceso, 99 = no encontrado/error
+    if (statusCode === '0' || statusCode === 0) {
+      if (!cdrBase64) {
+        return {
+          success: true,
+          accepted: true,
+          code: String(statusCode),
+          description: statusMessage || 'Documento encontrado pero sin contenido CDR'
+        }
+      }
+
+      // Descomprimir CDR del ZIP base64
+      const cdrZipBuffer = Buffer.from(cdrBase64, 'base64')
+      const zip = new JSZip()
+      const cdrZip = await zip.loadAsync(cdrZipBuffer)
+
+      const cdrFileName = Object.keys(cdrZip.files).find(name => name.endsWith('.xml'))
+      console.log('📋 Archivos en ZIP del CDR (getStatusCdr):', Object.keys(cdrZip.files))
+
+      if (!cdrFileName) {
+        return {
+          success: true,
+          accepted: true,
+          code: '0',
+          description: statusMessage || 'CDR recuperado pero sin XML dentro del ZIP'
+        }
+      }
+
+      const cdrXML = await cdrZip.files[cdrFileName].async('text')
+
+      // Parsear CDR para extraer código y descripción
+      const cdrParser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        removeNSPrefix: true
+      })
+      const cdr = cdrParser.parse(cdrXML)
+
+      const extractText = (node) => {
+        if (node === null || node === undefined) return undefined
+        if (typeof node === 'object' && node['#text'] !== undefined) return node['#text']
+        return node
+      }
+
+      let responseCode = extractText(cdr.ApplicationResponse?.ResponseCode)
+      let description = extractText(cdr.ApplicationResponse?.Note)
+
+      const docResponse = cdr.ApplicationResponse?.DocumentResponse
+      if (docResponse?.Response) {
+        if (responseCode === null || responseCode === undefined) {
+          responseCode = extractText(docResponse.Response.ResponseCode)
+        }
+        if (!description && docResponse.Response.Description) {
+          description = extractText(docResponse.Response.Description)
+        }
+      }
+
+      if (responseCode === null || responseCode === undefined) {
+        responseCode = '0'
+      }
+      responseCode = String(responseCode)
+
+      const accepted = responseCode === '0' || responseCode.startsWith('4')
+
+      console.log(`📋 CDR recuperado via getStatusCdr: code=${responseCode}, accepted=${accepted}`)
+
+      return {
+        success: true,
+        accepted,
+        code: responseCode,
+        description: description || statusMessage || 'CDR recuperado de SUNAT',
+        cdrData: cdrXML
+      }
+    }
+
+    // Otros códigos de estado
+    return {
+      success: false,
+      code: String(statusCode),
+      error: statusMessage || `Estado ${statusCode} al consultar CDR`
+    }
+
+  } catch (error) {
+    console.error('Error al parsear respuesta getStatusCdr:', error)
+    return {
+      success: false,
+      error: 'Error al procesar respuesta de getStatusCdr'
+    }
+  }
 }
 
 /**
