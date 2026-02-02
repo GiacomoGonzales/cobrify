@@ -513,27 +513,51 @@ export const sendInvoiceToSunat = onRequest(
         const errorMessage = emissionResult.error || emissionResult.description || 'Error al emitir comprobante'
         const errorCode = emissionResult.responseCode || 'ERROR'
 
-        // Verificar si SUNAT dice que el documento ya fue registrado (puede venir como SOAP Fault)
+        // Verificar si SUNAT dice que el documento ya fue registrado o aceptado (puede venir como SOAP Fault)
         // Esto pasa en reintentos cuando el primer envío sí llegó a SUNAT
-        const isAlreadyRegisteredError = errorCode === '1033' ||
-          (errorMessage && errorMessage.toLowerCase().includes('registrado previamente'))
+        // El código puede venir como "1033" o "soap-env:Client.1033"
+        const errorMsgLower = (errorMessage || '').toLowerCase()
+        const isAlreadyRegisteredError = errorCode === '1033' || errorCode.includes('1033') ||
+          errorMsgLower.includes('registrado previamente') ||
+          errorMsgLower.includes('ha sido aceptada') ||
+          errorMsgLower.includes('ha sido aceptado')
 
         if (isAlreadyRegisteredError) {
           console.log('📋 Documento ya registrado en SUNAT (detectado en error path) - tratando como ACEPTADO')
           console.log(`   Código: ${errorCode}, Mensaje: ${errorMessage}`)
 
-          await invoiceRef.update({
+          // Intentar guardar XML y CDR en Storage si están disponibles
+          let errXmlStorageUrl = null
+          let errCdrStorageUrl = null
+          const documentNumber = `${invoiceData.series}-${invoiceData.correlativeNumber}`
+          try {
+            if (emissionResult.xml) {
+              errXmlStorageUrl = await saveToStorage(userId, invoiceId, `${documentNumber}.xml`, emissionResult.xml)
+            }
+            if (emissionResult.cdrData) {
+              errCdrStorageUrl = await saveToStorage(userId, invoiceId, `${documentNumber}-CDR.xml`, emissionResult.cdrData)
+            }
+          } catch (storageErr) {
+            console.error('⚠️ Error guardando archivos en Storage (error path):', storageErr.message)
+          }
+
+          const updateObj = {
             sunatStatus: 'accepted',
-            sunatResponse: {
+            sunatResponse: sanitizeForFirestore(removeUndefined({
               code: errorCode,
               description: errorMessage,
               observations: ['Documento ya existía en SUNAT - aceptado en reintento'],
-              method: emissionResult.method
-            },
+              method: emissionResult.method,
+              cdrData: emissionResult.cdrData,
+              xmlStorageUrl: errXmlStorageUrl,
+              cdrStorageUrl: errCdrStorageUrl,
+            })),
             sunatSendingStartedAt: null,
             sunatSentAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
-          })
+          }
+
+          await invoiceRef.update(updateObj)
 
           res.status(200).json({
             success: true,
@@ -605,11 +629,15 @@ export const sendInvoiceToSunat = onRequest(
       }
 
       // 4. Actualizar estado en Firestore
-      // Código 1033 = "El comprobante fue registrado previamente"
+      // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
       // Esto puede pasar en reintentos o cuando SUNAT tuvo problemas temporales
+      const descLower = (emissionResult.description || '').toLowerCase()
       const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
-        (emissionResult.description && emissionResult.description.includes('registrado previamente'))
+        (emissionResult.responseCode || '').includes('1033') ||
+        descLower.includes('registrado previamente') ||
+        descLower.includes('ha sido aceptada') ||
+        descLower.includes('ha sido aceptado')
 
       if (isAlreadyRegistered) {
         // Verificar si este documento tiene historial de envío desde nuestro sistema
@@ -1220,21 +1248,42 @@ export const sendCreditNoteToSunat = onRequest(
         const ncErrorMessage = emissionResult.error || emissionResult.description || 'Error al emitir nota de crédito'
         const ncErrorCode = emissionResult.responseCode || 'ERROR'
 
-        // Verificar si SUNAT dice que ya fue registrada (puede venir como SOAP Fault en reintentos)
-        const ncAlreadyRegistered = ncErrorCode === '1033' ||
-          (ncErrorMessage && ncErrorMessage.toLowerCase().includes('registrado previamente'))
+        // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
+        const ncMsgLower = (ncErrorMessage || '').toLowerCase()
+        const ncAlreadyRegistered = ncErrorCode === '1033' || (ncErrorCode || '').includes('1033') ||
+          ncMsgLower.includes('registrado previamente') ||
+          ncMsgLower.includes('ha sido aceptada') ||
+          ncMsgLower.includes('ha sido aceptado')
 
         if (ncAlreadyRegistered) {
           console.log('📋 NC ya registrada en SUNAT (detectado en error path) - tratando como ACEPTADA')
 
+          // Intentar guardar XML y CDR en Storage si están disponibles
+          let errXmlStorageUrl = null
+          let errCdrStorageUrl = null
+          const documentNumber = `${creditNoteData.series}-${creditNoteData.correlativeNumber}`
+          try {
+            if (emissionResult.xml) {
+              errXmlStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}.xml`, emissionResult.xml)
+            }
+            if (emissionResult.cdrData) {
+              errCdrStorageUrl = await saveToStorage(userId, creditNoteId, `${documentNumber}-CDR.xml`, emissionResult.cdrData)
+            }
+          } catch (storageErr) {
+            console.error('⚠️ Error guardando archivos NC en Storage (error path):', storageErr.message)
+          }
+
           await creditNoteRef.update({
             sunatStatus: 'accepted',
-            sunatResponse: {
+            sunatResponse: sanitizeForFirestore(removeUndefined({
               code: ncErrorCode,
               description: ncErrorMessage,
               observations: ['Documento ya existía en SUNAT - aceptado en reintento'],
-              method: emissionResult.method
-            },
+              method: emissionResult.method,
+              cdrData: emissionResult.cdrData,
+              xmlStorageUrl: errXmlStorageUrl,
+              cdrStorageUrl: errCdrStorageUrl,
+            })),
             sunatSendingStartedAt: null,
             sunatSentAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
@@ -1271,13 +1320,13 @@ export const sendCreditNoteToSunat = onRequest(
       }
 
       // 5. Actualizar estado en Firestore
-      // Código 1033 = "El comprobante fue registrado previamente"
-      // Esto puede pasar cuando:
-      // - El primer envío llegó a SUNAT pero no recibimos respuesta (timeout)
-      // - Reenviamos y SUNAT dice que ya existe
-      // En ambos casos, si estamos reenviando desde nuestra app, debemos tratarlo como aceptado
+      // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
+      const ncDescLower = (emissionResult.description || '').toLowerCase()
       const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
-        (emissionResult.description && emissionResult.description.includes('registrado previamente'))
+        (emissionResult.responseCode || '').includes('1033') ||
+        ncDescLower.includes('registrado previamente') ||
+        ncDescLower.includes('ha sido aceptada') ||
+        ncDescLower.includes('ha sido aceptado')
 
       if (isAlreadyRegistered) {
         // Si el documento está en estado pending, signed, rejected o sending,
@@ -1816,21 +1865,42 @@ export const sendDebitNoteToSunat = onRequest(
         const ndErrorMessage = emissionResult.error || emissionResult.description || 'Error al emitir nota de débito'
         const ndErrorCode = emissionResult.responseCode || 'ERROR'
 
-        // Verificar si SUNAT dice que ya fue registrada (puede venir como SOAP Fault en reintentos)
-        const ndAlreadyRegistered = ndErrorCode === '1033' ||
-          (ndErrorMessage && ndErrorMessage.toLowerCase().includes('registrado previamente'))
+        // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
+        const ndMsgLower = (ndErrorMessage || '').toLowerCase()
+        const ndAlreadyRegistered = ndErrorCode === '1033' || (ndErrorCode || '').includes('1033') ||
+          ndMsgLower.includes('registrado previamente') ||
+          ndMsgLower.includes('ha sido aceptada') ||
+          ndMsgLower.includes('ha sido aceptado')
 
         if (ndAlreadyRegistered) {
           console.log('📋 ND ya registrada en SUNAT (detectado en error path) - tratando como ACEPTADA')
 
+          // Intentar guardar XML y CDR en Storage si están disponibles
+          let errXmlStorageUrl = null
+          let errCdrStorageUrl = null
+          const documentNumber = `${debitNoteData.series}-${debitNoteData.correlativeNumber}`
+          try {
+            if (emissionResult.xml) {
+              errXmlStorageUrl = await saveToStorage(userId, debitNoteId, `${documentNumber}.xml`, emissionResult.xml)
+            }
+            if (emissionResult.cdrData) {
+              errCdrStorageUrl = await saveToStorage(userId, debitNoteId, `${documentNumber}-CDR.xml`, emissionResult.cdrData)
+            }
+          } catch (storageErr) {
+            console.error('⚠️ Error guardando archivos ND en Storage (error path):', storageErr.message)
+          }
+
           await debitNoteRef.update({
             sunatStatus: 'accepted',
-            sunatResponse: {
+            sunatResponse: sanitizeForFirestore(removeUndefined({
               code: ndErrorCode,
               description: ndErrorMessage,
               observations: ['Documento ya existía en SUNAT - aceptado en reintento'],
-              method: emissionResult.method
-            },
+              method: emissionResult.method,
+              cdrData: emissionResult.cdrData,
+              xmlStorageUrl: errXmlStorageUrl,
+              cdrStorageUrl: errCdrStorageUrl,
+            })),
             sunatSendingStartedAt: null,
             sunatSentAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
@@ -1867,9 +1937,13 @@ export const sendDebitNoteToSunat = onRequest(
       }
 
       // 5. Actualizar estado en Firestore
-      // Código 1033 = "El comprobante fue registrado previamente"
+      // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
+      const ndDescLower = (emissionResult.description || '').toLowerCase()
       const isAlreadyRegistered = emissionResult.responseCode === '1033' ||
-        (emissionResult.description && emissionResult.description.includes('registrado previamente'))
+        (emissionResult.responseCode || '').includes('1033') ||
+        ndDescLower.includes('registrado previamente') ||
+        ndDescLower.includes('ha sido aceptada') ||
+        ndDescLower.includes('ha sido aceptado')
 
       if (isAlreadyRegistered) {
         const allowedStatuses = ['pending', 'signed', 'rejected', 'sending']
@@ -4381,12 +4455,15 @@ export const voidInvoice = onRequest(
       }
 
       // Error en la baja
-      const errorMsg = statusResult.error || 'SUNAT rechazó la comunicación de baja'
+      const errorMsg = statusResult.error || statusResult.description || 'SUNAT rechazó la comunicación de baja'
+      const errorCode = statusResult.code || null
+
+      console.error(`❌ Baja rechazada por SUNAT: code=${errorCode}, msg=${errorMsg}`)
 
       await voidedDocsRef.doc(voidedDocRef.id).update({
         status: 'rejected',
         error: errorMsg,
-        responseCode: statusResult.code || null,
+        responseCode: errorCode,
         processedAt: FieldValue.serverTimestamp()
       })
 
@@ -4399,7 +4476,7 @@ export const voidInvoice = onRequest(
 
       res.status(400).json({
         success: false,
-        error: errorMsg
+        error: `SUNAT rechazó la anulación (código ${errorCode}): ${errorMsg}`
       })
 
     } catch (error) {

@@ -59,7 +59,7 @@ export async function sendToSunat(signedXML, config) {
         'Content-Type': 'text/xml; charset=utf-8',
         'SOAPAction': 'urn:sendBill'
       },
-      timeout: 60000 // 60 segundos timeout
+      timeout: 120000 // 120 segundos timeout (SUNAT puede tardar)
     })
 
     console.log('✅ Respuesta recibida de SUNAT')
@@ -82,6 +82,16 @@ export async function sendToSunat(signedXML, config) {
 
       if (error.response.data) {
         const errorResult = parseSunatError(error.response.data)
+
+        // IMPORTANTE: Si el SOAP Fault indica que el documento fue ACEPTADO,
+        // retornar el resultado en vez de lanzar error.
+        // SUNAT a veces responde con HTTP 500 + SOAP Fault "ha sido aceptada"
+        // cuando el documento ya fue procesado (timeout en envío anterior, reintentos, etc.)
+        if (errorResult.accepted) {
+          console.log('✅ SOAP Fault (HTTP error) indica aceptación - retornando resultado exitoso')
+          return errorResult
+        }
+
         throw new Error(errorResult.description || 'Error al enviar a SUNAT')
       }
     }
@@ -188,9 +198,29 @@ async function parseSunatResponse(soapResponse) {
 
       console.log(`🚨 SUNAT devolvió SOAP Fault: [${faultcode}] ${faultstring}`)
 
+      // Extraer código numérico del faultcode (e.g. "soap-env:Client.1033" → "1033")
+      const numericCode = faultcode.match(/\.(\d+)$/)?.[1] || faultcode
+
+      // Detectar si el SOAP Fault indica que el documento fue ACEPTADO
+      // SUNAT a veces retorna Fault con mensajes como "ha sido aceptada" o "registrado previamente"
+      const faultLower = faultstring.toLowerCase()
+      const isAcceptedFault = faultLower.includes('ha sido aceptada') ||
+                              faultLower.includes('ha sido aceptado') ||
+                              (numericCode === '1033' && !faultLower.includes('rechaz'))
+
+      if (isAcceptedFault) {
+        console.log(`✅ SOAP Fault indica aceptación: [${faultcode}] ${faultstring}`)
+        return {
+          accepted: true,
+          code: numericCode,
+          description: faultstring,
+          observations: ['Documento aceptado (detectado en SOAP Fault)']
+        }
+      }
+
       return {
         accepted: false,
-        code: faultcode,
+        code: numericCode,
         description: faultstring,
         observations: []
       }
@@ -333,9 +363,28 @@ function parseSunatError(soapResponse) {
 
       console.log(`🚨 SUNAT Error: [${faultcode}] ${faultstring}`)
 
+      // Extraer código numérico del faultcode (e.g. "soap-env:Client.1033" → "1033")
+      const numericCode = faultcode.match(/\.(\d+)$/)?.[1] || faultcode
+
+      // Detectar si el SOAP Fault indica que el documento fue ACEPTADO
+      const faultLower = faultstring.toLowerCase()
+      const isAcceptedFault = faultLower.includes('ha sido aceptada') ||
+                              faultLower.includes('ha sido aceptado') ||
+                              (numericCode === '1033' && !faultLower.includes('rechaz'))
+
+      if (isAcceptedFault) {
+        console.log(`✅ SOAP Fault (error path) indica aceptación: [${faultcode}] ${faultstring}`)
+        return {
+          accepted: true,
+          code: numericCode,
+          description: faultstring,
+          observations: ['Documento aceptado (detectado en SOAP Fault - HTTP error)']
+        }
+      }
+
       return {
         accepted: false,
-        code: faultcode,
+        code: numericCode,
         description: faultstring,
         observations: []
       }
@@ -827,11 +876,17 @@ async function parseGetStatusResponse(soapResponse) {
         if (responseCode && typeof responseCode === 'object') {
           responseCode = responseCode['#text'] || responseCode['_'] || Object.values(responseCode)[0]
         }
+        // Lo mismo para description
+        if (description && typeof description === 'object') {
+          description = description['#text'] || description['_'] || Object.values(description)[0]
+        }
 
-        // Si no encontramos código, asumir 0 si hay CDR (SUNAT envió respuesta)
-        if (responseCode === null || responseCode === undefined) {
-          // Si hay CDR y no hay statusCode de error, asumir aceptado
-          responseCode = statusCode || '0'
+        // Normalizar a string
+        responseCode = responseCode !== null && responseCode !== undefined ? String(responseCode) : null
+
+        // Si no encontramos código, usar statusCode o UNKNOWN
+        if (!responseCode) {
+          responseCode = statusCode ? String(statusCode) : 'UNKNOWN'
         }
 
         console.log(`📋 CDR de baja: statusCode=${statusCode}, responseCode=${responseCode}, description=${description}`)
@@ -841,13 +896,15 @@ async function parseGetStatusResponse(soapResponse) {
           return {
             success: false,
             accepted: false,
-            code: String(responseCode || '99'),
+            code: responseCode || '99',
             error: description || 'SUNAT rechazó la comunicación de baja',
             cdrData: cdrXML
           }
         }
 
-        const accepted = (responseCode === '0' || responseCode === 0) && (statusCode === '0' || statusCode === 0 || !statusCode)
+        // Código 0 = Aceptado, 4xxx = Aceptado con observaciones
+        const accepted = (responseCode === '0' || responseCode.startsWith('4')) &&
+                         (statusCode === '0' || statusCode === 0 || !statusCode)
 
         return {
           success: true,
