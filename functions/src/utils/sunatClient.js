@@ -231,12 +231,22 @@ async function parseSunatResponse(soapResponse) {
       // 1. Directamente en ApplicationResponse/ResponseCode (CDRs simples)
       // 2. En ApplicationResponse/DocumentResponse/Response/ResponseCode (CDRs con errores)
 
-      let responseCode = cdr.ApplicationResponse?.ResponseCode
+      // Helper: extraer valor de texto de un nodo XML parseado
+      // fast-xml-parser con ignoreAttributes:false puede devolver:
+      // - valor simple: 0, '0', 'texto'
+      // - objeto con atributos: { '#text': 0, '@_listAgencyName': 'PE:SUNAT' }
+      const extractText = (node) => {
+        if (node === null || node === undefined) return undefined
+        if (typeof node === 'object' && node['#text'] !== undefined) return node['#text']
+        return node
+      }
+
+      let responseCode = extractText(cdr.ApplicationResponse?.ResponseCode)
 
       // El mensaje puede estar en diferentes lugares:
       // 1. Note - mensaje general
       // 2. DocumentResponse > Response > Description - mensaje específico de error
-      let description = cdr.ApplicationResponse?.Note
+      let description = extractText(cdr.ApplicationResponse?.Note)
 
       // Buscar en DocumentResponse para obtener código y mensaje más específico
       const docResponse = cdr.ApplicationResponse?.DocumentResponse
@@ -244,30 +254,32 @@ async function parseSunatResponse(soapResponse) {
         const response = docResponse.Response
         // CRÍTICO: Si el ResponseCode no estaba en el nivel superior, buscarlo aquí
         if ((responseCode === null || responseCode === undefined) && response?.ResponseCode) {
-          responseCode = response.ResponseCode
+          responseCode = extractText(response.ResponseCode)
           console.log(`📋 ResponseCode encontrado en DocumentResponse/Response: ${responseCode}`)
         }
         if (response?.Description) {
-          description = response.Description
+          description = extractText(response.Description)
         }
       }
 
-      // IMPORTANTE: Solo usar default 0 si realmente no se encontró código en ningún lugar
-      // NO asumir aceptado si no hay código - es más seguro reportar como error
+      // IMPORTANTE: Solo usar default si realmente no se encontró código en ningún lugar
       if (responseCode === null || responseCode === undefined) {
         console.warn('⚠️ No se encontró ResponseCode en el CDR. Estructura:', JSON.stringify(Object.keys(cdr), null, 2))
         responseCode = 'UNKNOWN'
       }
 
+      // Normalizar a string para comparaciones consistentes
+      responseCode = String(responseCode)
+
       // Si aún no hay descripción, usar default según el código
       if (!description) {
-        description = responseCode === '0' || responseCode === 0
+        description = responseCode === '0'
           ? 'Aceptado por SUNAT'
           : `Rechazado por SUNAT (código ${responseCode})`
       }
 
       // Código 0 = Aceptado, cualquier otro código = Rechazado
-      const accepted = responseCode === '0' || responseCode === 0
+      const accepted = responseCode === '0'
 
       console.log(`📋 CDR parseado: code=${responseCode}, accepted=${accepted}, description=${description}`)
 
