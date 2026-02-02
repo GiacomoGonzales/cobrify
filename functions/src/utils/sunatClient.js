@@ -271,15 +271,22 @@ async function parseSunatResponse(soapResponse) {
       // Normalizar a string para comparaciones consistentes
       responseCode = String(responseCode)
 
+      // Determinar si fue aceptado:
+      // - Código 0 = Aceptado sin observaciones
+      // - Códigos 4xxx = Aceptado CON observaciones (warnings, no errores)
+      // - Códigos 2xxx/3xxx = Rechazado
+      const accepted = responseCode === '0' || responseCode.startsWith('4')
+
       // Si aún no hay descripción, usar default según el código
       if (!description) {
-        description = responseCode === '0'
+        description = accepted
           ? 'Aceptado por SUNAT'
           : `Rechazado por SUNAT (código ${responseCode})`
       }
 
-      // Código 0 = Aceptado, cualquier otro código = Rechazado
-      const accepted = responseCode === '0'
+      if (responseCode.startsWith('4')) {
+        console.log(`📋 Documento aceptado con observaciones (código ${responseCode}): ${description}`)
+      }
 
       console.log(`📋 CDR parseado: code=${responseCode}, accepted=${accepted}, description=${description}`)
 

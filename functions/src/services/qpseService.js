@@ -516,8 +516,8 @@ function parseQPseResponse(qpseResponse) {
   // - sunat_success: true/false = si SUNAT aceptó el comprobante
   // Debemos verificar sunat_success, NO success
   // CRÍTICO: Si hay un responseCode específico (diferente de 0), ese tiene prioridad sobre sunat_success
-  const esCodigoAceptado = responseCode === '0' || responseCode === '0000'
-  const esCodigoRechazado = responseCode && responseCode !== '0' && responseCode !== '0000' && responseCode !== ''
+  const esCodigoAceptado = responseCode === '0' || responseCode === '0000' || String(responseCode).startsWith('4')
+  const esCodigoRechazado = responseCode && !esCodigoAceptado && responseCode !== ''
   const sinCodigoPeroExitoso = !responseCode && qpseResponse.sunat_success === true
   const accepted = esCodigoAceptado || (!esCodigoRechazado && sinCodigoPeroExitoso)
 
