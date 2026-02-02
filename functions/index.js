@@ -513,6 +513,37 @@ export const sendInvoiceToSunat = onRequest(
         const errorMessage = emissionResult.error || emissionResult.description || 'Error al emitir comprobante'
         const errorCode = emissionResult.responseCode || 'ERROR'
 
+        // Verificar si SUNAT dice que el documento ya fue registrado (puede venir como SOAP Fault)
+        // Esto pasa en reintentos cuando el primer envío sí llegó a SUNAT
+        const isAlreadyRegisteredError = errorCode === '1033' ||
+          (errorMessage && errorMessage.toLowerCase().includes('registrado previamente'))
+
+        if (isAlreadyRegisteredError) {
+          console.log('📋 Documento ya registrado en SUNAT (detectado en error path) - tratando como ACEPTADO')
+          console.log(`   Código: ${errorCode}, Mensaje: ${errorMessage}`)
+
+          await invoiceRef.update({
+            sunatStatus: 'accepted',
+            sunatResponse: {
+              code: errorCode,
+              description: errorMessage,
+              observations: ['Documento ya existía en SUNAT - aceptado en reintento'],
+              method: emissionResult.method
+            },
+            sunatSendingStartedAt: null,
+            sunatSentAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+
+          res.status(200).json({
+            success: true,
+            message: 'El documento ya fue aceptado por SUNAT previamente',
+            method: emissionResult.method,
+            alreadyRegistered: true
+          })
+          return
+        }
+
         // Verificar si es error temporal (SUNAT caído, timeout, etc.)
         const isTransientError = isTransientSunatError(errorCode, errorMessage)
 
@@ -1186,12 +1217,44 @@ export const sendCreditNoteToSunat = onRequest(
       console.log(`📡 Método usado: ${emissionResult.method}`)
 
       if (!emissionResult.success) {
+        const ncErrorMessage = emissionResult.error || emissionResult.description || 'Error al emitir nota de crédito'
+        const ncErrorCode = emissionResult.responseCode || 'ERROR'
+
+        // Verificar si SUNAT dice que ya fue registrada (puede venir como SOAP Fault en reintentos)
+        const ncAlreadyRegistered = ncErrorCode === '1033' ||
+          (ncErrorMessage && ncErrorMessage.toLowerCase().includes('registrado previamente'))
+
+        if (ncAlreadyRegistered) {
+          console.log('📋 NC ya registrada en SUNAT (detectado en error path) - tratando como ACEPTADA')
+
+          await creditNoteRef.update({
+            sunatStatus: 'accepted',
+            sunatResponse: {
+              code: ncErrorCode,
+              description: ncErrorMessage,
+              observations: ['Documento ya existía en SUNAT - aceptado en reintento'],
+              method: emissionResult.method
+            },
+            sunatSendingStartedAt: null,
+            sunatSentAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+
+          res.status(200).json({
+            success: true,
+            message: 'La nota de crédito ya fue aceptada por SUNAT previamente',
+            method: emissionResult.method,
+            alreadyRegistered: true
+          })
+          return
+        }
+
         // Actualizar NC con error
         await creditNoteRef.update({
           sunatStatus: 'rejected',
           sunatResponse: {
-            code: 'ERROR',
-            description: emissionResult.error || 'Error al emitir nota de crédito',
+            code: ncErrorCode,
+            description: ncErrorMessage,
             observations: [],
             error: true,
             method: emissionResult.method
@@ -1201,7 +1264,7 @@ export const sendCreditNoteToSunat = onRequest(
         })
 
         res.status(500).json({
-          error: emissionResult.error || 'Error al emitir nota de crédito',
+          error: ncErrorMessage,
           method: emissionResult.method
         })
         return
@@ -1750,12 +1813,44 @@ export const sendDebitNoteToSunat = onRequest(
       console.log(`📡 Método usado: ${emissionResult.method}`)
 
       if (!emissionResult.success) {
+        const ndErrorMessage = emissionResult.error || emissionResult.description || 'Error al emitir nota de débito'
+        const ndErrorCode = emissionResult.responseCode || 'ERROR'
+
+        // Verificar si SUNAT dice que ya fue registrada (puede venir como SOAP Fault en reintentos)
+        const ndAlreadyRegistered = ndErrorCode === '1033' ||
+          (ndErrorMessage && ndErrorMessage.toLowerCase().includes('registrado previamente'))
+
+        if (ndAlreadyRegistered) {
+          console.log('📋 ND ya registrada en SUNAT (detectado en error path) - tratando como ACEPTADA')
+
+          await debitNoteRef.update({
+            sunatStatus: 'accepted',
+            sunatResponse: {
+              code: ndErrorCode,
+              description: ndErrorMessage,
+              observations: ['Documento ya existía en SUNAT - aceptado en reintento'],
+              method: emissionResult.method
+            },
+            sunatSendingStartedAt: null,
+            sunatSentAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+
+          res.status(200).json({
+            success: true,
+            message: 'La nota de débito ya fue aceptada por SUNAT previamente',
+            method: emissionResult.method,
+            alreadyRegistered: true
+          })
+          return
+        }
+
         // Actualizar ND con error
         await debitNoteRef.update({
           sunatStatus: 'rejected',
           sunatResponse: {
-            code: 'ERROR',
-            description: emissionResult.error || 'Error al emitir nota de débito',
+            code: ndErrorCode,
+            description: ndErrorMessage,
             observations: [],
             error: true,
             method: emissionResult.method
@@ -1765,7 +1860,7 @@ export const sendDebitNoteToSunat = onRequest(
         })
 
         res.status(500).json({
-          error: emissionResult.error || 'Error al emitir nota de débito',
+          error: ndErrorMessage,
           method: emissionResult.method
         })
         return
