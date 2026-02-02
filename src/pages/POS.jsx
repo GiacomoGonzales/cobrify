@@ -2065,6 +2065,18 @@ export default function POS() {
       }
     }
 
+    // Si tiene detracción, validar que exista cuenta del Banco de la Nación
+    if (hasDetraction && detractionType) {
+      let bnAccount = detractionBankAccount
+      if (!bnAccount && companySettings?.bankAccountsList && Array.isArray(companySettings.bankAccountsList)) {
+        bnAccount = companySettings.bankAccountsList.find(acc => acc.accountType === 'detracciones')?.accountNumber
+      }
+      if (!bnAccount) {
+        toast.error('Para emitir con detraccion debes configurar tu cuenta del Banco de la Nacion en Ajustes > Cuentas bancarias (tipo "detracciones")')
+        return
+      }
+    }
+
     // Si es boleta mayor a 700 soles, validar DNI obligatorio (según normativa SUNAT)
     if (documentType === 'boleta' && amounts.total > 700) {
       if (!customerData.documentNumber) {

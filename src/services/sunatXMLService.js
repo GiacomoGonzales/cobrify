@@ -206,6 +206,8 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   if (hasDetraction && detractionAccount) {
     paymentMeansXml = `
   <cac:PaymentMeans>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansCode listAgencyName="PE:SUNAT" listName="Medio de pago" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo59">001</cbc:PaymentMeansCode>
     <cac:PayeeFinancialAccount>
       <cbc:ID>${detractionAccount}</cbc:ID>
     </cac:PayeeFinancialAccount>
@@ -218,22 +220,45 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   const paymentInstallments = invoiceData.paymentInstallments || []
   const paymentTotalAmount = parseFloat(total) || 0
 
+  // Calcular monto neto (descontando detracción) para crédito/cuotas
+  const detractionAmt = hasDetraction ? parseFloat(invoiceData.detractionAmount) : 0
+  const netPayableAmount = paymentTotalAmount - detractionAmt
+
   let paymentTermsXml = ''
+
+  // === PaymentTerms de detracción (DEBE ir ANTES de FormaPago según SUNAT) ===
+  if (hasDetraction) {
+    paymentTermsXml += `
+  <cac:PaymentTerms>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansID schemeAgencyName="PE:SUNAT" schemeName="Codigo de detraccion" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo54">${invoiceData.detractionType}</cbc:PaymentMeansID>
+    <cbc:Note>${netPayableAmount.toFixed(2)}</cbc:Note>
+    <cbc:PaymentPercent>${invoiceData.detractionRate || 0}</cbc:PaymentPercent>
+    <cbc:Amount currencyID="${currency}">${detractionAmt.toFixed(2)}</cbc:Amount>
+  </cac:PaymentTerms>`
+  }
+
   if (paymentType === 'credito') {
+    const creditAmount = hasDetraction ? netPayableAmount : paymentTotalAmount
+
     paymentTermsXml += `
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
-    <cbc:Amount currencyID="${currency}">${paymentTotalAmount.toFixed(2)}</cbc:Amount>
+    <cbc:Amount currencyID="${currency}">${creditAmount.toFixed(2)}</cbc:Amount>
   </cac:PaymentTerms>`
 
     if (paymentInstallments.length > 0) {
+      const adjustFactor = hasDetraction && paymentTotalAmount > 0
+        ? netPayableAmount / paymentTotalAmount : 1
+
       paymentInstallments.forEach((cuota, index) => {
+        const cuotaAmount = parseFloat(cuota.amount || 0) * adjustFactor
         paymentTermsXml += `
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Cuota${String(index + 1).padStart(3, '0')}</cbc:PaymentMeansID>
-    <cbc:Amount currencyID="${currency}">${parseFloat(cuota.amount || 0).toFixed(2)}</cbc:Amount>${cuota.dueDate ? `
+    <cbc:Amount currencyID="${currency}">${cuotaAmount.toFixed(2)}</cbc:Amount>${cuota.dueDate ? `
     <cbc:PaymentDueDate>${cuota.dueDate}</cbc:PaymentDueDate>` : ''}
   </cac:PaymentTerms>`
       })
@@ -242,7 +267,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
-    <cbc:Amount currencyID="${currency}">${paymentTotalAmount.toFixed(2)}</cbc:Amount>
+    <cbc:Amount currencyID="${currency}">${creditAmount.toFixed(2)}</cbc:Amount>
     <cbc:PaymentDueDate>${paymentDueDate}</cbc:PaymentDueDate>
   </cac:PaymentTerms>`
     }
@@ -251,16 +276,6 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>
-  </cac:PaymentTerms>`
-  }
-
-  // === PaymentTerms de detracción ===
-  if (hasDetraction) {
-    paymentTermsXml += `
-  <cac:PaymentTerms>
-    <cbc:ID schemeName="SUNAT:Codigo de detraccion" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo54">${invoiceData.detractionType}</cbc:ID>
-    <cbc:PaymentPercent>${invoiceData.detractionRate || 0}</cbc:PaymentPercent>
-    <cbc:Amount currencyID="${currency}">${parseFloat(invoiceData.detractionAmount).toFixed(2)}</cbc:Amount>
   </cac:PaymentTerms>`
   }
 
@@ -283,7 +298,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   <cbc:ID>${documentNumber}</cbc:ID>
   <cbc:IssueDate>${issueDate}</cbc:IssueDate>
   <cbc:IssueTime>${issueTime}</cbc:IssueTime>
-  <cbc:InvoiceTypeCode listID="0101">${documentTypeCode}</cbc:InvoiceTypeCode>${spotLegend}
+  <cbc:InvoiceTypeCode listID="${hasDetraction ? '1001' : '0101'}" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01">${documentTypeCode}</cbc:InvoiceTypeCode>${spotLegend}
   <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha">${currency}</cbc:DocumentCurrencyCode>
   <cac:Signature>
     <cbc:ID>SignatureSP</cbc:ID>

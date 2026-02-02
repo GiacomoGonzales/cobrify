@@ -218,38 +218,45 @@ async function parseSunatResponse(soapResponse) {
 
       const cdrXML = await cdrZip.files[cdrFileName].async('text')
 
-      // Parsear CDR
-      const cdr = parser.parse(cdrXML)
+      // Parsear CDR con removeNSPrefix para manejar prefijos como ar:ApplicationResponse
+      const cdrParser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        removeNSPrefix: true
+      })
+      const cdr = cdrParser.parse(cdrXML)
 
       // Extraer información del CDR
       // IMPORTANTE: El ResponseCode puede estar en diferentes ubicaciones según el tipo de CDR:
-      // 1. Directamente en ApplicationResponse/cbc:ResponseCode (CDRs simples)
-      // 2. En ApplicationResponse/cac:DocumentResponse/cac:Response/cbc:ResponseCode (CDRs con errores)
+      // 1. Directamente en ApplicationResponse/ResponseCode (CDRs simples)
+      // 2. En ApplicationResponse/DocumentResponse/Response/ResponseCode (CDRs con errores)
 
-      let responseCode = cdr.ApplicationResponse?.['cbc:ResponseCode']
+      let responseCode = cdr.ApplicationResponse?.ResponseCode
 
       // El mensaje puede estar en diferentes lugares:
-      // 1. cbc:Note - mensaje general
-      // 2. cac:DocumentResponse > cac:Response > cbc:Description - mensaje específico de error
-      let description = cdr.ApplicationResponse?.['cbc:Note']
+      // 1. Note - mensaje general
+      // 2. DocumentResponse > Response > Description - mensaje específico de error
+      let description = cdr.ApplicationResponse?.Note
 
       // Buscar en DocumentResponse para obtener código y mensaje más específico
-      const docResponse = cdr.ApplicationResponse?.['cac:DocumentResponse']
+      const docResponse = cdr.ApplicationResponse?.DocumentResponse
       if (docResponse) {
-        const response = docResponse['cac:Response']
+        const response = docResponse.Response
         // CRÍTICO: Si el ResponseCode no estaba en el nivel superior, buscarlo aquí
-        if ((responseCode === null || responseCode === undefined) && response?.['cbc:ResponseCode']) {
-          responseCode = response['cbc:ResponseCode']
+        if ((responseCode === null || responseCode === undefined) && response?.ResponseCode) {
+          responseCode = response.ResponseCode
           console.log(`📋 ResponseCode encontrado en DocumentResponse/Response: ${responseCode}`)
         }
-        if (response?.['cbc:Description']) {
-          description = response['cbc:Description']
+        if (response?.Description) {
+          description = response.Description
         }
       }
 
-      // Si aún no hay responseCode, usar default 0 (solo si realmente no hay código)
+      // IMPORTANTE: Solo usar default 0 si realmente no se encontró código en ningún lugar
+      // NO asumir aceptado si no hay código - es más seguro reportar como error
       if (responseCode === null || responseCode === undefined) {
-        responseCode = '0'
+        console.warn('⚠️ No se encontró ResponseCode en el CDR. Estructura:', JSON.stringify(Object.keys(cdr), null, 2))
+        responseCode = 'UNKNOWN'
       }
 
       // Si aún no hay descripción, usar default según el código

@@ -500,15 +500,18 @@ export function generateInvoiceXML(invoiceData, businessData) {
     // PaymentMeans - Medio de pago (cuenta del Banco de la Nación)
     const paymentMeans = root.ele('cac:PaymentMeans')
     paymentMeans.ele('cbc:ID').txt('Detraccion')
-    paymentMeans.ele('cbc:PaymentMeansCode').txt('001') // 001 = Transferencia bancaria
+    paymentMeans.ele('cbc:PaymentMeansCode', {
+      'listAgencyName': 'PE:SUNAT',
+      'listName': 'Medio de pago',
+      'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo59'
+    }).txt('001') // 001 = Transferencia bancaria
 
     // La cuenta del Banco de la Nación es OBLIGATORIA para detracciones (error 3034)
-    if (detractionAccount) {
-      const payeeAccount = paymentMeans.ele('cac:PayeeFinancialAccount')
-      payeeAccount.ele('cbc:ID').txt(detractionAccount)
-    } else {
-      console.warn('⚠️ ADVERTENCIA: No se encontró cuenta de detracciones. SUNAT rechazará con error 3034.')
+    if (!detractionAccount) {
+      throw new Error('DETRACCION_SIN_CUENTA: No se encontró cuenta de detracciones del Banco de la Nación. Configura tu cuenta BN en Ajustes > Cuentas bancarias (tipo "detracciones") antes de emitir con detracción.')
     }
+    const payeeAccount = paymentMeans.ele('cac:PayeeFinancialAccount')
+    payeeAccount.ele('cbc:ID').txt(detractionAccount)
   }
 
   // === FORMA DE PAGO / TIPO DE OPERACIÓN ===
@@ -521,36 +524,63 @@ export function generateInvoiceXML(invoiceData, businessData) {
   const paymentDueDate = invoiceData.paymentDueDate || null
   const paymentInstallments = invoiceData.paymentInstallments || []
 
-  // Monto total para PaymentTerms (usar el total de la factura directamente)
+  // Monto total para PaymentTerms
   const paymentTotalAmount = parseFloat(invoiceData.total) || 0
 
+  // Calcular monto neto (descontando detracción) para crédito/cuotas
+  const hasDetractionForPayment = invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0
+  const detractionAmount = hasDetractionForPayment ? parseFloat(invoiceData.detractionAmount) : 0
+  const netPayableAmount = paymentTotalAmount - detractionAmount
+
+  // === DETRACCIÓN - PaymentTerms (DEBE ir ANTES de FormaPago según SUNAT) ===
+  if (hasDetractionForPayment) {
+    const detractionTerms = root.ele('cac:PaymentTerms')
+    detractionTerms.ele('cbc:ID').txt('Detraccion')
+    detractionTerms.ele('cbc:PaymentMeansID', {
+      'schemeAgencyName': 'PE:SUNAT',
+      'schemeName': 'Codigo de detraccion',
+      'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo54'
+    }).txt(invoiceData.detractionType)
+    detractionTerms.ele('cbc:Note').txt(netPayableAmount.toFixed(2))
+    detractionTerms.ele('cbc:PaymentPercent').txt(String(invoiceData.detractionRate || 0))
+    detractionTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
+      .txt(detractionAmount.toFixed(2))
+  }
+
   if (paymentType === 'credito') {
-    // Pago al Crédito - Primer bloque indica el tipo y monto total pendiente
+    // Pago al Crédito - Monto pendiente descontando detracción
+    const creditAmount = hasDetractionForPayment ? netPayableAmount : paymentTotalAmount
+
     const paymentTermsCredito = root.ele('cac:PaymentTerms')
     paymentTermsCredito.ele('cbc:ID').txt('FormaPago')
     paymentTermsCredito.ele('cbc:PaymentMeansID').txt('Credito')
     paymentTermsCredito.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(paymentTotalAmount.toFixed(2))
+      .txt(creditAmount.toFixed(2))
 
-    // Si hay cuotas definidas, agregar cada una
+    // Si hay cuotas definidas, agregar cada una (ajustando montos si hay detracción)
     if (paymentInstallments.length > 0) {
+      // Calcular factor de ajuste para distribuir la detracción proporcionalmente en las cuotas
+      const adjustFactor = hasDetractionForPayment && paymentTotalAmount > 0
+        ? netPayableAmount / paymentTotalAmount : 1
+
       paymentInstallments.forEach((cuota, index) => {
         const cuotaTerms = root.ele('cac:PaymentTerms')
         cuotaTerms.ele('cbc:ID').txt('FormaPago')
         cuotaTerms.ele('cbc:PaymentMeansID').txt(`Cuota${String(index + 1).padStart(3, '0')}`)
+        const cuotaAmount = parseFloat(cuota.amount || 0) * adjustFactor
         cuotaTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-          .txt(parseFloat(cuota.amount || 0).toFixed(2))
+          .txt(cuotaAmount.toFixed(2))
         if (cuota.dueDate) {
           cuotaTerms.ele('cbc:PaymentDueDate').txt(cuota.dueDate)
         }
       })
     } else if (paymentDueDate) {
-      // Si no hay cuotas pero sí fecha de vencimiento, crear una sola cuota con el total
+      // Si no hay cuotas pero sí fecha de vencimiento, crear una sola cuota con el monto neto
       const cuotaTerms = root.ele('cac:PaymentTerms')
       cuotaTerms.ele('cbc:ID').txt('FormaPago')
       cuotaTerms.ele('cbc:PaymentMeansID').txt('Cuota001')
       cuotaTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-        .txt(paymentTotalAmount.toFixed(2))
+        .txt(creditAmount.toFixed(2))
       cuotaTerms.ele('cbc:PaymentDueDate').txt(paymentDueDate)
     }
   } else {
@@ -558,17 +588,6 @@ export function generateInvoiceXML(invoiceData, businessData) {
     const paymentTerms = root.ele('cac:PaymentTerms')
     paymentTerms.ele('cbc:ID').txt('FormaPago')
     paymentTerms.ele('cbc:PaymentMeansID').txt('Contado')
-  }
-
-  // === DETRACCIÓN - PaymentTerms ===
-  // PaymentTerms de detracción va después de los PaymentTerms de forma de pago
-  if (invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0) {
-    const detractionTerms = root.ele('cac:PaymentTerms')
-    detractionTerms.ele('cbc:ID').txt('Detraccion')
-    detractionTerms.ele('cbc:PaymentMeansID').txt(invoiceData.detractionType) // Código catálogo 54
-    detractionTerms.ele('cbc:PaymentPercent').txt(String(invoiceData.detractionRate || 0))
-    detractionTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(parseFloat(invoiceData.detractionAmount).toFixed(2))
   }
 
   // === DESCUENTO ===
