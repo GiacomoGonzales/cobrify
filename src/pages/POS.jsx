@@ -1691,6 +1691,21 @@ export default function POS() {
     }))
   }
 
+  // Actualizar nombre de un item en el carrito
+  const updateItemName = (itemId, name) => {
+    if (saleCompleted) {
+      toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
+      return
+    }
+    setCart(cart.map(item => {
+      const matchId = item.cartId || item.id
+      if (matchId === itemId) {
+        return { ...item, name }
+      }
+      return item
+    }))
+  }
+
   // Actualizar descuento individual de un item
   const updateItemDiscount = (itemId, discountValue) => {
     if (saleCompleted) {
@@ -4497,9 +4512,18 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {/* Nombre + Eliminar */}
                           <div className="flex-1 min-w-0 flex items-start justify-between">
                             <div className="flex-1 pr-2">
-                              <p className="font-semibold text-base text-gray-900 line-clamp-2">
-                                {item.name}
-                              </p>
+                              {companySettings?.allowNameEdit ? (
+                                <input
+                                  type="text"
+                                  value={item.name}
+                                  onChange={(e) => updateItemName(item.cartId || item.id, e.target.value)}
+                                  className="font-semibold text-base text-gray-900 w-full bg-transparent border-b border-dashed border-gray-300 focus:border-primary-500 focus:outline-none py-0.5"
+                                />
+                              ) : (
+                                <p className="font-semibold text-base text-gray-900 line-clamp-2">
+                                  {item.name}
+                                </p>
+                              )}
                               {item.isVariant && item.variantAttributes && (
                                 <p className="text-sm text-gray-600 mt-0.5">
                                   {Object.entries(item.variantAttributes).map(([key, value]) => (

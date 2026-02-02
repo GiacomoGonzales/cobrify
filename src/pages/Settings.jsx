@@ -135,6 +135,7 @@ export default function Settings() {
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
+  const [allowNameEdit, setAllowNameEdit] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
@@ -669,6 +670,7 @@ export default function Settings() {
         setAllowNegativeStock(businessData.allowNegativeStock || false)
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
+        setAllowNameEdit(businessData.allowNameEdit || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
 
@@ -3468,6 +3470,25 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={allowNameEdit}
+                      onChange={(e) => setAllowNameEdit(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Permitir modificar nombre de productos en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {allowNameEdit
+                          ? '✓ Habilitado: Podrás editar el nombre de cualquier producto directamente desde el carrito del punto de venta. Útil para personalizar la descripción según el cliente o agregar detalles específicos al comprobante.'
+                          : '✗ Deshabilitado: Los productos se mostrarán siempre con el nombre registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener consistencia en los comprobantes.'}
+                      </p>
+                    </div>
+                  </label>
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -3729,6 +3750,7 @@ export default function Settings() {
                       allowNegativeStock: allowNegativeStock,
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
+                      allowNameEdit: allowNameEdit,
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
