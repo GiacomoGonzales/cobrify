@@ -53,7 +53,7 @@ const routeToPageId = {
 }
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const location = useLocation()
@@ -109,7 +109,8 @@ export default function MainLayout() {
       }, 5000)
 
       try {
-        const businessRef = doc(db, 'businesses', user.uid)
+        const businessId = getBusinessId() || user.uid
+        const businessRef = doc(db, 'businesses', businessId)
         const businessDoc = await getDoc(businessRef)
 
         if (isMounted) {
@@ -182,7 +183,7 @@ export default function MainLayout() {
   // }
 
   // Verificar permisos de página para sub-usuarios
-  if (!isAdmin && !isBusinessOwner && hasPageAccess) {
+  if (!isAdmin && !isBusinessOwner && hasPageAccess && allowedPages && allowedPages.length > 0) {
     // Obtener el pageId de la ruta actual
     const basePath = location.pathname.replace(/\/[^/]+$/, '') // Para sub-rutas como /cotizaciones/nueva
     const pageId = routeToPageId[location.pathname] || routeToPageId[basePath]
@@ -198,12 +199,38 @@ export default function MainLayout() {
         'cash-register': '/app/caja',
         'reports': '/app/reportes',
         'sellers': '/app/vendedores',
+        'expenses': '/app/gastos',
+        'cash-flow': '/app/flujo-caja',
+        'settings': '/app/configuracion',
+        'quotations': '/app/cotizaciones',
+        'dispatch-guides': '/app/guias-remision',
+        'carrier-dispatch-guides': '/app/guias-transportista',
+        'inventory': '/app/inventario',
+        'warehouses': '/app/almacenes',
+        'stock-movements': '/app/movimientos',
+        'purchases': '/app/compras',
+        'purchase-orders': '/app/ordenes-compra',
+        'suppliers': '/app/proveedores',
+        'complaints': '/app/reclamos',
+        'tables': '/app/mesas',
+        'orders': '/app/ordenes',
+        'kitchen': '/app/cocina',
+        'waiters': '/app/mozos',
+        'loans': '/app/prestamos',
+        'certificates': '/app/certificados',
+        'ingredients': '/app/ingredientes',
+        'recipes': '/app/recetas',
+        'laboratories': '/app/laboratorios',
+        'expiry-alerts': '/app/alertas-vencimiento',
+        'batch-control': '/app/control-lotes',
+        'properties': '/app/propiedades',
+        'agents': '/app/agentes',
+        'operations': '/app/operaciones',
+        'commissions': '/app/comisiones',
+        'student-payment-control': '/app/control-pagos-alumnos',
       }
-      let redirectTo = '/app/pos'
-      if (allowedPages && allowedPages.length > 0) {
-        redirectTo = pageRouteMap[allowedPages[0]] || '/app/pos'
-      }
-      return <Navigate to={redirectTo} replace />
+      const firstAllowedRoute = pageRouteMap[allowedPages[0]] || '/app/pos'
+      return <Navigate to={firstAllowedRoute} replace />
     }
   }
 
