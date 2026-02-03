@@ -110,7 +110,7 @@ function Sidebar() {
       path: '/cotizaciones',
       icon: FileCheck,
       label: 'Cotizaciones',
-      pageId: 'invoices', // Mismo permiso que facturas
+      pageId: 'quotations',
       menuId: 'quotations',
     },
     {
@@ -124,7 +124,7 @@ function Sidebar() {
       path: '/guias-transportista',
       icon: Truck,
       label: 'GRE Transportista',
-      pageId: 'dispatch-guides',
+      pageId: 'carrier-dispatch-guides',
       menuId: 'carrier-dispatch-guides',
     },
     {
@@ -167,21 +167,21 @@ function Sidebar() {
       path: '/almacenes',
       icon: Warehouse,
       label: 'Almacenes',
-      pageId: 'products', // Mismo permiso que productos
+      pageId: 'warehouses',
       menuId: 'warehouses',
     },
     {
       path: '/movimientos',
       icon: History,
       label: 'Movimientos',
-      pageId: 'products', // Mismo permiso que productos/inventario
+      pageId: 'stock-movements',
       menuId: 'stock-movements',
     },
     {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
-      pageId: 'purchases', // Relacionado con compras
+      pageId: 'suppliers',
       menuId: 'suppliers',
     },
     {
@@ -246,7 +246,7 @@ function Sidebar() {
       path: '/flujo-caja',
       icon: TrendingUp,
       label: 'Flujo de Caja',
-      pageId: 'reports',
+      pageId: 'cash-flow',
       menuId: 'cash-flow',
     },
     {
@@ -338,7 +338,7 @@ function Sidebar() {
       path: '/proveedores',
       icon: Truck,
       label: 'Proveedores',
-      pageId: 'purchases', // Relacionado con compras
+      pageId: 'suppliers',
       menuId: 'suppliers',
     },
     {
@@ -393,7 +393,7 @@ function Sidebar() {
       path: '/flujo-caja',
       icon: TrendingUp,
       label: 'Flujo de Caja',
-      pageId: 'reports',
+      pageId: 'cash-flow',
       menuId: 'cash-flow',
     },
     {
@@ -443,7 +443,7 @@ function Sidebar() {
       path: '/cotizaciones',
       icon: FileCheck,
       label: 'Cotizaciones',
-      pageId: 'invoices',
+      pageId: 'quotations',
       menuId: 'quotations',
     },
     {
@@ -539,7 +539,7 @@ function Sidebar() {
       path: '/flujo-caja',
       icon: TrendingUp,
       label: 'Flujo de Caja',
-      pageId: 'reports',
+      pageId: 'cash-flow',
       menuId: 'cash-flow',
     },
     {

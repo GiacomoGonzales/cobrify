@@ -131,12 +131,14 @@ export const AuthProvider = ({ children }) => {
           setIsBusinessOwner(businessOwnerStatus)
 
           // Cargar permisos del usuario (si no es super admin ni business owner)
+          let subUserOwnerId = null
           if (!superAdminStatus && !businessOwnerStatus) {
             try {
               const userDataResult = await getUserData(firebaseUser.uid)
               console.log('📋 Datos del usuario secundario:', userDataResult)
               if (userDataResult.success && userDataResult.data) {
                 const userData = userDataResult.data
+                subUserOwnerId = userData.ownerId || null
                 setUserPermissions(userData)
                 setAllowedPages(userData.allowedPages || [])
                 setAllowedWarehouses(userData.allowedWarehouses || [])
@@ -228,22 +230,14 @@ export const AuthProvider = ({ children }) => {
           // Cargar configuración del negocio (businessMode y settings completos)
           try {
             let businessId
-            let ownerIdFromUser = null
 
             if (businessOwnerStatus || superAdminStatus) {
               businessId = firebaseUser.uid
               console.log('👑 Owner/Admin - usando propio UID como businessId:', businessId)
             } else {
-              // Para usuarios secundarios, obtener el ownerId
-              const userDataResult = await getUserData(firebaseUser.uid)
-              console.log('👤 Usuario secundario - Resultado completo de getUserData:', userDataResult)
-
-              ownerIdFromUser = userDataResult?.data?.ownerId
-              businessId = ownerIdFromUser || firebaseUser.uid
-
-              console.log('👤 Usuario secundario - ownerId extraído:', ownerIdFromUser)
-              console.log('👤 Usuario secundario - businessId final:', businessId)
-              console.log('👤 Usuario secundario - Datos completos del usuario:', userDataResult?.data)
+              // Para usuarios secundarios, usar el ownerId ya obtenido de los permisos
+              businessId = subUserOwnerId || firebaseUser.uid
+              console.log('👤 Usuario secundario - businessId:', businessId)
             }
 
             console.log('🔍 Intentando cargar documento de businesses/' + businessId)
