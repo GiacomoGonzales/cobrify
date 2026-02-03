@@ -88,6 +88,7 @@ const CashClosureTicket = forwardRef(({
   const salesPlin = sessionData?.salesPlin || 0
   const salesRappi = sessionData?.salesRappi || 0
   const salesPedidosYa = sessionData?.salesPedidosYa || 0
+  const salesDiDiFood = sessionData?.salesDiDiFood || 0
   const expectedAmount = sessionData?.expectedAmount || 0
   const closingCash = sessionData?.closingCash || 0
   const closingCard = sessionData?.closingCard || 0
@@ -433,6 +434,12 @@ const CashClosureTicket = forwardRef(({
           <div className="info-row">
             <span className="info-label">PedidosYa:</span>
             <span>{formatCurrency(salesPedidosYa)}</span>
+          </div>
+        )}
+        {salesDiDiFood > 0 && (
+          <div className="info-row">
+            <span className="info-label">DiDiFood:</span>
+            <span>{formatCurrency(salesDiDiFood)}</span>
           </div>
         )}
 

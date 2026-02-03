@@ -81,6 +81,7 @@ const PAYMENT_METHODS = {
   PLIN: 'Plin',
   RAPPI: 'Rappi',
   PEDIDOSYA: 'PedidosYa',
+  DIDIFOOD: 'DiDiFood',
 }
 
 const ORDER_TYPES = {
@@ -5021,6 +5022,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         )}
                         {businessMode === 'restaurant' && (
                           <option value="PEDIDOSYA">PedidosYa</option>
+                        )}
+                        {businessMode === 'restaurant' && (
+                          <option value="DIDIFOOD">DiDiFood</option>
                         )}
                       </Select>
 

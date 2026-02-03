@@ -526,6 +526,7 @@ export default function CashRegister() {
         salesPlin: totals.salesPlin,
         salesRappi: totals.salesRappi,
         salesPedidosYa: totals.salesPedidosYa,
+        salesDiDiFood: totals.salesDiDiFood,
         totalIncome: totals.income,
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
@@ -556,6 +557,7 @@ export default function CashRegister() {
         salesPlin: totals.salesPlin,
         salesRappi: totals.salesRappi,
         salesPedidosYa: totals.salesPedidosYa,
+        salesDiDiFood: totals.salesDiDiFood,
         totalIncome: totals.income,
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
@@ -927,6 +929,7 @@ export default function CashRegister() {
       salesPlin: 0,
       salesRappi: 0,
       salesPedidosYa: 0,
+      salesDiDiFood: 0,
       income: 0,
       expense: 0,
       expected: 0,
@@ -941,6 +944,7 @@ export default function CashRegister() {
     let salesPlin = 0
     let salesRappi = 0
     let salesPedidosYa = 0
+    let salesDiDiFood = 0
 
     // Filtrar facturas:
     // - Excluir notas de crédito y débito (no son ventas, son ajustes)
@@ -1003,6 +1007,9 @@ export default function CashRegister() {
             case 'PedidosYa':
               salesPedidosYa += amount
               break
+            case 'DiDiFood':
+              salesDiDiFood += amount
+              break
           }
         })
       } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
@@ -1034,6 +1041,9 @@ export default function CashRegister() {
             case 'PedidosYa':
               salesPedidosYa += invoiceTotal
               break
+            case 'DiDiFood':
+              salesDiDiFood += invoiceTotal
+              break
           }
         } else {
           // Múltiples métodos de pago: usar los montos reales de cada pago
@@ -1060,6 +1070,9 @@ export default function CashRegister() {
                 break
               case 'PedidosYa':
                 salesPedidosYa += amount
+                break
+              case 'DiDiFood':
+                salesDiDiFood += amount
                 break
             }
           })
@@ -1092,12 +1105,15 @@ export default function CashRegister() {
           case 'PedidosYa':
             salesPedidosYa += total
             break
+          case 'DiDiFood':
+            salesDiDiFood += total
+            break
         }
       }
     })
 
     // Total de ventas (todos los métodos)
-    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa
+    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa + salesDiDiFood
 
     // Calcular ventas pendientes de cobro (crédito y pagos parciales)
     let pendingTotal = 0
@@ -1149,6 +1165,7 @@ export default function CashRegister() {
       salesPlin,
       salesRappi,
       salesPedidosYa,
+      salesDiDiFood,
       income,
       expense,
       expected,
@@ -1408,6 +1425,12 @@ export default function CashRegister() {
                         <div className="flex justify-between text-gray-600">
                           <span>• PedidosYa:</span>
                           <span className="font-medium">{formatCurrency(totals.salesPedidosYa)}</span>
+                        </div>
+                      )}
+                      {totals.salesDiDiFood > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• DiDiFood:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesDiDiFood)}</span>
                         </div>
                       )}
                     </div>
@@ -2113,6 +2136,12 @@ export default function CashRegister() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">• Ventas en PedidosYa:</span>
                 <span className="font-semibold text-gray-700">{formatCurrency(totals.salesPedidosYa)}</span>
+              </div>
+            )}
+            {totals.salesDiDiFood > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en DiDiFood:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesDiDiFood)}</span>
               </div>
             )}
 
