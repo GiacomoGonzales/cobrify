@@ -80,6 +80,7 @@ const PAYMENT_METHODS = {
   YAPE: 'Yape',
   PLIN: 'Plin',
   RAPPI: 'Rappi',
+  PEDIDOSYA: 'PedidosYa',
 }
 
 const ORDER_TYPES = {
@@ -5017,6 +5018,9 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         <option value="PLIN">Plin</option>
                         {businessMode === 'restaurant' && (
                           <option value="RAPPI">Rappi</option>
+                        )}
+                        {businessMode === 'restaurant' && (
+                          <option value="PEDIDOSYA">PedidosYa</option>
                         )}
                       </Select>
 

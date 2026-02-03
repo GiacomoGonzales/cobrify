@@ -525,6 +525,7 @@ export default function CashRegister() {
         salesYape: totals.salesYape,
         salesPlin: totals.salesPlin,
         salesRappi: totals.salesRappi,
+        salesPedidosYa: totals.salesPedidosYa,
         totalIncome: totals.income,
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
@@ -554,6 +555,7 @@ export default function CashRegister() {
         salesYape: totals.salesYape,
         salesPlin: totals.salesPlin,
         salesRappi: totals.salesRappi,
+        salesPedidosYa: totals.salesPedidosYa,
         totalIncome: totals.income,
         totalExpense: totals.expense,
         expectedAmount: totals.expected,
@@ -924,6 +926,7 @@ export default function CashRegister() {
       salesYape: 0,
       salesPlin: 0,
       salesRappi: 0,
+      salesPedidosYa: 0,
       income: 0,
       expense: 0,
       expected: 0,
@@ -937,6 +940,7 @@ export default function CashRegister() {
     let salesYape = 0
     let salesPlin = 0
     let salesRappi = 0
+    let salesPedidosYa = 0
 
     // Filtrar facturas:
     // - Excluir notas de crédito y débito (no son ventas, son ajustes)
@@ -996,6 +1000,9 @@ export default function CashRegister() {
             case 'Rappi':
               salesRappi += amount
               break
+            case 'PedidosYa':
+              salesPedidosYa += amount
+              break
           }
         })
       } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
@@ -1024,6 +1031,9 @@ export default function CashRegister() {
             case 'Rappi':
               salesRappi += invoiceTotal
               break
+            case 'PedidosYa':
+              salesPedidosYa += invoiceTotal
+              break
           }
         } else {
           // Múltiples métodos de pago: usar los montos reales de cada pago
@@ -1047,6 +1057,9 @@ export default function CashRegister() {
                 break
               case 'Rappi':
                 salesRappi += amount
+                break
+              case 'PedidosYa':
+                salesPedidosYa += amount
                 break
             }
           })
@@ -1076,12 +1089,15 @@ export default function CashRegister() {
           case 'Rappi':
             salesRappi += total
             break
+          case 'PedidosYa':
+            salesPedidosYa += total
+            break
         }
       }
     })
 
     // Total de ventas (todos los métodos)
-    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi
+    const sales = salesCash + salesCard + salesTransfer + salesYape + salesPlin + salesRappi + salesPedidosYa
 
     // Calcular ventas pendientes de cobro (crédito y pagos parciales)
     let pendingTotal = 0
@@ -1132,6 +1148,7 @@ export default function CashRegister() {
       salesYape,
       salesPlin,
       salesRappi,
+      salesPedidosYa,
       income,
       expense,
       expected,
@@ -1385,6 +1402,12 @@ export default function CashRegister() {
                         <div className="flex justify-between text-gray-600">
                           <span>• Rappi:</span>
                           <span className="font-medium">{formatCurrency(totals.salesRappi)}</span>
+                        </div>
+                      )}
+                      {totals.salesPedidosYa > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>• PedidosYa:</span>
+                          <span className="font-medium">{formatCurrency(totals.salesPedidosYa)}</span>
                         </div>
                       )}
                     </div>
@@ -2084,6 +2107,12 @@ export default function CashRegister() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">• Ventas en Rappi:</span>
                 <span className="font-semibold text-gray-700">{formatCurrency(totals.salesRappi)}</span>
+              </div>
+            )}
+            {totals.salesPedidosYa > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">• Ventas en PedidosYa:</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(totals.salesPedidosYa)}</span>
               </div>
             )}
 
