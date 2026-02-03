@@ -246,7 +246,6 @@ async function pollDocumentStatus(numTicket, accessToken, environment) {
         // Aceptado
         let cdrXML = null
         if (arcCdr) {
-          // Decodificar CDR (viene en base64, puede ser ZIP)
           cdrXML = await decodeCDR(arcCdr)
         }
 

@@ -2585,17 +2585,46 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // Warning 4388: "Debe consignar el Indicador de pagador de flete"
   // Formato: SUNAT_Envio_IndicadorPagadorFlete_[Pagador]
   const freightPayerRaw = guideData.freightPayer || guideData.pagadorFlete || 'remitente'
+  // Valores válidos según SUNAT/EFACT:
+  // - _Remitente: el remitente paga el flete
+  // - _Subcontratador: transporte subcontratado (requiere IndicadorTrasporteSubcontratado + LogisticsOperatorParty)
+  // - _Tercero: un tercero paga (requiere datos del pagador)
+  // "Destinatario" se mapea a "Remitente" para evitar observaciones 4401/4402/4370
   const freightPayerMap = {
     'remitente': 'SUNAT_Envio_IndicadorPagadorFlete_Remitente',
     '1': 'SUNAT_Envio_IndicadorPagadorFlete_Remitente',
-    'destinatario': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratante',
-    'subcontratante': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratante',
-    '2': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratante',
+    'destinatario': 'SUNAT_Envio_IndicadorPagadorFlete_Remitente',
+    '2': 'SUNAT_Envio_IndicadorPagadorFlete_Remitente',
+    'subcontratante': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratador',
+    'subcontratador': 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratador',
     'tercero': 'SUNAT_Envio_IndicadorPagadorFlete_Tercero',
     '3': 'SUNAT_Envio_IndicadorPagadorFlete_Tercero',
   }
   const freightPayerIndicator = freightPayerMap[freightPayerRaw] || 'SUNAT_Envio_IndicadorPagadorFlete_Remitente'
+  const isSubcontracted = freightPayerIndicator === 'SUNAT_Envio_IndicadorPagadorFlete_Subcontratador'
+
+  // Si es subcontratado, agregar IndicadorTrasporteSubcontratado ANTES del indicador de pagador (como EFACT)
+  if (isSubcontracted) {
+    shipment.ele('cbc:SpecialInstructions').txt('SUNAT_Envio_IndicadorTrasporteSubcontratado')
+  }
   shipment.ele('cbc:SpecialInstructions').txt(freightPayerIndicator)
+
+  // === CONSIGNMENT / OPERADOR LOGÍSTICO (solo para transporte subcontratado) ===
+  // Según EFACT: cac:Consignment > cac:LogisticsOperatorParty con RUC y razón social del subcontratista
+  if (isSubcontracted) {
+    const logisticsOperator = guideData.logisticsOperator || guideData.subcontractor || {}
+    if (logisticsOperator.ruc || logisticsOperator.documentNumber) {
+      const consignment = shipment.ele('cac:Consignment')
+      consignment.ele('cbc:ID').txt('SUNAT_Envio')
+      const logisticsParty = consignment.ele('cac:LogisticsOperatorParty')
+      const logisticsPartyId = logisticsParty.ele('cac:PartyIdentification')
+      logisticsPartyId.ele('cbc:ID', {
+        'schemeID': logisticsOperator.documentType || '6'
+      }).txt(logisticsOperator.ruc || logisticsOperator.documentNumber)
+      const logisticsLegalEntity = logisticsParty.ele('cac:PartyLegalEntity')
+      logisticsLegalEntity.ele('cbc:RegistrationName').txt(logisticsOperator.businessName || logisticsOperator.name || '')
+    }
+  }
 
   // === DATOS DE TRANSPORTE (ShipmentStage) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
@@ -2757,16 +2786,18 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   }
 
   // === LÍNEAS DE DESPACHO (DespatchLine) ===
-  // Siempre incluir items reales cuando existan. La OBS 4434 (cuando hay GRE Remitente
-  // electrónica referenciada) es solo un warning inofensivo. En cambio, usar ID="0"
-  // (anotación) con GRE electrónica causa ERROR 3458 (rechazo).
+  // Para GRE Transportista (tipo 31), el transportista no detalla bienes individuales.
+  // Se usa unitCode="ZZ" (unidad genérica) en vez de NIU/unidades específicas (OBS 4434).
   // SUNAT valida que DeliveredQuantity sea > 0 (ERROR 2780 si es 0).
   if (guideData.items && guideData.items.length > 0) {
     guideData.items.forEach((item, index) => {
       const despatchLine = root.ele('cac:DespatchLine')
       despatchLine.ele('cbc:ID').txt(String(index + 1))
+      if (item.packageType || item.note) {
+        despatchLine.ele('cbc:Note').txt(item.packageType || item.note || '')
+      }
       despatchLine.ele('cbc:DeliveredQuantity', {
-        'unitCode': mapUnitToSunatCode(item.unit)
+        'unitCode': 'ZZ'
       }).txt(String(item.quantity || 1))
       const orderLineRef = despatchLine.ele('cac:OrderLineReference')
       orderLineRef.ele('cbc:LineID').txt(String(index + 1))
