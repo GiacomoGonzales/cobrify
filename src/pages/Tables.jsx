@@ -716,11 +716,50 @@ export default function Tables() {
             toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
             toast.info('Usando impresión estándar...')
           } else {
-            // Imprimir comanda en impresora térmica
+            const pw = printerConfigResult.config.paperWidth || 58
+
+            // Si hay estaciones habilitadas, imprimir separado en la misma ticketera
+            if (enableKitchenStations && kitchenStations.length > 0) {
+              const itemMatchesStation = (itemCategory, stationCategories) => {
+                if (!itemCategory || !stationCategories || stationCategories.length === 0) return false
+                if (stationCategories.includes(itemCategory)) return true
+                const itemCatName = categoryMap[itemCategory]
+                if (itemCatName && stationCategories.includes(itemCatName)) return true
+                for (const sc of stationCategories) {
+                  if (categoryMap[sc] === itemCategory) return true
+                }
+                return false
+              }
+
+              let anyPrinted = false
+              for (const station of kitchenStations) {
+                let stationItems
+                if (station.isPase) {
+                  stationItems = selectedOrder.items || []
+                } else if (station.categories?.length > 0) {
+                  stationItems = (selectedOrder.items || []).filter(item =>
+                    itemMatchesStation(item.category || item.categoryId || '', station.categories)
+                  )
+                } else {
+                  continue
+                }
+                if (stationItems.length > 0) {
+                  const stationOrder = { ...selectedOrder, items: stationItems }
+                  await printKitchenOrder(stationOrder, selectedTable, pw, station.name)
+                  anyPrinted = true
+                }
+              }
+              if (anyPrinted) {
+                toast.success('Comandas impresas por estación')
+                return
+              }
+            }
+
+            // Sin estaciones: imprimir todo junto
             const result = await printKitchenOrder(
               selectedOrder,
               selectedTable,
-              printerConfigResult.config.paperWidth || 58
+              pw
             )
 
             if (result.success) {

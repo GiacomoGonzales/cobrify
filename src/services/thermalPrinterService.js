@@ -1115,7 +1115,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
  * @param {Object} table - Datos de la mesa (opcional)
  * @param {number} paperWidth - Ancho de papel (58 o 80mm)
  */
-export const printKitchenOrder = async (order, table = null, paperWidth = 58) => {
+export const printKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   const isNative = Capacitor.isNativePlatform();
 
   console.log('🖨️ printKitchenOrder - Iniciando...');
@@ -1137,7 +1137,7 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
   // Si es conexión WiFi o interna, usar función específica con ESC/POS builder
   if (connectionType === 'wifi' || connectionType === 'internal') {
     console.log(`📶 Usando impresión ${connectionType} para comanda...`);
-    return await printWifiKitchenOrder(order, table, paperWidth);
+    return await printWifiKitchenOrder(order, table, paperWidth, stationName);
   }
 
   // Si usa el servicio BLE alternativo (iOS), usar printBLEKitchenOrder
@@ -1186,6 +1186,14 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58) =>
       .bold()
       .text('*** COMANDA ***\n')
       .clearFormatting();
+
+    if (stationName) {
+      printer = printer
+        .align('center')
+        .bold()
+        .text(`* ${convertSpanishText(stationName.toUpperCase())} *\n`)
+        .clearFormatting();
+    }
 
     printer = addSeparator(printer, format.separator, paperWidth, 'center');
 
@@ -2089,7 +2097,7 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
 /**
  * Imprimir comanda de cocina vía WiFi
  */
-const printWifiKitchenOrder = async (order, table = null, paperWidth = 58) => {
+const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stationName = null) => {
   try {
     const format = getFormat(paperWidth);
     const builder = new EscPosBuilder();
@@ -2100,8 +2108,15 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58) => {
       .bold(true)
       .text('*** COMANDA ***')
       .newLine()
-      .doubleWidth(false)
-      .bold(false)
+      .doubleWidth(false);
+
+    if (stationName) {
+      builder.bold(true)
+        .text(`* ${stationName.toUpperCase()} *`)
+        .newLine();
+    }
+
+    builder.bold(false)
       .text(format.separator)
       .newLine()
       .alignLeft()
