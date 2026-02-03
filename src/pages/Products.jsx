@@ -23,6 +23,7 @@ import {
   deleteProduct,
   getProductCategories,
   saveProductCategories,
+  getNextSkuNumber,
 } from '@/services/firestoreService'
 import { exportProductsForImport } from '@/services/productExportService'
 import ImportProductsModal from '@/components/ImportProductsModal'
@@ -3069,13 +3070,27 @@ export default function Products() {
             </div>
 
             {/* SKU */}
-            <Input
-              label="SKU / Código Interno"
-              placeholder="SKU-001"
-              error={errors.sku?.message}
-              {...register('sku')}
-              helperText="Código interno de tu negocio"
-            />
+            <div>
+              <Input
+                label="SKU / Código Interno"
+                placeholder="SKU-001"
+                error={errors.sku?.message}
+                {...register('sku')}
+                helperText="Código interno de tu negocio"
+              />
+              {businessSettings?.autoSku && !editingProduct && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nextSku = await getNextSkuNumber(getBusinessId())
+                    setValue('sku', nextSku)
+                  }}
+                  className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
+                >
+                  Generar SKU automático
+                </button>
+              )}
+            </div>
 
             {/* Código de Barras con botón de escanear */}
             <div>

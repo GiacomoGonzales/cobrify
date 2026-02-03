@@ -502,6 +502,29 @@ export const deleteProduct = async (userId, productId) => {
   }
 }
 
+// ==================== SKU AUTOMÁTICO ====================
+
+export const getNextSkuNumber = async (businessId) => {
+  const counterRef = doc(db, 'businesses', businessId, 'counters', 'sku')
+  try {
+    const newNumber = await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef)
+      let currentNumber = 0
+      if (counterDoc.exists()) {
+        currentNumber = counterDoc.data().lastNumber || 0
+      }
+      const nextNumber = currentNumber + 1
+      transaction.set(counterRef, { lastNumber: nextNumber }, { merge: true })
+      return nextNumber
+    })
+    return `PROD-${String(newNumber).padStart(4, '0')}`
+  } catch (error) {
+    console.error('Error obteniendo siguiente SKU:', error)
+    const timestamp = Date.now().toString().slice(-6)
+    return `PROD-${timestamp}`
+  }
+}
+
 // ==================== CONFIGURACIÓN DE EMPRESA ====================
 
 /**

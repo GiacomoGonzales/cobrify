@@ -13,6 +13,7 @@ import Select from '@/components/ui/Select'
 import Button from '@/components/ui/Button'
 import { productSchema } from '@/utils/schemas'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
+import { getNextSkuNumber } from '@/services/firestoreService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 export const UNITS = [
@@ -543,13 +544,27 @@ const ProductFormModal = ({
 
           {/* SKU */}
           {showSku && (
-            <Input
-              label="SKU / Código Interno"
-              placeholder="SKU-001"
-              error={errors.sku?.message}
-              {...register('sku')}
-              helperText="Código interno de tu negocio"
-            />
+            <div>
+              <Input
+                label="SKU / Código Interno"
+                placeholder="SKU-001"
+                error={errors.sku?.message}
+                {...register('sku')}
+                helperText="Código interno de tu negocio"
+              />
+              {businessSettings?.autoSku && !initialData && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nextSku = await getNextSkuNumber(getBusinessId())
+                    setValue('sku', nextSku)
+                  }}
+                  className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
+                >
+                  Generar SKU automático
+                </button>
+              )}
+            </div>
           )}
 
           {/* Código de Barras con botón de escanear */}

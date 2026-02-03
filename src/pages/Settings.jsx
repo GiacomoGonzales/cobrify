@@ -136,6 +136,7 @@ export default function Settings() {
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
   const [allowPriceEdit, setAllowPriceEdit] = useState(false)
   const [allowNameEdit, setAllowNameEdit] = useState(false)
+  const [autoSku, setAutoSku] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
@@ -671,6 +672,7 @@ export default function Settings() {
         setAllowCustomProducts(businessData.allowCustomProducts || false)
         setAllowPriceEdit(businessData.allowPriceEdit || false)
         setAllowNameEdit(businessData.allowNameEdit || false)
+        setAutoSku(businessData.autoSku || false)
         setEnableProductImages(businessData.enableProductImages || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
 
@@ -3489,6 +3491,26 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  {/* SKU automático */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={autoSku}
+                      onChange={(e) => setAutoSku(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        SKU automático al crear productos
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {autoSku
+                          ? '✓ Habilitado: Al crear un nuevo producto se generará automáticamente un SKU secuencial (PROD-0001, PROD-0002, etc.). Puedes modificarlo antes de guardar si lo deseas.'
+                          : '✗ Deshabilitado: El campo SKU quedará vacío al crear un producto y deberás ingresarlo manualmente si lo necesitas.'}
+                      </p>
+                    </div>
+                  </label>
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -3751,6 +3773,7 @@ export default function Settings() {
                       allowCustomProducts: allowCustomProducts,
                       allowPriceEdit: allowPriceEdit,
                       allowNameEdit: allowNameEdit,
+                      autoSku: autoSku,
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
