@@ -6,7 +6,7 @@ import { forwardRef } from 'react'
  * Diseñado para impresoras térmicas de 80mm
  * Muestra la información esencial para la cocina/bar
  */
-const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false }, ref) => {
+const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = false, compactPrint = false, stationName = null }, ref) => {
   // Formatear fecha
   const formatDate = (timestamp) => {
     if (!timestamp) return new Date().toLocaleDateString('es-PE')
@@ -89,6 +89,20 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: hidden;
+          }
+
+          /* Cuando hay múltiples tickets (multi-estación), no usar position absolute */
+          .kitchen-multi-ticket,
+          .kitchen-multi-ticket * {
+            visibility: visible;
+          }
+          .kitchen-multi-ticket {
+            position: absolute;
+            left: 0;
+            top: 0;
+          }
+          .kitchen-multi-ticket .kitchen-ticket-container {
+            position: static;
           }
 
           /* Estilos adicionales para modo legible */
@@ -312,6 +326,23 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           font-weight: 900;
         }
 
+        .station-name {
+          text-align: center;
+          font-size: 14pt;
+          font-weight: 900;
+          background: #000;
+          color: #fff;
+          padding: 6px 10px;
+          margin: 4px 0 8px 0;
+          letter-spacing: 1px;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        [data-web-print-legible="true"] .station-name {
+          font-size: 16pt !important;
+        }
+
         ${compactPrint ? `
         /* === MODO COMPACTO === */
         @media print {
@@ -369,12 +400,20 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           font-size: 8pt !important;
           margin: 2px 0 !important;
         }
+        .station-name {
+          font-size: 11pt !important;
+          padding: 3px 6px !important;
+          margin: 2px 0 4px 0 !important;
+        }
         ` : ''}
       `}</style>
 
       {/* HEADER */}
       <div className="kitchen-header">
         <div className="kitchen-title">COMANDA</div>
+        {stationName && (
+          <div className="station-name">★ {stationName.toUpperCase()} ★</div>
+        )}
         <div className="kitchen-subtitle">
           {companySettings?.tradeName || companySettings?.name || 'RESTAURANTE'}
         </div>

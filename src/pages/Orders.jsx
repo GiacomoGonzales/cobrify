@@ -32,6 +32,7 @@ export default function Orders() {
   const [deliveryPersons, setDeliveryPersons] = useState([]) // Lista de repartidores
   const [brands, setBrands] = useState([]) // Lista de marcas
   const [kitchenStations, setKitchenStations] = useState([]) // Estaciones de cocina
+  const [enableKitchenStations, setEnableKitchenStations] = useState(false) // Multi-estación habilitada
   const [autoPrintByStation, setAutoPrintByStation] = useState(false) // Impresión automática
 
   // Modales para nueva orden
@@ -86,6 +87,7 @@ export default function Orders() {
           setDeliveryPersons((config.deliveryPersons || []).filter(p => p.active !== false))
           setBrands((config.brands || []).filter(b => b.active !== false))
           setKitchenStations(config.kitchenStations || [])
+          setEnableKitchenStations(config.enableKitchenStations || false)
           setAutoPrintByStation(config.autoPrintByStation || false)
         }
       },
@@ -140,6 +142,20 @@ export default function Orders() {
         const printerConfigResult = await getPrinterConfig(getBusinessId())
 
         if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          // Si hay estaciones con impresoras, imprimir separado por estación
+          const stationsWithPrinter = enableKitchenStations && kitchenStations.filter(s => s.printerIp)
+          if (stationsWithPrinter && stationsWithPrinter.length > 0) {
+            const results = await printToAllStations(order, kitchenStations, printerConfigResult.config.paperWidth || 58)
+            const allOk = results.every(r => r.success)
+            if (allOk) {
+              toast.success('Comandas impresas por estación')
+            } else {
+              const failed = results.filter(r => !r.success).map(r => r.station).join(', ')
+              toast.error('Error en estaciones: ' + failed)
+            }
+            return
+          }
+
           // Reconectar a la impresora
           const connectResult = await connectPrinter(printerConfigResult.config.address)
 
@@ -1032,13 +1048,66 @@ export default function Orders() {
       {/* Comanda para imprimir (oculta) */}
       {orderToPrint && (
         <div style={{ display: 'none' }}>
-          <KitchenTicket
-            ref={kitchenTicketRef}
-            order={orderToPrint}
-            companySettings={companySettings}
-            webPrintLegible={webPrintLegible}
-            compactPrint={compactPrint}
-          />
+          <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
+            {enableKitchenStations && kitchenStations.length > 0 ? (() => {
+              const allItems = orderToPrint.items || []
+              const assignedCategories = new Set()
+              const stationTickets = []
+
+              kitchenStations.forEach(station => {
+                let stationItems
+                if (station.isPase) {
+                  stationItems = allItems
+                } else if (station.categories && station.categories.length > 0) {
+                  stationItems = allItems.filter(item => {
+                    const itemCategory = item.category || item.categoryId
+                    return station.categories.some(cat => {
+                      const catId = typeof cat === 'string' ? cat : cat.id
+                      return catId === itemCategory
+                    })
+                  })
+                  station.categories.forEach(cat => {
+                    assignedCategories.add(typeof cat === 'string' ? cat : cat.id)
+                  })
+                } else {
+                  stationItems = []
+                }
+                if (stationItems.length > 0) {
+                  stationTickets.push({ name: station.name, items: stationItems })
+                }
+              })
+
+              // Items huérfanos (categoría no asignada a ninguna estación)
+              const orphanItems = allItems.filter(item => {
+                const itemCategory = item.category || item.categoryId
+                return !assignedCategories.has(itemCategory)
+              })
+              // Solo mostrar "General" si no hay estación isPase (que ya los incluye)
+              const hasPase = kitchenStations.some(s => s.isPase)
+              if (orphanItems.length > 0 && !hasPase) {
+                stationTickets.push({ name: 'General', items: orphanItems })
+              }
+
+              return stationTickets.map((ticket, idx) => (
+                <div key={idx} style={{ pageBreakAfter: idx < stationTickets.length - 1 ? 'always' : 'auto' }}>
+                  <KitchenTicket
+                    order={{ ...orderToPrint, items: ticket.items }}
+                    companySettings={companySettings}
+                    webPrintLegible={webPrintLegible}
+                    compactPrint={compactPrint}
+                    stationName={ticket.name}
+                  />
+                </div>
+              ))
+            })() : (
+              <KitchenTicket
+                order={orderToPrint}
+                companySettings={companySettings}
+                webPrintLegible={webPrintLegible}
+                compactPrint={compactPrint}
+              />
+            )}
+          </div>
         </div>
       )}
 

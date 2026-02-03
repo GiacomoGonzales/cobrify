@@ -17,7 +17,7 @@ import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { printPreBill } from '@/utils/printPreBill'
 import { Capacitor } from '@capacitor/core'
-import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig, printKitchenOrder } from '@/services/thermalPrinterService'
+import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig, printKitchenOrder, printToAllStations } from '@/services/thermalPrinterService'
 import {
   getTables,
   getTablesStats,
@@ -78,6 +78,8 @@ export default function Tables() {
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
   const kitchenTicketRef = useRef()
+  const [kitchenStations, setKitchenStations] = useState([])
+  const [enableKitchenStations, setEnableKitchenStations] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -132,6 +134,28 @@ export default function Tables() {
     }
     loadPrinterConfig()
   }, [user])
+
+  // Cargar configuración de estaciones de cocina
+  useEffect(() => {
+    if (!user?.uid || isDemoMode) return
+
+    const businessRef = doc(db, 'businesses', getBusinessId())
+    const unsubscribe = onSnapshot(
+      businessRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const config = docSnap.data().restaurantConfig || {}
+          setKitchenStations(config.kitchenStations || [])
+          setEnableKitchenStations(config.enableKitchenStations || false)
+        }
+      },
+      (error) => {
+        console.error('Error al cargar estaciones de cocina:', error)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [user, isDemoMode, getBusinessId])
 
   // Cargar configuración de la empresa para comanda
   useEffect(() => {
@@ -652,6 +676,20 @@ export default function Tables() {
         const printerConfigResult = await getPrinterConfig(businessId)
 
         if (printerConfigResult.success && printerConfigResult.config?.enabled && printerConfigResult.config?.address) {
+          // Si hay estaciones con impresoras, imprimir separado por estación
+          const stationsWithPrinter = enableKitchenStations && kitchenStations.filter(s => s.printerIp)
+          if (stationsWithPrinter && stationsWithPrinter.length > 0) {
+            const results = await printToAllStations(selectedOrder, kitchenStations, printerConfigResult.config.paperWidth || 58)
+            const allOk = results.every(r => r.success)
+            if (allOk) {
+              toast.success('Comandas impresas por estación')
+            } else {
+              const failed = results.filter(r => !r.success).map(r => r.station).join(', ')
+              toast.error('Error en estaciones: ' + failed)
+            }
+            return
+          }
+
           // Reconectar a la impresora
           const connectResult = await connectPrinter(printerConfigResult.config.address)
 
@@ -1296,13 +1334,64 @@ export default function Tables() {
       {/* Comanda para imprimir (oculta) */}
       {orderToPrint && (
         <div style={{ display: 'none' }}>
-          <KitchenTicket
-            ref={kitchenTicketRef}
-            order={orderToPrint}
-            companySettings={companySettings}
-            webPrintLegible={webPrintLegible}
-            compactPrint={compactPrint}
-          />
+          <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
+            {enableKitchenStations && kitchenStations.length > 0 ? (() => {
+              const allItems = orderToPrint.items || []
+              const assignedCategories = new Set()
+              const stationTickets = []
+
+              kitchenStations.forEach(station => {
+                let stationItems
+                if (station.isPase) {
+                  stationItems = allItems
+                } else if (station.categories && station.categories.length > 0) {
+                  stationItems = allItems.filter(item => {
+                    const itemCategory = item.category || item.categoryId
+                    return station.categories.some(cat => {
+                      const catId = typeof cat === 'string' ? cat : cat.id
+                      return catId === itemCategory
+                    })
+                  })
+                  station.categories.forEach(cat => {
+                    assignedCategories.add(typeof cat === 'string' ? cat : cat.id)
+                  })
+                } else {
+                  stationItems = []
+                }
+                if (stationItems.length > 0) {
+                  stationTickets.push({ name: station.name, items: stationItems })
+                }
+              })
+
+              const orphanItems = allItems.filter(item => {
+                const itemCategory = item.category || item.categoryId
+                return !assignedCategories.has(itemCategory)
+              })
+              const hasPase = kitchenStations.some(s => s.isPase)
+              if (orphanItems.length > 0 && !hasPase) {
+                stationTickets.push({ name: 'General', items: orphanItems })
+              }
+
+              return stationTickets.map((ticket, idx) => (
+                <div key={idx} style={{ pageBreakAfter: idx < stationTickets.length - 1 ? 'always' : 'auto' }}>
+                  <KitchenTicket
+                    order={{ ...orderToPrint, items: ticket.items }}
+                    companySettings={companySettings}
+                    webPrintLegible={webPrintLegible}
+                    compactPrint={compactPrint}
+                    stationName={ticket.name}
+                  />
+                </div>
+              ))
+            })() : (
+              <KitchenTicket
+                order={orderToPrint}
+                companySettings={companySettings}
+                webPrintLegible={webPrintLegible}
+                compactPrint={compactPrint}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>
