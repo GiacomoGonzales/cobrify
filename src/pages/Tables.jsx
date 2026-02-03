@@ -1331,9 +1331,9 @@ export default function Tables() {
         </div>
       </Modal>
 
-      {/* Comanda para imprimir (oculta) */}
+      {/* Comanda para imprimir (oculta, fuera de pantalla para react-to-print) */}
       {orderToPrint && (
-        <div style={{ display: 'none' }}>
+        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
           <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
             {enableKitchenStations && kitchenStations.length > 0 ? (() => {
               const allItems = orderToPrint.items || []
@@ -1346,15 +1346,10 @@ export default function Tables() {
                   stationItems = allItems
                 } else if (station.categories && station.categories.length > 0) {
                   stationItems = allItems.filter(item => {
-                    const itemCategory = item.category || item.categoryId
-                    return station.categories.some(cat => {
-                      const catId = typeof cat === 'string' ? cat : cat.id
-                      return catId === itemCategory
-                    })
+                    const itemCategory = item.category || ''
+                    return station.categories.includes(itemCategory)
                   })
-                  station.categories.forEach(cat => {
-                    assignedCategories.add(typeof cat === 'string' ? cat : cat.id)
-                  })
+                  station.categories.forEach(cat => assignedCategories.add(cat))
                 } else {
                   stationItems = []
                 }
@@ -1363,13 +1358,15 @@ export default function Tables() {
                 }
               })
 
-              const orphanItems = allItems.filter(item => {
-                const itemCategory = item.category || item.categoryId
-                return !assignedCategories.has(itemCategory)
-              })
               const hasPase = kitchenStations.some(s => s.isPase)
-              if (orphanItems.length > 0 && !hasPase) {
-                stationTickets.push({ name: 'General', items: orphanItems })
+              if (!hasPase) {
+                const orphanItems = allItems.filter(item => {
+                  const itemCategory = item.category || ''
+                  return !assignedCategories.has(itemCategory)
+                })
+                if (orphanItems.length > 0) {
+                  stationTickets.push({ name: 'General', items: orphanItems })
+                }
               }
 
               return stationTickets.map((ticket, idx) => (
