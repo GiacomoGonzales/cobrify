@@ -33,7 +33,7 @@ import {
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
 import { getOrder } from '@/services/orderService'
-import { getCompanySettings } from '@/services/firestoreService'
+import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
 import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
@@ -80,6 +80,7 @@ export default function Tables() {
   const kitchenTicketRef = useRef()
   const [kitchenStations, setKitchenStations] = useState([])
   const [enableKitchenStations, setEnableKitchenStations] = useState(false)
+  const [categoryMap, setCategoryMap] = useState({})
 
   // Form state
   const [formData, setFormData] = useState({
@@ -155,6 +156,24 @@ export default function Tables() {
     )
 
     return () => unsubscribe()
+  }, [user, isDemoMode, getBusinessId])
+
+  // Cargar categorías para mapeo ID → nombre (necesario para matching de estaciones)
+  useEffect(() => {
+    if (!user?.uid || isDemoMode) return
+    const loadCategories = async () => {
+      try {
+        const result = await getProductCategories(getBusinessId())
+        if (result.success && result.data) {
+          const catMap = {}
+          result.data.forEach(cat => { catMap[cat.id] = cat.name })
+          setCategoryMap(catMap)
+        }
+      } catch (error) {
+        console.error('Error al cargar categorías:', error)
+      }
+    }
+    loadCategories()
   }, [user, isDemoMode, getBusinessId])
 
   // Cargar configuración de la empresa para comanda
@@ -1336,6 +1355,18 @@ export default function Tables() {
         <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
           <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
             {enableKitchenStations && kitchenStations.length > 0 ? (() => {
+              // Helper: matchear categoría de item con categorías de estación
+              const itemMatchesStation = (itemCategory, stationCategories) => {
+                if (!itemCategory || !stationCategories || stationCategories.length === 0) return false
+                if (stationCategories.includes(itemCategory)) return true
+                const itemCatName = categoryMap[itemCategory]
+                if (itemCatName && stationCategories.includes(itemCatName)) return true
+                for (const stationCat of stationCategories) {
+                  if (categoryMap[stationCat] === itemCategory) return true
+                }
+                return false
+              }
+
               const allItems = orderToPrint.items || []
               const assignedCategories = new Set()
               const stationTickets = []
@@ -1345,11 +1376,13 @@ export default function Tables() {
                 if (station.isPase) {
                   stationItems = allItems
                 } else if (station.categories && station.categories.length > 0) {
-                  stationItems = allItems.filter(item => {
-                    const itemCategory = item.category || ''
-                    return station.categories.includes(itemCategory)
+                  stationItems = allItems.filter(item =>
+                    itemMatchesStation(item.category || item.categoryId || '', station.categories)
+                  )
+                  station.categories.forEach(cat => {
+                    assignedCategories.add(cat)
+                    if (categoryMap[cat]) assignedCategories.add(categoryMap[cat])
                   })
-                  station.categories.forEach(cat => assignedCategories.add(cat))
                 } else {
                   stationItems = []
                 }
@@ -1361,8 +1394,9 @@ export default function Tables() {
               const hasPase = kitchenStations.some(s => s.isPase)
               if (!hasPase) {
                 const orphanItems = allItems.filter(item => {
-                  const itemCategory = item.category || ''
-                  return !assignedCategories.has(itemCategory)
+                  const itemCat = item.category || item.categoryId || ''
+                  const itemCatName = categoryMap[itemCat] || itemCat
+                  return !assignedCategories.has(itemCat) && !assignedCategories.has(itemCatName)
                 })
                 if (orphanItems.length > 0) {
                   stationTickets.push({ name: 'General', items: orphanItems })

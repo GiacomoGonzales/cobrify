@@ -10,7 +10,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { getCompanySettings } from '@/services/firestoreService'
+import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
 import CreateOrderModal from '@/components/restaurant/CreateOrderModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import KitchenTicket from '@/components/KitchenTicket'
@@ -33,6 +33,7 @@ export default function Orders() {
   const [brands, setBrands] = useState([]) // Lista de marcas
   const [kitchenStations, setKitchenStations] = useState([]) // Estaciones de cocina
   const [enableKitchenStations, setEnableKitchenStations] = useState(false) // Multi-estación habilitada
+  const [categoryMap, setCategoryMap] = useState({}) // Mapeo ID → nombre de categoría
   const [autoPrintByStation, setAutoPrintByStation] = useState(false) // Impresión automática
 
   // Modales para nueva orden
@@ -97,6 +98,24 @@ export default function Orders() {
     )
 
     return () => unsubscribe()
+  }, [user, isDemoMode, getBusinessId])
+
+  // Cargar categorías para mapeo ID → nombre (necesario para matching de estaciones)
+  useEffect(() => {
+    if (!user?.uid || isDemoMode) return
+    const loadCategories = async () => {
+      try {
+        const result = await getProductCategories(getBusinessId())
+        if (result.success && result.data) {
+          const catMap = {}
+          result.data.forEach(cat => { catMap[cat.id] = cat.name })
+          setCategoryMap(catMap)
+        }
+      } catch (error) {
+        console.error('Error al cargar categorías:', error)
+      }
+    }
+    loadCategories()
   }, [user, isDemoMode, getBusinessId])
 
   // Cargar configuración de la empresa
@@ -1050,6 +1069,21 @@ export default function Orders() {
         <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
           <div ref={kitchenTicketRef} className={enableKitchenStations && kitchenStations.length > 0 ? 'kitchen-multi-ticket' : undefined}>
             {enableKitchenStations && kitchenStations.length > 0 ? (() => {
+              // Helper: matchear categoría de item con categorías de estación
+              // Soporta nombres e IDs en ambos lados (igual que Kitchen.jsx)
+              const itemMatchesStation = (itemCategory, stationCategories) => {
+                if (!itemCategory || !stationCategories || stationCategories.length === 0) return false
+                if (stationCategories.includes(itemCategory)) return true
+                // item.category es un ID → buscar su nombre y comparar
+                const itemCatName = categoryMap[itemCategory]
+                if (itemCatName && stationCategories.includes(itemCatName)) return true
+                // station.categories tiene IDs → buscar sus nombres y comparar
+                for (const stationCat of stationCategories) {
+                  if (categoryMap[stationCat] === itemCategory) return true
+                }
+                return false
+              }
+
               const allItems = orderToPrint.items || []
               const assignedCategories = new Set()
               const stationTickets = []
@@ -1059,11 +1093,13 @@ export default function Orders() {
                 if (station.isPase) {
                   stationItems = allItems
                 } else if (station.categories && station.categories.length > 0) {
-                  stationItems = allItems.filter(item => {
-                    const itemCategory = item.category || ''
-                    return station.categories.includes(itemCategory)
+                  stationItems = allItems.filter(item =>
+                    itemMatchesStation(item.category || item.categoryId || '', station.categories)
+                  )
+                  station.categories.forEach(cat => {
+                    assignedCategories.add(cat)
+                    if (categoryMap[cat]) assignedCategories.add(categoryMap[cat])
                   })
-                  station.categories.forEach(cat => assignedCategories.add(cat))
                 } else {
                   stationItems = []
                 }
@@ -1076,8 +1112,9 @@ export default function Orders() {
               const hasPase = kitchenStations.some(s => s.isPase)
               if (!hasPase) {
                 const orphanItems = allItems.filter(item => {
-                  const itemCategory = item.category || ''
-                  return !assignedCategories.has(itemCategory)
+                  const itemCat = item.category || item.categoryId || ''
+                  const itemCatName = categoryMap[itemCat] || itemCat
+                  return !assignedCategories.has(itemCat) && !assignedCategories.has(itemCatName)
                 })
                 if (orphanItems.length > 0) {
                   stationTickets.push({ name: 'General', items: orphanItems })
