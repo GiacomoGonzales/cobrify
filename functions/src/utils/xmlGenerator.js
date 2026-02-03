@@ -2434,10 +2434,8 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // UBL Version
   root.ele('cbc:UBLVersionID').txt('2.1')
 
-  // Customization ID (versión de SUNAT para GRE)
-  root.ele('cbc:CustomizationID', {
-    'schemeAgencyName': 'PE:SUNAT'
-  }).txt('2.0')
+  // Customization ID
+  root.ele('cbc:CustomizationID').txt('2.0')
 
   // ID de la guía (Serie-Correlativo)
   root.ele('cbc:ID').txt(guideData.number || `${guideData.series}-${String(guideData.correlative).padStart(8, '0')}`)
@@ -2449,11 +2447,11 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   root.ele('cbc:IssueTime').txt(issueTime)
 
   // Tipo de documento: 31 = Guía de Remisión TRANSPORTISTA
-  root.ele('cbc:DespatchAdviceTypeCode', {
-    'listAgencyName': 'PE:SUNAT',
-    'listName': 'Tipo de Documento',
-    'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
-  }).txt('31')
+  root.ele('cbc:DespatchAdviceTypeCode').txt('31')
+
+  // Cantidad de líneas
+  const itemCount = (guideData.items && guideData.items.length > 0) ? guideData.items.length : 1
+  root.ele('cbc:LineCountNumeric').txt(String(itemCount))
 
   // Referencia a GRE Remitente(s) relacionada(s)
   if (guideData.relatedGuides && guideData.relatedGuides.length > 0) {
@@ -2461,14 +2459,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
       if (related.number) {
         const additionalDoc = root.ele('cac:AdditionalDocumentReference')
         additionalDoc.ele('cbc:ID').txt(related.number.trim())
-        // Atributos correctos para documento relacionado según catálogo 61
-        additionalDoc.ele('cbc:DocumentTypeCode', {
-          'listAgencyName': 'PE:SUNAT',
-          'listName': 'Documento relacionado al transporte',
-          'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo61'
-        }).txt('09') // 09 = GRE Remitente
-
-        // Descripción del tipo de documento relacionado (Warning 4371)
+        additionalDoc.ele('cbc:DocumentTypeCode').txt('09') // 09 = GRE Remitente
         additionalDoc.ele('cbc:DocumentType').txt('Guía de Remisión Remitente')
 
         // Datos del emisor de la GRE Remitente
@@ -2476,15 +2467,24 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
           const issuerParty = additionalDoc.ele('cac:IssuerParty')
           const issuerPartyId = issuerParty.ele('cac:PartyIdentification')
           issuerPartyId.ele('cbc:ID', {
-            'schemeID': '6',
-            'schemeName': 'Documento de Identidad',
-            'schemeAgencyName': 'PE:SUNAT',
-            'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+            'schemeID': '6'
           }).txt(related.ruc.trim())
         }
       }
     })
   }
+
+  // === FIRMA (Referencia) ===
+  const signature = root.ele('cac:Signature')
+  signature.ele('cbc:ID').txt('IDSignature')
+  const signatoryParty = signature.ele('cac:SignatoryParty')
+  const sigPartyId = signatoryParty.ele('cac:PartyIdentification')
+  sigPartyId.ele('cbc:ID').txt(businessData.ruc)
+  const sigPartyName = signatoryParty.ele('cac:PartyName')
+  sigPartyName.ele('cbc:Name').txt(businessData.businessName)
+  const digitalSigAttachment = signature.ele('cac:DigitalSignatureAttachment')
+  const externalRef = digitalSigAttachment.ele('cac:ExternalReference')
+  externalRef.ele('cbc:URI').txt('IDSignature')
 
   // === TRANSPORTISTA (Emisor de la guía - CarrierParty) ===
   // En GRE Transportista, el emisor es el transportista
@@ -2494,11 +2494,18 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   // Identificación del transportista (RUC)
   const supplierPartyId = supplierParty.ele('cac:PartyIdentification')
   supplierPartyId.ele('cbc:ID', {
-    'schemeID': '6',
-    'schemeName': 'Documento de Identidad',
-    'schemeAgencyName': 'PE:SUNAT',
-    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    'schemeID': '6'
   }).txt(businessData.ruc)
+
+  // Dirección fiscal del transportista
+  const supplierPostalAddress = supplierParty.ele('cac:PostalAddress')
+  supplierPostalAddress.ele('cbc:ID').txt(businessData.ubigeo || '150101')
+  supplierPostalAddress.ele('cbc:StreetName').txt(businessData.address || '')
+  supplierPostalAddress.ele('cbc:CityName').txt(businessData.province || businessData.city || 'LIMA')
+  supplierPostalAddress.ele('cbc:CountrySubentity').txt(businessData.department || 'LIMA')
+  supplierPostalAddress.ele('cbc:District').txt(businessData.district || '')
+  const supplierCountry = supplierPostalAddress.ele('cac:Country')
+  supplierCountry.ele('cbc:IdentificationCode').txt('PE')
 
   // Nombre o razón social del transportista
   const supplierLegalEntity = supplierParty.ele('cac:PartyLegalEntity')
@@ -2512,6 +2519,12 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     }).txt(businessData.mtcRegistration)
   }
 
+  // Email del transportista
+  if (businessData.email) {
+    const supplierContact = supplierParty.ele('cac:Contact')
+    supplierContact.ele('cbc:ElectronicMail').txt(businessData.email)
+  }
+
   // === DESTINATARIO ===
   const recipientData = guideData.recipient || {}
   let recipientDocType = recipientData.documentType || '1'
@@ -2523,14 +2536,29 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   const customerPartyId = customerParty.ele('cac:PartyIdentification')
   customerPartyId.ele('cbc:ID', {
-    'schemeID': recipientDocType,
-    'schemeName': 'Documento de Identidad',
-    'schemeAgencyName': 'PE:SUNAT',
-    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    'schemeID': recipientDocType
   }).txt(recipientData.documentNumber || '00000000')
+
+  // Dirección del destinatario (si está disponible)
+  if (recipientData.ubigeo || recipientData.address) {
+    const customerPostalAddress = customerParty.ele('cac:PostalAddress')
+    customerPostalAddress.ele('cbc:ID').txt(recipientData.ubigeo || '150101')
+    customerPostalAddress.ele('cbc:StreetName').txt(recipientData.address || '')
+    if (recipientData.city) customerPostalAddress.ele('cbc:CityName').txt(recipientData.city)
+    if (recipientData.department) customerPostalAddress.ele('cbc:CountrySubentity').txt(recipientData.department)
+    if (recipientData.district) customerPostalAddress.ele('cbc:District').txt(recipientData.district)
+    const customerCountry = customerPostalAddress.ele('cac:Country')
+    customerCountry.ele('cbc:IdentificationCode').txt('PE')
+  }
 
   const customerLegalEntity = customerParty.ele('cac:PartyLegalEntity')
   customerLegalEntity.ele('cbc:RegistrationName').txt(recipientData.name || 'DESTINATARIO')
+
+  // Email del destinatario
+  if (recipientData.email) {
+    const customerContact = customerParty.ele('cac:Contact')
+    customerContact.ele('cbc:ElectronicMail').txt(recipientData.email)
+  }
 
   // === REMITENTE ===
   // En GRE Transportista, el remitente va dentro de cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty
@@ -2546,33 +2574,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   // === ENVÍO (Shipment) ===
   const shipment = root.ele('cac:Shipment')
-  shipment.ele('cbc:ID').txt('1')
-
-  // Motivo de traslado (Catálogo 20)
-  shipment.ele('cbc:HandlingCode', {
-    'listAgencyName': 'PE:SUNAT',
-    'listName': 'Motivo de traslado',
-    'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo20'
-  }).txt(guideData.transferReason || '01')
-
-  // Campo cbc:HandlingInstructions - Descripción del motivo de traslado
-  // Obligatorio cuando el motivo es "13" (Otros), opcional para los demás
-  if (guideData.transferReason === '13') {
-    const otherReasonDescriptionCarrier = guideData.transferReasonDescription || 'OTROS MOTIVOS DE TRASLADO'
-    shipment.ele('cbc:HandlingInstructions').txt(otherReasonDescriptionCarrier)
-  }
-
-  // Campo cbc:Information - Sustento de diferencia de peso bruto
-  // SOLO para motivos 08 (Importación), 09 (Exportación), 19 (Traslado mercancía extranjera)
-  // Error 3418: Si el motivo NO es 08, 09 o 19, NO debe consignar este campo
-  if (['08', '09', '19'].includes(guideData.transferReason)) {
-    const transferReasonNamesCarrier = {
-      '08': 'IMPORTACION',
-      '09': 'EXPORTACION',
-      '19': 'TRASLADO A ZONA PRIMARIA'
-    }
-    shipment.ele('cbc:Information').txt(transferReasonNamesCarrier[guideData.transferReason])
-  }
+  shipment.ele('cbc:ID').txt('SUNAT_Envio')
 
   // Peso bruto total
   shipment.ele('cbc:GrossWeightMeasure', {
@@ -2595,16 +2597,8 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const freightPayerIndicator = freightPayerMap[freightPayerRaw] || 'SUNAT_Envio_IndicadorPagadorFlete_Remitente'
   shipment.ele('cbc:SpecialInstructions').txt(freightPayerIndicator)
 
-  // === DATOS DE TRANSPORTE (ShipmentStage DEBE ir ANTES de TransportHandlingUnit según UBL 2.1) ===
+  // === DATOS DE TRANSPORTE (ShipmentStage) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
-  shipmentStage.ele('cbc:ID').txt('1')
-
-  // Modalidad de transporte: siempre 01 (Público) para GRE Transportista
-  shipmentStage.ele('cbc:TransportModeCode', {
-    'listName': 'Modalidad de traslado',
-    'listAgencyName': 'PE:SUNAT',
-    'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo18'
-  }).txt('01')
 
   // Fecha de inicio del traslado
   const transitPeriod = shipmentStage.ele('cac:TransitPeriod')
@@ -2625,10 +2619,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   const driverPerson = shipmentStage.ele('cac:DriverPerson')
   driverPerson.ele('cbc:ID', {
-    'schemeID': driverData.documentType || '1',
-    'schemeName': 'Documento de Identidad',
-    'schemeAgencyName': 'PE:SUNAT',
-    'schemeURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo06'
+    'schemeID': driverData.documentType || '1'
   }).txt(driverData.documentNumber || '00000000')
 
   driverPerson.ele('cbc:FirstName').txt(driverData.name || driverData.firstName || 'CONDUCTOR')
@@ -2639,27 +2630,41 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
   const driverLicense = driverPerson.ele('cac:IdentityDocumentReference')
   driverLicense.ele('cbc:ID').txt(driverData.license || driverData.licenseNumber || 'Q00000000')
 
-  // === PUNTO DE LLEGADA (Destino) - cac:Delivery DEBE ir ANTES de TransportHandlingUnit según UBL 2.1 ===
-  // Orden en cac:Shipment según UBL 2.1: ShipmentStage (24) -> Delivery (25) -> TransportHandlingUnit (26)
+  // === CONDUCTOR SECUNDARIO (opcional) ===
+  const secondaryDriver = guideData.secondaryDriver || guideData.driver2 || null
+  if (secondaryDriver && secondaryDriver.documentNumber) {
+    const driverPerson2 = shipmentStage.ele('cac:DriverPerson')
+    driverPerson2.ele('cbc:ID', {
+      'schemeID': secondaryDriver.documentType || '1'
+    }).txt(secondaryDriver.documentNumber)
+    driverPerson2.ele('cbc:FirstName').txt(secondaryDriver.name || secondaryDriver.firstName || '')
+    driverPerson2.ele('cbc:FamilyName').txt(secondaryDriver.lastName || secondaryDriver.familyName || '')
+    driverPerson2.ele('cbc:JobTitle').txt('Secundario')
+    const driverLicense2 = driverPerson2.ele('cac:IdentityDocumentReference')
+    driverLicense2.ele('cbc:ID').txt(secondaryDriver.license || secondaryDriver.licenseNumber || '')
+  }
+
+  // === PUNTO DE LLEGADA (Destino) ===
   const delivery = shipment.ele('cac:Delivery')
   const deliveryAddress = delivery.ele('cac:DeliveryAddress')
-  deliveryAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.destination?.ubigeo || '150101')
-  deliveryAddress.ele('cbc:StreetName').txt(guideData.destination?.address || '')
+  deliveryAddress.ele('cbc:ID').txt(guideData.destination?.ubigeo || '150101')
+  if (guideData.destination?.city) deliveryAddress.ele('cbc:CityName').txt(guideData.destination.city)
+  if (guideData.destination?.department) deliveryAddress.ele('cbc:CountrySubentity').txt(guideData.destination.department)
+  if (guideData.destination?.district) deliveryAddress.ele('cbc:District').txt(guideData.destination.district)
+  const deliveryAddressLine = deliveryAddress.ele('cac:AddressLine')
+  deliveryAddressLine.ele('cbc:Line').txt(guideData.destination?.address || '')
 
   // === PUNTO DE PARTIDA (dentro de cac:Delivery/cac:Despatch/cac:DespatchAddress) ===
-  // Según validaciones SUNAT (error 2775): /DespatchAdvice/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchAddress/cbc:ID
   const despatch = delivery.ele('cac:Despatch')
 
   // Dirección de despacho (punto de partida/origen)
   const despatchAddress = despatch.ele('cac:DespatchAddress')
-  despatchAddress.ele('cbc:ID', {
-    'schemeAgencyName': 'PE:INEI',
-    'schemeName': 'Ubigeos'
-  }).txt(guideData.origin?.ubigeo || '150101')
-  despatchAddress.ele('cbc:StreetName').txt(guideData.origin?.address || '')
+  despatchAddress.ele('cbc:ID').txt(guideData.origin?.ubigeo || '150101')
+  if (guideData.origin?.city) despatchAddress.ele('cbc:CityName').txt(guideData.origin.city)
+  if (guideData.origin?.department) despatchAddress.ele('cbc:CountrySubentity').txt(guideData.origin.department)
+  if (guideData.origin?.district) despatchAddress.ele('cbc:District').txt(guideData.origin.district)
+  const despatchAddressLine = despatchAddress.ele('cac:AddressLine')
+  despatchAddressLine.ele('cbc:Line').txt(guideData.origin?.address || '')
 
   // === REMITENTE (dentro de cac:Delivery/cac:Despatch/cac:DespatchParty) ===
   // Según validaciones SUNAT: /DespatchAdvice/cac:Shipment/cac:Delivery/cac:Despatch/cac:DespatchParty
@@ -2672,8 +2677,27 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     'schemeID': shipperDocType
   }).txt(shipperRuc || '00000000000')
 
+  // Dirección del remitente (si está disponible)
+  if (shipperData.ubigeo || shipperData.address) {
+    const shipperPostalAddress = despatchParty.ele('cac:PostalAddress')
+    shipperPostalAddress.ele('cbc:ID').txt(shipperData.ubigeo || '150101')
+    shipperPostalAddress.ele('cbc:StreetName').txt(shipperData.address || '')
+    if (shipperData.city) shipperPostalAddress.ele('cbc:CityName').txt(shipperData.city)
+    if (shipperData.department) shipperPostalAddress.ele('cbc:CountrySubentity').txt(shipperData.department)
+    if (shipperData.district) shipperPostalAddress.ele('cbc:District').txt(shipperData.district)
+    const shipperCountry = shipperPostalAddress.ele('cac:Country')
+    shipperCountry.ele('cbc:IdentificationCode').txt('PE')
+  }
+
   const despatchLegalEntity = despatchParty.ele('cac:PartyLegalEntity')
   despatchLegalEntity.ele('cbc:RegistrationName').txt(shipperBusinessName || 'REMITENTE NO ESPECIFICADO')
+
+  // Email del remitente o del transportista como contacto
+  const shipperEmail = shipperData.email || businessData.email || ''
+  if (shipperEmail) {
+    const shipperContact = despatchParty.ele('cac:Contact')
+    shipperContact.ele('cbc:ElectronicMail').txt(shipperEmail)
+  }
 
   // === VEHÍCULO - TransportHandlingUnit (DEBE ir DESPUÉS de Delivery según UBL 2.1) ===
   // XPath: /DespatchAdvice/cac:Shipment/cac:TransportHandlingUnit/cac:TransportEquipment/cbc:ID
@@ -2728,9 +2752,7 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
     const vehicleEntity = entityCodeMap[rawEntity.toUpperCase()] || rawEntity
     const shipmentDocRef = transportEquipment.ele('cac:ShipmentDocumentReference')
     shipmentDocRef.ele('cbc:ID', {
-      'schemeID': vehicleEntity,
-      'schemeName': 'Entidad Autorizadora',
-      'schemeAgencyName': 'PE:SUNAT'
+      'schemeID': vehicleEntity
     }).txt(vehicleCertificate)
   }
 
