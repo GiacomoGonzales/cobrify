@@ -74,7 +74,17 @@ export default function InvoiceList() {
     // Usar emissionDate si existe (fecha de emisión configurada en el POS)
     if (invoice?.emissionDate) {
       if (invoice.emissionDate.toDate) return invoice.emissionDate.toDate()
-      if (typeof invoice.emissionDate === 'string') return new Date(invoice.emissionDate + 'T00:00:00')
+      if (typeof invoice.emissionDate === 'string') {
+        // emissionDate es solo fecha "YYYY-MM-DD", tomar la hora de createdAt
+        const createdAt = invoice.createdAt?.toDate?.() || (invoice.createdAt ? new Date(invoice.createdAt) : null)
+        if (createdAt) {
+          const [year, month, day] = invoice.emissionDate.split('-').map(Number)
+          const combined = new Date(createdAt)
+          combined.setFullYear(year, month - 1, day)
+          return combined
+        }
+        return new Date(invoice.emissionDate + 'T12:00:00')
+      }
       return new Date(invoice.emissionDate)
     }
     // Fallback a createdAt
