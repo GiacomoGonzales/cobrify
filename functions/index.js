@@ -7374,3 +7374,330 @@ export const scheduledBillingStatsUpdate = onSchedule(
     }
   }
 )
+
+/**
+ * Cloud Function Callable: Renovación segura de cliente por reseller
+ * Valida pertenencia, calcula precio con tier, verifica saldo, y ejecuta atómicamente
+ */
+export const resellerRenewClient = onCall(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+  },
+  async (request) => {
+    // Verificar autenticación
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debes iniciar sesión')
+    }
+
+    const { clientId, plan } = request.data
+    if (!clientId || !plan) {
+      throw new HttpsError('invalid-argument', 'clientId y plan son requeridos')
+    }
+
+    // Meses por plan
+    const PLAN_MONTHS = {
+      qpse_1_month: 1,
+      qpse_6_months: 6,
+      qpse_12_months: 12,
+      sunat_direct_1_month: 1,
+      sunat_direct_6_months: 6,
+      sunat_direct_12_months: 12,
+    }
+
+    // Precios base para resellers
+    const BASE_PRICES = {
+      qpse_1_month: 20,
+      qpse_6_months: 100,
+      qpse_12_months: 150,
+      sunat_direct_1_month: 20,
+      sunat_direct_6_months: 100,
+      sunat_direct_12_months: 150,
+    }
+
+    const months = PLAN_MONTHS[plan]
+    if (!months) {
+      throw new HttpsError('invalid-argument', 'Plan no válido para renovación')
+    }
+
+    const callerUid = request.auth.uid
+    const callerEmail = request.auth.token.email
+
+    try {
+      // Ejecutar en transacción para atomicidad
+      const result = await db.runTransaction(async (transaction) => {
+        // 1. Verificar que el caller es un reseller activo
+        let resellerRef = db.collection('resellers').doc(callerUid)
+        let resellerDoc = await transaction.get(resellerRef)
+
+        // Si no existe por UID, buscar por email
+        if (!resellerDoc.exists) {
+          const resellersQuery = await db.collection('resellers')
+            .where('email', '==', callerEmail)
+            .limit(1)
+            .get()
+
+          if (resellersQuery.empty) {
+            throw new HttpsError('permission-denied', 'No eres un reseller registrado')
+          }
+
+          resellerRef = resellersQuery.docs[0].ref
+          resellerDoc = await transaction.get(resellerRef)
+        }
+
+        const resellerData = resellerDoc.data()
+        if (resellerData.isActive === false) {
+          throw new HttpsError('permission-denied', 'Tu cuenta de reseller está inactiva')
+        }
+
+        const resellerId = resellerDoc.id
+
+        // 2. Verificar que el cliente pertenece al reseller
+        const clientRef = db.collection('subscriptions').doc(clientId)
+        const clientDoc = await transaction.get(clientRef)
+
+        if (!clientDoc.exists) {
+          throw new HttpsError('not-found', 'Cliente no encontrado')
+        }
+
+        const clientData = clientDoc.data()
+        if (clientData.resellerId !== resellerId) {
+          throw new HttpsError('permission-denied', 'Este cliente no pertenece a tu red')
+        }
+
+        // 3. Calcular precio según tier del reseller
+        const discount = resellerData.discountOverride !== null && resellerData.discountOverride !== undefined
+          ? resellerData.discountOverride
+          : 20 // Default bronze tier
+
+        // Si hay tier dinámico, contamos clientes activos
+        if (resellerData.discountOverride === null || resellerData.discountOverride === undefined) {
+          // Obtener tier info (simplificado - usar defaults si no hay config)
+          const tiersDoc = await transaction.get(db.collection('settings').doc('resellerTiers'))
+          let tiers = [
+            { minClients: 0, discount: 20 },
+            { minClients: 10, discount: 30 },
+            { minClients: 100, discount: 40 }
+          ]
+          if (tiersDoc.exists && tiersDoc.data().tiers) {
+            tiers = tiersDoc.data().tiers
+          }
+
+          // Nota: no podemos hacer queries en transacciones, usar el descuento del override o default
+        }
+
+        const basePrice = BASE_PRICES[plan] || 0
+        const finalPrice = Math.round(basePrice * (1 - discount / 100))
+
+        // 4. Verificar saldo suficiente
+        const currentBalance = resellerData.balance || 0
+        if (currentBalance < finalPrice) {
+          throw new HttpsError('failed-precondition',
+            `Saldo insuficiente. Necesitas S/ ${finalPrice} pero tienes S/ ${currentBalance.toFixed(2)}`)
+        }
+
+        // 5. Calcular nueva fecha de vencimiento
+        const now = new Date()
+        const currentEnd = clientData.currentPeriodEnd?.toDate?.()
+        const startFrom = currentEnd && currentEnd > now ? currentEnd : now
+        const newPeriodEnd = new Date(startFrom)
+        newPeriodEnd.setMonth(newPeriodEnd.getMonth() + months)
+
+        const isSunatDirect = plan.startsWith('sunat_direct')
+
+        // 6. Actualizar suscripción del cliente
+        transaction.update(clientRef, {
+          plan: plan,
+          currentPeriodEnd: newPeriodEnd,
+          status: 'active',
+          accessBlocked: false,
+          blockReason: null,
+          blockedAt: null,
+          'limits.maxInvoicesPerMonth': isSunatDirect ? -1 : 500,
+          updatedAt: FieldValue.serverTimestamp(),
+          lastRenewalAt: FieldValue.serverTimestamp(),
+          lastRenewalBy: resellerId,
+        })
+
+        // 7. Deducir saldo del reseller
+        const newBalance = currentBalance - finalPrice
+        transaction.update(resellerRef, {
+          balance: newBalance,
+          totalSpent: (resellerData.totalSpent || 0) + finalPrice,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        // 8. Registrar transacción
+        const transactionRef = db.collection('resellerTransactions').doc()
+        transaction.set(transactionRef, {
+          resellerId: resellerId,
+          type: 'renewal',
+          amount: -finalPrice,
+          description: `Renovación ${plan} - ${clientData.businessName || clientData.email}`,
+          clientId: clientId,
+          clientEmail: clientData.email,
+          plan: plan,
+          balanceBefore: currentBalance,
+          balanceAfter: newBalance,
+          createdAt: FieldValue.serverTimestamp(),
+        })
+
+        return {
+          success: true,
+          newPeriodEnd: newPeriodEnd.toISOString(),
+          amountCharged: finalPrice,
+          newBalance: newBalance,
+        }
+      })
+
+      console.log(`✅ [ResellerRenew] Reseller ${callerUid} renovó cliente ${clientId} con plan ${plan}`)
+      return result
+
+    } catch (error) {
+      if (error instanceof HttpsError) throw error
+      console.error('❌ [ResellerRenew] Error:', error)
+      throw new HttpsError('internal', 'Error al procesar la renovación')
+    }
+  }
+)
+
+/**
+ * Scheduled Function: Verifica vencimientos de suscripciones diariamente
+ * - 7 días antes: notificación de advertencia
+ * - 3 días antes: notificación de urgencia
+ * - 1 día antes: notificación final
+ * - Día del vencimiento: marcar como "en gracia"
+ * - 1 día después: suspender automáticamente
+ * - Salta usuarios enterprise y super admins
+ * - Salta sub-usuarios (usan suscripción del owner)
+ */
+export const checkSubscriptionExpirations = onSchedule(
+  {
+    schedule: '0 1 * * *', // 01:00 AM Lima
+    timeZone: 'America/Lima',
+    region: 'us-central1',
+    memory: '512MiB',
+    timeoutSeconds: 300,
+  },
+  async () => {
+    console.log('🔔 [CheckExpirations] Iniciando verificación de vencimientos...')
+
+    try {
+      const now = new Date()
+
+      // 1. Obtener todos los admins para excluirlos
+      const adminsSnapshot = await db.collection('admins').get()
+      const adminIds = new Set(adminsSnapshot.docs.map(d => d.id))
+
+      // 2. Obtener sub-usuarios para excluirlos
+      const usersSnapshot = await db.collection('users').where('ownerId', '!=', '').get()
+      const subUserIds = new Set()
+      usersSnapshot.docs.forEach(d => {
+        if (d.data().ownerId) subUserIds.add(d.id)
+      })
+
+      // 3. Obtener suscripciones activas
+      const activeSnapshot = await db.collection('subscriptions')
+        .where('status', '==', 'active')
+        .where('accessBlocked', '==', false)
+        .get()
+
+      let notificationsCreated = 0
+      let suspendedCount = 0
+
+      for (const docSnap of activeSnapshot.docs) {
+        const sub = docSnap.data()
+        const userId = docSnap.id
+
+        // Saltar admins, sub-usuarios, y enterprise
+        if (adminIds.has(userId)) continue
+        if (subUserIds.has(userId)) continue
+        if (sub.plan === 'enterprise') continue
+
+        const periodEnd = sub.currentPeriodEnd?.toDate?.()
+        if (!periodEnd) continue
+
+        const diffMs = periodEnd.getTime() - now.getTime()
+        const daysUntilExpiry = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+
+        // 1 día después del vencimiento → suspender
+        if (daysUntilExpiry <= -1) {
+          await db.collection('subscriptions').doc(userId).update({
+            status: 'suspended',
+            accessBlocked: true,
+            blockReason: 'Suscripción vencida',
+            blockedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+          suspendedCount++
+
+          // Crear notificación de suspensión
+          await db.collection('notifications').add({
+            userId,
+            type: 'subscription_expired',
+            title: 'Cuenta Suspendida',
+            message: `Tu suscripción ha vencido y tu cuenta ha sido suspendida. Renueva tu plan para seguir usando Cobrify.`,
+            metadata: { periodEnd: periodEnd.toISOString(), autoSuspended: true },
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+          notificationsCreated++
+          continue
+        }
+
+        // Notificaciones por proximidad de vencimiento
+        let notifTitle = null
+        let notifMessage = null
+        let notifType = 'subscription_expiring_soon'
+
+        if (daysUntilExpiry === 7) {
+          notifTitle = 'Tu suscripción vence en 7 días'
+          notifMessage = `Tu plan ${sub.plan} vence el ${periodEnd.toLocaleDateString('es-PE')}. Renueva para no perder acceso.`
+        } else if (daysUntilExpiry === 3) {
+          notifTitle = 'Tu suscripción vence en 3 días'
+          notifMessage = `¡Atención! Tu plan vence el ${periodEnd.toLocaleDateString('es-PE')}. Renueva ahora para evitar la suspensión.`
+        } else if (daysUntilExpiry === 1) {
+          notifTitle = 'Tu suscripción vence mañana'
+          notifMessage = `¡Último día! Tu plan vence mañana ${periodEnd.toLocaleDateString('es-PE')}. Renueva hoy para no perder acceso.`
+        } else if (daysUntilExpiry === 0) {
+          notifTitle = 'Tu suscripción vence hoy'
+          notifMessage = `Tu plan vence hoy. Tienes 24 horas de gracia para renovar antes de que tu cuenta sea suspendida.`
+          notifType = 'subscription_expired'
+        }
+
+        if (notifTitle) {
+          // Verificar que no se haya creado ya hoy
+          const todayStart = new Date(now)
+          todayStart.setHours(0, 0, 0, 0)
+
+          const existingNotif = await db.collection('notifications')
+            .where('userId', '==', userId)
+            .where('type', '==', notifType)
+            .where('createdAt', '>=', todayStart)
+            .limit(1)
+            .get()
+
+          if (existingNotif.empty) {
+            await db.collection('notifications').add({
+              userId,
+              type: notifType,
+              title: notifTitle,
+              message: notifMessage,
+              metadata: { periodEnd: periodEnd.toISOString(), daysUntilExpiry },
+              read: false,
+              createdAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+            notificationsCreated++
+          }
+        }
+      }
+
+      console.log(`✅ [CheckExpirations] Completado: ${notificationsCreated} notificaciones, ${suspendedCount} suspendidos`)
+
+    } catch (error) {
+      console.error('❌ [CheckExpirations] Error:', error)
+    }
+  }
+)

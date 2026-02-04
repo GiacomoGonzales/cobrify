@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
   const [resellerData, setResellerData] = useState(null) // Datos del reseller
   const [subscription, setSubscription] = useState(null)
   const [hasAccess, setHasAccess] = useState(false)
+  const [isInGracePeriod, setIsInGracePeriod] = useState(false)
   const [userPermissions, setUserPermissions] = useState(null) // Permisos del usuario
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
   const [allowedWarehouses, setAllowedWarehouses] = useState([]) // Almacenes permitidos (vacío = todos)
@@ -217,8 +218,19 @@ export const AuthProvider = ({ children }) => {
             }
 
             // Verificar acceso activo (super admin y business owner siempre tienen acceso)
-            const accessStatus = superAdminStatus || businessOwnerStatus ? true : hasActiveAccess(userSubscription)
-            setHasAccess(accessStatus)
+            if (superAdminStatus || businessOwnerStatus) {
+              setHasAccess(true)
+              setIsInGracePeriod(false)
+            } else {
+              const accessResult = hasActiveAccess(userSubscription)
+              if (accessResult === 'grace') {
+                setHasAccess(true)
+                setIsInGracePeriod(true)
+              } else {
+                setHasAccess(accessResult)
+                setIsInGracePeriod(false)
+              }
+            }
           } catch (error) {
             console.error('Error al obtener suscripción:', error)
             // Si es admin o business owner, darle acceso aunque falle la suscripción
@@ -309,6 +321,7 @@ export const AuthProvider = ({ children }) => {
           setIsBusinessOwner(false)
           setSubscription(null)
           setHasAccess(false)
+          setIsInGracePeriod(false)
           setUserPermissions(null)
           setAllowedPages([])
           setAllowedWarehouses([])
@@ -458,6 +471,7 @@ export const AuthProvider = ({ children }) => {
       setIsBusinessOwner(false)
       setSubscription(null)
       setHasAccess(false)
+      setIsInGracePeriod(false)
       setUserPermissions(null)
       setAllowedPages([])
       setAllowedWarehouses([])
@@ -493,8 +507,19 @@ export const AuthProvider = ({ children }) => {
       try {
         const userSubscription = await getSubscription(user.uid)
         setSubscription(userSubscription)
-        const accessStatus = isAdmin ? true : hasActiveAccess(userSubscription)
-        setHasAccess(accessStatus)
+        if (isAdmin) {
+          setHasAccess(true)
+          setIsInGracePeriod(false)
+        } else {
+          const accessResult = hasActiveAccess(userSubscription)
+          if (accessResult === 'grace') {
+            setHasAccess(true)
+            setIsInGracePeriod(true)
+          } else {
+            setHasAccess(accessResult)
+            setIsInGracePeriod(false)
+          }
+        }
       } catch (error) {
         console.error('Error al refrescar suscripción:', error)
       }
@@ -605,6 +630,7 @@ export const AuthProvider = ({ children }) => {
     resellerData, // Datos del reseller
     subscription,
     hasAccess,
+    isInGracePeriod,
     userPermissions,
     allowedPages,
     allowedWarehouses, // Almacenes permitidos para el usuario

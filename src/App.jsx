@@ -37,6 +37,7 @@ import AdminPayments from './pages/admin/AdminPayments'
 import AdminAnalytics from './pages/admin/AdminAnalytics'
 import AdminSettings from './pages/admin/AdminSettings'
 import AdminResellers from './pages/admin/AdminResellers'
+import AdminExpirations from './pages/admin/AdminExpirations'
 // Reseller pages
 import ResellerLayout from './layouts/ResellerLayout'
 import ResellerDashboard from './pages/reseller/ResellerDashboard'
@@ -337,6 +338,7 @@ function App() {
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="resellers" element={<AdminResellers />} />
+              <Route path="expirations" element={<AdminExpirations />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="settings" element={<AdminSettings />} />

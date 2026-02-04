@@ -8,6 +8,7 @@ import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import { useYapeListener } from '@/hooks/useYapeListener'
+import { AlertTriangle, MessageCircle } from 'lucide-react'
 
 // Mapeo de rutas a pageIds para verificación de permisos
 const routeToPageId = {
@@ -53,7 +54,7 @@ const routeToPageId = {
 }
 
 export default function MainLayout() {
-  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId } = useAuth()
+  const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const location = useLocation()
@@ -238,6 +239,25 @@ export default function MainLayout() {
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
       {/* iOS Status Bar - Gradiente moderno */}
       <div className="ios-status-bar bg-gradient-to-r from-primary-800 via-primary-700 to-blue-800 md:hidden flex-shrink-0" />
+
+      {/* Banner de período de gracia */}
+      {isInGracePeriod && (
+        <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-2 flex-shrink-0 text-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span className="font-medium">Tu suscripción venció. Tienes hasta mañana para renovar.</span>
+          </div>
+          <a
+            href={`https://wa.me/51900434988?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de Cobrify. Mi email es ${user?.email || ''}.`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            Renovar
+          </a>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}

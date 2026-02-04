@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { PLANS } from '@/services/subscriptionService'
 import { getResellerTierInfo, calculatePrice, BASE_PRICES } from '@/services/resellerTierService'
 import {
@@ -191,17 +192,11 @@ export default function ResellerClients() {
     setSelectedClient(null)
   }
 
-  // Procesar renovación
+  // Procesar renovación via Cloud Function (segura y atómica)
   async function handleRenewal() {
     if (!renewalClient || !renewalPlan) return
 
     const planPrice = calculatePrice(renewalPlan, effectiveDiscount)
-    const planMonths = PLAN_MONTHS[renewalPlan]
-
-    if (!planMonths) {
-      alert('Plan no válido')
-      return
-    }
 
     if (currentBalance < planPrice) {
       alert(`Saldo insuficiente. Necesitas S/ ${planPrice} pero tienes S/ ${currentBalance.toFixed(2)}`)
@@ -211,59 +206,26 @@ export default function ResellerClients() {
     setRenewalLoading(true)
 
     try {
-      // Calcular nueva fecha de vencimiento
-      const now = new Date()
-      const currentEnd = renewalClient.periodEnd
-      // Si ya venció, empezar desde hoy; si no, extender desde la fecha actual
-      const startFrom = currentEnd && currentEnd > now ? currentEnd : now
-      const newPeriodEnd = new Date(startFrom)
-      newPeriodEnd.setMonth(newPeriodEnd.getMonth() + planMonths)
-
-      // 1. Actualizar suscripción del cliente
-      // QPse = 200 docs/mes, SUNAT Directo = ilimitado
-      const isSunatDirect = renewalPlan.startsWith('sunat_direct')
-      await updateDoc(doc(db, 'subscriptions', renewalClient.id), {
-        plan: renewalPlan,
-        currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
-        status: 'active',
-        accessBlocked: false,
-        'limits.maxInvoicesPerMonth': isSunatDirect ? -1 : 200,
-        updatedAt: Timestamp.now(),
-        lastRenewalAt: Timestamp.now(),
-        lastRenewalBy: resellerId
-      })
-
-      // 2. Deducir saldo del reseller
-      const newBalance = currentBalance - planPrice
-      await updateDoc(doc(db, 'resellers', resellerId), {
-        balance: newBalance,
-        updatedAt: Timestamp.now()
-      })
-
-      // 3. Registrar transacción
-      await addDoc(collection(db, 'resellerTransactions'), {
-        resellerId: resellerId,
-        type: 'renewal',
-        amount: -planPrice,
-        description: `Renovación ${PLANS[renewalPlan]?.name || renewalPlan} - ${renewalClient.businessName || renewalClient.email}`,
+      const functions = getFunctions()
+      const renewFn = httpsCallable(functions, 'resellerRenewClient')
+      const result = await renewFn({
         clientId: renewalClient.id,
-        clientEmail: renewalClient.email,
         plan: renewalPlan,
-        balanceBefore: currentBalance,
-        balanceAfter: newBalance,
-        createdAt: Timestamp.now()
       })
 
-      // 4. Refrescar datos
-      await refreshResellerData()
-      await loadClients()
+      if (result.data.success) {
+        // Refrescar datos
+        await refreshResellerData()
+        await loadClients()
 
-      setShowRenewalModal(false)
-      setRenewalClient(null)
-      alert('¡Renovación exitosa!')
+        setShowRenewalModal(false)
+        setRenewalClient(null)
+        alert('¡Renovación exitosa!')
+      }
     } catch (error) {
       console.error('Error en renovación:', error)
-      alert('Error al procesar la renovación: ' + error.message)
+      const message = error.message || 'Error al procesar la renovación'
+      alert(message)
     } finally {
       setRenewalLoading(false)
     }

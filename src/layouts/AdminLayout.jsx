@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   Search,
-  Building2
+  Building2,
+  CalendarClock
 } from 'lucide-react'
 
 const navItems = [
@@ -38,6 +39,13 @@ const navItems = [
     label: 'Resellers',
     description: 'Red de revendedores',
     color: 'from-emerald-500 to-teal-600'
+  },
+  {
+    path: '/app/admin/expirations',
+    icon: CalendarClock,
+    label: 'Vencimientos',
+    description: 'Gestión de vencimientos',
+    color: 'from-red-500 to-rose-600'
   },
   {
     path: '/app/admin/payments',

@@ -60,8 +60,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.resellerId != null && isReseller(request.resource.data.resellerId);
       // Only admins can update/delete subscriptions
       allow update, delete: if isAdmin();
-      // Resellers pueden actualizar suscripciones de sus clientes (verificar por UID o email)
-      allow update: if isAuthenticated() && resource.data.resellerId != null && isReseller(resource.data.resellerId);
+      // Resellers pueden actualizar suscripciones de sus clientes, pero NO campos financieros/sensibles
+      allow update: if isAuthenticated()
+        && resource.data.resellerId != null
+        && isReseller(resource.data.resellerId)
+        && request.resource.data.currentPeriodEnd == resource.data.currentPeriodEnd
+        && request.resource.data.plan == resource.data.plan
+        && request.resource.data.limits == resource.data.limits
+        && request.resource.data.resellerId == resource.data.resellerId;
     }
 
     // Admins collection (lista de UIDs de administradores)
@@ -95,8 +101,12 @@ service cloud.firestore {
       // Admins pueden leer/escribir cualquier reseller
       allow read, write: if isAdmin();
 
-      // Resellers pueden leer/escribir sus propios datos (por UID)
-      allow read, write: if isAuthenticated() && isOwner(resellerId);
+      // Resellers pueden leer sus propios datos (por UID)
+      allow read: if isAuthenticated() && isOwner(resellerId);
+      // Resellers pueden actualizar sus propios datos, pero NO el balance ni totalSpent
+      allow update: if isAuthenticated() && isOwner(resellerId)
+        && request.resource.data.balance == resource.data.balance
+        && request.resource.data.totalSpent == resource.data.totalSpent;
 
       // Usuarios autenticados pueden leer si su email coincide con el del reseller
       // Esto permite que resellers creados con docId diferente al uid puedan acceder

@@ -428,6 +428,7 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
 };
 
 // Verificar si el usuario tiene acceso activo
+// Retorna: true (acceso normal), false (sin acceso), o 'grace' (período de gracia de 24h)
 export const hasActiveAccess = (subscription) => {
   if (!subscription) return false;
 
@@ -441,7 +442,17 @@ export const hasActiveAccess = (subscription) => {
   const now = new Date();
   const periodEnd = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd;
 
-  if (periodEnd && periodEnd < now) return false;
+  if (periodEnd && periodEnd < now) {
+    // Verificar período de gracia (24 horas después del vencimiento)
+    const gracePeriodMs = 24 * 60 * 60 * 1000; // 24 horas
+    const timeSinceExpiry = now.getTime() - new Date(periodEnd).getTime();
+
+    if (timeSinceExpiry < gracePeriodMs) {
+      return 'grace'; // Dentro del período de gracia
+    }
+
+    return false; // Período de gracia expirado
+  }
 
   return true;
 };
