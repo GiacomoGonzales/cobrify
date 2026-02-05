@@ -1093,6 +1093,7 @@ export default function CashFlow() {
                           <div>
                             <p className="font-medium text-gray-900">{cat?.name || mov.category}</p>
                             <p className="text-xs text-gray-500 truncate max-w-[150px]">{mov.description || '-'}</p>
+                            <p className="text-xs text-gray-400">{formatDate(mov.date || mov.createdAt)}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1116,6 +1117,7 @@ export default function CashFlow() {
                 <table className="w-full hidden sm:table">
                   <thead>
                     <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 text-sm font-medium text-gray-500">Fecha</th>
                       <th className="text-left py-2 text-sm font-medium text-gray-500">Tipo</th>
                       <th className="text-left py-2 text-sm font-medium text-gray-500">Detalle</th>
                       <th className="text-right py-2 text-sm font-medium text-gray-500">Monto</th>
@@ -1123,6 +1125,7 @@ export default function CashFlow() {
                   </thead>
                   <tbody>
                     <tr className="border-b border-gray-100">
+                      <td className="py-3 text-sm text-gray-500">-</td>
                       <td className="py-3">
                         <div className="flex items-center gap-2">
                           <ShoppingCart className="w-4 h-4 text-green-600" />
@@ -1137,6 +1140,7 @@ export default function CashFlow() {
                     </tr>
                     {cashFlowData.loansIncome > 0 && (
                       <tr className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-500">-</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <Landmark className="w-4 h-4 text-green-600" />
@@ -1149,6 +1153,7 @@ export default function CashFlow() {
                     )}
                     {cashFlowData.otherIncome > 0 && (
                       <tr className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-500">-</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <DollarSign className="w-4 h-4 text-green-600" />
@@ -1165,6 +1170,7 @@ export default function CashFlow() {
                       const Icon = cat?.icon || DollarSign
                       return (
                         <tr key={mov.id} className="border-b border-gray-100 bg-green-50/30">
+                          <td className="py-3 text-sm text-gray-500">{formatDate(mov.date || mov.createdAt)}</td>
                           <td className="py-3">
                             <div className="flex items-center gap-2">
                               <Icon className="w-4 h-4 text-green-600" />
@@ -1195,7 +1201,7 @@ export default function CashFlow() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-green-50">
-                      <td colSpan={2} className="py-3 px-2 font-semibold">TOTAL INGRESOS</td>
+                      <td colSpan={3} className="py-3 px-2 font-semibold">TOTAL INGRESOS</td>
                       <td className="py-3 px-2 text-right font-bold text-green-600 text-lg">{formatCurrency(cashFlowData.totalIncome)}</td>
                     </tr>
                   </tfoot>
@@ -1319,6 +1325,7 @@ export default function CashFlow() {
                           <div>
                             <p className="font-medium text-gray-900">{cat?.name || mov.category}</p>
                             <p className="text-xs text-gray-500 truncate max-w-[150px]">{mov.description || '-'}</p>
+                            <p className="text-xs text-gray-400">{formatDate(mov.date || mov.createdAt)}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1342,6 +1349,7 @@ export default function CashFlow() {
                 <table className="w-full hidden sm:table">
                   <thead>
                     <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 text-sm font-medium text-gray-500">Fecha</th>
                       <th className="text-left py-2 text-sm font-medium text-gray-500">Categoría</th>
                       <th className="text-left py-2 text-sm font-medium text-gray-500">Detalle</th>
                       <th className="text-right py-2 text-sm font-medium text-gray-500">Monto</th>
@@ -1354,6 +1362,7 @@ export default function CashFlow() {
                       const categoryName = EXPENSE_CATEGORIES.find(c => c.id === category)?.name || category
                       return (
                         <tr key={category} className="border-b border-gray-100">
+                          <td className="py-3 text-sm text-gray-500">-</td>
                           <td className="py-3">
                             <div className="flex items-center gap-2">
                               <CategoryIcon className="w-4 h-4 text-red-600" />
@@ -1369,6 +1378,7 @@ export default function CashFlow() {
                     {/* Compras al contado */}
                     {cashFlowData.cashPurchasesTotal > 0 && (
                       <tr className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-500">-</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <Package className="w-4 h-4 text-red-600" />
@@ -1383,6 +1393,7 @@ export default function CashFlow() {
                     {/* Abonos a compras a crédito */}
                     {cashFlowData.purchasePaymentsTotal > 0 && (
                       <tr className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-500">-</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <DollarSign className="w-4 h-4 text-red-600" />
@@ -1397,6 +1408,7 @@ export default function CashFlow() {
                     {/* Cuotas de préstamos */}
                     {cashFlowData.loanInstallmentsTotal > 0 && (
                       <tr className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-500">-</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <Landmark className="w-4 h-4 text-red-600" />
@@ -1411,6 +1423,7 @@ export default function CashFlow() {
                     {/* Otros egresos */}
                     {cashFlowData.otherExpenses > 0 && (
                       <tr className="border-b border-gray-100">
+                        <td className="py-3 text-sm text-gray-500">-</td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             <MoreHorizontal className="w-4 h-4 text-red-600" />
@@ -1427,6 +1440,7 @@ export default function CashFlow() {
                       const Icon = cat?.icon || DollarSign
                       return (
                         <tr key={mov.id} className="border-b border-gray-100 bg-red-50/30">
+                          <td className="py-3 text-sm text-gray-500">{formatDate(mov.date || mov.createdAt)}</td>
                           <td className="py-3">
                             <div className="flex items-center gap-2">
                               <Icon className="w-4 h-4 text-red-600" />
@@ -1457,7 +1471,7 @@ export default function CashFlow() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-red-50">
-                      <td colSpan={2} className="py-3 px-2 font-semibold">TOTAL EGRESOS</td>
+                      <td colSpan={3} className="py-3 px-2 font-semibold">TOTAL EGRESOS</td>
                       <td className="py-3 px-2 text-right font-bold text-red-600 text-lg">{formatCurrency(cashFlowData.totalExpenses)}</td>
                     </tr>
                   </tfoot>
