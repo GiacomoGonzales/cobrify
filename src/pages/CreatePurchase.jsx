@@ -849,7 +849,7 @@ export default function CreatePurchase() {
               productId: productId,
               warehouseId: originalWarehouseId,
               type: 'exit',
-              quantity: originalQty,
+              quantity: -originalQty,
               reason: 'Edición de compra (cambio de almacén)',
               referenceType: 'purchase_edit',
               referenceId: purchaseId,
@@ -884,7 +884,7 @@ export default function CreatePurchase() {
               productId: productId,
               warehouseId: originalWarehouseId,
               type: difference > 0 ? 'entry' : 'exit',
-              quantity: Math.abs(difference),
+              quantity: difference, // Positivo para entrada, negativo para salida
               reason: difference > 0 ? 'Edición de compra (aumento)' : 'Edición de compra (reducción)',
               referenceType: 'purchase_edit',
               referenceId: purchaseId,
