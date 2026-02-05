@@ -75,19 +75,56 @@ export default function PurchaseHistory() {
 
   // Unificar ambas fuentes en un solo array normalizado
   const allPurchases = useMemo(() => {
+    // Construir sets de claves de compras principales que ya tienen ingredientes
+    // para evitar duplicar ingredientes que ya están en la colección purchases
+    const mainPurchaseKeysByInvoice = new Set()
+    const mainPurchaseKeysByDay = new Set()
+    productPurchases.forEach(purchase => {
+      const hasIngredients = purchase.items?.some(item => item.itemType === 'ingredient')
+      if (hasIngredients) {
+        const supplierName = purchase.supplier?.businessName || ''
+        if (purchase.invoiceNumber) {
+          mainPurchaseKeysByInvoice.add(`${supplierName}_${purchase.invoiceNumber}`)
+        } else {
+          // Sin factura: usar tanto invoiceDate como createdAt para cubrir cuando caen en días diferentes
+          const invoiceDate = purchase.invoiceDate?.toDate ? purchase.invoiceDate.toDate() : (purchase.invoiceDate ? new Date(purchase.invoiceDate) : null)
+          const createdAt = purchase.createdAt?.toDate ? purchase.createdAt.toDate() : (purchase.createdAt ? new Date(purchase.createdAt) : null)
+          if (invoiceDate) {
+            const dayKey = `${invoiceDate.getFullYear()}-${invoiceDate.getMonth()}-${invoiceDate.getDate()}`
+            mainPurchaseKeysByDay.add(`${supplierName}_${dayKey}`)
+          }
+          if (createdAt) {
+            const dayKey = `${createdAt.getFullYear()}-${createdAt.getMonth()}-${createdAt.getDate()}`
+            mainPurchaseKeysByDay.add(`${supplierName}_${dayKey}`)
+          }
+        }
+      }
+    })
+
     // Compras de ingredientes (colección ingredientPurchases)
-    const ingItems = ingredientPurchases.map(p => ({
-      id: p.id,
-      type: 'ingredient',
-      name: p.ingredientName,
-      quantity: p.quantity,
-      unit: p.unit,
-      unitPrice: p.unitPrice,
-      total: p.totalCost || (p.quantity * p.unitPrice),
-      supplier: p.supplier || '',
-      invoiceNumber: p.invoiceNumber || '',
-      date: p.purchaseDate || p.createdAt,
-    }))
+    // Filtrar las que ya están representadas en compras principales
+    const ingItems = ingredientPurchases
+      .filter(p => {
+        if (p.invoiceNumber && mainPurchaseKeysByInvoice.has(`${p.supplier || ''}_${p.invoiceNumber}`)) return false
+        if (!p.invoiceNumber) {
+          const date = p.purchaseDate?.toDate ? p.purchaseDate.toDate() : (p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.purchaseDate || p.createdAt))
+          const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+          if (mainPurchaseKeysByDay.has(`${p.supplier || ''}_${dayKey}`)) return false
+        }
+        return true
+      })
+      .map(p => ({
+        id: p.id,
+        type: 'ingredient',
+        name: p.ingredientName,
+        quantity: p.quantity,
+        unit: p.unit,
+        unitPrice: p.unitPrice,
+        total: p.totalCost || (p.quantity * p.unitPrice),
+        supplier: p.supplier || '',
+        invoiceNumber: p.invoiceNumber || '',
+        date: p.purchaseDate || p.createdAt,
+      }))
 
     // Compras de productos (colección purchases) - desglosar items individuales
     const prodItems = []

@@ -97,6 +97,9 @@ export const getIngredientStockForBranch = (ingredient, warehouses, branchFilter
  * Conversión de unidades de medida
  */
 export const convertUnit = (value, fromUnit, toUnit) => {
+  // Si alguna unidad no está definida, retornar el valor sin convertir
+  if (!fromUnit || !toUnit) return value
+
   // Normalizar a minúsculas
   const from = fromUnit.toLowerCase()
   const to = toUnit.toLowerCase()

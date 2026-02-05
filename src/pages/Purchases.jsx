@@ -145,11 +145,45 @@ export default function Purchases() {
       }
 
       // Agrupar compras de ingredientes por proveedor + factura + mismo día
+      // Solo mostrar las que NO ya están representadas en una compra principal (purchases)
       if (ingResult.success && ingResult.data?.length > 0) {
+        // Construir sets de claves de compras principales que ya tienen ingredientes
+        // Usamos dos estrategias: por factura (sin fecha) y por día (sin factura)
+        const mainPurchaseKeysByInvoice = new Set() // proveedor + factura (cuando hay N° factura)
+        const mainPurchaseKeysByDay = new Set() // proveedor + día (cuando no hay N° factura)
+        allPurchases.forEach(p => {
+          const hasIngredients = p.items?.some(item => item.itemType === 'ingredient')
+          if (hasIngredients) {
+            const supplierName = p.supplier?.businessName || ''
+            if (p.invoiceNumber) {
+              // Con factura: match por proveedor + factura (sin importar día)
+              mainPurchaseKeysByInvoice.add(`${supplierName}_${p.invoiceNumber}`)
+            } else {
+              // Sin factura: match por proveedor + día (usando tanto invoiceDate como createdAt)
+              // Esto cubre el caso donde invoiceDate y createdAt caen en días diferentes
+              const invoiceDate = p.invoiceDate?.toDate ? p.invoiceDate.toDate() : (p.invoiceDate ? new Date(p.invoiceDate) : null)
+              const createdAt = p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : null)
+              if (invoiceDate) {
+                const dayKey = `${invoiceDate.getFullYear()}-${invoiceDate.getMonth()}-${invoiceDate.getDate()}`
+                mainPurchaseKeysByDay.add(`${supplierName}_${dayKey}`)
+              }
+              if (createdAt) {
+                const dayKey = `${createdAt.getFullYear()}-${createdAt.getMonth()}-${createdAt.getDate()}`
+                mainPurchaseKeysByDay.add(`${supplierName}_${dayKey}`)
+              }
+            }
+          }
+        })
+
         const groups = {}
         ingResult.data.forEach(p => {
           const date = p.purchaseDate?.toDate ? p.purchaseDate.toDate() : (p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.purchaseDate || p.createdAt))
           const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+
+          // Saltar si ya existe una compra principal con los mismos datos
+          if (p.invoiceNumber && mainPurchaseKeysByInvoice.has(`${p.supplier || ''}_${p.invoiceNumber}`)) return
+          if (!p.invoiceNumber && mainPurchaseKeysByDay.has(`${p.supplier || ''}_${dayKey}`)) return
+
           const key = `${p.supplier || ''}_${p.invoiceNumber || ''}_${dayKey}`
 
           if (!groups[key]) {
@@ -1184,6 +1218,17 @@ export default function Purchases() {
                             ? (viewingPurchase.invoiceDate || viewingPurchase.createdAt).toDate()
                             : (viewingPurchase.invoiceDate || viewingPurchase.createdAt)
                         )
+                      : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Hora de registro:</span>
+                  <span className="text-sm font-medium">
+                    {viewingPurchase.createdAt
+                      ? (viewingPurchase.createdAt.toDate
+                          ? viewingPurchase.createdAt.toDate()
+                          : new Date(viewingPurchase.createdAt)
+                        ).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true })
                       : '-'}
                   </span>
                 </div>

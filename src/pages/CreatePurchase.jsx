@@ -22,7 +22,8 @@ import {
 } from '@/services/firestoreService'
 import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
-import { getIngredients, registerPurchase as registerIngredientPurchase } from '@/services/ingredientService'
+import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
+import Modal from '@/components/ui/Modal'
 
 // Helper function for legacy categories (used in ingredient logic)
 const migrateLegacyCategories = (cats) => {
@@ -118,6 +119,14 @@ export default function CreatePurchase() {
   const [currentItemIndex, setCurrentItemIndex] = useState(null)
   const [isCreatingProduct, setIsCreatingProduct] = useState(false)
   const [newProductName, setNewProductName] = useState('')
+
+  // Estados para el modal de crear ingrediente
+  const [showCreateIngredientModal, setShowCreateIngredientModal] = useState(false)
+  const [isCreatingIngredient, setIsCreatingIngredient] = useState(false)
+  const [newIngredientForm, setNewIngredientForm] = useState({ name: '', category: 'otros', purchaseUnit: 'kg' })
+
+  // Estado para menú de crear (producto o ingrediente)
+  const [showCreateMenu, setShowCreateMenu] = useState({})
 
   useEffect(() => {
     loadData()
@@ -649,6 +658,68 @@ export default function CreatePurchase() {
     setIsCreatingProduct(false)
   }
 
+  const openCreateIngredientModal = (itemIndex) => {
+    setCurrentItemIndex(itemIndex)
+    const searchTerm = productSearches[itemIndex] || ''
+    setNewIngredientForm({ name: searchTerm, category: 'otros', purchaseUnit: 'kg' })
+    setShowCreateIngredientModal(true)
+    setShowCreateMenu({})
+  }
+
+  const handleCreateIngredient = async () => {
+    if (isCreatingIngredient) return
+    if (!newIngredientForm.name.trim()) {
+      toast.error('El nombre del ingrediente es requerido')
+      return
+    }
+
+    setIsCreatingIngredient(true)
+    const businessId = getBusinessId()
+
+    try {
+      const ingredientData = {
+        name: newIngredientForm.name.trim(),
+        category: newIngredientForm.category,
+        purchaseUnit: newIngredientForm.purchaseUnit,
+        currentStock: 0,
+        minimumStock: 0,
+        averageCost: 0,
+      }
+
+      const result = await createIngredient(businessId, ingredientData)
+      if (result.success) {
+        toast.success('Ingrediente creado exitosamente')
+
+        // Recargar ingredientes
+        const ingResult = await getIngredients(businessId)
+        if (ingResult.success) {
+          setIngredients(ingResult.data || [])
+        }
+
+        // Seleccionar el ingrediente recién creado
+        if (currentItemIndex !== null) {
+          const createdIngredient = {
+            id: result.id,
+            ...ingredientData,
+            itemType: 'ingredient',
+          }
+          selectProduct(currentItemIndex, createdIngredient)
+        }
+
+        setShowCreateIngredientModal(false)
+        setNewIngredientForm({ name: '', category: 'otros', purchaseUnit: 'kg' })
+        setCurrentItemIndex(null)
+      } else {
+        toast.error(result.error || 'Error al crear ingrediente')
+      }
+    } catch (error) {
+      console.error('Error al crear ingrediente:', error)
+      toast.error('Error al crear el ingrediente')
+    } finally {
+      setIsCreatingIngredient(false)
+    }
+  }
+
   const validateForm = (itemsToValidate = null) => {
     // Usar items proporcionados o los del estado
     const items = itemsToValidate || purchaseItems
@@ -1116,29 +1187,29 @@ export default function CreatePurchase() {
         })
       }
 
-      // 4. Actualizar stock de INGREDIENTES (solo en creación, no en edición por complejidad)
+      // 4. Actualizar stock de INGREDIENTES
       // IMPORTANTE: Agrupar items por ingredientId para manejar múltiples líneas del mismo ingrediente
-      if (!isEditMode) {
-        const groupedIngredients = {}
-        ingredientItems.forEach(item => {
-          const ingredientId = item.productId
-          if (!groupedIngredients[ingredientId]) {
-            groupedIngredients[ingredientId] = {
-              ingredientId,
-              ingredientName: item.productName,
-              unit: item.unit || 'NIU',
-              totalQuantity: 0,
-              totalCost: 0
-            }
+      const groupedIngredients = {}
+      ingredientItems.forEach(item => {
+        const ingredientId = item.productId
+        if (!groupedIngredients[ingredientId]) {
+          groupedIngredients[ingredientId] = {
+            ingredientId,
+            ingredientName: item.productName,
+            unit: item.unit || 'NIU',
+            totalQuantity: 0,
+            totalCost: 0
           }
-          const qty = parseFloat(item.quantity) || 0
-          const cost = parseFloat(item.cost) || 0
-          groupedIngredients[ingredientId].totalQuantity += qty
-          groupedIngredients[ingredientId].totalCost += qty * cost
-        })
+        }
+        const qty = parseFloat(item.quantity) || 0
+        const cost = parseFloat(item.cost) || 0
+        groupedIngredients[ingredientId].totalQuantity += qty
+        groupedIngredients[ingredientId].totalCost += qty * cost
+      })
 
+      if (!isEditMode) {
+        // Modo creación: registrar compra de ingredientes (crea registro + actualiza stock)
         const ingredientUpdates = Object.values(groupedIngredients).map(async grouped => {
-          // Costo unitario promedio ponderado (redondeado a 2 decimales)
           const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 100) / 100 : 0
           return registerIngredientPurchase(businessId, {
             ingredientId: grouped.ingredientId,
@@ -1148,11 +1219,77 @@ export default function CreatePurchase() {
             unitPrice: avgUnitPrice,
             totalCost: grouped.totalCost,
             supplier: selectedSupplier?.businessName || '',
-            invoiceNumber: invoiceNumber.trim() || ''
+            invoiceNumber: invoiceNumber.trim() || '',
+            purchaseDate: parseLocalDate(invoiceDate),
           })
         })
 
         await Promise.all(ingredientUpdates)
+      } else {
+        // Modo edición: calcular diferencias y ajustar stock de ingredientes
+        const originalIngredientItems = (originalPurchase?.items || []).filter(item => item.itemType === 'ingredient')
+
+        // Agrupar cantidades originales por ingrediente
+        const originalIngredientQtys = {}
+        originalIngredientItems.forEach(item => {
+          const id = item.productId
+          if (!originalIngredientQtys[id]) originalIngredientQtys[id] = 0
+          originalIngredientQtys[id] += parseFloat(item.quantity) || 0
+        })
+
+        // Agrupar cantidades nuevas por ingrediente
+        const newIngredientQtys = {}
+        ingredientItems.forEach(item => {
+          const id = item.productId
+          if (!newIngredientQtys[id]) newIngredientQtys[id] = 0
+          newIngredientQtys[id] += parseFloat(item.quantity) || 0
+        })
+
+        // Calcular diferencias (ingredientes existentes + nuevos + removidos)
+        const allIngredientIds = new Set([...Object.keys(originalIngredientQtys), ...Object.keys(newIngredientQtys)])
+
+        const ingredientStockUpdates = [...allIngredientIds].map(async ingredientId => {
+          const originalQty = originalIngredientQtys[ingredientId] || 0
+          const newQty = newIngredientQtys[ingredientId] || 0
+
+          if (originalQty === newQty) return // Sin cambio
+
+          const ingredient = ingredients.find(i => i.id === ingredientId)
+          if (!ingredient) return
+
+          const currentStock = ingredient.currentStock || 0
+          const purchaseUnit = ingredient.purchaseUnit
+          const itemUnit = groupedIngredients[ingredientId]?.unit || originalIngredientItems.find(i => i.productId === ingredientId)?.unit || 'NIU'
+
+          // Enfoque "revertir + sumar": primero revertir la cantidad original, luego sumar la nueva
+          // Esto funciona correctamente incluso si el registro original falló (stock nunca se sumó)
+          const convertedOriginalQty = convertUnit(originalQty, itemUnit, purchaseUnit)
+          const convertedNewQty = convertUnit(newQty, itemUnit, purchaseUnit)
+          const revertedStock = Math.max(0, currentStock - convertedOriginalQty)
+          const newStock = revertedStock + convertedNewQty
+
+          const updates = { currentStock: newStock }
+
+          // Recalcular costo promedio
+          if (newQty > 0 && groupedIngredients[ingredientId]) {
+            const grouped = groupedIngredients[ingredientId]
+            const avgUnitPrice = grouped.totalQuantity > 0 ? Math.round((grouped.totalCost / grouped.totalQuantity) * 100) / 100 : 0
+            if (avgUnitPrice > 0) {
+              const currentAvgCost = ingredient.averageCost || 0
+              if (currentAvgCost > 0 && revertedStock > 0) {
+                // Costo promedio ponderado con el stock restante + nueva compra
+                updates.averageCost = ((revertedStock * currentAvgCost) + (convertedNewQty * avgUnitPrice)) / newStock
+              } else {
+                updates.averageCost = avgUnitPrice
+              }
+              updates.lastPurchasePrice = avgUnitPrice
+            }
+          }
+
+          return updateIngredient(businessId, ingredientId, updates)
+        })
+
+        await Promise.all(ingredientStockUpdates)
       }
 
       // 5. Mostrar éxito y redirigir
@@ -1558,14 +1695,36 @@ export default function CreatePurchase() {
                             </div>
                           )}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => openCreateProductModal(index)}
-                          className="p-1.5 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
-                          title="Crear producto nuevo"
-                        >
-                          <PackagePlus className="w-4 h-4" />
-                        </button>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateMenu(prev => ({ ...prev, [index]: !prev[index] }))}
+                            className="p-1.5 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                            title="Crear nuevo"
+                          >
+                            <PackagePlus className="w-4 h-4" />
+                          </button>
+                          {showCreateMenu[index] && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-40">
+                              <button
+                                type="button"
+                                onClick={() => { setShowCreateMenu({}); openCreateProductModal(index) }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 rounded-t-lg"
+                              >
+                                <Package className="w-3.5 h-3.5 text-primary-600" />
+                                Producto
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openCreateIngredientModal(index)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 rounded-b-lg border-t"
+                              >
+                                <Beaker className="w-3.5 h-3.5 text-amber-600" />
+                                Ingrediente
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     {/* Cantidad */}
@@ -1736,14 +1895,36 @@ export default function CreatePurchase() {
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openCreateProductModal(index)}
-                    className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                    title="Nuevo"
-                  >
-                    <PackagePlus className="w-4 h-4" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateMenu(prev => ({ ...prev, [`m${index}`]: !prev[`m${index}`] }))}
+                      className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                      title="Crear nuevo"
+                    >
+                      <PackagePlus className="w-4 h-4" />
+                    </button>
+                    {showCreateMenu[`m${index}`] && (
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-40">
+                        <button
+                          type="button"
+                          onClick={() => { setShowCreateMenu({}); openCreateProductModal(index) }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 rounded-t-lg"
+                        >
+                          <Package className="w-3.5 h-3.5 text-primary-600" />
+                          Producto
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openCreateIngredientModal(index)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 rounded-b-lg border-t"
+                        >
+                          <Beaker className="w-3.5 h-3.5 text-amber-600" />
+                          Ingrediente
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Lote y Vencimiento - Solo en modo farmacia */}
@@ -1938,6 +2119,81 @@ export default function CreatePurchase() {
         }}
         hideStockField={true} // En compras, el stock se maneja con la cantidad del item, no aquí
       />
+
+      {/* Modal para crear ingrediente nuevo */}
+      <Modal
+        isOpen={showCreateIngredientModal}
+        onClose={() => { setShowCreateIngredientModal(false); setCurrentItemIndex(null) }}
+        title="Nuevo Ingrediente"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+            <input
+              type="text"
+              value={newIngredientForm.name}
+              onChange={e => setNewIngredientForm(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Ej: Arroz, Pollo, Tomate..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+            <select
+              value={newIngredientForm.category}
+              onChange={e => setNewIngredientForm(prev => ({ ...prev, category: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="granos">Granos y Cereales</option>
+              <option value="carnes">Carnes</option>
+              <option value="vegetales">Vegetales y Frutas</option>
+              <option value="lacteos">Lácteos</option>
+              <option value="condimentos">Condimentos y Especias</option>
+              <option value="bebidas">Bebidas</option>
+              <option value="estetica">Estética y Belleza</option>
+              <option value="salud">Salud y Farmacia</option>
+              <option value="limpieza">Limpieza</option>
+              <option value="otros">Otros</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unidad de compra</label>
+            <select
+              value={newIngredientForm.purchaseUnit}
+              onChange={e => setNewIngredientForm(prev => ({ ...prev, purchaseUnit: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="kg">Kilogramos (kg)</option>
+              <option value="g">Gramos (g)</option>
+              <option value="L">Litros (L)</option>
+              <option value="ml">Mililitros (ml)</option>
+              <option value="unidades">Unidades</option>
+              <option value="cajas">Cajas</option>
+              <option value="sobres">Sobres</option>
+              <option value="piezas">Piezas</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowCreateIngredientModal(false); setCurrentItemIndex(null) }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateIngredient}
+              disabled={isCreatingIngredient || !newIngredientForm.name.trim()}
+            >
+              {isCreatingIngredient ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creando...</>
+              ) : (
+                'Crear Ingrediente'
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
