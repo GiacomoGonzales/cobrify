@@ -267,6 +267,7 @@ function Sidebar() {
 
   // Menú para modo RESTAURANT (restaurantes, cafeterías, bares)
   const restaurantMenuItems = [
+    // --- Operación diaria ---
     {
       path: '/dashboard',
       icon: LayoutDashboard,
@@ -309,37 +310,31 @@ function Sidebar() {
       menuId: 'kitchen',
     },
     {
+      path: '/mozos',
+      icon: Users,
+      label: 'Mozos',
+      pageId: 'waiters',
+      menuId: 'waiters',
+    },
+    // --- Ventas y clientes ---
+    {
       path: '/facturas',
       icon: FileText,
       label: 'Ventas',
       pageId: 'invoices',
     },
     {
+      path: '/clientes',
+      icon: Users,
+      label: 'Clientes',
+      pageId: 'customers',
+    },
+    // --- Menú y cocina ---
+    {
       path: '/productos',
       icon: UtensilsCrossed,
       label: 'Menú',
       pageId: 'products',
-    },
-    {
-      path: '/inventario',
-      icon: ClipboardList,
-      label: 'Inventario',
-      pageId: 'inventory', // Permiso propio de inventario
-      menuId: 'inventory',
-    },
-    {
-      path: '/compras',
-      icon: ShoppingBag,
-      label: 'Compras',
-      pageId: 'purchases',
-      menuId: 'purchases',
-    },
-    {
-      path: '/proveedores',
-      icon: Truck,
-      label: 'Proveedores',
-      pageId: 'suppliers',
-      menuId: 'suppliers',
     },
     {
       path: '/ingredientes',
@@ -355,6 +350,21 @@ function Sidebar() {
       pageId: 'recipes',
       menuId: 'recipes',
     },
+    // --- Inventario y compras ---
+    {
+      path: '/inventario',
+      icon: ClipboardList,
+      label: 'Inventario',
+      pageId: 'inventory',
+      menuId: 'inventory',
+    },
+    {
+      path: '/compras',
+      icon: ShoppingBag,
+      label: 'Compras',
+      pageId: 'purchases',
+      menuId: 'purchases',
+    },
     {
       path: '/ingredientes/historial',
       icon: History,
@@ -363,18 +373,13 @@ function Sidebar() {
       menuId: 'purchase-history',
     },
     {
-      path: '/mozos',
-      icon: Users,
-      label: 'Mozos',
-      pageId: 'waiters',
-      menuId: 'waiters',
+      path: '/proveedores',
+      icon: Truck,
+      label: 'Proveedores',
+      pageId: 'suppliers',
+      menuId: 'suppliers',
     },
-    {
-      path: '/clientes',
-      icon: Users,
-      label: 'Clientes',
-      pageId: 'customers',
-    },
+    // --- Finanzas ---
     {
       path: '/reportes',
       icon: BarChart3,
@@ -396,6 +401,7 @@ function Sidebar() {
       pageId: 'cash-flow',
       menuId: 'cash-flow',
     },
+    // --- Otros ---
     {
       path: '/reclamos',
       icon: BookOpen,
