@@ -564,8 +564,15 @@ Gracias por tu preferencia.`
       const isBoleta = series.toUpperCase().startsWith('B')
       const docTypeName = isBoleta ? 'Boleta' : 'Factura'
 
-      // Obtener método de emisión desde businessSettings
-      const emissionMethod = businessSettings?.emissionConfig?.method || null
+      // Obtener método de emisión desde businessSettings (lógica similar a emissionRouter)
+      let emissionMethod = businessSettings?.emissionConfig?.method || businessSettings?.emissionMethod || null
+      // Solo usar qpse si realmente tiene credenciales configuradas
+      if (emissionMethod === 'qpse') {
+        const qpseConfig = businessSettings?.emissionConfig?.qpse || businessSettings?.qpse
+        if (!qpseConfig?.usuario || !qpseConfig?.password) {
+          emissionMethod = null // Fallback a SUNAT directo
+        }
+      }
 
       // Llamar al servicio de anulación unificado (detecta automáticamente factura o boleta)
       // Pasa el método de emisión para usar QPSe si corresponde
