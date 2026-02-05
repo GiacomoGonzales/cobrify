@@ -156,6 +156,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         stock: row.stock || row.Stock || row.STOCK || row.inventario || row.Inventario || row.INVENTARIO || null,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
         category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
+        subcategory: String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim(),
         trackStock: trackStock,
         hasVariants: false,
         variantAttributes: [],
@@ -316,6 +317,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Analgésicos',
+          subcategoria: 'Tabletas',
           afectacion_igv: 'GRAVADO'
         },
         {
@@ -342,6 +344,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Antibióticos',
+          subcategoria: 'Cápsulas',
           afectacion_igv: 'GRAVADO'
         },
         {
@@ -368,6 +371,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Psicotrópicos',
+          subcategoria: '',
           afectacion_igv: 'EXONERADO'
         }
       ]
@@ -388,6 +392,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: 'Categoría Ejemplo',
+          subcategoria: 'Subcategoría Ejemplo',
           afectacion_igv: 'GRAVADO'
         },
         {
@@ -404,6 +409,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'NO',
           unidad: 'SERVICIO',
           categoria: 'Servicios',
+          subcategoria: '',
           afectacion_igv: 'EXONERADO'
         },
         {
@@ -420,6 +426,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           trackStock: 'SI',
           unidad: 'UNIDAD',
           categoria: '',
+          subcategoria: '',
           afectacion_igv: 'INAFECTO'
         }
       ]
@@ -454,6 +461,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 10 }, // trackStock
         { wch: 10 }, // unidad
         { wch: 15 }, // categoria
+        { wch: 15 }, // subcategoria
         { wch: 20 }, // almacen
         { wch: 15 }  // afectacion_igv
       ]
@@ -472,6 +480,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 12 }, // trackStock
         { wch: 12 }, // unidad
         { wch: 20 }, // categoria
+        { wch: 20 }, // subcategoria
         { wch: 15 }  // afectacion_igv
       ]
     }

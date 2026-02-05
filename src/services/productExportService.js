@@ -12,11 +12,29 @@ import { Share } from '@capacitor/share';
 export const exportProductsForImport = async (products, categories, businessMode = 'retail') => {
   const workbook = XLSX.utils.book_new();
 
-  // Helper para obtener nombre de categoría por ID
+  // Helper para obtener nombre de categoría y subcategoría por ID
   const getCategoryName = (categoryId) => {
     if (!categoryId) return '';
     const category = categories.find(cat => cat.id === categoryId);
     return category ? category.name : '';
+  };
+
+  const getCategoryAndSubcategory = (categoryId) => {
+    if (!categoryId) return { categoria: '', subcategoria: '' };
+    const category = categories.find(cat => cat.id === categoryId);
+    if (!category) return { categoria: '', subcategoria: '' };
+
+    if (category.parentId) {
+      // Es una subcategoría - buscar la categoría padre
+      const parent = categories.find(cat => cat.id === category.parentId);
+      return {
+        categoria: parent ? parent.name : '',
+        subcategoria: category.name
+      };
+    }
+
+    // Es una categoría raíz
+    return { categoria: category.name, subcategoria: '' };
   };
 
   // Mapear afectación IGV a texto
@@ -33,50 +51,58 @@ export const exportProductsForImport = async (products, categories, businessMode
 
   if (businessMode === 'pharmacy') {
     // Formato farmacia con campos específicos
-    productData = products.map(product => ({
-      sku: product.sku || '',
-      codigo_barras: product.code || '',
-      nombre: product.name || '',
-      descripcion: product.description || '',
-      nombre_generico: product.genericName || '',
-      concentracion: product.concentration || '',
-      presentacion: product.presentation || '',
-      laboratorio: product.laboratoryName || '',
-      marca: product.marca || '',
-      principio_activo: product.activeIngredient || '',
-      accion_terapeutica: product.therapeuticAction || '',
-      condicion_venta: product.saleCondition || '',
-      registro_sanitario: product.sanitaryRegistry || '',
-      ubicacion: product.location || '',
-      costo: product.cost || '',
-      precio: product.price || 0,
-      precio2: product.price2 || '',
-      precio3: product.price3 || '',
-      precio4: product.price4 || '',
-      stock: product.stock ?? '',
-      trackStock: product.trackStock === false ? 'NO' : 'SI',
-      unidad: product.unit || 'UNIDAD',
-      categoria: getCategoryName(product.category),
-      afectacion_igv: getTaxAffectationText(product.taxAffectation),
-    }));
+    productData = products.map(product => {
+      const { categoria, subcategoria } = getCategoryAndSubcategory(product.category);
+      return {
+        sku: product.sku || '',
+        codigo_barras: product.code || '',
+        nombre: product.name || '',
+        descripcion: product.description || '',
+        nombre_generico: product.genericName || '',
+        concentracion: product.concentration || '',
+        presentacion: product.presentation || '',
+        laboratorio: product.laboratoryName || '',
+        marca: product.marca || '',
+        principio_activo: product.activeIngredient || '',
+        accion_terapeutica: product.therapeuticAction || '',
+        condicion_venta: product.saleCondition || '',
+        registro_sanitario: product.sanitaryRegistry || '',
+        ubicacion: product.location || '',
+        costo: product.cost || '',
+        precio: product.price || 0,
+        precio2: product.price2 || '',
+        precio3: product.price3 || '',
+        precio4: product.price4 || '',
+        stock: product.stock ?? '',
+        trackStock: product.trackStock === false ? 'NO' : 'SI',
+        unidad: product.unit || 'UNIDAD',
+        categoria,
+        subcategoria,
+        afectacion_igv: getTaxAffectationText(product.taxAffectation),
+      };
+    });
   } else {
     // Formato retail estándar
-    productData = products.map(product => ({
-      sku: product.sku || '',
-      codigo_barras: product.code || '',
-      nombre: product.name || '',
-      descripcion: product.description || '',
-      costo: product.cost || '',
-      precio: product.price || 0,
-      precio2: product.price2 || '',
-      precio3: product.price3 || '',
-      precio4: product.price4 || '',
-      stock: product.stock ?? '',
-      trackStock: product.trackStock === false ? 'NO' : 'SI',
-      unidad: product.unit || 'UNIDAD',
-      categoria: getCategoryName(product.category),
-      afectacion_igv: getTaxAffectationText(product.taxAffectation),
-    }));
+    productData = products.map(product => {
+      const { categoria, subcategoria } = getCategoryAndSubcategory(product.category);
+      return {
+        sku: product.sku || '',
+        codigo_barras: product.code || '',
+        nombre: product.name || '',
+        descripcion: product.description || '',
+        costo: product.cost || '',
+        precio: product.price || 0,
+        precio2: product.price2 || '',
+        precio3: product.price3 || '',
+        precio4: product.price4 || '',
+        stock: product.stock ?? '',
+        trackStock: product.trackStock === false ? 'NO' : 'SI',
+        unidad: product.unit || 'UNIDAD',
+        categoria,
+        subcategoria,
+        afectacion_igv: getTaxAffectationText(product.taxAffectation),
+      };
+    });
   }
 
   // Crear hoja de cálculo
@@ -107,6 +133,7 @@ export const exportProductsForImport = async (products, categories, businessMode
       { wch: 12 }, // trackStock
       { wch: 12 }, // unidad
       { wch: 20 }, // categoria
+      { wch: 20 }, // subcategoria
       { wch: 15 }, // afectacion_igv
     ];
   } else {
@@ -124,6 +151,7 @@ export const exportProductsForImport = async (products, categories, businessMode
       { wch: 12 }, // trackStock
       { wch: 12 }, // unidad
       { wch: 20 }, // categoria
+      { wch: 20 }, // subcategoria
       { wch: 15 }, // afectacion_igv
     ];
   }

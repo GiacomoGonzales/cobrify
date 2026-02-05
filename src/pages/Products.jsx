@@ -1259,22 +1259,40 @@ export default function Products() {
 
       // Crear un mapa de categorías nuevas que se necesitan crear
       const newCategoriesNeeded = new Set()
+      const newSubcategoriesNeeded = new Map() // Map<subcategoryName, parentCategoryName>
       const updatedCategories = [...categories]
 
-      // Identificar categorías que no existen
+      // Identificar categorías y subcategorías que no existen
       for (const product of productsToImport) {
         if (product.category && product.category.trim() !== '') {
           const categoryName = product.category.trim()
-          // Verificar si la categoría ya existe (por nombre)
-          const categoryExists = updatedCategories.some(cat => cat.name.toLowerCase() === categoryName.toLowerCase())
+          // Verificar si la categoría ya existe (por nombre, solo raíz)
+          const categoryExists = updatedCategories.some(cat => cat.name.toLowerCase() === categoryName.toLowerCase() && !cat.parentId)
 
           if (!categoryExists) {
             newCategoriesNeeded.add(categoryName)
           }
         }
+
+        if (product.subcategory && product.subcategory.trim() !== '' && product.category && product.category.trim() !== '') {
+          const subcategoryName = product.subcategory.trim()
+          const parentCategoryName = product.category.trim()
+          // Verificar si la subcategoría ya existe bajo esa categoría padre
+          const parentCat = updatedCategories.find(cat => cat.name.toLowerCase() === parentCategoryName.toLowerCase() && !cat.parentId)
+          if (parentCat) {
+            const subExists = updatedCategories.some(cat => cat.name.toLowerCase() === subcategoryName.toLowerCase() && cat.parentId === parentCat.id)
+            if (!subExists) {
+              newSubcategoriesNeeded.set(`${parentCategoryName}|||${subcategoryName}`, parentCategoryName)
+            }
+          } else {
+            // La categoría padre es nueva, la subcategoría se creará después
+            newSubcategoriesNeeded.set(`${parentCategoryName}|||${subcategoryName}`, parentCategoryName)
+          }
+        }
       }
 
-      // Crear las categorías nuevas
+      // Crear las categorías raíz nuevas
+      let categoriesChanged = false
       if (newCategoriesNeeded.size > 0) {
         for (const categoryName of newCategoriesNeeded) {
           const newCategory = {
@@ -1284,12 +1302,38 @@ export default function Products() {
           }
           updatedCategories.push(newCategory)
         }
+        categoriesChanged = true
+      }
 
-        // Guardar las nuevas categorías en Firestore
+      // Crear las subcategorías nuevas
+      if (newSubcategoriesNeeded.size > 0) {
+        for (const [key] of newSubcategoriesNeeded) {
+          const [parentCategoryName, subcategoryName] = key.split('|||')
+          // Buscar la categoría padre (ya debería existir)
+          const parentCat = updatedCategories.find(cat => cat.name.toLowerCase() === parentCategoryName.toLowerCase() && !cat.parentId)
+          if (parentCat) {
+            // Verificar que no se haya creado ya en esta iteración
+            const subExists = updatedCategories.some(cat => cat.name.toLowerCase() === subcategoryName.toLowerCase() && cat.parentId === parentCat.id)
+            if (!subExists) {
+              const newSubcategory = {
+                id: `cat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                name: subcategoryName,
+                parentId: parentCat.id,
+              }
+              updatedCategories.push(newSubcategory)
+            }
+          }
+        }
+        categoriesChanged = true
+      }
+
+      // Guardar las categorías nuevas en Firestore
+      if (categoriesChanged) {
+        const totalNew = newCategoriesNeeded.size + newSubcategoriesNeeded.size
         const saveCategoriesResult = await saveProductCategories(getBusinessId(), updatedCategories)
         if (saveCategoriesResult.success) {
           setCategories(updatedCategories)
-          toast.info(`${newCategoriesNeeded.size} categoría(s) creada(s) automáticamente`)
+          toast.info(`${totalNew} categoría(s) creada(s) automáticamente`)
         }
       }
 
@@ -1311,14 +1355,25 @@ export default function Products() {
         const product = productsToImport[i]
 
         try {
-          // Convertir nombre de categoría a ID si existe
-          if (product.category && product.category.trim() !== '') {
+          // Convertir nombre de categoría/subcategoría a ID
+          if (product.subcategory && product.subcategory.trim() !== '' && product.category && product.category.trim() !== '') {
+            // Tiene subcategoría - buscar la subcategoría bajo la categoría padre
+            const parentCategoryName = product.category.trim()
+            const subcategoryName = product.subcategory.trim()
+            const parentCat = updatedCategories.find(cat => cat.name.toLowerCase() === parentCategoryName.toLowerCase() && !cat.parentId)
+            if (parentCat) {
+              const subCat = updatedCategories.find(cat => cat.name.toLowerCase() === subcategoryName.toLowerCase() && cat.parentId === parentCat.id)
+              product.category = subCat ? subCat.id : parentCat.id
+            }
+          } else if (product.category && product.category.trim() !== '') {
+            // Solo categoría raíz
             const categoryName = product.category.trim()
-            const foundCategory = updatedCategories.find(cat => cat.name.toLowerCase() === categoryName.toLowerCase())
+            const foundCategory = updatedCategories.find(cat => cat.name.toLowerCase() === categoryName.toLowerCase() && !cat.parentId)
             if (foundCategory) {
               product.category = foundCategory.id
             }
           }
+          delete product.subcategory
 
           // El almacén destino ya está definido al inicio (targetWarehouse)
 
