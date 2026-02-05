@@ -594,12 +594,21 @@ export default function Inventory() {
       })
 
       // Actualizar stock del producto en el almacén
-      await updateWarehouseStock(
-        businessId,
-        damageProduct.id,
+      const updatedProduct = updateWarehouseStock(
+        damageProduct,
         damageData.warehouseId,
         -quantity
       )
+
+      // Guardar en Firestore
+      const updateResult = await updateProduct(businessId, damageProduct.id, {
+        stock: updatedProduct.stock,
+        warehouseStocks: updatedProduct.warehouseStocks
+      })
+
+      if (!updateResult.success) {
+        throw new Error('Error al actualizar el stock')
+      }
 
       toast.success(`Merma registrada: ${quantity} unidades de ${damageProduct.name}`)
       closeDamageModal()
