@@ -101,8 +101,6 @@ export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
-  const isRetailMode = businessMode === 'retail'
-
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [productCategories, setProductCategories] = useState([])
@@ -178,14 +176,12 @@ export default function Inventory() {
 
   useEffect(() => {
     loadProducts()
-    if (isRetailMode) {
-      loadIngredients()
-    }
+    loadIngredients()
     loadCategories()
     loadWarehouses()
     loadBranches()
     loadCompanySettings()
-  }, [user, isRetailMode])
+  }, [user])
 
   // Resetear página cuando cambia el filtro de tipo (productos/insumos)
   useEffect(() => {
@@ -868,15 +864,15 @@ export default function Inventory() {
     // Mapear productos con itemType
     const productItems = products.map(p => ({ ...p, itemType: 'product' }))
 
-    // Mapear ingredientes solo si está en modo retail
-    const ingredientItems = isRetailMode ? ingredients.map(i => ({
+    // Mapear ingredientes
+    const ingredientItems = ingredients.map(i => ({
       ...i,
       itemType: 'ingredient',
       code: i.code || '-',
       price: i.averageCost || 0,
       stock: i.currentStock || 0,
       category: i.category
-    })) : []
+    }))
 
     console.log(`📋 [Inventory] Datos: ${productItems.length} productos, ${ingredientItems.length} insumos`)
 
@@ -895,7 +891,7 @@ export default function Inventory() {
     }
 
     return result
-  }, [products, ingredients, filterType, isRetailMode])
+  }, [products, ingredients, filterType])
 
   // Filtrar y ordenar items (optimizado con useMemo)
   const filteredProducts = React.useMemo(() => {
@@ -1021,34 +1017,32 @@ export default function Inventory() {
       return category ? { id: catId, name: category.name } : { id: catId, name: catId }
     })
 
-    // Categorías de ingredientes en retail
-    if (isRetailMode) {
-      const ingredientCats = [...new Set(ingredients.map(i => i.category).filter(Boolean))]
-      const categoryLabels = {
-        'granos': 'Granos y Cereales',
-        'carnes': 'Carnes',
-        'vegetales': 'Vegetales y Frutas',
-        'lacteos': 'Lácteos',
-        'condimentos': 'Condimentos y Especias',
-        'bebidas': 'Bebidas',
-        'estetica': 'Estética y Belleza',
-        'salud': 'Salud y Farmacia',
-        'limpieza': 'Limpieza',
-        'otros': 'Otros'
-      }
-
-      ingredientCats.forEach(cat => {
-        if (!allCategories.find(c => c.id === cat)) {
-          allCategories.push({
-            id: cat,
-            name: categoryLabels[cat] || cat
-          })
-        }
-      })
+    // Categorías de ingredientes
+    const ingredientCats = [...new Set(ingredients.map(i => i.category).filter(Boolean))]
+    const categoryLabels = {
+      'granos': 'Granos y Cereales',
+      'carnes': 'Carnes',
+      'vegetales': 'Vegetales y Frutas',
+      'lacteos': 'Lácteos',
+      'condimentos': 'Condimentos y Especias',
+      'bebidas': 'Bebidas',
+      'estetica': 'Estética y Belleza',
+      'salud': 'Salud y Farmacia',
+      'limpieza': 'Limpieza',
+      'otros': 'Otros'
     }
 
+    ingredientCats.forEach(cat => {
+      if (!allCategories.find(c => c.id === cat)) {
+        allCategories.push({
+          id: cat,
+          name: categoryLabels[cat] || cat
+        })
+      }
+    })
+
     return allCategories
-  }, [products, ingredients, productCategories, isRetailMode])
+  }, [products, ingredients, productCategories])
 
   // Calcular estadísticas (basadas en productos filtrados para reflejar todos los filtros)
   const statistics = React.useMemo(() => {
@@ -1190,7 +1184,7 @@ export default function Inventory() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Control de Inventario</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            {isRetailMode ? 'Gestiona el stock de tus productos e insumos' : 'Gestiona el stock de tus productos'}
+            Gestiona el stock de tus productos e ingredientes
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -1220,10 +1214,10 @@ export default function Inventory() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-600">
-                  {isRetailMode ? 'Total Items' : 'Total Productos'}
+                  Total Items
                 </p>
                 <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-                  {isRetailMode ? products.length + ingredients.length : products.length}
+                  {products.length + ingredients.length}
                 </p>
               </div>
               <Package className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600" />
@@ -1334,8 +1328,8 @@ export default function Inventory() {
         </Alert>
       )}
 
-      {/* Tabs - Solo en modo retail */}
-      {isRetailMode && (
+      {/* Tabs - Filtro por tipo */}
+      {(
         <div className="flex gap-2 border-b border-gray-200">
           <button
             onClick={() => {
@@ -1374,22 +1368,20 @@ export default function Inventory() {
                 : 'border-transparent text-gray-600 hover:text-gray-900'
             }`}
           >
-            Insumos ({ingredients.length})
+            Ingredientes ({ingredients.length})
           </button>
         </div>
       )}
 
-      {/* Info de ayuda contextual - Solo en retail cuando hay tabs */}
-      {isRetailMode && (
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-3">
-            <p className="text-xs text-blue-800">
-              <strong>Productos</strong> son los artículos que vendes. <strong>Insumos</strong> son la materia prima que consumen.
-              Ve a <strong>Composición</strong> para definir qué insumos consume cada producto/servicio.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Info de ayuda contextual */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="p-3">
+          <p className="text-xs text-blue-800">
+            <strong>Productos</strong> son los artículos que vendes. <strong>Ingredientes</strong> son la materia prima que consumen.
+            Ve a <strong>{businessMode === 'restaurant' ? 'Recetas' : 'Composición'}</strong> para definir qué ingredientes consume cada producto.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -1605,10 +1597,7 @@ export default function Inventory() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {isRetailMode
-              ? `${filterType === 'all' ? 'Items' : filterType === 'products' ? 'Productos' : 'Insumos'} en Inventario (${filteredProducts.length})`
-              : `Productos en Inventario (${filteredProducts.length})`
-            }
+            {`${filterType === 'all' ? 'Items' : filterType === 'products' ? 'Productos' : 'Ingredientes'} en Inventario (${filteredProducts.length})`}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1647,13 +1636,11 @@ export default function Inventory() {
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
                         title="Ordenar por nombre"
                       >
-                        {isRetailMode ? 'Nombre' : 'Producto'}
+                        Nombre
                         {getSortIcon('name')}
                       </button>
                     </TableHead>
-                    {isRetailMode && (
-                      <TableHead className="hidden sm:table-cell w-20 lg:w-[8%]">Tipo</TableHead>
-                    )}
+                    <TableHead className="hidden sm:table-cell w-20 lg:w-[8%]">Tipo</TableHead>
                     <TableHead className="hidden md:table-cell lg:w-[18%]">
                       <button
                         onClick={() => handleSort('category')}
@@ -1719,13 +1706,11 @@ export default function Inventory() {
                             )}
                           </div>
                         </TableCell>
-                        {isRetailMode && (
-                          <TableCell className="hidden sm:table-cell lg:w-[8%]">
-                            <Badge variant={isProduct ? 'default' : 'success'} className="text-xs">
-                              {isProduct ? 'Prod.' : 'Ins.'}
-                            </Badge>
-                          </TableCell>
-                        )}
+                        <TableCell className="hidden sm:table-cell lg:w-[8%]">
+                          <Badge variant={isProduct ? 'default' : 'success'} className="text-xs">
+                            {isProduct ? 'Prod.' : 'Ing.'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="hidden md:table-cell lg:w-[18%] max-w-0">
                           <span
                             className="text-xs text-gray-600 truncate block"
@@ -2111,9 +2096,9 @@ export default function Inventory() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-1">{isRetailMode ? 'Total Items' : 'Total Productos'}</p>
+              <p className="text-gray-600 mb-1">Total Items</p>
               <p className="text-2xl font-bold text-gray-900">
-                {isRetailMode ? products.length + ingredients.length : products.length}
+                {products.length + ingredients.length}
               </p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
@@ -2582,11 +2567,11 @@ export default function Inventory() {
       <InventoryCountModal
         isOpen={showInventoryCountModal}
         onClose={() => setShowInventoryCountModal(false)}
-        products={isRetailMode ? [...products, ...ingredients.map(ing => ({
+        products={[...products, ...ingredients.map(ing => ({
           ...ing,
           isIngredient: true,
-          name: `${ing.name} (Insumo)`,
-        }))] : products}
+          name: `${ing.name} (Ingrediente)`,
+        }))]}
         categories={productCategories}
         businessId={getBusinessId()}
         userId={user?.uid}
@@ -2595,7 +2580,7 @@ export default function Inventory() {
         defaultWarehouse={defaultWarehouse}
         onCountCompleted={() => {
           loadProducts()
-          if (isRetailMode) loadIngredients()
+          loadIngredients()
           setShowInventoryCountModal(false)
         }}
       />
