@@ -504,6 +504,87 @@ export const getStockMovements = async (businessId, filters = {}) => {
  * Ajustar stock manualmente
  * Ahora soporta warehouseId para ajuste por almacén
  */
+/**
+ * Eliminar una compra de ingrediente y revertir su stock
+ */
+export const deleteIngredientPurchase = async (businessId, purchaseId) => {
+  try {
+    // 1. Obtener datos de la compra
+    const purchaseRef = doc(db, 'businesses', businessId, 'ingredientPurchases', purchaseId)
+    const purchaseDoc = await getDoc(purchaseRef)
+
+    if (!purchaseDoc.exists()) {
+      throw new Error('Compra no encontrada')
+    }
+
+    const purchaseData = purchaseDoc.data()
+    const batch = writeBatch(db)
+
+    // 2. Revertir stock del ingrediente
+    const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', purchaseData.ingredientId)
+    const ingredientDoc = await getDoc(ingredientRef)
+
+    if (ingredientDoc.exists()) {
+      const currentData = ingredientDoc.data()
+      const currentStock = currentData.currentStock || 0
+
+      const quantityToRevert = convertUnit(
+        purchaseData.quantity,
+        purchaseData.unit,
+        currentData.purchaseUnit
+      )
+
+      const newStock = Math.max(0, currentStock - quantityToRevert)
+
+      const updateData = {
+        currentStock: newStock,
+        updatedAt: Timestamp.now()
+      }
+
+      // Revertir warehouseStocks si aplica
+      if (purchaseData.warehouseId && currentData.warehouseStocks) {
+        const updatedWarehouseStocks = [...currentData.warehouseStocks]
+        const idx = updatedWarehouseStocks.findIndex(ws => ws.warehouseId === purchaseData.warehouseId)
+        if (idx >= 0) {
+          updatedWarehouseStocks[idx] = {
+            ...updatedWarehouseStocks[idx],
+            stock: Math.max(0, (updatedWarehouseStocks[idx].stock || 0) - quantityToRevert)
+          }
+          updateData.warehouseStocks = updatedWarehouseStocks
+          updateData.currentStock = updatedWarehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        }
+      }
+
+      batch.update(ingredientRef, updateData)
+
+      // 3. Crear movimiento de stock
+      const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+      const movementRef = doc(movementsRef)
+      batch.set(movementRef, {
+        ingredientId: purchaseData.ingredientId,
+        ingredientName: purchaseData.ingredientName,
+        type: 'purchase_delete',
+        quantity: quantityToRevert,
+        unit: currentData.purchaseUnit,
+        warehouseId: purchaseData.warehouseId || null,
+        reason: `Eliminación de compra - ${purchaseData.supplier || 'Sin proveedor'}`,
+        beforeStock: currentStock,
+        afterStock: updateData.currentStock,
+        createdAt: Timestamp.now()
+      })
+    }
+
+    // 4. Eliminar la compra
+    batch.delete(purchaseRef)
+
+    await batch.commit()
+    return { success: true }
+  } catch (error) {
+    console.error('Error al eliminar compra de ingrediente:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export const adjustStock = async (businessId, ingredientId, ingredientName, newStock, reason, warehouseId = null) => {
   try {
     const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', ingredientId)

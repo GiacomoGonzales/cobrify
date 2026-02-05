@@ -33,6 +33,7 @@ import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { getPurchases, deletePurchase, updatePurchase, getProducts, updateProduct } from '@/services/firestoreService'
+import { getPurchases as getIngredientPurchases, deleteIngredientPurchase } from '@/services/ingredientService'
 
 /**
  * Parsea fecha YYYY-MM-DD a Date en hora LOCAL (evita problema de timezone)
@@ -129,12 +130,67 @@ export default function Purchases() {
         return
       }
 
-      const result = await getPurchases(getBusinessId())
+      const businessId = getBusinessId()
+      const [result, ingResult] = await Promise.all([
+        getPurchases(businessId),
+        getIngredientPurchases(businessId)
+      ])
+
+      let allPurchases = []
+
       if (result.success) {
-        setPurchases(result.data || [])
+        allPurchases = result.data || []
       } else {
         console.error('Error al cargar compras:', result.error)
       }
+
+      // Agrupar compras de ingredientes por proveedor + factura + mismo día
+      if (ingResult.success && ingResult.data?.length > 0) {
+        const groups = {}
+        ingResult.data.forEach(p => {
+          const date = p.purchaseDate?.toDate ? p.purchaseDate.toDate() : (p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.purchaseDate || p.createdAt))
+          const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+          const key = `${p.supplier || ''}_${p.invoiceNumber || ''}_${dayKey}`
+
+          if (!groups[key]) {
+            groups[key] = {
+              ids: [],
+              supplier: p.supplier || 'Sin proveedor',
+              invoiceNumber: p.invoiceNumber || '',
+              date: p.purchaseDate || p.createdAt,
+              items: [],
+              total: 0,
+            }
+          }
+          groups[key].ids.push(p.id)
+          groups[key].items.push({
+            productId: p.ingredientId,
+            productName: p.ingredientName,
+            itemType: 'ingredient',
+            quantity: p.quantity,
+            unit: p.unit,
+            unitPrice: p.unitPrice,
+          })
+          groups[key].total += p.totalCost || (p.quantity * p.unitPrice)
+        })
+
+        const groupedPurchases = Object.values(groups).map(g => ({
+          id: `ing-${g.ids.join('-')}`,
+          _isIngredientPurchase: true,
+          _ingredientPurchaseIds: g.ids,
+          invoiceNumber: g.invoiceNumber,
+          supplier: { businessName: g.supplier, documentNumber: '' },
+          invoiceDate: g.date,
+          createdAt: g.date,
+          items: g.items,
+          total: g.total,
+          paymentType: 'contado',
+          paymentStatus: 'paid',
+        }))
+        allPurchases = [...allPurchases, ...groupedPurchases]
+      }
+
+      setPurchases(allPurchases)
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -156,6 +212,22 @@ export default function Purchases() {
     const businessId = getBusinessId()
 
     try {
+      // Compras de ingredientes (desde ingredientPurchases)
+      if (deletingPurchase._isIngredientPurchase) {
+        const ids = deletingPurchase._ingredientPurchaseIds || []
+        for (const purchaseId of ids) {
+          const result = await deleteIngredientPurchase(businessId, purchaseId)
+          if (!result.success) {
+            console.warn(`Error eliminando compra de ingrediente ${purchaseId}:`, result.error)
+          }
+        }
+        toast.success('Compra de ingredientes eliminada y stock revertido')
+        setDeletingPurchase(null)
+        loadPurchases()
+        return
+      }
+
+      // Compras normales (desde purchases)
       // 1. Revertir el stock de los productos antes de eliminar
       if (deletingPurchase.items && deletingPurchase.items.length > 0) {
         // Obtener productos actuales
@@ -939,7 +1011,14 @@ export default function Purchases() {
                         : '-'}
                     </TableCell>
                     <TableCell className="text-center hidden md:table-cell">
-                      <Badge>{purchase.items?.length || 0} items</Badge>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Badge>{purchase.items?.length || 0} items</Badge>
+                        {purchase.items?.some(i => i.itemType === 'ingredient') && (
+                          <span className="text-[10px] text-green-600">
+                            {purchase.items.filter(i => i.itemType === 'ingredient').length} ing.
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-semibold">
                       {formatCurrency(purchase.total)}
@@ -1038,15 +1117,17 @@ export default function Purchases() {
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/app/compras/editar/${purchase.id}`)}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          title="Editar"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
+                        {!purchase._isIngredientPurchase && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/app/compras/editar/${purchase.id}`)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1109,14 +1190,15 @@ export default function Purchases() {
               </div>
             </div>
 
-            {/* Productos */}
+            {/* Items de la compra */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Productos</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Items</h3>
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Producto</TableHead>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead className="text-center">Tipo</TableHead>
                       <TableHead className="text-center">Cantidad</TableHead>
                       <TableHead className="text-right">Precio Unit.</TableHead>
                       <TableHead className="text-right">Subtotal</TableHead>
@@ -1126,6 +1208,11 @@ export default function Purchases() {
                     {viewingPurchase.items?.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell>{item.productName}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={item.itemType === 'ingredient' ? 'success' : 'default'} className="text-xs">
+                            {item.itemType === 'ingredient' ? 'Ingrediente' : 'Producto'}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
                         <TableCell className="text-right">
                           {formatCurrency(item.unitPrice)}
