@@ -26,6 +26,10 @@ import {
   Activity,
   Check,
   X,
+  Cog,
+  CookingPot,
+  Wrench,
+  CheckCircle,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -48,6 +52,8 @@ import { generateProductsExcel } from '@/services/productExportService'
 import { getWarehouses, createStockMovement, updateWarehouseStock, getOrphanStockProducts, migrateOrphanStock, getOrphanStock, getDeletedWarehouseStock, getStockMovements } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import InventoryCountModal from '@/components/InventoryCountModal'
+import { executeRecipeProduction, executeManualProduction, checkProductionReadiness } from '@/services/productionService'
+import { getRecipeByProductId, calculateRecipeCost } from '@/services/recipeService'
 import { getCompanySettings } from '@/services/firestoreService'
 
 // Helper functions for category hierarchy
@@ -160,6 +166,19 @@ export default function Inventory() {
     notes: ''
   })
   const [isProcessingDamage, setIsProcessingDamage] = useState(false)
+
+  // Estado para modal de producción rápida
+  const [showProductionModal, setShowProductionModal] = useState(false)
+  const [productionProduct, setProductionProduct] = useState(null)
+  const [productionMode, setProductionMode] = useState(null) // 'recipe' | 'manual'
+  const [productionData, setProductionData] = useState({
+    warehouseId: '',
+    quantity: '',
+    notes: ''
+  })
+  const [isProcessingProduction, setIsProcessingProduction] = useState(false)
+  const [productionRecipeInfo, setProductionRecipeInfo] = useState(null)
+  const [isCheckingProductionRecipe, setIsCheckingProductionRecipe] = useState(false)
 
   // Estado para modal de historial de movimientos
   const [showHistoryModal, setShowHistoryModal] = useState(false)
@@ -617,6 +636,143 @@ export default function Inventory() {
     }
   }
 
+  // Funciones para modal de producción rápida
+  const openProductionModal = async (product) => {
+    setProductionProduct(product)
+    setProductionMode(null)
+    setProductionRecipeInfo(null)
+    const activeWarehouses = warehouses.filter(w => w.isActive)
+    const defaultWarehouseId = activeWarehouses.length === 1 ? activeWarehouses[0].id : ''
+    setProductionData({
+      warehouseId: defaultWarehouseId,
+      quantity: '',
+      notes: ''
+    })
+    setShowProductionModal(true)
+
+    // Verificar si tiene receta
+    try {
+      const businessId = getBusinessId()
+      const recipeResult = await getRecipeByProductId(businessId, product.id)
+      if (recipeResult.success) {
+        setProductionMode('recipe')
+        // Pre-cargar info de receta
+        setIsCheckingProductionRecipe(true)
+        const readiness = await checkProductionReadiness(businessId, product.id, 1)
+        if (readiness.success && readiness.hasRecipe) {
+          let totalCost = 0
+          if (readiness.recipe?.ingredients) {
+            totalCost = await calculateRecipeCost(businessId, readiness.recipe.ingredients)
+          }
+          setProductionRecipeInfo({
+            recipe: readiness.recipe,
+            hasStock: readiness.hasStock,
+            missingIngredients: readiness.missingIngredients || [],
+            totalCost
+          })
+        }
+        setIsCheckingProductionRecipe(false)
+      } else {
+        setProductionMode('manual')
+      }
+    } catch (error) {
+      console.error('Error al verificar receta:', error)
+      setProductionMode('manual')
+    }
+  }
+
+  const closeProductionModal = () => {
+    setShowProductionModal(false)
+    setProductionProduct(null)
+    setProductionMode(null)
+    setProductionRecipeInfo(null)
+    setProductionData({
+      warehouseId: '',
+      quantity: '',
+      notes: ''
+    })
+  }
+
+  const handleProductionQuantityChange = async (value) => {
+    setProductionData(prev => ({ ...prev, quantity: value }))
+    if (productionMode === 'recipe' && productionProduct && value) {
+      const qty = parseFloat(value)
+      if (qty > 0) {
+        setIsCheckingProductionRecipe(true)
+        try {
+          const businessId = getBusinessId()
+          const readiness = await checkProductionReadiness(businessId, productionProduct.id, qty)
+          if (readiness.success && readiness.hasRecipe) {
+            let totalCost = 0
+            if (readiness.recipe?.ingredients) {
+              totalCost = await calculateRecipeCost(businessId, readiness.recipe.ingredients) * qty
+            }
+            setProductionRecipeInfo({
+              recipe: readiness.recipe,
+              hasStock: readiness.hasStock,
+              missingIngredients: readiness.missingIngredients || [],
+              totalCost
+            })
+          }
+        } catch (error) {
+          console.error('Error al re-verificar stock:', error)
+        } finally {
+          setIsCheckingProductionRecipe(false)
+        }
+      }
+    }
+  }
+
+  const handleProduction = async () => {
+    if (!user?.uid || !productionProduct) return
+
+    if (!productionData.warehouseId) {
+      toast.error('Debes seleccionar un almacén destino')
+      return
+    }
+
+    const quantity = parseFloat(productionData.quantity)
+    if (!quantity || quantity <= 0) {
+      toast.error('La cantidad debe ser mayor a 0')
+      return
+    }
+
+    setIsProcessingProduction(true)
+    try {
+      const businessId = getBusinessId()
+      const params = {
+        productId: productionProduct.id,
+        productName: productionProduct.name,
+        quantity,
+        warehouseId: productionData.warehouseId,
+        notes: productionData.notes,
+        userId: user.uid,
+        product: productionProduct
+      }
+
+      let result
+      if (productionMode === 'recipe') {
+        result = await executeRecipeProduction(businessId, params)
+      } else {
+        result = await executeManualProduction(businessId, params)
+      }
+
+      if (result.success) {
+        const modeLabel = productionMode === 'recipe' ? 'con receta' : 'manual'
+        toast.success(`Producción ${modeLabel}: ${quantity} unidades de ${productionProduct.name}`)
+        closeProductionModal()
+        loadProducts()
+      } else {
+        toast.error(result.error || 'Error al ejecutar producción')
+      }
+    } catch (error) {
+      console.error('Error en producción:', error)
+      toast.error('Error inesperado al ejecutar producción')
+    } finally {
+      setIsProcessingProduction(false)
+    }
+  }
+
   // Funciones para modal de historial de movimientos
   const openHistoryModal = async (product) => {
     setHistoryProduct(product)
@@ -710,6 +866,27 @@ export default function Inventory() {
         color: 'text-red-700',
         bgColor: 'bg-red-100',
         variant: 'danger',
+      },
+      production: {
+        label: 'Producción',
+        icon: Cog,
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+        variant: 'success',
+      },
+      production_manual: {
+        label: 'Producción Manual',
+        icon: Cog,
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+        variant: 'success',
+      },
+      production_consumption: {
+        label: 'Consumo Producción',
+        icon: Cog,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-50',
+        variant: 'warning',
       },
     }
 
@@ -1804,6 +1981,15 @@ export default function Inventory() {
                               )}
                               {isProduct && (
                                 <button
+                                  onClick={() => openProductionModal(item)}
+                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  title="Producir"
+                                >
+                                  <Cog className="w-4 h-4" />
+                                </button>
+                              )}
+                              {isProduct && (
+                                <button
                                   onClick={() => openDamageModal(item)}
                                   className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                   title="Registrar merma/daño"
@@ -2411,6 +2597,161 @@ export default function Inventory() {
               )}
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Producción Rápida */}
+      <Modal
+        isOpen={showProductionModal}
+        onClose={closeProductionModal}
+        title="Producción Rápida"
+        size="md"
+      >
+        <div className="space-y-4">
+          {productionProduct && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <p className="text-sm text-gray-600">Producto</p>
+              <p className="font-semibold text-gray-900">{productionProduct.name}</p>
+              {productionProduct.code && (
+                <p className="text-sm text-gray-500">Código: {productionProduct.code}</p>
+              )}
+              <div className="mt-2">
+                {productionMode === 'recipe' ? (
+                  <Badge variant="info"><CookingPot className="w-3 h-3 mr-1" />Con Receta</Badge>
+                ) : (
+                  <Badge variant="default"><Wrench className="w-3 h-3 mr-1" />Manual</Badge>
+                )}
+              </div>
+            </div>
+          )}
+
+          {productionMode && (
+            <>
+              <Select
+                label="Almacén destino"
+                required
+                value={productionData.warehouseId}
+                onChange={(e) => setProductionData({ ...productionData, warehouseId: e.target.value })}
+              >
+                <option value="">Seleccionar almacén</option>
+                {warehouses
+                  .filter((w) => w.isActive)
+                  .map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </option>
+                  ))}
+              </Select>
+
+              <Input
+                label="Cantidad a producir"
+                type="number"
+                min="1"
+                step="1"
+                required
+                value={productionData.quantity}
+                onChange={(e) => handleProductionQuantityChange(e.target.value)}
+                placeholder="Ej: 10"
+              />
+
+              {/* Vista previa de receta (modo recipe) */}
+              {productionMode === 'recipe' && (
+                <div>
+                  {isCheckingProductionRecipe ? (
+                    <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                      <span className="text-sm text-gray-500">Verificando insumos...</span>
+                    </div>
+                  ) : productionRecipeInfo ? (
+                    <div className={`p-4 rounded-lg border ${productionRecipeInfo.hasStock ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {productionRecipeInfo.hasStock ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-600" />
+                        )}
+                        <span className={`text-sm font-medium ${productionRecipeInfo.hasStock ? 'text-green-700' : 'text-red-700'}`}>
+                          {productionRecipeInfo.hasStock ? 'Insumos disponibles' : 'Stock insuficiente'}
+                        </span>
+                      </div>
+                      {productionRecipeInfo.recipe?.ingredients && (
+                        <div className="space-y-1">
+                          {productionRecipeInfo.recipe.ingredients.map((ing, idx) => {
+                            const needed = ing.quantity * (parseFloat(productionData.quantity) || 1)
+                            const missing = productionRecipeInfo.missingIngredients?.find(
+                              m => m.name === ing.ingredientName
+                            )
+                            return (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <span className={missing ? 'text-red-600' : 'text-gray-700'}>
+                                  {ing.ingredientName}
+                                </span>
+                                <span className={missing ? 'text-red-600 font-medium' : 'text-gray-500'}>
+                                  {needed.toFixed(2)} {ing.unit}
+                                  {missing && ` (disp: ${missing.available.toFixed(2)})`}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {productionRecipeInfo.totalCost > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-200 flex justify-between text-sm font-medium">
+                          <span className="text-gray-600">Costo estimado:</span>
+                          <span className="text-gray-900">{formatCurrency(productionRecipeInfo.totalCost)}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notas (opcional)
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  rows={2}
+                  value={productionData.notes}
+                  onChange={(e) => setProductionData({ ...productionData, notes: e.target.value })}
+                  placeholder="Notas adicionales..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={closeProductionModal}
+                  disabled={isProcessingProduction}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleProduction}
+                  disabled={
+                    isProcessingProduction ||
+                    !productionData.warehouseId ||
+                    !productionData.quantity ||
+                    (productionMode === 'recipe' && productionRecipeInfo && !productionRecipeInfo.hasStock) ||
+                    isCheckingProductionRecipe
+                  }
+                >
+                  {isProcessingProduction ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Produciendo...
+                    </>
+                  ) : (
+                    <>
+                      <Cog className="w-4 h-4 mr-2" />
+                      Producir
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
 

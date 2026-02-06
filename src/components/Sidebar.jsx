@@ -31,6 +31,7 @@ import {
   ListOrdered,
   Carrot,
   CookingPot,
+  Cog,
   // Iconos para modo farmacia
   Pill,
   FlaskConical,
@@ -228,6 +229,13 @@ function Sidebar() {
       menuId: 'recipes',
     },
     {
+      path: '/produccion',
+      icon: Cog,
+      label: 'Producción',
+      pageId: 'production',
+      menuId: 'production',
+    },
+    {
       path: '/reportes',
       icon: BarChart3,
       label: 'Reportes',
@@ -349,6 +357,13 @@ function Sidebar() {
       label: 'Recetas',
       pageId: 'recipes',
       menuId: 'recipes',
+    },
+    {
+      path: '/produccion',
+      icon: Cog,
+      label: 'Producción',
+      pageId: 'production',
+      menuId: 'production',
     },
     // --- Inventario y compras ---
     {

@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   ScanBarcode,
   Store,
+  Cog,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -265,6 +266,27 @@ export default function StockMovements() {
         bgColor: 'bg-red-100',
         variant: 'danger',
       },
+      production: {
+        label: 'Producción',
+        icon: Cog,
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+        variant: 'success',
+      },
+      production_manual: {
+        label: 'Producción Manual',
+        icon: Cog,
+        color: 'text-emerald-600',
+        bgColor: 'bg-emerald-50',
+        variant: 'success',
+      },
+      production_consumption: {
+        label: 'Consumo Producción',
+        icon: Cog,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-50',
+        variant: 'warning',
+      },
     }
 
     return types[type] || types.adjustment
@@ -506,6 +528,10 @@ export default function StockMovements() {
                 <option value="transfer_in">Transferencias Entrada</option>
                 <option value="transfer_out">Transferencias Salida</option>
                 <option value="adjustment">Ajustes</option>
+                <option value="damage">Merma/Dañado</option>
+                <option value="production">Producción</option>
+                <option value="production_manual">Producción Manual</option>
+                <option value="production_consumption">Consumo Producción</option>
               </Select>
 
               {/* Fecha desde */}

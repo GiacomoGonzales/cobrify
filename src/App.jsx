@@ -94,6 +94,8 @@ import LibroReclamaciones from './pages/LibroReclamaciones'
 import ComplaintsList from './pages/ComplaintsList'
 // Student payment control
 import StudentPaymentControl from './pages/StudentPaymentControl'
+// Production
+import Production from './pages/Production'
 
 function App() {
   const isNative = Capacitor.isNativePlatform()
@@ -202,6 +204,7 @@ function App() {
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
+              <Route path="produccion" element={<Production />} />
             </Route>
 
             {/* Rutas de demo restaurante (sin autenticación, con datos de ejemplo de restaurante) */}
@@ -233,6 +236,7 @@ function App() {
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
+              <Route path="produccion" element={<Production />} />
             </Route>
 
             {/* Rutas de demo farmacia (sin autenticación, con datos de ejemplo de farmacia) */}
@@ -317,6 +321,7 @@ function App() {
               <Route path="ingredientes/compra" element={<RegisterPurchase />} />
               <Route path="ingredientes/historial" element={<PurchaseHistory />} />
               <Route path="recetas" element={<Recipes />} />
+              <Route path="produccion" element={<Production />} />
 
               {/* Rutas de modo farmacia */}
               <Route path="laboratorios" element={<Laboratories />} />

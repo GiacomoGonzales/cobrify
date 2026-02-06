@@ -385,7 +385,7 @@ export const getPurchases = async (businessId, filters = {}) => {
  * Descontar ingredientes del stock (cuando se vende un plato)
  * Ahora soporta warehouseId para descuento por almacén
  */
-export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null) => {
+export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null, movementType = 'sale') => {
   try {
     const batch = writeBatch(db)
 
@@ -454,11 +454,11 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
       batch.set(movementRef, {
         ingredientId: ingredient.ingredientId,
         ingredientName: ingredient.ingredientName,
-        type: 'sale',
+        type: movementType,
         quantity: quantityToDeduct,
         unit: currentData.purchaseUnit,
         warehouseId: effectiveWarehouseId || null,
-        reason: `Venta: ${productName}`,
+        reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
         relatedSaleId: relatedSaleId,
         beforeStock: currentStock,
         afterStock: newStock,
