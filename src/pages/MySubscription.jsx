@@ -96,15 +96,6 @@ export default function MySubscription() {
                  `${planInfo.months || 1} meses`}
               </p>
             </div>
-            {planInfo.months === 1 && (
-              <div>
-                <p className="text-sm text-gray-500">Precio Mensual</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  S/ {subscription.monthlyPrice}
-                  <span className="text-sm text-gray-500 font-normal">/mes</span>
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -251,11 +242,7 @@ export default function MySubscription() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Fecha</th>
-                  {planInfo.months === 1 && (
-                    <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Monto</th>
-                  )}
-                  <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Método</th>
+                  <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Mes</th>
                   <th className="text-left py-2 px-4 text-sm font-medium text-gray-700">Estado</th>
                 </tr>
               </thead>
@@ -270,15 +257,9 @@ export default function MySubscription() {
                       <tr key={idx} className="border-b last:border-b-0">
                         <td className="py-3 px-4 text-sm text-gray-900">
                           {paymentDate
-                            ? format(new Date(paymentDate), "dd/MM/yyyy", { locale: es })
+                            ? format(new Date(paymentDate), "MMMM yyyy", { locale: es })
                             : 'N/A'}
                         </td>
-                        {planInfo.months === 1 && (
-                          <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                            S/ {payment.amount}
-                          </td>
-                        )}
-                        <td className="py-3 px-4 text-sm text-gray-700">{payment.method}</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             payment.status === 'completed'
@@ -287,7 +268,7 @@ export default function MySubscription() {
                               ? 'bg-yellow-100 text-yellow-800'
                               : 'bg-red-100 text-red-800'
                           }`}>
-                            {payment.status === 'completed' ? 'Completado' :
+                            {payment.status === 'completed' ? 'Pagado' :
                              payment.status === 'pending' ? 'Pendiente' : 'Fallido'}
                           </span>
                         </td>
