@@ -39,7 +39,7 @@ import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 const PRODUCTION_URL = 'https://cobrifyperu.com'
 
 export default function Settings() {
-  const { user, isDemoMode, getBusinessId } = useAppContext()
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -1127,6 +1127,7 @@ export default function Settings() {
       }, { merge: true })
 
       setLogoFile(null) // Limpiar archivo temporal
+      if (refreshBusinessSettings) await refreshBusinessSettings()
       toast.success('Configuración guardada exitosamente')
     } catch (error) {
       console.error('Error al guardar:', error)
@@ -2808,6 +2809,7 @@ export default function Settings() {
                       pdfAccentColor: pdfAccentColor,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
                     toast.success('Preferencias guardadas exitosamente.')
                   } catch (error) {
                     console.error('Error al guardar preferencias:', error)
@@ -3782,6 +3784,8 @@ export default function Settings() {
                       presentationsEnabled: presentationsEnabled,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
+                    // Refrescar businessSettings en el contexto para que otros componentes vean los cambios
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
                     toast.success('Configuración de ventas guardada exitosamente.')
                   } catch (error) {
                     console.error('Error al guardar configuración:', error)
@@ -4724,7 +4728,8 @@ export default function Settings() {
                       hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
-                    toast.success('Configuración avanzada guardada exitosamente. Recarga la página para ver los cambios en el menú.')
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
+                    toast.success('Configuración avanzada guardada exitosamente.')
                   } catch (error) {
                     console.error('Error al guardar configuración:', error)
                     toast.error('Error al guardar la configuración')

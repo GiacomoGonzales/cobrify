@@ -1055,9 +1055,9 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       ESCPOSCommands.init(),
       ESCPOSCommands.align(1), // Centro
       ESCPOSCommands.bold(true),
-      ESCPOSCommands.doubleWidth(true),
+      ESCPOSCommands.doubleHeight(true),
       ESCPOSCommands.text('*** COMANDA ***\n'),
-      ESCPOSCommands.doubleWidth(false),
+      ESCPOSCommands.doubleHeight(false),
       ESCPOSCommands.bold(false),
       ESCPOSCommands.text(separator + '\n'),
       ESCPOSCommands.align(0), // Izquierda
@@ -1074,7 +1074,6 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
     commands.push(ESCPOSCommands.text('Orden: #' + orderNum + '\n'));
     commands.push(ESCPOSCommands.bold(false));
     commands.push(ESCPOSCommands.text(separator + '\n'));
-    commands.push(ESCPOSCommands.lineFeed());
 
     // Items
     for (const item of order.items || []) {
@@ -1084,11 +1083,9 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
 
       // Modificadores
       if (item.modifiers && item.modifiers.length > 0) {
-        commands.push(ESCPOSCommands.text('  *** MODIFICADORES ***\n'));
         for (const modifier of item.modifiers) {
-          commands.push(ESCPOSCommands.text('  * ' + convertSpanishText(modifier.modifierName) + ':\n'));
           for (const option of modifier.options) {
-            let optText = '    -> ' + convertSpanishText(option.optionName);
+            let optText = '  > ' + convertSpanishText(option.optionName);
             if (option.priceAdjustment > 0) {
               optText += ' (+S/' + option.priceAdjustment.toFixed(2) + ')';
             }
@@ -1101,7 +1098,6 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
       if (item.notes) {
         commands.push(ESCPOSCommands.text('  Nota: ' + convertSpanishText(item.notes) + '\n'));
       }
-      commands.push(ESCPOSCommands.lineFeed());
     }
 
     commands.push(ESCPOSCommands.text(separator + '\n'));
@@ -1159,16 +1155,16 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
       ESCPOSCommands.init(),
       ESCPOSCommands.align(1), // Centro
       ESCPOSCommands.bold(true),
-      ESCPOSCommands.doubleWidth(true),
+      ESCPOSCommands.doubleHeight(true),
       ESCPOSCommands.text(convertSpanishText(business.tradeName || 'RESTAURANTE') + '\n'),
-      ESCPOSCommands.doubleWidth(false),
+      ESCPOSCommands.doubleHeight(false),
       ESCPOSCommands.bold(false),
       ESCPOSCommands.text(convertSpanishText(business.address || '') + '\n'),
       ESCPOSCommands.text((business.phone || '') + '\n'),
       ESCPOSCommands.bold(true),
-      ESCPOSCommands.doubleWidth(true),
+      ESCPOSCommands.doubleHeight(true),
       ESCPOSCommands.text('PRECUENTA\n'),
-      ESCPOSCommands.doubleWidth(false),
+      ESCPOSCommands.doubleHeight(false),
       ESCPOSCommands.bold(false),
       ESCPOSCommands.text(separator + '\n'),
       ESCPOSCommands.align(0), // Izquierda
@@ -1222,9 +1218,9 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     }
 
     commands.push(ESCPOSCommands.bold(true));
-    commands.push(ESCPOSCommands.doubleWidth(true));
+    commands.push(ESCPOSCommands.doubleHeight(true));
     commands.push(ESCPOSCommands.text('TOTAL: S/ ' + total.toFixed(2) + '\n'));
-    commands.push(ESCPOSCommands.doubleWidth(false));
+    commands.push(ESCPOSCommands.doubleHeight(false));
     commands.push(ESCPOSCommands.bold(false));
 
     // Footer

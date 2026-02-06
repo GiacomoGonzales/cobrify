@@ -526,6 +526,25 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  // Refrescar configuración del negocio (llamar después de guardar settings)
+  const refreshBusinessSettings = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const businessRef = doc(db, 'businesses', businessId)
+      const businessDoc = await getDoc(businessRef)
+      if (businessDoc.exists()) {
+        const businessData = businessDoc.data()
+        setBusinessSettings(businessData)
+        const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport']
+        const mode = validModes.includes(businessData.businessMode) ? businessData.businessMode : 'retail'
+        setBusinessMode(mode)
+      }
+    } catch (error) {
+      console.error('Error al refrescar configuración del negocio:', error)
+    }
+  }
+
   // Función helper para verificar si el usuario tiene acceso a una página
   const hasPageAccess = (pageId) => {
     // Super Admin siempre tiene acceso
@@ -648,6 +667,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     refreshSubscription,
+    refreshBusinessSettings, // Refrescar configuración del negocio después de guardar settings
     refreshResellerData, // Función para refrescar datos del reseller
   }
 

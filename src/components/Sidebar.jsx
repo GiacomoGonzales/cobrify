@@ -759,12 +759,12 @@ function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 sidebar-ios
+        className={`fixed left-0 top-0 h-screen h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 sidebar-ios flex flex-col overflow-hidden
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
       >
       {/* Logo - Dinámico según branding del reseller */}
-      <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200">
+      <div className="h-16 flex-shrink-0 flex items-center justify-center px-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
           {branding.logoUrl ? (
             <img
@@ -795,7 +795,7 @@ function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="p-3 space-y-1 overflow-y-auto" style={{ height: 'calc(100dvh - 4rem - env(safe-area-inset-bottom, 0px))' }}>
+      <nav className="p-3 space-y-1 flex-1 min-h-0 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
         {/* Skeleton loader mientras carga businessMode */}
         {!businessMode && (
           <div className="space-y-2 animate-pulse">

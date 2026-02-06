@@ -16,8 +16,7 @@ const CREDIT_NOTE_MODES = {
   EXTERNAL: 'external'
 }
 
-// Catálogo 09 - Tipos de nota de crédito SUNAT
-// Nota: El código 13 "Otros conceptos" requiere información de cuotas y solo aplica a facturas a crédito
+// Catálogo 09 - Tipos de nota de crédito SUNAT (completo)
 const CREDIT_NOTE_REASONS = [
   { code: '01', description: 'Anulación de la operación' },
   { code: '02', description: 'Anulación por error en el RUC' },
@@ -26,7 +25,12 @@ const CREDIT_NOTE_REASONS = [
   { code: '05', description: 'Descuento por ítem' },
   { code: '06', description: 'Devolución total' },
   { code: '07', description: 'Devolución por ítem' },
+  { code: '08', description: 'Bonificación' },
+  { code: '09', description: 'Disminución en el valor' },
   { code: '10', description: 'Otros conceptos tributarios' },
+  { code: '11', description: 'Ajustes de operaciones de exportación' },
+  { code: '12', description: 'Ajustes - montos y/o fechas de pago' },
+  { code: '13', description: 'Otros conceptos' },
 ]
 
 export default function CreateCreditNote() {

@@ -625,9 +625,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (itemObservations) {
           itemsText += `  ${itemObservations}\n`;
         }
-
-        // Línea 6: Separación entre items (línea vacía)
-        itemsText += '\n';
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
         // Línea 1: Nombre del producto completo
@@ -683,11 +680,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     // Construir comando en cadena
     let printer = CapacitorThermalPrinter.begin();
 
-    // Solo aplicar lineSpacing para 80mm (el de 58mm ya está bien)
-    if (paperWidth === 80) {
-      printer = printer.lineSpacing(2); // Espaciado vertical entre líneas (0-255mm)
-    }
-
     printer = printer.align('center');
 
     // ========== HEADER - Datos del Emisor ==========
@@ -710,15 +702,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         if (logoConfig.ready && logoConfig.base64) {
           // Convertir base64 a data URL para el plugin
           const dataUrl = `data:image/png;base64,${logoConfig.base64}`;
-          console.log('✅ Logo listo (base64). Aplicando ancho:', logoWidthMm, 'mm');
+          console.log('✅ Logo listo (base64). Ancho:', logoWidthMm, 'mm');
           printer = printer
-            .limitWidth(logoWidthMm)
             .image(dataUrl);
         } else if (logoConfig.ready && logoConfig.url) {
           // Fallback: intentar con URL directa
           console.log('⚠️ Intentando imprimir logo desde URL...');
           printer = printer
-            .limitWidth(logoWidthMm)
             .image(logoConfig.url);
         } else {
           console.warn('⚠️ Logo no disponible, usando header de texto');
@@ -1153,17 +1143,15 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
     const format = getFormat(paperWidth);
 
     // Construir items text
-    let itemsText = '\n';
+    let itemsText = '';
     for (const item of order.items || []) {
       itemsText += `${item.quantity}x ${convertSpanishText(item.name)}\n`;
 
-      // Mostrar modificadores si existen (DESTACADO)
+      // Mostrar modificadores si existen
       if (item.modifiers && item.modifiers.length > 0) {
-        itemsText += '  *** MODIFICADORES ***\n';
         for (const modifier of item.modifiers) {
-          itemsText += `  * ${convertSpanishText(modifier.modifierName)}:\n`;
           for (const option of modifier.options) {
-            itemsText += `    -> ${convertSpanishText(option.optionName)}`;
+            itemsText += `  > ${convertSpanishText(option.optionName)}`;
             if (option.priceAdjustment > 0) {
               itemsText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
             }
@@ -1175,14 +1163,13 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
       if (item.notes) {
         itemsText += `  Nota: ${convertSpanishText(item.notes)}\n`;
       }
-      itemsText += '\n';
     }
 
     // Construir comando en cadena
     let printer = CapacitorThermalPrinter.begin()
       // Encabezado
       .align('center')
-      .doubleWidth()
+      .doubleHeight()
       .bold()
       .text('*** COMANDA ***\n')
       .clearFormatting();
@@ -1347,13 +1334,13 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
     let printer = CapacitorThermalPrinter.begin()
       // Encabezado
       .align('center')
-      .doubleWidth()
+      .doubleHeight()
       .text((business.tradeName || 'RESTAURANTE') + '\n')
       .clearFormatting()
       .text((business.address || '') + '\n')
       .text((business.phone || '') + '\n')
       .bold()
-      .doubleWidth()
+      .doubleHeight()
       .text('PRECUENTA\n')
       .clearFormatting();
 
@@ -1373,7 +1360,7 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .align('right')
       .text(totalsText)
       .bold()
-      .doubleWidth()
+      .doubleHeight()
       .text(`TOTAL: S/ ${total.toFixed(2)}\n`)
       .clearFormatting();
 
@@ -2104,11 +2091,11 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
 
     builder.init()
       .alignCenter()
-      .doubleWidth(true)
+      .doubleHeight(true)
       .bold(true)
       .text('*** COMANDA ***')
       .newLine()
-      .doubleWidth(false);
+      .doubleHeight(false);
 
     if (stationName) {
       builder.bold(true)
@@ -2146,11 +2133,9 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
 
       // Modificadores
       if (item.modifiers && item.modifiers.length > 0) {
-        builder.text('  *** MODIFICADORES ***').newLine();
         for (const modifier of item.modifiers) {
-          builder.text(`  * ${modifier.modifierName}:`).newLine();
           for (const option of modifier.options) {
-            let optionText = `    -> ${option.optionName}`;
+            let optionText = `  > ${option.optionName}`;
             if (option.priceAdjustment > 0) {
               optionText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
             }
@@ -2162,7 +2147,6 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
       if (item.notes) {
         builder.text(`  Nota: ${item.notes}`).newLine();
       }
-      builder.newLine();
     }
 
     builder.text(format.separator)
@@ -2203,11 +2187,11 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
     builder.init()
       .alignCenter()
-      .doubleWidth(true)
+      .doubleHeight(true)
       .bold(true)
       .text(`*** ${station.name?.toUpperCase() || 'ESTACION'} ***`)
       .newLine()
-      .doubleWidth(false)
+      .doubleHeight(false)
       .bold(false)
       .text(format.separator)
       .newLine()
@@ -2232,10 +2216,10 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
     // Prioridad si es urgente
     if (order.priority === 'urgent') {
-      builder.doubleWidth(true)
+      builder.doubleHeight(true)
         .text('!!! URGENTE !!!')
         .newLine()
-        .doubleWidth(false);
+        .doubleHeight(false);
     }
 
     builder.bold(false)
@@ -2251,11 +2235,9 @@ export const printStationTicket = async (printerIp, order, station, items, paper
 
       // Modificadores
       if (item.modifiers && item.modifiers.length > 0) {
-        builder.text('  *** MODIFICADORES ***').newLine();
         for (const modifier of item.modifiers) {
-          builder.text(`  * ${modifier.modifierName}:`).newLine();
           for (const option of modifier.options) {
-            let optionText = `    -> ${option.optionName}`;
+            let optionText = `  > ${option.optionName}`;
             if (option.priceAdjustment > 0) {
               optionText += ` (+S/${option.priceAdjustment.toFixed(2)})`;
             }
@@ -2267,7 +2249,6 @@ export const printStationTicket = async (printerIp, order, station, items, paper
       if (item.notes) {
         builder.text(`  Nota: ${item.notes}`).newLine();
       }
-      builder.newLine();
     }
 
     builder.text(format.separator)
@@ -2379,19 +2360,19 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
 
     builder.init()
       .alignCenter()
-      .doubleWidth(true)
+      .doubleHeight(true)
       .text(business.tradeName || 'RESTAURANTE')
       .newLine()
-      .doubleWidth(false)
+      .doubleHeight(false)
       .text(business.address || '')
       .newLine()
       .text(business.phone || '')
       .newLine()
       .bold(true)
-      .doubleWidth(true)
+      .doubleHeight(true)
       .text('PRECUENTA')
       .newLine()
-      .doubleWidth(false)
+      .doubleHeight(false)
       .bold(false)
       .text(format.separator)
       .newLine();
@@ -2458,10 +2439,10 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
     }
 
     builder.bold(true)
-      .doubleWidth(true)
+      .doubleHeight(true)
       .text(`TOTAL: S/ ${total.toFixed(2)}`)
       .newLine()
-      .doubleWidth(false)
+      .doubleHeight(false)
       .bold(false);
 
     // Pie
@@ -2808,11 +2789,9 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
 
     builder.newLine()
       .bold(true)
-      .doubleWidth(true)
       .doubleHeight(true)
       .text('CIERRE DE CAJA')
       .newLine()
-      .doubleWidth(false)
       .doubleHeight(false)
       .bold(false)
       .text(format.separator)

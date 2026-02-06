@@ -58,6 +58,7 @@ import {
   sendInvoiceToSunat,
   upsertCustomerFromSale,
 } from '@/services/firestoreService'
+import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { getRecipeByProductId } from '@/services/recipeService'
@@ -338,6 +339,10 @@ export default function POS() {
   // Variant selection modal
   const [selectedProductForVariant, setSelectedProductForVariant] = useState(null)
   const [showVariantModal, setShowVariantModal] = useState(false)
+
+  // Modifier selection modal (restaurant modifiers)
+  const [showModifierModal, setShowModifierModal] = useState(false)
+  const [productForModifiers, setProductForModifiers] = useState(null)
 
   // Custom product modal
   const [showCustomProductModal, setShowCustomProductModal] = useState(false)
@@ -1277,6 +1282,13 @@ export default function POS() {
       return
     }
 
+    // Si el producto tiene modificadores, abrir modal de selección
+    if (product.modifiers && product.modifiers.length > 0) {
+      setProductForModifiers(product)
+      setShowModifierModal(true)
+      return
+    }
+
     // Verificar si tiene presentaciones y no viene con presentación ya seleccionada
     const hasPresentations = businessSettings?.presentationsEnabled && product.presentations && product.presentations.length > 0
     if (hasPresentations && selectedPresentation === null) {
@@ -1367,6 +1379,47 @@ export default function POS() {
     setShowBatchModal(false)
     setProductForBatchSelection(null)
     setPendingPriceForBatch(null)
+  }
+
+  // Manejar selección de modificadores desde el modal
+  const addToCartWithModifiers = (data) => {
+    if (!productForModifiers) return
+    const { selectedModifiers, totalPrice } = data
+    const product = productForModifiers
+
+    // Crear identificador único basado en los modificadores seleccionados
+    const modifierKey = selectedModifiers
+      .map(m => `${m.modifierId}:${m.options.map(o => o.optionId).join(',')}`)
+      .join('|')
+    const cartItemId = `${product.id}-mod-${modifierKey}`
+
+    const existingItem = cart.find(item => (item.cartId || item.id) === cartItemId)
+
+    if (existingItem) {
+      setCart(
+        cart.map(item =>
+          (item.cartId || item.id) === cartItemId
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      )
+    } else {
+      setCart([
+        ...cart,
+        {
+          ...product,
+          price: totalPrice,
+          basePrice: product.price,
+          quantity: 1,
+          cartId: cartItemId,
+          modifiers: selectedModifiers,
+          modifierKey: modifierKey,
+        },
+      ])
+    }
+
+    setShowModifierModal(false)
+    setProductForModifiers(null)
   }
 
   // Manejar selección de precio desde el modal
@@ -2209,6 +2262,7 @@ export default function POS() {
           ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
           ...(item.batchNumber && { batchNumber: item.batchNumber }),
           ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
+          ...(item.modifiers && { modifiers: item.modifiers }),
         }))
 
         // Crear datos simulados de factura
@@ -2380,6 +2434,7 @@ export default function POS() {
         ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
         ...(item.laboratoryName && { laboratoryName: item.laboratoryName }),
         ...(item.marca && { marca: item.marca }),
+        ...(item.modifiers && { modifiers: item.modifiers }),
       }))
 
       // 3. Crear factura
@@ -4540,6 +4595,20 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                   {item.presentationName} (×{item.presentationFactor})
                                 </p>
                               )}
+                              {item.modifiers && item.modifiers.length > 0 && (
+                                <div className="mt-0.5">
+                                  {item.modifiers.map((mod, idx) => (
+                                    <p key={idx} className="text-xs text-purple-600">
+                                      {mod.options.map(o => o.optionName).join(', ')}
+                                      {mod.options.some(o => o.priceAdjustment > 0) && (
+                                        <span className="text-purple-400 ml-1">
+                                          (+{formatCurrency(mod.options.reduce((s, o) => s + (o.priceAdjustment || 0), 0))})
+                                        </span>
+                                      )}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             <button
                               onClick={() => removeFromCart(itemId)}
@@ -5730,6 +5799,17 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           </div>
         )}
       </Modal>
+
+      {/* Modal de Selección de Modificadores */}
+      <ModifierSelectorModal
+        isOpen={showModifierModal}
+        onClose={() => {
+          setShowModifierModal(false)
+          setProductForModifiers(null)
+        }}
+        product={productForModifiers}
+        onConfirm={addToCartWithModifiers}
+      />
 
       {/* Ticket Oculto para Impresión */}
       {lastInvoiceData && (

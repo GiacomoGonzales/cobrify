@@ -948,15 +948,16 @@ export default function CashRegister() {
 
     // Filtrar facturas:
     // - Excluir notas de crédito y débito (no son ventas, son ajustes)
-    // - Excluir boletas/facturas convertidas desde notas de venta (para no duplicar)
+    // - Excluir notas de venta ya convertidas a boleta/factura (para no duplicar)
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
     const validInvoices = todayInvoices.filter(invoice => {
       // Excluir notas de crédito y débito (no son ventas)
       if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') {
         return false
       }
-      // Si es una boleta convertida desde nota de venta, no contar (ya se contó en la nota)
-      if (invoice.convertedFrom) {
+      // Si es una nota de venta que ya fue convertida a boleta/factura, no contar
+      // (se cuenta la boleta/factura resultante en su lugar)
+      if (invoice.documentType === 'nota_venta' && invoice.convertedTo) {
         return false
       }
       // Si el documento está anulado o pendiente de anulación por NC, no contar
@@ -1119,9 +1120,9 @@ export default function CashRegister() {
     let pendingTotal = 0
     let pendingCount = 0
     todayInvoices.forEach(invoice => {
-      // Excluir notas de crédito, débito, convertidas y anuladas
+      // Excluir notas de crédito, débito, notas convertidas y anuladas
       if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') return
-      if (invoice.convertedFrom) return
+      if (invoice.documentType === 'nota_venta' && invoice.convertedTo) return
       if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
           invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending') return
 
