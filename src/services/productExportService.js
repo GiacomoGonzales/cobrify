@@ -49,6 +49,14 @@ export const exportProductsForImport = async (products, categories, businessMode
   // Preparar datos según el modo de negocio
   let productData = [];
 
+  // Helper para obtener el precio efectivo (considera variantes)
+  const getEffectivePrice = (product) => {
+    if (product.hasVariants && product.variants?.length > 0) {
+      return product.variants[0].price || 0;
+    }
+    return product.price || 0;
+  };
+
   if (businessMode === 'pharmacy') {
     // Formato farmacia con campos específicos
     productData = products.map(product => {
@@ -69,7 +77,7 @@ export const exportProductsForImport = async (products, categories, businessMode
         registro_sanitario: product.sanitaryRegistry || '',
         ubicacion: product.location || '',
         costo: product.cost || '',
-        precio: product.price || 0,
+        precio: getEffectivePrice(product),
         precio2: product.price2 || '',
         precio3: product.price3 || '',
         precio4: product.price4 || '',
@@ -91,7 +99,7 @@ export const exportProductsForImport = async (products, categories, businessMode
         nombre: product.name || '',
         descripcion: product.description || '',
         costo: product.cost || '',
-        precio: product.price || 0,
+        precio: getEffectivePrice(product),
         precio2: product.price2 || '',
         precio3: product.price3 || '',
         precio4: product.price4 || '',
@@ -280,7 +288,7 @@ export const generateProductsExcel = async (products, categories, businessData, 
       getCategoryHierarchy(product.category),
       product.description || '',
       unitLabels[product.unit] || product.unit || 'Unidad',
-      product.price || 0,
+      product.hasVariants && product.variants?.length > 0 ? product.variants[0].price || 0 : product.price || 0,
       product.stock || 0,
       product.minStock || 0,
       stockStatus,
@@ -290,7 +298,10 @@ export const generateProductsExcel = async (products, categories, businessData, 
 
   // Agregar estadísticas al final
   const totalStock = products.reduce((sum, product) => sum + (product.stock || 0), 0);
-  const totalValue = products.reduce((sum, product) => sum + ((product.price || 0) * (product.stock || 0)), 0);
+  const totalValue = products.reduce((sum, product) => {
+    const price = product.hasVariants && product.variants?.length > 0 ? product.variants[0].price || 0 : product.price || 0;
+    return sum + (price * (product.stock || 0));
+  }, 0);
   const lowStockProducts = products.filter(p => p.minStock && p.stock <= p.minStock).length;
   const outOfStockProducts = products.filter(p => p.stock === 0).length;
 

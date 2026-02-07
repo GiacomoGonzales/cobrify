@@ -560,7 +560,7 @@ export default function Products() {
       sku: product.sku || '',
       name: product.name,
       description: product.description || '',
-      price: productHasVariants ? '' : (product.price?.toString() || ''),
+      price: productHasVariants ? (product.variants?.[0]?.price?.toString() || '') : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
@@ -645,7 +645,7 @@ export default function Products() {
       sku: '', // Limpiar SKU para evitar duplicados
       name: `${product.name} (copia)`, // Agregar indicador de copia
       description: product.description || '',
-      price: productHasVariants ? '' : (product.price?.toString() || ''),
+      price: productHasVariants ? (product.variants?.[0]?.price?.toString() || '') : (product.price?.toString() || ''),
       price2: product.price2?.toString() || '',
       price3: product.price3?.toString() || '',
       price4: product.price4?.toString() || '',
@@ -4143,7 +4143,16 @@ export default function Products() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-medium text-gray-500">Precio de Venta</label>
-                  <p className="text-lg text-green-600 font-bold mt-1">{formatCurrency(viewingProduct.price)}</p>
+                  {viewingProduct.hasVariants && viewingProduct.variants?.length > 0 ? (
+                    <p className="text-lg text-green-600 font-bold mt-1">
+                      Desde {formatCurrency(Math.min(...viewingProduct.variants.map(v => v.price)))}
+                      {Math.min(...viewingProduct.variants.map(v => v.price)) !== Math.max(...viewingProduct.variants.map(v => v.price)) && (
+                        <span className="text-sm font-normal text-gray-500"> - {formatCurrency(Math.max(...viewingProduct.variants.map(v => v.price)))}</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-lg text-green-600 font-bold mt-1">{formatCurrency(viewingProduct.price)}</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">Costo</label>
