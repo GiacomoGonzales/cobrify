@@ -87,11 +87,19 @@ export const RESTAURANT_PAGES = [
 export const PHARMACY_PAGES = [
   // Inventario
   { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'warehouses', name: 'Almacenes', path: '/almacenes', category: 'inventario' },
+  { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
   { id: 'batch-control', name: 'Control de Lotes', path: '/control-lotes', category: 'inventario' },
   { id: 'expiry-alerts', name: 'Alertas de Vencimiento', path: '/alertas-vencimiento', category: 'inventario' },
   { id: 'laboratories', name: 'Laboratorios', path: '/laboratorios', category: 'inventario' },
+  // Documentos
+  { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
+  { id: 'dispatch-guides', name: 'GRE Remitente', path: '/guias-remision', category: 'documentos' },
+  // Ventas
+  { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
   // Compras
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'purchase-orders', name: 'Órdenes de Compra', path: '/ordenes-compra', category: 'compras' },
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
   // Otros
   { id: 'loans', name: 'Préstamos', path: '/prestamos', category: 'otros' },

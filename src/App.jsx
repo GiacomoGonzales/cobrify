@@ -252,6 +252,8 @@ function App() {
               <Route path="clientes" element={<Customers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
+              <Route path="almacenes" element={<Warehouses />} />
+              <Route path="movimientos" element={<StockMovements />} />
               <Route path="control-lotes" element={<BatchControl />} />
               <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
               <Route path="laboratorios" element={<Laboratories />} />
@@ -259,6 +261,7 @@ function App() {
               <Route path="compras/nueva" element={<CreatePurchase />} />
               <Route path="ordenes-compra" element={<PurchaseOrders />} />
               <Route path="proveedores" element={<Suppliers />} />
+              <Route path="vendedores" element={<Sellers />} />
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />

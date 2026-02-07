@@ -474,6 +474,13 @@ function Sidebar() {
       pageId: 'customers',
     },
     {
+      path: '/vendedores',
+      icon: UserCog,
+      label: 'Vendedores',
+      pageId: 'sellers',
+      menuId: 'sellers',
+    },
+    {
       path: '/productos',
       icon: Pill,
       label: 'Medicamentos',
@@ -492,6 +499,20 @@ function Sidebar() {
       label: 'Inventario',
       pageId: 'inventory',
       menuId: 'inventory',
+    },
+    {
+      path: '/almacenes',
+      icon: Warehouse,
+      label: 'Almacenes',
+      pageId: 'warehouses',
+      menuId: 'warehouses',
+    },
+    {
+      path: '/movimientos',
+      icon: History,
+      label: 'Movimientos',
+      pageId: 'stock-movements',
+      menuId: 'stock-movements',
     },
     {
       path: '/control-lotes',
