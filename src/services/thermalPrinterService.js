@@ -241,7 +241,7 @@ const sendEscPosData = async (base64Data) => {
   if (connectionType === 'internal') {
     return await IminPrinter.print({ data: base64Data });
   }
-  return await sendEscPosData(base64Data);
+  return await TcpPrinter.print({ data: base64Data });
 };
 
 /**
