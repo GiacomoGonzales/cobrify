@@ -193,6 +193,7 @@ export default function Settings() {
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
+  const [catalogObservations, setCatalogObservations] = useState('')
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
   const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
   const qrCanvasRef = useRef(null)
@@ -727,6 +728,7 @@ export default function Settings() {
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
+        setCatalogObservations(businessData.catalogObservations || '')
 
         // Cargar configuración de Libro de Reclamaciones
         setComplaintsBookEnabled(businessData.complaintsBookEnabled || false)
@@ -4150,6 +4152,22 @@ export default function Settings() {
                         />
                       </div>
 
+                      {/* Observaciones del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Observaciones del catálogo (opcional)
+                        </label>
+                        <textarea
+                          value={catalogObservations}
+                          onChange={(e) => setCatalogObservations(e.target.value)}
+                          placeholder="Ej: Cuentas de pago, WhatsApp de vendedores, horarios..."
+                          maxLength={500}
+                          rows={3}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
+                      </div>
+
                       {/* Color */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4281,6 +4299,7 @@ export default function Settings() {
                       catalogTagline,
                       catalogShowPrices,
                       catalogWhatsapp: catalogWhatsapp.trim(),
+                      catalogObservations: catalogObservations.trim(),
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     toast.success(catalogEnabled ? 'Catálogo configurado exitosamente' : 'Catálogo deshabilitado')

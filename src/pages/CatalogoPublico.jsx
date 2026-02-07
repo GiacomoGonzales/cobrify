@@ -26,7 +26,8 @@ import {
   User,
   Hash,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Info
 } from 'lucide-react'
 
 // Componente de skeleton para carga
@@ -954,6 +955,7 @@ const DEMO_CATALOG_DATA = {
     catalogWhatsapp: '51987654321',
     catalogShowPrices: true,
     catalogAllowOrders: true,
+    catalogObservations: 'Pagos: BCP Cta. Ahorros 123-456789-0-12\nYape / Plin: 987 654 321\nWhatsApp ventas: 987 654 321',
   },
   products: [
     { id: '1', code: 'PROD001', name: 'Laptop HP 15"', description: 'Laptop HP 15 pulgadas, Intel Core i5, 8GB RAM', price: 2500.00, stock: 15, category: 'cat-electronica', imageUrl: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=400&fit=crop', catalogVisible: true },
@@ -994,6 +996,7 @@ const DEMO_RESTAURANT_DATA = {
     catalogWelcome: '¡Bienvenido! Descubre nuestra carta y haz tu pedido.',
     catalogColor: '#F97316',
     catalogShowPrices: true,
+    catalogObservations: 'Horario: Lun-Sáb 12:00 - 22:00 | Dom 12:00 - 18:00\nReservas: 01-9876543 / WhatsApp 987 654 321',
     taxConfig: { igvRate: 18, igvExempt: false }
   },
   products: [
@@ -1392,6 +1395,19 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         </div>
       </div>
+
+      {/* Observaciones del catálogo */}
+      {business?.catalogObservations && (
+        <div className="max-w-7xl mx-auto px-4 mt-4">
+          <div
+            className="rounded-xl p-4 flex items-start gap-3"
+            style={{ backgroundColor: `${business.catalogColor || '#10B981'}10`, borderLeft: `4px solid ${business.catalogColor || '#10B981'}` }}
+          >
+            <Info className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: business.catalogColor || '#10B981' }} />
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{business.catalogObservations}</p>
+          </div>
+        </div>
+      )}
 
       {/* Categorías */}
       {rootCategories.length > 0 && (
