@@ -24,6 +24,8 @@ import { getWarehouses, updateWarehouseStock, createStockMovement } from '@/serv
 import { getActiveBranches } from '@/services/branchService'
 import { getIngredients, registerPurchase as registerIngredientPurchase, createIngredient, updateIngredient, convertUnit } from '@/services/ingredientService'
 import Modal from '@/components/ui/Modal'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 // Helper function for legacy categories (used in ingredient logic)
 const migrateLegacyCategories = (cats) => {
@@ -127,6 +129,9 @@ export default function CreatePurchase() {
 
   // Estado para menú de crear (producto o ingrediente)
   const [showCreateMenu, setShowCreateMenu] = useState({})
+
+  // Laboratories for pharmacy mode
+  const [laboratories, setLaboratories] = useState([])
 
   useEffect(() => {
     loadData()
@@ -248,6 +253,21 @@ export default function CreatePurchase() {
 
       if (branchesResult.success) {
         setBranches(branchesResult.data || [])
+      }
+
+      // Load laboratories for pharmacy mode
+      if (businessMode === 'pharmacy') {
+        try {
+          const labsRef = collection(db, 'businesses', businessId, 'laboratories')
+          const snapshot = await getDocs(labsRef)
+          const labsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          setLaboratories(labsData)
+        } catch (error) {
+          console.error('Error al cargar laboratorios:', error)
+        }
       }
 
       // Si estamos en modo edición, cargar los datos de la compra
@@ -610,6 +630,23 @@ export default function CreatePurchase() {
         imageUrl: data.imageUrl || null,
       }
 
+      // Include pharmacy fields if present
+      if (businessMode === 'pharmacy') {
+        productData.genericName = data.genericName || null
+        productData.concentration = data.concentration || null
+        productData.presentation = data.presentation || null
+        productData.laboratoryId = data.laboratoryId || null
+        productData.laboratoryName = data.laboratoryName || null
+        productData.marca = data.marca || null
+        productData.batchNumber = data.batchNumber || null
+        productData.activeIngredient = data.activeIngredient || null
+        productData.therapeuticAction = data.therapeuticAction || null
+        productData.saleCondition = data.saleCondition || 'sin_receta'
+        productData.requiresPrescription = data.saleCondition !== 'sin_receta'
+        productData.sanitaryRegistry = data.sanitaryRegistry || null
+        productData.location = data.location || null
+      }
+
       const result = await createProduct(businessId, productData)
       if (result.success) {
         toast.success('Producto creado exitosamente')
@@ -623,19 +660,23 @@ export default function CreatePurchase() {
         // Seleccionar automáticamente el producto recién creado en el item actual
         if (currentItemIndex !== null) {
           const createdProduct = { id: result.id, ...productData }
-          selectProduct(currentItemIndex, createdProduct)
-
-          // Auto-llenar cantidad, costo y precio de venta en el formulario de compra
-          const newItems = [...purchaseItems]
           const costValue = productData.cost || 0
 
+          // Actualizar todo en un solo setPurchaseItems para evitar race condition
+          const newItems = [...purchaseItems]
+          newItems[currentItemIndex].productId = createdProduct.id
+          newItems[currentItemIndex].productName = createdProduct.name
+          newItems[currentItemIndex].itemType = 'product'
+          newItems[currentItemIndex].unit = createdProduct.unit || 'NIU'
           newItems[currentItemIndex].quantity = data.stock ? parseFloat(data.stock) : 1
           newItems[currentItemIndex].cost = costValue
           newItems[currentItemIndex].unitPrice = productData.price || 0
-          // Calcular costo sin IGV automáticamente
           newItems[currentItemIndex].costWithoutIGV = costValue > 0 ? Math.round((costValue / 1.18) * 100) / 100 : 0
-
           setPurchaseItems(newItems)
+
+          // Actualizar búsqueda y cerrar dropdown
+          setProductSearches(prev => ({ ...prev, [currentItemIndex]: createdProduct.name }))
+          setShowProductDropdowns(prev => ({ ...prev, [currentItemIndex]: false }))
         }
 
         // Cerrar modal y resetear
@@ -2118,6 +2159,8 @@ export default function CreatePurchase() {
           showCatalogVisibility: true,
         }}
         hideStockField={true} // En compras, el stock se maneja con la cantidad del item, no aquí
+        businessMode={businessMode}
+        laboratories={laboratories}
       />
 
       {/* Modal para crear ingrediente nuevo */}

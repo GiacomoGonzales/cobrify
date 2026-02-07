@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, X, Upload, Camera, ScanBarcode, Package, Plus, Trash2 } from 'lucide-react'
@@ -144,6 +144,8 @@ const ProductFormModal = ({
   stockLabel = 'Stock Inicial',
   stockHelperText = 'Cantidad inicial',
   hideStockField = false,
+  businessMode = null,
+  laboratories = [],
 }) => {
   const { user, businessSettings, hasFeature, getBusinessId } = useAppContext()
   const toast = useToast()
@@ -209,68 +211,104 @@ const ProductFormModal = ({
   const [presentations, setPresentations] = useState([])
   const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
 
+  // Pharmacy mode state
+  const [pharmacyData, setPharmacyData] = useState({
+    genericName: '',
+    concentration: '',
+    presentation: '',
+    laboratoryId: '',
+    laboratoryName: '',
+    marca: '',
+    batchNumber: '',
+    activeIngredient: '',
+    therapeuticAction: '',
+    saleCondition: 'sin_receta',
+    sanitaryRegistry: '',
+    location: '',
+  })
+
   // Check if product images are enabled
   const canUseProductImages = showImages && (hasFeature?.('productImages') || businessSettings?.enableProductImages)
 
-  // Reset form when modal opens/closes or initialData changes
+  // Track previous isOpen to only reset when modal transitions from closed to open
+  const prevIsOpenRef = useRef(false)
+
+  // Reset form only when modal opens (not on every parent re-render)
   useEffect(() => {
-    if (isOpen) {
-      if (initialData) {
-        // Editing mode
-        reset({
-          code: initialData.code || '',
-          sku: initialData.sku || '',
-          name: initialData.name || '',
-          description: initialData.description || '',
-          price: initialData.price?.toString() || '',
-          price2: initialData.price2?.toString() || '',
-          price3: initialData.price3?.toString() || '',
-          price4: initialData.price4?.toString() || '',
-          cost: initialData.cost?.toString() || '',
-          weight: initialData.weight?.toString() || '',
-          unit: initialData.unit || 'NIU',
-          category: initialData.category || '',
-          stock: initialData.stock?.toString() || '',
-          initialStock: initialData.initialStock?.toString() || '',
-          expirationDate: initialData.expirationDate || '',
-        })
-        setNoStock(initialData.noStock || false)
-        setAllowDecimalQuantity(initialData.allowDecimalQuantity || false)
-        setTrackExpiration(initialData.trackExpiration || false)
-        setCatalogVisible(initialData.catalogVisible || false)
-        setTaxAffectation(initialData.taxAffectation || '10')
-        setPresentations(initialData.presentations || [])
-        if (initialData.imageUrl) {
-          setProductImagePreview(initialData.imageUrl)
-        }
-      } else {
-        // Create mode - reset to defaults
-        reset({
-          code: '',
-          sku: '',
-          name: '',
-          description: '',
-          price: '',
-          price2: '',
-          price3: '',
-          price4: '',
-          cost: '',
-          unit: 'NIU',
-          category: '',
-          stock: '',
-          initialStock: '',
-          expirationDate: '',
-        })
-        setNoStock(false)
-        setAllowDecimalQuantity(false)
-        setTrackExpiration(false)
-        setCatalogVisible(false)
-        setTaxAffectation(isIgvExempt ? '20' : '10')
-        setWarehouseInitialStocks({})
-        setPresentations([])
-        setProductImage(null)
-        setProductImagePreview(null)
+    const justOpened = isOpen && !prevIsOpenRef.current
+    prevIsOpenRef.current = isOpen
+
+    if (!justOpened) return
+
+    if (initialData) {
+      // Editing mode
+      reset({
+        code: initialData.code || '',
+        sku: initialData.sku || '',
+        name: initialData.name || '',
+        description: initialData.description || '',
+        price: initialData.price?.toString() || '',
+        price2: initialData.price2?.toString() || '',
+        price3: initialData.price3?.toString() || '',
+        price4: initialData.price4?.toString() || '',
+        cost: initialData.cost?.toString() || '',
+        weight: initialData.weight?.toString() || '',
+        unit: initialData.unit || 'NIU',
+        category: initialData.category || '',
+        stock: initialData.stock?.toString() || '',
+        initialStock: initialData.initialStock?.toString() || '',
+        expirationDate: initialData.expirationDate || '',
+      })
+      setNoStock(initialData.noStock || false)
+      setAllowDecimalQuantity(initialData.allowDecimalQuantity || false)
+      setTrackExpiration(initialData.trackExpiration || false)
+      setCatalogVisible(initialData.catalogVisible || false)
+      setTaxAffectation(initialData.taxAffectation || '10')
+      setPresentations(initialData.presentations || [])
+      if (initialData.imageUrl) {
+        setProductImagePreview(initialData.imageUrl)
       }
+    } else {
+      // Create mode - reset to defaults
+      reset({
+        code: '',
+        sku: '',
+        name: '',
+        description: '',
+        price: '',
+        price2: '',
+        price3: '',
+        price4: '',
+        cost: '',
+        unit: 'NIU',
+        category: '',
+        stock: '',
+        initialStock: '',
+        expirationDate: '',
+      })
+      setNoStock(false)
+      setAllowDecimalQuantity(false)
+      setTrackExpiration(false)
+      setCatalogVisible(false)
+      setTaxAffectation(isIgvExempt ? '20' : '10')
+      setWarehouseInitialStocks({})
+      setPresentations([])
+      setProductImage(null)
+      setProductImagePreview(null)
+      setPharmacyData({
+        genericName: '',
+        concentration: '',
+        presentation: '',
+        laboratoryId: '',
+        laboratoryName: '',
+        marca: '',
+        batchNumber: '',
+        activeIngredient: '',
+        therapeuticAction: '',
+        saleCondition: 'sin_receta',
+        sanitaryRegistry: '',
+        location: '',
+      })
     }
   }, [isOpen, initialData, reset])
 
@@ -398,6 +436,23 @@ const ProductFormModal = ({
       taxAffectation,
       presentations: showPresentations ? presentations : [],
       warehouseInitialStocks: showWarehouseStock ? warehouseInitialStocks : {},
+    }
+
+    // Include pharmacy data if in pharmacy mode
+    if (businessMode === 'pharmacy') {
+      productData.genericName = pharmacyData.genericName || null
+      productData.concentration = pharmacyData.concentration || null
+      productData.presentation = pharmacyData.presentation || null
+      productData.laboratoryId = pharmacyData.laboratoryId || null
+      productData.laboratoryName = pharmacyData.laboratoryName || null
+      productData.marca = pharmacyData.marca || null
+      productData.batchNumber = pharmacyData.batchNumber || null
+      productData.activeIngredient = pharmacyData.activeIngredient || null
+      productData.therapeuticAction = pharmacyData.therapeuticAction || null
+      productData.saleCondition = pharmacyData.saleCondition || 'sin_receta'
+      productData.requiresPrescription = pharmacyData.saleCondition !== 'sin_receta'
+      productData.sanitaryRegistry = pharmacyData.sanitaryRegistry || null
+      productData.location = pharmacyData.location || null
     }
 
     // Handle image upload if there's a new image
@@ -733,6 +788,210 @@ const ProductFormModal = ({
             )}
           </div>
         </div>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECCIÓN: INFORMACIÓN FARMACÉUTICA (solo modo farmacia)
+        ═══════════════════════════════════════════════════════════════════ */}
+        {businessMode === 'pharmacy' && (
+          <div className="space-y-4 bg-green-50/50 border border-green-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-green-800 flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              Información Farmacéutica
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Nombre Genérico (DCI) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nombre Genérico (DCI)
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.genericName}
+                  onChange={(e) => setPharmacyData({...pharmacyData, genericName: e.target.value})}
+                  placeholder="Ej: Paracetamol"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Denominación Común Internacional</p>
+              </div>
+
+              {/* Concentración */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Concentración
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.concentration}
+                  onChange={(e) => setPharmacyData({...pharmacyData, concentration: e.target.value})}
+                  placeholder="Ej: 500mg, 100ml"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+
+              {/* Presentación farmacéutica */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Presentación
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.presentation}
+                  onChange={(e) => setPharmacyData({...pharmacyData, presentation: e.target.value})}
+                  placeholder="Ej: Tabletas x 100, Jarabe 120ml"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+
+              {/* Laboratorio */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Laboratorio
+                </label>
+                <select
+                  value={pharmacyData.laboratoryId}
+                  onChange={(e) => {
+                    const lab = laboratories.find(l => l.id === e.target.value)
+                    setPharmacyData({
+                      ...pharmacyData,
+                      laboratoryId: e.target.value,
+                      laboratoryName: lab?.name || ''
+                    })
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                >
+                  <option value="">Seleccionar laboratorio</option>
+                  {laboratories.map(lab => (
+                    <option key={lab.id} value={lab.id}>{lab.name}</option>
+                  ))}
+                </select>
+                {laboratories.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">No hay laboratorios registrados. Agrégalos desde el menú Laboratorios.</p>
+                )}
+              </div>
+
+              {/* Marca */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Marca
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.marca}
+                  onChange={(e) => setPharmacyData({...pharmacyData, marca: e.target.value})}
+                  placeholder="Ej: Panadol, Aspirina"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+
+              {/* Número de Lote */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Número de Lote
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.batchNumber}
+                  onChange={(e) => setPharmacyData({...pharmacyData, batchNumber: e.target.value})}
+                  placeholder="Ej: LOT2024001"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+
+              {/* Principio Activo */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Principio Activo
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.activeIngredient}
+                  onChange={(e) => setPharmacyData({...pharmacyData, activeIngredient: e.target.value})}
+                  placeholder="Ej: Paracetamol, Ibuprofeno"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+
+              {/* Acción Terapéutica */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Acción Terapéutica
+                </label>
+                <select
+                  value={pharmacyData.therapeuticAction}
+                  onChange={(e) => setPharmacyData({...pharmacyData, therapeuticAction: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                >
+                  <option value="">Seleccionar acción</option>
+                  <option value="Analgésico">Analgésico</option>
+                  <option value="Antiinflamatorio">Antiinflamatorio</option>
+                  <option value="Antibiótico">Antibiótico</option>
+                  <option value="Antialérgico">Antialérgico</option>
+                  <option value="Antihipertensivo">Antihipertensivo</option>
+                  <option value="Antiácido">Antiácido</option>
+                  <option value="Antidiarreico">Antidiarreico</option>
+                  <option value="Antidepresivo">Antidepresivo</option>
+                  <option value="Antiparasitario">Antiparasitario</option>
+                  <option value="Antifúngico">Antifúngico</option>
+                  <option value="Antipirético">Antipirético</option>
+                  <option value="Antiemético">Antiemético</option>
+                  <option value="Antitusivo">Antitusivo</option>
+                  <option value="Broncodilatador">Broncodilatador</option>
+                  <option value="Diurético">Diurético</option>
+                  <option value="Laxante">Laxante</option>
+                  <option value="Vitamina/Suplemento">Vitamina/Suplemento</option>
+                  <option value="Dermatológico">Dermatológico</option>
+                  <option value="Oftálmico">Oftálmico</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+
+              {/* Condición de Venta */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Condición de Venta
+                </label>
+                <select
+                  value={pharmacyData.saleCondition}
+                  onChange={(e) => setPharmacyData({...pharmacyData, saleCondition: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                >
+                  <option value="sin_receta">Venta libre (sin receta)</option>
+                  <option value="con_receta">Con receta médica</option>
+                  <option value="receta_retenida">Receta retenida</option>
+                </select>
+              </div>
+
+              {/* Registro Sanitario */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Registro Sanitario DIGEMID
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.sanitaryRegistry}
+                  onChange={(e) => setPharmacyData({...pharmacyData, sanitaryRegistry: e.target.value})}
+                  placeholder="Ej: N-12345"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+
+              {/* Ubicación en estante */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ubicación (Estante/Anaquel)
+                </label>
+                <input
+                  type="text"
+                  value={pharmacyData.location}
+                  onChange={(e) => setPharmacyData({...pharmacyData, location: e.target.value})}
+                  placeholder="Ej: A1-E3, Vitrina 2"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════════════
             SECCIÓN: PRESENTACIONES DE VENTA (opcional)
