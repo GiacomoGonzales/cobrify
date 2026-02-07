@@ -613,6 +613,8 @@ export default function LandingPage() {
             </div>
           </div>
 
+          <p className="text-sm text-gray-500 mt-6">* Los precios no incluyen IGV</p>
+
           {/* Demos Section */}
           <div className="mt-20 pt-12 border-t border-gray-200">
             <h3 className="text-3xl font-bold text-gray-900 mb-4">
@@ -621,7 +623,7 @@ export default function LandingPage() {
             <p className="text-lg text-gray-600 mb-8">
               Explora todas las funcionalidades sin compromiso
             </p>
-            <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
               <Link to="/demo">
                 <div className="bg-white p-6 rounded-xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-lg group cursor-pointer">
                   <div className="flex items-center justify-center mb-4">
@@ -646,6 +648,20 @@ export default function LandingPage() {
                   <h4 className="text-xl font-bold text-white mb-2">Demo Restaurante</h4>
                   <p className="text-primary-100 text-sm mb-4">Especializado para restaurantes</p>
                   <Button className="w-full bg-white text-primary-700 hover:bg-primary-50 font-semibold">
+                    Explorar Demo
+                  </Button>
+                </div>
+              </Link>
+              <Link to="/demopharmacy">
+                <div className="bg-white p-6 rounded-xl border-2 border-green-200 hover:border-green-400 transition-all hover:shadow-lg group cursor-pointer">
+                  <div className="flex items-center justify-center mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">Demo Farmacia</h4>
+                  <p className="text-gray-600 text-sm mb-4">Especializado para farmacias y boticas</p>
+                  <Button variant="outline" className="w-full border-2 border-green-600 text-green-700 hover:bg-green-50">
                     Explorar Demo
                   </Button>
                 </div>
