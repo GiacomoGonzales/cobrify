@@ -1084,10 +1084,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .text(convertSpanishText(business.website + '\n'));
     }
 
-    printer = printer.text('\n');
-
-    // Finalizar y enviar
+    // Finalizar y enviar - avanzar suficiente papel para que la cuchilla no corte el texto
     await printer
+      .text('\n')
+      .text('\n')
+      .text('\n')
+      .text('\n')
       .text('\n')
       .cutPaper()
       .write();
@@ -1208,7 +1210,11 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
 
     printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
+    // Avanzar suficiente papel para que la cuchilla no corte el texto
     await printer
+      .text('\n')
+      .text('\n')
+      .text('\n')
       .text('\n')
       .text('\n')
       .cutPaper()
@@ -1375,6 +1381,9 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       .text('Solicite su factura o boleta\n')
       .text('\n')
       .text('Gracias por su preferencia\n')
+      .text('\n')
+      .text('\n')
+      .text('\n')
       .text('\n')
       .text('\n')
       .cutPaper()
