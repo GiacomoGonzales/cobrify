@@ -467,6 +467,12 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // Subcollection: Productions (Producciones - transformar insumos en producto terminado)
+      match /productions/{productionId} {
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Complaints (Libro de Reclamaciones)
       match /complaints/{complaintId} {
         // El dueño del negocio puede leer y actualizar todos los reclamos

@@ -30,6 +30,7 @@ import {
   CookingPot,
   Wrench,
   CheckCircle,
+  MoreVertical,
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
@@ -117,6 +118,8 @@ export default function Inventory() {
   const [filterStatuses, setFilterStatuses] = useState([]) // Array vacío = todos los estados
   const [filterType, setFilterType] = useState('all') // 'all', 'products', 'ingredients'
   const [expandedProduct, setExpandedProduct] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   // Estado para controlar qué dropdown multi-select está abierto
   const [openDropdown, setOpenDropdown] = useState(null) // 'categories', 'statuses', 'warehouses', or null
@@ -1777,7 +1780,7 @@ export default function Inventory() {
             {`${filterType === 'all' ? 'Items' : filterType === 'products' ? 'Productos' : 'Ingredientes'} en Inventario (${filteredProducts.length})`}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {filteredProducts.length === 0 ? (
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -1793,11 +1796,11 @@ export default function Inventory() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto lg:overflow-x-visible">
-              <Table className="w-full lg:table-fixed">
+            <div className="overflow-hidden">
+              <Table className="w-full lg:table-fixed [&_th]:px-2 [&_th]:lg:px-3 [&_td]:px-2 [&_td]:lg:px-3">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-20 lg:w-[8%]">
+                    <TableHead className="lg:w-[7%]">
                       <button
                         onClick={() => handleSort('code')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1807,7 +1810,7 @@ export default function Inventory() {
                         {getSortIcon('code')}
                       </button>
                     </TableHead>
-                    <TableHead className="lg:w-[22%]">
+                    <TableHead className="lg:w-[32%]">
                       <button
                         onClick={() => handleSort('name')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1817,8 +1820,8 @@ export default function Inventory() {
                         {getSortIcon('name')}
                       </button>
                     </TableHead>
-                    <TableHead className="hidden sm:table-cell w-20 lg:w-[8%]">Tipo</TableHead>
-                    <TableHead className="hidden md:table-cell lg:w-[18%]">
+                    <TableHead className="hidden sm:table-cell lg:w-[6%]">Tipo</TableHead>
+                    <TableHead className="hidden md:table-cell lg:w-[10%]">
                       <button
                         onClick={() => handleSort('category')}
                         className="flex items-center gap-1 hover:text-primary-600 transition-colors"
@@ -1828,7 +1831,7 @@ export default function Inventory() {
                         {getSortIcon('category')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-20 lg:w-[10%] text-right">
+                    <TableHead className="lg:w-[6%] text-right">
                       <button
                         onClick={() => handleSort('stock')}
                         className="flex items-center gap-1 justify-end hover:text-primary-600 transition-colors"
@@ -1838,7 +1841,7 @@ export default function Inventory() {
                         {getSortIcon('stock')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-24 lg:w-[10%] text-right">
+                    <TableHead className="lg:w-[8%] text-right">
                       <button
                         onClick={() => handleSort('price')}
                         className="flex items-center gap-1 justify-end hover:text-primary-600 transition-colors"
@@ -1848,9 +1851,9 @@ export default function Inventory() {
                         {getSortIcon('price')}
                       </button>
                     </TableHead>
-                    <TableHead className="w-24 lg:w-[10%] text-right">Valor</TableHead>
-                    <TableHead className="w-20 lg:w-[9%] text-center">Estado</TableHead>
-                    {warehouses.length >= 1 && <TableHead className="w-20 lg:w-[8%] text-right">Acciones</TableHead>}
+                    <TableHead className="lg:w-[10%] text-right">Valor</TableHead>
+                    <TableHead className="lg:w-[7%] text-right">Estado</TableHead>
+                    {warehouses.length >= 1 && <TableHead className="lg:w-[3%]"></TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1863,14 +1866,14 @@ export default function Inventory() {
                     return (
                       <React.Fragment key={`${item.itemType}-${item.id}`}>
                       <TableRow>
-                        <TableCell className="lg:w-[8%]">
-                          <span className="font-mono text-xs sm:text-sm truncate block">
+                        <TableCell className="lg:w-[7%]">
+                          <span className="font-mono text-xs break-all block">
                             {item.sku || item.code || '-'}
                           </span>
                         </TableCell>
-                        <TableCell className="lg:w-[22%] max-w-0">
+                        <TableCell className="lg:w-[32%] max-w-0 !whitespace-normal">
                           <div className="min-w-0">
-                            <p className="font-medium text-sm truncate" title={item.name}>
+                            <p className="font-medium text-sm line-clamp-2" title={item.name}>
                               {item.name}
                             </p>
                             {item.category && (
@@ -1883,14 +1886,14 @@ export default function Inventory() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell lg:w-[8%]">
+                        <TableCell className="hidden sm:table-cell lg:w-[6%]">
                           <Badge variant={isProduct ? 'default' : 'success'} className="text-xs">
                             {isProduct ? 'Prod.' : 'Ing.'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell lg:w-[18%] max-w-0">
+                        <TableCell className="hidden md:table-cell lg:w-[10%] max-w-0 !whitespace-normal">
                           <span
-                            className="text-xs text-gray-600 truncate block"
+                            className="text-xs text-gray-600 line-clamp-2 block"
                             title={isProduct
                               ? getCategoryPath(productCategories, item.category) || 'Sin categoría'
                               : item.category || 'Sin categoría'
@@ -1902,7 +1905,7 @@ export default function Inventory() {
                             }
                           </span>
                         </TableCell>
-                        <TableCell className="text-right lg:w-[10%]">
+                        <TableCell className="text-right lg:w-[6%]">
                           {(() => {
                             const realStock = getRealStock(item)
                             return (
@@ -1944,7 +1947,7 @@ export default function Inventory() {
                             )
                           })()}
                         </TableCell>
-                        <TableCell className="text-right lg:w-[10%]">
+                        <TableCell className="text-right lg:w-[8%]">
                           <span className="text-sm">
                             {formatCurrency(isProduct ? item.price : (item.averageCost || 0))}
                           </span>
@@ -1961,52 +1964,31 @@ export default function Inventory() {
                             )
                           })()}
                         </TableCell>
-                        <TableCell className="text-center lg:w-[9%]">
+                        <TableCell className="text-right lg:w-[7%]">
                           <Badge variant={stockStatus.variant} className="text-xs whitespace-nowrap">
                             {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
                           </Badge>
                         </TableCell>
-                        {warehouses.length >= 1 && (
-                          <TableCell className="lg:w-[8%]">
-                            <div className="flex items-center justify-end gap-1">
-                              {isProduct && warehouses.length > 1 && (
-                                <button
-                                  onClick={() => openTransferModal(item)}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                  title="Transferir entre almacenes"
-                                  disabled={getRealStock(item) === null || getRealStock(item) === 0}
-                                >
-                                  <ArrowRightLeft className="w-4 h-4" />
-                                </button>
-                              )}
-                              {isProduct && (
-                                <button
-                                  onClick={() => openProductionModal(item)}
-                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                  title="Producir"
-                                >
-                                  <Cog className="w-4 h-4" />
-                                </button>
-                              )}
-                              {isProduct && (
-                                <button
-                                  onClick={() => openDamageModal(item)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Registrar merma/daño"
-                                  disabled={getRealStock(item) === null || getRealStock(item) === 0}
-                                >
-                                  <AlertTriangle className="w-4 h-4" />
-                                </button>
-                              )}
-                              {isProduct && (
-                                <button
-                                  onClick={() => openHistoryModal(item)}
-                                  className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                                  title="Ver historial de movimientos"
-                                >
-                                  <History className="w-4 h-4" />
-                                </button>
-                              )}
+                        {warehouses.length >= 1 && isProduct && (
+                          <TableCell className="lg:w-[4%]">
+                            <div className="flex justify-end">
+                              <button
+                                onClick={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  const menuHeight = 200
+                                  const spaceBelow = window.innerHeight - rect.bottom
+                                  const openUpward = spaceBelow < menuHeight
+                                  setMenuPosition({
+                                    top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                                    right: window.innerWidth - rect.right,
+                                    openUpward
+                                  })
+                                  setOpenMenuId(openMenuId === item.id ? null : item.id)
+                                }}
+                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
                             </div>
                           </TableCell>
                         )}
@@ -2174,6 +2156,59 @@ export default function Inventory() {
                   })}
                 </TableBody>
               </Table>
+
+              {/* Menú de acciones flotante */}
+              {openMenuId && (() => {
+                const menuItem = [...products, ...ingredients].find(p => p.id === openMenuId)
+                if (!menuItem) return null
+                const noStock = getRealStock(menuItem) === null || getRealStock(menuItem) === 0
+                return (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                    <div
+                      className="fixed w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                      style={{
+                        top: `${menuPosition.top}px`,
+                        right: `${menuPosition.right}px`,
+                        transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                      }}
+                    >
+                      {warehouses.length > 1 && (
+                        <button
+                          onClick={() => { openTransferModal(menuItem); setOpenMenuId(null) }}
+                          disabled={noStock}
+                          className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                          Transferir
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { openProductionModal(menuItem); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <Cog className="w-4 h-4 text-emerald-600" />
+                        Producir
+                      </button>
+                      <button
+                        onClick={() => { openDamageModal(menuItem); setOpenMenuId(null) }}
+                        disabled={noStock}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                        Registrar merma
+                      </button>
+                      <button
+                        onClick={() => { openHistoryModal(menuItem); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <History className="w-4 h-4 text-purple-600" />
+                        Ver historial
+                      </button>
+                    </div>
+                  </>
+                )
+              })()}
 
               {/* Controles de paginación */}
               {totalFilteredProducts > 0 && (
