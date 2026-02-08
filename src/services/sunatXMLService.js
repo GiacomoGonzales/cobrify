@@ -139,14 +139,51 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     if (detrBankAccount) detractionAccount = detrBankAccount.accountNumber
   }
 
+  // Acumuladores por tasa/tipo para TaxTotal del documento
+  const taxByRate = {}  // { rate: { taxable, tax } } para gravados
+  let docTotalExonerado = 0
+  let docTotalInafecto = 0
+
   // Generar líneas de items
+  // IMPORTANTE: Los precios del POS ya incluyen IGV (para productos gravados)
   const invoiceLines = items.map((item, index) => {
     // Soportar tanto 'price' como 'unitPrice' para compatibilidad
-    const unitPrice = item.unitPrice || item.price || 0
-    const lineExtensionAmount = item.quantity * unitPrice
-    // Calcular precio con IGV usando la tasa dinámica
-    const priceWithTax = unitPrice * (1 + igvMultiplier)
-    const lineIgv = lineExtensionAmount * igvMultiplier
+    const unitPriceWithIgv = item.unitPrice || item.price || 0
+
+    // Per-item tax affectation and IGV rate
+    const itemTaxAffectation = igvExempt ? '20' : (item.taxAffectation || exemptionCode || '10')
+    const isGravado = itemTaxAffectation === '10'
+    const isExonerado = itemTaxAffectation === '20'
+    const isInafecto = itemTaxAffectation === '30'
+
+    // Per-item IGV rate: usar item.igvRate si existe, sino el igvRate global
+    const itemIgvRate = isGravado ? (item.igvRate ?? igvRate) : 0
+    const itemIgvMultiplier = itemIgvRate / 100
+
+    // Los precios del POS ya incluyen IGV para gravados
+    // Para exonerados/inafectos el precio es directamente el valor de venta
+    const lineTotal = Number((item.quantity * unitPriceWithIgv).toFixed(2))
+    let lineExtensionAmount, lineIgv, basePricePerUnit
+
+    if (isGravado) {
+      // Extraer base imponible (sin IGV) del precio con IGV
+      lineExtensionAmount = Number((lineTotal / (1 + itemIgvMultiplier)).toFixed(2))
+      lineIgv = Number((lineTotal - lineExtensionAmount).toFixed(2))
+      basePricePerUnit = Number((lineExtensionAmount / item.quantity).toFixed(2))
+
+      // Acumular por tasa para TaxSubtotals del documento
+      if (!taxByRate[itemIgvRate]) taxByRate[itemIgvRate] = { taxable: 0, tax: 0 }
+      taxByRate[itemIgvRate].taxable += lineExtensionAmount
+      taxByRate[itemIgvRate].tax += lineIgv
+    } else {
+      // Exonerado/Inafecto: no hay IGV, precio = valor de venta
+      lineExtensionAmount = lineTotal
+      lineIgv = 0
+      basePricePerUnit = unitPriceWithIgv
+
+      if (isExonerado) docTotalExonerado += lineExtensionAmount
+      if (isInafecto) docTotalInafecto += lineExtensionAmount
+    }
 
     // Unidad de medida del item (usar la del item si existe, sino NIU por defecto)
     const unitCode = item.unit || item.unitCode || UNIT_CODES.UNIDAD
@@ -156,6 +193,14 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
       ? `<cbc:TaxExemptionReason><![CDATA[${exemptionReason}]]></cbc:TaxExemptionReason>`
       : ''
 
+    // Tax category and scheme based on affectation type
+    let taxCategoryId = 'S', taxSchemeId = '1000', taxSchemeName = 'IGV', taxTypeCode = 'VAT'
+    if (isExonerado) {
+      taxCategoryId = 'E'; taxSchemeId = '9997'; taxSchemeName = 'EXO'
+    } else if (isInafecto) {
+      taxCategoryId = 'O'; taxSchemeId = '9998'; taxSchemeName = 'INA'; taxTypeCode = 'FRE'
+    }
+
     return `
     <cac:InvoiceLine>
       <cbc:ID>${index + 1}</cbc:ID>
@@ -163,7 +208,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
       <cbc:LineExtensionAmount currencyID="${currency}">${lineExtensionAmount.toFixed(2)}</cbc:LineExtensionAmount>
       <cac:PricingReference>
         <cac:AlternativeConditionPrice>
-          <cbc:PriceAmount currencyID="${currency}">${priceWithTax.toFixed(2)}</cbc:PriceAmount>
+          <cbc:PriceAmount currencyID="${currency}">${unitPriceWithIgv.toFixed(2)}</cbc:PriceAmount>
           <cbc:PriceTypeCode listName="Tipo de Precio" listAgencyName="PE:SUNAT" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo16">01</cbc:PriceTypeCode>
         </cac:AlternativeConditionPrice>
       </cac:PricingReference>
@@ -173,13 +218,14 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
           <cbc:TaxableAmount currencyID="${currency}">${lineExtensionAmount.toFixed(2)}</cbc:TaxableAmount>
           <cbc:TaxAmount currencyID="${currency}">${lineIgv.toFixed(2)}</cbc:TaxAmount>
           <cac:TaxCategory>
-            <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
-            <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>
+            <cbc:ID schemeID="UN/ECE 5305" schemeName="Tax Category Identifier" schemeAgencyName="United Nations Economic Commission for Europe">${taxCategoryId}</cbc:ID>
+            <cbc:Percent>${itemIgvRate.toFixed(2)}</cbc:Percent>
+            <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${itemTaxAffectation}</cbc:TaxExemptionReasonCode>
             ${exemptionReasonTag}
             <cac:TaxScheme>
-              <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
-              <cbc:Name>IGV</cbc:Name>
-              <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+              <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">${taxSchemeId}</cbc:ID>
+              <cbc:Name>${taxSchemeName}</cbc:Name>
+              <cbc:TaxTypeCode>${taxTypeCode}</cbc:TaxTypeCode>
             </cac:TaxScheme>
           </cac:TaxCategory>
         </cac:TaxSubtotal>
@@ -191,10 +237,89 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
         </cac:SellersItemIdentification>
       </cac:Item>
       <cac:Price>
-        <cbc:PriceAmount currencyID="${currency}">${unitPrice.toFixed(2)}</cbc:PriceAmount>
+        <cbc:PriceAmount currencyID="${currency}">${basePricePerUnit.toFixed(2)}</cbc:PriceAmount>
       </cac:Price>
     </cac:InvoiceLine>`
   }).join('\n')
+
+  // Generar TaxSubtotals del documento (uno por cada tasa de IGV + exonerado/inafecto)
+  let taxSubtotalsXml = ''
+
+  // TaxSubtotals de gravados (uno por cada tasa: 18%, 10.5%, etc.)
+  const rateKeys = Object.keys(taxByRate).sort((a, b) => Number(b) - Number(a))
+  for (const rate of rateKeys) {
+    const data = taxByRate[rate]
+    taxSubtotalsXml += `
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="${currency}">${data.taxable.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${currency}">${data.tax.toFixed(2)}</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:Percent>${Number(rate).toFixed(2)}</cbc:Percent>
+        <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">10</cbc:TaxExemptionReasonCode>
+        <cac:TaxScheme>
+          <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
+          <cbc:Name>IGV</cbc:Name>
+          <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+        </cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>`
+  }
+
+  // Fallback: si no hay gravados y no es exempt, usar valores del documento
+  if (rateKeys.length === 0 && !igvExempt) {
+    taxSubtotalsXml = `
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="${currency}">${subtotal.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
+        <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>
+        <cac:TaxScheme>
+          <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
+          <cbc:Name>IGV</cbc:Name>
+          <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+        </cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>`
+  }
+
+  // TaxSubtotal de exonerados
+  if (docTotalExonerado > 0 || igvExempt) {
+    const exoAmount = igvExempt ? subtotal : docTotalExonerado
+    taxSubtotalsXml += `
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="${currency}">${exoAmount.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:Percent>0.00</cbc:Percent>
+        <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">20</cbc:TaxExemptionReasonCode>${igvExempt && exemptionReason ? `
+        <cbc:TaxExemptionReason><![CDATA[${exemptionReason}]]></cbc:TaxExemptionReason>` : ''}
+        <cac:TaxScheme>
+          <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">9997</cbc:ID>
+          <cbc:Name>EXO</cbc:Name>
+          <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
+        </cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>`
+  }
+
+  // TaxSubtotal de inafectos
+  if (docTotalInafecto > 0) {
+    taxSubtotalsXml += `
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="${currency}">${docTotalInafecto.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${currency}">0.00</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:Percent>0.00</cbc:Percent>
+        <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">30</cbc:TaxExemptionReasonCode>
+        <cac:TaxScheme>
+          <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">9998</cbc:ID>
+          <cbc:Name>INA</cbc:Name>
+          <cbc:TaxTypeCode>FRE</cbc:TaxTypeCode>
+        </cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>`
+  }
 
   // === Leyenda SPOT (detracción) ===
   const spotLegend = hasDetraction
@@ -353,21 +478,7 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
     </cac:Party>
   </cac:AccountingCustomerParty>${paymentMeansXml}${paymentTermsXml}
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>
-    <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="${currency}">${subtotal.toFixed(2)}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>
-      <cac:TaxCategory>
-        <cbc:Percent>${igvRate.toFixed(2)}</cbc:Percent>
-        <cbc:TaxExemptionReasonCode listAgencyName="PE:SUNAT" listName="Afectacion del IGV" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo07">${exemptionCode}</cbc:TaxExemptionReasonCode>${igvExempt && exemptionReason ? `
-        <cbc:TaxExemptionReason><![CDATA[${exemptionReason}]]></cbc:TaxExemptionReason>` : ''}
-        <cac:TaxScheme>
-          <cbc:ID schemeName="Codigo de tributos" schemeAgencyName="PE:SUNAT" schemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo05">1000</cbc:ID>
-          <cbc:Name>IGV</cbc:Name>
-          <cbc:TaxTypeCode>VAT</cbc:TaxTypeCode>
-        </cac:TaxScheme>
-      </cac:TaxCategory>
-    </cac:TaxSubtotal>
+    <cbc:TaxAmount currencyID="${currency}">${igv.toFixed(2)}</cbc:TaxAmount>${taxSubtotalsXml}
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>
     <cbc:LineExtensionAmount currencyID="${currency}">${subtotal.toFixed(2)}</cbc:LineExtensionAmount>

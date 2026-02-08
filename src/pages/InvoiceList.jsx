@@ -2257,7 +2257,15 @@ Gracias por tu preferencia.`
                 )}
                 <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>{formatCurrency(viewingInvoice.subtotal)}</span></div>
                 {viewingInvoice.igv > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">IGV ({viewingInvoice.taxConfig?.igvRate || 18}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
+                  viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate).length > 1 ? (
+                    Object.entries(viewingInvoice.igvByRate)
+                      .sort(([a], [b]) => Number(b) - Number(a))
+                      .map(([rate, data]) => (
+                        <div key={rate} className="flex justify-between"><span className="text-gray-600">IGV ({rate}%)</span><span>{formatCurrency(data.igv || 0)}</span></div>
+                      ))
+                  ) : (
+                    <div className="flex justify-between"><span className="text-gray-600">IGV ({(viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate)[0]) || viewingInvoice.taxConfig?.igvRate || 18}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
+                  )
                 )}
                 {viewingInvoice.recargoConsumo > 0 && (
                   <div className="flex justify-between text-green-600"><span>Recargo al Consumo ({viewingInvoice.recargoConsumoRate || 10}%)</span><span>{formatCurrency(viewingInvoice.recargoConsumo)}</span></div>

@@ -662,8 +662,8 @@ export default function AdminUsers() {
           igvExempt: taxConfig.igvExempt || false,
           igvRate: taxConfig.igvRate || 18,
           // Determinar taxType basado en configuración existente
-          // Nota: 10% = Ley 31556 (8% IGV + 2% IPM), también aceptar 8% por compatibilidad
-          taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')
+          // Nota: Ley 31556 = 10% temporalmente (SUNAT no acepta 10.5% aún), también aceptar 10.5% y 8% por compatibilidad
+          taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')
         })
       } else {
         console.warn('⚠️ No se encontró documento de negocio para:', user.id)
@@ -749,10 +749,10 @@ export default function AdminUsers() {
       }
 
       // Determinar igvExempt e igvRate basado en taxType
-      // Nota: Ley 31556 es 10% (8% IGV + 2% IPM), pero en el XML se declara junto como 10%
+      // Nota: Ley 31556 es 10.5% real (8% IGV + 2.5% IPM), pero SUNAT solo acepta 10% por ahora
       const taxTypeConfig = {
         standard: { igvExempt: false, igvRate: 18 },
-        reduced: { igvExempt: false, igvRate: 10 }, // Ley 31556: 8% IGV + 2% IPM = 10%
+        reduced: { igvExempt: false, igvRate: 10 }, // Ley 31556: temporalmente 10% hasta que SUNAT acepte 10.5%
         exempt: { igvExempt: true, igvRate: 0 }
       }
       const selectedTaxConfig = taxTypeConfig[sunatForm.taxType] || taxTypeConfig.standard
@@ -2184,7 +2184,7 @@ export default function AdminUsers() {
                       />
                       <div>
                         <span className="font-medium text-gray-900">IGV Reducido (10%) - Ley N° 31556</span>
-                        <p className="text-xs text-gray-500">8% IGV + 2% IPM. MYPES de restaurantes, hoteles y alojamientos turísticos (ventas ≤ S/ 7.8M anuales). Vigente hasta 31/12/2026.</p>
+                        <p className="text-xs text-gray-500">MYPES de restaurantes, hoteles y alojamientos turísticos (ventas ≤ S/ 7.8M anuales). Vigente hasta 31/12/2026. Nota: tasa real 10.5%, SUNAT acepta 10% temporalmente.</p>
                       </div>
                     </label>
 

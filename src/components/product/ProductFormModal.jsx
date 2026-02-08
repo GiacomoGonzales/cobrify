@@ -198,7 +198,9 @@ const ProductFormModal = ({
   const [trackExpiration, setTrackExpiration] = useState(false)
   const [catalogVisible, setCatalogVisible] = useState(false)
   const isIgvExempt = businessSettings?.emissionConfig?.taxConfig?.igvExempt === true
+  const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (isIgvExempt ? 'exempt' : 'standard')
   const [taxAffectation, setTaxAffectation] = useState(isIgvExempt ? '20' : '10')
+  const [igvRate, setIgvRate] = useState(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
   const [isScanningBarcode, setIsScanningBarcode] = useState(false)
   const [warehouseInitialStocks, setWarehouseInitialStocks] = useState({})
 
@@ -264,6 +266,7 @@ const ProductFormModal = ({
       setTrackExpiration(initialData.trackExpiration || false)
       setCatalogVisible(initialData.catalogVisible || false)
       setTaxAffectation(initialData.taxAffectation || '10')
+      setIgvRate(initialData.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
       setPresentations(initialData.presentations || [])
       if (initialData.imageUrl) {
         setProductImagePreview(initialData.imageUrl)
@@ -291,6 +294,7 @@ const ProductFormModal = ({
       setTrackExpiration(false)
       setCatalogVisible(false)
       setTaxAffectation(isIgvExempt ? '20' : '10')
+      setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
       setWarehouseInitialStocks({})
       setPresentations([])
       setProductImage(null)
@@ -434,6 +438,7 @@ const ProductFormModal = ({
       trackExpiration,
       catalogVisible,
       taxAffectation,
+      ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }),
       presentations: showPresentations ? presentations : [],
       warehouseInitialStocks: showWarehouseStock ? warehouseInitialStocks : {},
     }
@@ -749,15 +754,43 @@ const ProductFormModal = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Afectación IGV
                 </label>
-                <select
-                  value={taxAffectation}
-                  onChange={(e) => setTaxAffectation(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="10">Gravado</option>
-                  <option value="20">Exonerado</option>
-                  <option value="30">Inafecto</option>
-                </select>
+                {taxType === 'standard' ? (
+                  <select
+                    value={taxAffectation === '10' ? `10-${igvRate}` : taxAffectation}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '10-18') {
+                        setTaxAffectation('10')
+                        setIgvRate(18)
+                      } else if (val === '10-10') {
+                        setTaxAffectation('10')
+                        setIgvRate(10)
+                      } else if (val === '20') {
+                        setTaxAffectation('20')
+                        setIgvRate(0)
+                      } else if (val === '30') {
+                        setTaxAffectation('30')
+                        setIgvRate(0)
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="10-18">Gravado (18%)</option>
+                    <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                    <option value="20">Exonerado</option>
+                    <option value="30">Inafecto</option>
+                  </select>
+                ) : (
+                  <select
+                    value={taxAffectation}
+                    onChange={(e) => setTaxAffectation(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="10">Gravado</option>
+                    <option value="20">Exonerado</option>
+                    <option value="30">Inafecto</option>
+                  </select>
+                )}
               </div>
             )}
           </div>

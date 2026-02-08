@@ -1323,6 +1323,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const igvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
   const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
 
+  // Determinar si hay tasas mixtas de IGV
+  const igvByRate = invoice.igvByRate || {}
+  const igvRateKeys = Object.keys(igvByRate).sort((a, b) => Number(b) - Number(a))
+  const hasMultipleIgvRates = igvRateKeys.length > 1
+  const extraIgvRows = hasMultipleIgvRates ? igvRateKeys.length - 1 : 0
+
   // --- TOTALES (derecha) con borde ---
   const totalsRowHeight = 15
   const totalsStartY = footerY
@@ -1331,7 +1337,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Si oculta IGV: solo 1 fila (total), sino: 3 base + extras
   const totalsSectionRows = shouldHideRucIgv
     ? 1
-    : (3 + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
+    : (3 + extraIgvRows + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
 
   // Si es nota de venta con ocultar IGV, solo mostrar TOTAL
   if (shouldHideRucIgv) {
@@ -1381,14 +1387,26 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       footerY += totalsRowHeight
     }
 
-    // Fila: IGV
-    doc.setFillColor(255, 255, 255)
-    doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
-    doc.setDrawColor(200, 200, 200)
-    doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
-    doc.text(`IGV (${igvRate}%)`, totalsX + 5, footerY + 10)
-    doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
-    footerY += totalsRowHeight
+    // Fila(s): IGV - desagregado si hay tasas mixtas
+    if (hasMultipleIgvRates) {
+      igvRateKeys.forEach(rate => {
+        doc.setFillColor(255, 255, 255)
+        doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+        doc.setDrawColor(200, 200, 200)
+        doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+        doc.text(`IGV (${rate}%)`, totalsX + 5, footerY + 10)
+        doc.text('S/ ' + (igvByRate[rate].igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+        footerY += totalsRowHeight
+      })
+    } else {
+      doc.setFillColor(255, 255, 255)
+      doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')
+      doc.setDrawColor(200, 200, 200)
+      doc.line(totalsX, footerY + totalsRowHeight, totalsX + totalsWidth, footerY + totalsRowHeight)
+      doc.text(`IGV (${igvRateKeys[0] || igvRate}%)`, totalsX + 5, footerY + 10)
+      doc.text('S/ ' + (invoice.igv || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }), totalsX + totalsWidth - 5, footerY + 10, { align: 'right' })
+      footerY += totalsRowHeight
+    }
 
     // Fila: RECARGO AL CONSUMO (solo si aplica)
     if (invoice.recargoConsumo && invoice.recargoConsumo > 0) {

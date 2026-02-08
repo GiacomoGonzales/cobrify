@@ -178,6 +178,13 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           if (rawValue === 'EXONERADO' || rawValue === '20') return '20'
           if (rawValue === 'INAFECTO' || rawValue === '30') return '30'
           return '10' // Default: GRAVADO
+        })(),
+        igvRate: (() => {
+          const rawValue = String(row.tasa_igv || row.Tasa_Igv || row.TASA_IGV || row.tasaIgv || row.igv_rate || row.Igv_Rate || row.IGV_RATE || row.igvRate || '').trim()
+          if (!rawValue) return null // No set = hereda del negocio
+          const parsed = parseFloat(rawValue)
+          if (!isNaN(parsed) && (parsed === 18 || parsed === 10 || parsed === 10.5)) return parsed
+          return null
         })()
       }
 

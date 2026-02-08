@@ -263,6 +263,8 @@ export default function Products() {
 
   // Tax affectation state (IGV: Gravado, Exonerado, Inafecto)
   const [taxAffectation, setTaxAffectation] = useState('10') // '10' = Gravado (default), '20' = Exonerado, '30' = Inafecto
+  const [igvRate, setIgvRate] = useState(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
+  const taxType = businessSettings?.emissionConfig?.taxConfig?.taxType || (businessSettings?.emissionConfig?.taxConfig?.igvExempt ? 'exempt' : 'standard')
 
   // Pharmacy mode state
   const [pharmacyData, setPharmacyData] = useState({
@@ -471,6 +473,7 @@ export default function Products() {
     setPresentations([]) // Limpiar presentaciones
     setNewPresentation({ name: '', factor: '', price: '' })
     setTaxAffectation('10') // Default: Gravado
+    setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
     // Resetear datos de farmacia
     setPharmacyData({
       genericName: '',
@@ -540,6 +543,7 @@ export default function Products() {
 
     // Load tax affectation (default to '10' = Gravado if not set for backwards compatibility)
     setTaxAffectation(product.taxAffectation || '10')
+    setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
 
     // Load catalog visibility
     setCatalogVisible(product.catalogVisible || false)
@@ -627,6 +631,7 @@ export default function Products() {
     })
 
     setTaxAffectation(product.taxAffectation || '10')
+    setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
     setCatalogVisible(product.catalogVisible || false)
 
     // No copiar la imagen (el usuario puede agregarla manualmente)
@@ -759,6 +764,7 @@ export default function Products() {
         expirationDate: trackExpiration && data.expirationDate ? new Date(data.expirationDate) : null,
         allowDecimalQuantity: allowDecimalQuantity, // Venta por peso (decimales)
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
+        ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
@@ -3271,15 +3277,43 @@ export default function Products() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Afectación IGV
                 </label>
-                <select
-                  value={taxAffectation}
-                  onChange={(e) => setTaxAffectation(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="10">Gravado</option>
-                  <option value="20">Exonerado</option>
-                  <option value="30">Inafecto</option>
-                </select>
+                {taxType === 'standard' ? (
+                  <select
+                    value={taxAffectation === '10' ? `10-${igvRate}` : taxAffectation}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '10-18') {
+                        setTaxAffectation('10')
+                        setIgvRate(18)
+                      } else if (val === '10-10') {
+                        setTaxAffectation('10')
+                        setIgvRate(10)
+                      } else if (val === '20') {
+                        setTaxAffectation('20')
+                        setIgvRate(0)
+                      } else if (val === '30') {
+                        setTaxAffectation('30')
+                        setIgvRate(0)
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="10-18">Gravado (18%)</option>
+                    <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                    <option value="20">Exonerado</option>
+                    <option value="30">Inafecto</option>
+                  </select>
+                ) : (
+                  <select
+                    value={taxAffectation}
+                    onChange={(e) => setTaxAffectation(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="10">Gravado</option>
+                    <option value="20">Exonerado</option>
+                    <option value="30">Inafecto</option>
+                  </select>
+                )}
               </div>
             </div>
 

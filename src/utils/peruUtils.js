@@ -127,20 +127,37 @@ export function calculateInvoiceAmounts(items, igvRate = 18) {
  * @returns {Object} - Objeto con montos separados por tipo de afectación
  */
 export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
-  const igvMultiplier = igvRate / 100
-
+  let subtotalGravado = 0   // Subtotal sin IGV de productos gravados
+  let igvGravado = 0        // IGV total de productos gravados
   let totalGravado = 0      // Total con IGV de productos gravados
   let totalExonerado = 0    // Total de productos exonerados (sin IGV)
   let totalInafecto = 0     // Total de productos inafectos (sin IGV)
+
+  // Desglose por tasa de IGV (para mostrar IGV 18% e IGV 10.5% por separado)
+  const byRate = {}
 
   items.forEach(item => {
     const lineTotal = item.price * item.quantity
     const taxAffectation = item.taxAffectation || '10' // Default: Gravado
 
     switch (taxAffectation) {
-      case '10': // Gravado
+      case '10': { // Gravado
+        // Usar igvRate del item si existe, sino el global como fallback
+        const itemRate = item.igvRate ?? igvRate
+        const itemMultiplier = itemRate / 100
+        const lineSubtotal = lineTotal / (1 + itemMultiplier)
+        const lineIgv = lineTotal - lineSubtotal
+        subtotalGravado += lineSubtotal
+        igvGravado += lineIgv
         totalGravado += lineTotal
+
+        // Acumular por tasa
+        if (!byRate[itemRate]) byRate[itemRate] = { subtotal: 0, igv: 0, total: 0 }
+        byRate[itemRate].subtotal += lineSubtotal
+        byRate[itemRate].igv += lineIgv
+        byRate[itemRate].total += lineTotal
         break
+      }
       case '20': // Exonerado
         totalExonerado += lineTotal
         break
@@ -152,13 +169,19 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
     }
   })
 
-  // Calcular subtotal e IGV solo de productos gravados
-  const subtotalGravado = totalGravado / (1 + igvMultiplier)
-  const igvGravado = totalGravado - subtotalGravado
-
   // El subtotal total es la suma de todos los subtotales
   const subtotalTotal = subtotalGravado + totalExonerado + totalInafecto
   const totalFinal = totalGravado + totalExonerado + totalInafecto
+
+  // Redondear desglose por tasa
+  const igvByRate = {}
+  for (const rate in byRate) {
+    igvByRate[rate] = {
+      subtotal: Number(byRate[rate].subtotal.toFixed(2)),
+      igv: Number(byRate[rate].igv.toFixed(2)),
+      total: Number(byRate[rate].total.toFixed(2)),
+    }
+  }
 
   return {
     // Montos por tipo de afectación
@@ -173,6 +196,8 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
     inafecto: {
       total: Number(totalInafecto.toFixed(2)),
     },
+    // Desglose de IGV por tasa (ej: { 18: { subtotal, igv, total }, 10.5: { ... } })
+    igvByRate,
     // Totales generales
     subtotal: Number(subtotalTotal.toFixed(2)),
     igv: Number(igvGravado.toFixed(2)),

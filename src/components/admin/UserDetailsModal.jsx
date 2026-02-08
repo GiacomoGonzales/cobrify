@@ -1141,7 +1141,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 {/* Configuración cuando NO está exonerado (IGV normal) */}
                 {!emissionConfig.taxConfig.igvExempt && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
-                    <strong>✓ IGV Normal:</strong> Los comprobantes se emitirán con IGV 18% (gravado).
+                    <strong>✓ IGV Normal:</strong> Los comprobantes se emitirán con IGV {emissionConfig.taxConfig.igvRate}% (gravado).
                   </div>
                 )}
               </div>

@@ -242,7 +242,7 @@ export default function POS() {
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
-  const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false }) // Configuración de impuestos
+  const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false, taxType: 'standard' }) // Configuración de impuestos
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
   const [cart, setCart] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -352,6 +352,7 @@ export default function POS() {
     quantity: 1,
     unit: 'NIU',
     taxAffectation: '10', // '10'=Gravado 18%, '20'=Exonerado, '30'=Inafecto
+    igvRate: 18, // Per-product IGV rate (18% or 10%)
     addIgv: false // Si true, se agrega IGV al precio ingresado
   })
 
@@ -984,7 +985,8 @@ export default function POS() {
               igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
               igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false,
               exemptionReason: businessData.emissionConfig.taxConfig.exemptionReason ?? '',
-              exemptionCode: businessData.emissionConfig.taxConfig.exemptionCode ?? '10'
+              exemptionCode: businessData.emissionConfig.taxConfig.exemptionCode ?? '10',
+              taxType: businessData.emissionConfig.taxConfig.taxType || (businessData.emissionConfig.taxConfig.igvExempt ? 'exempt' : 'standard')
             }
             console.log('✅ TaxConfig a aplicar:', newTaxConfig)
             setTaxConfig(newTaxConfig)
@@ -1340,6 +1342,20 @@ export default function POS() {
       return
     }
 
+    // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma boleta/factura
+    // Validar que el producto tenga la misma tasa que los items gravados ya en el carrito
+    if (taxConfig.taxType === 'standard' && (product.taxAffectation || '10') === '10') {
+      const productRate = product.igvRate || taxConfig.igvRate || 18
+      const existingGravado = cart.find(item => (item.taxAffectation || '10') === '10')
+      if (existingGravado) {
+        const cartRate = existingGravado.igvRate || taxConfig.igvRate || 18
+        if (productRate !== cartRate) {
+          toast.error(`No se puede mezclar productos con IGV ${cartRate}% e IGV ${productRate}% en la misma venta. SUNAT requiere una sola tasa por comprobante.`)
+          return
+        }
+      }
+    }
+
     // ID único para el item en carrito (diferente por lote)
     const cartItemId = batchToUse ? `${product.id}-batch-${batchToUse.lotNumber}` : product.id
     const existingItem = cart.find(item => (item.cartId || item.id) === cartItemId)
@@ -1592,11 +1608,23 @@ export default function POS() {
     }
 
     // Si addIgv está activado y el producto es gravado, agregar IGV al precio
+    const customIgvRate = taxConfig.taxType === 'standard' ? (customProduct.igvRate || 18) : (taxConfig.igvRate || 18)
     if (customProduct.addIgv && customProduct.taxAffectation === '10' && !taxConfig.igvExempt) {
-      const igvRate = taxConfig.igvRate || 18
-      price = price * (1 + igvRate / 100)
+      price = price * (1 + customIgvRate / 100)
       // Redondear a 2 decimales
       price = Math.round(price * 100) / 100
+    }
+
+    // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma venta
+    if (taxConfig.taxType === 'standard' && (customProduct.taxAffectation || '10') === '10') {
+      const existingGravado = cart.find(item => (item.taxAffectation || '10') === '10')
+      if (existingGravado) {
+        const cartRate = existingGravado.igvRate || taxConfig.igvRate || 18
+        if (customIgvRate !== cartRate) {
+          toast.error(`No se puede mezclar productos con IGV ${cartRate}% e IGV ${customIgvRate}% en la misma venta. SUNAT requiere una sola tasa por comprobante.`)
+          return
+        }
+      }
     }
 
     // Crear producto personalizado con ID único
@@ -1609,6 +1637,8 @@ export default function POS() {
       unit: customProduct.unit || 'NIU',
       // Si la empresa está exenta de IGV, forzar exonerado
       taxAffectation: taxConfig.igvExempt ? '20' : (customProduct.taxAffectation || '10'),
+      // Solo incluir igvRate si es standard y gravado
+      ...(taxConfig.taxType === 'standard' && customProduct.taxAffectation === '10' && { igvRate: customIgvRate }),
       stock: null, // Productos personalizados no tienen control de stock
       isCustom: true,
     }
@@ -1617,7 +1647,7 @@ export default function POS() {
     toast.success('Producto personalizado agregado al carrito')
 
     // Resetear y cerrar modal
-    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', addIgv: false })
+    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', igvRate: 18, addIgv: false })
     setShowCustomProductModal(false)
   }
 
@@ -1964,6 +1994,7 @@ export default function POS() {
           price: effectivePrice,
           quantity: item.quantity,
           taxAffectation: item.taxAffectation || '10', // Default: Gravado
+          igvRate: item.igvRate, // Per-product IGV rate (undefined = use global)
         }
       }),
       taxConfig.igvRate
@@ -1986,9 +2017,9 @@ export default function POS() {
     const exoneradoAfterDiscount = baseAmounts.exonerado.total * discountRatio
     const inafectoAfterDiscount = baseAmounts.inafecto.total * discountRatio
 
-    // Recalcular IGV solo de productos gravados
-    const subtotalGravadoAfterDiscount = gravadoAfterDiscount / (1 + taxConfig.igvRate / 100)
-    const igvAfterDiscount = gravadoAfterDiscount - subtotalGravadoAfterDiscount
+    // Recalcular IGV proporcionalmente (correcto con tasas mixtas 18%/10%)
+    const subtotalGravadoAfterDiscount = baseAmounts.gravado.subtotal * discountRatio
+    const igvAfterDiscount = baseAmounts.gravado.igv * discountRatio
 
     // Subtotal total = subtotal gravado + exonerado + inafecto
     const subtotalAfterDiscount = subtotalGravadoAfterDiscount + exoneradoAfterDiscount + inafectoAfterDiscount
@@ -2003,6 +2034,16 @@ export default function POS() {
     // Total final = total con IGV + recargo al consumo
     const totalFinal = totalAfterDiscount + recargoConsumo
 
+    // Desglose de IGV por tasa, con descuento aplicado proporcionalmente
+    const igvByRate = {}
+    if (baseAmounts.igvByRate) {
+      for (const rate in baseAmounts.igvByRate) {
+        igvByRate[rate] = {
+          igv: Number((baseAmounts.igvByRate[rate].igv * discountRatio).toFixed(2)),
+        }
+      }
+    }
+
     return {
       subtotal: Number(baseAmounts.subtotal.toFixed(2)),
       discount: Number(totalDiscount.toFixed(2)), // Total de descuentos (ítems + global)
@@ -2010,6 +2051,7 @@ export default function POS() {
       itemDiscounts: Number(totalItemDiscounts.toFixed(2)),
       subtotalAfterDiscount: Number(subtotalAfterDiscount.toFixed(2)),
       igv: Number(igvAfterDiscount.toFixed(2)),
+      igvByRate,
       recargoConsumo: Number(recargoConsumo.toFixed(2)),
       recargoConsumoRate: recargoConsumoConfig.enabled ? recargoConsumoConfig.rate : 0,
       total: Number(totalFinal.toFixed(2)),
@@ -2330,8 +2372,10 @@ export default function POS() {
           subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
           subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
           discount: amounts.discount || 0,
+          globalDiscount: amounts.globalDiscount || 0, // Solo descuento global (sin item discounts) para XML
           discountPercentage: parseFloat(discountPercentage) || 0,
           igv: amounts.igv,
+          igvByRate: amounts.igvByRate || {},
           total: amounts.total,
           // Montos por tipo de afectación tributaria
           opGravadas: amounts.gravado?.total || 0,
@@ -2425,6 +2469,7 @@ export default function POS() {
         unitPrice: item.price,
         subtotal: item.price * item.quantity,
         taxAffectation: item.taxAffectation || '10', // '10'=Gravado (default), '20'=Exonerado, '30'=Inafecto
+        ...(item.igvRate && { igvRate: item.igvRate }), // Per-product IGV rate for mixed-rate invoices
         ...(item.observations && { observations: item.observations }), // Incluir observaciones si existen (IMEI, placa, serie, etc.)
         ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }), // Descuento por ítem para XML SUNAT
         ...(item.notes && { notes: item.notes }), // Incluir notas si existen
@@ -2509,8 +2554,10 @@ export default function POS() {
         subtotal: amounts.subtotalAfterDiscount, // Subtotal después del descuento (base imponible)
         subtotalBeforeDiscount: amounts.subtotal, // Subtotal original (antes del descuento)
         discount: amounts.discount || 0,
+        globalDiscount: amounts.globalDiscount || 0, // Solo descuento global (sin item discounts) para XML
         discountPercentage: parseFloat(discountPercentage) || 0,
         igv: amounts.igv,
+        igvByRate: amounts.igvByRate || {},
         total: amounts.total,
         // Montos por tipo de afectación tributaria
         opGravadas: amounts.gravado?.total || 0,
@@ -4889,12 +4936,25 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   </div>
                 )}
 
-                {/* Mostrar IGV solo si hay productos gravados */}
+                {/* Mostrar IGV desglosado por tasa */}
                 {amounts.igv > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">IGV ({taxConfig.igvRate}%):</span>
-                    <span className="font-medium">{formatCurrency(amounts.igv)}</span>
-                  </div>
+                  Object.keys(amounts.igvByRate).length > 1 ? (
+                    // Tasas mixtas: mostrar cada tasa por separado
+                    Object.entries(amounts.igvByRate)
+                      .sort(([a], [b]) => Number(b) - Number(a))
+                      .map(([rate, data]) => (
+                        <div key={rate} className="flex justify-between text-sm">
+                          <span className="text-gray-600">IGV ({rate}%):</span>
+                          <span className="font-medium">{formatCurrency(data.igv)}</span>
+                        </div>
+                      ))
+                  ) : (
+                    // Tasa única: mostrar una sola línea
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">IGV ({Object.keys(amounts.igvByRate)[0] || taxConfig.igvRate}%):</span>
+                      <span className="font-medium">{formatCurrency(amounts.igv)}</span>
+                    </div>
+                  )
                 )}
                 {/* Mostrar Recargo al Consumo si está habilitado */}
                 {amounts.recargoConsumo > 0 && (
@@ -5413,6 +5473,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                 <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600">
                   Exonerado (Régimen especial)
                 </div>
+              ) : taxConfig.taxType === 'standard' ? (
+                <select
+                  value={customProduct.taxAffectation === '10' ? `10-${customProduct.igvRate}` : customProduct.taxAffectation}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val === '10-18') {
+                      setCustomProduct({ ...customProduct, taxAffectation: '10', igvRate: 18 })
+                    } else if (val === '10-10') {
+                      setCustomProduct({ ...customProduct, taxAffectation: '10', igvRate: 10 })
+                    } else if (val === '20') {
+                      setCustomProduct({ ...customProduct, taxAffectation: val, igvRate: 0 })
+                    } else if (val === '30') {
+                      setCustomProduct({ ...customProduct, taxAffectation: val, igvRate: 0 })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="10-18">Gravado (18%)</option>
+                  <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                </select>
               ) : (
                 <select
                   value={customProduct.taxAffectation}
@@ -5431,7 +5513,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
           {customProduct.name && customProduct.price > 0 && (() => {
             const basePrice = parseFloat(customProduct.price)
             const quantity = parseFloat(customProduct.quantity) || 1
-            const igvRate = taxConfig.igvRate || 18
+            const igvRate = taxConfig.taxType === 'standard' ? (customProduct.igvRate || 18) : (taxConfig.igvRate || 18)
             const shouldAddIgv = customProduct.addIgv && customProduct.taxAffectation === '10' && !taxConfig.igvExempt
             const finalPrice = shouldAddIgv ? Math.round(basePrice * (1 + igvRate / 100) * 100) / 100 : basePrice
             const totalFinal = finalPrice * quantity

@@ -859,10 +859,21 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>
               <span>{formatCurrency(invoice.subtotal || 0)}</span>
             </div>
-            <div className="total-row">
-              <span>IGV ({companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18}%):</span>
-              <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
-            </div>
+            {invoice.igvByRate && Object.keys(invoice.igvByRate).length > 1 ? (
+              Object.entries(invoice.igvByRate)
+                .sort(([a], [b]) => Number(b) - Number(a))
+                .map(([rate, data]) => (
+                  <div key={rate} className="total-row">
+                    <span>IGV ({rate}%):</span>
+                    <span>{formatCurrency(data.igv || 0)}</span>
+                  </div>
+                ))
+            ) : (
+              <div className="total-row">
+                <span>IGV ({(invoice.igvByRate && Object.keys(invoice.igvByRate)[0]) || (companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18)}%):</span>
+                <span>{formatCurrency(invoice.igv || invoice.tax || 0)}</span>
+              </div>
+            )}
           </>
         )}
         {/* Recargo al Consumo (si existe) */}
