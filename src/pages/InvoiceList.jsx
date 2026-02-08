@@ -1527,6 +1527,96 @@ Gracias por tu preferencia.`
             )}
           </CardContent>
         ) : (
+          <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {displayedInvoices.map(invoice => (
+                <div key={invoice.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                  {/* Fila superior: Número + tipo + acciones */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium text-primary-600 text-sm">{invoice.number}</span>
+                      <span className="text-xs text-gray-500">{getDocumentTypeName(invoice.documentType)}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 400
+                        const spaceAbove = rect.top
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === invoice.id ? null : invoice.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                      title="Acciones"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila medio: Cliente */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm font-medium truncate">{invoice.customer?.name || 'Sin cliente'}</p>
+                    {invoice.customer?.documentNumber && (
+                      <span className="text-xs text-gray-500 flex-shrink-0">{invoice.customer.documentNumber}</span>
+                    )}
+                  </div>
+
+                  {/* Fila inferior: Total + fecha + badges */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-sm">{formatCurrency(invoice.total)}</span>
+                      <span className="text-xs text-gray-500">
+                        {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="scale-90 origin-right">{getStatusBadge(invoice.status, invoice.documentType)}</div>
+                      <div className="scale-75 origin-right">{getSunatStatusBadge(invoice.sunatStatus || 'pending')}</div>
+                    </div>
+                  </div>
+
+                  {/* Fila extra: pago parcial/crédito + indicadores conversión */}
+                  {(
+                    (invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending')) ||
+                    invoice.convertedTo ||
+                    invoice.convertedFrom
+                  ) && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'pending' && (
+                        <span className="text-xs text-orange-600 font-semibold">Al Crédito: {formatCurrency(invoice.total || 0)}</span>
+                      )}
+                      {invoice.documentType === 'nota_venta' && invoice.paymentStatus === 'partial' && (
+                        <>
+                          <span className="text-xs text-green-600">Pagado: {formatCurrency(invoice.amountPaid || 0)}</span>
+                          <span className="text-xs text-orange-600 font-semibold">Saldo: {formatCurrency(invoice.balance || 0)}</span>
+                        </>
+                      )}
+                      {invoice.convertedTo && (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          Convertida
+                        </span>
+                      )}
+                      {invoice.convertedFrom && (
+                        <span className="text-xs text-blue-600 flex items-center gap-1">
+                          <ArrowRightCircle className="w-3 h-3" />
+                          Desde nota
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1642,6 +1732,9 @@ Gracias por tu preferencia.`
                 ))}
               </TableBody>
             </Table>
+            </div>
+          </>
+
         )}
       </Card>
 
