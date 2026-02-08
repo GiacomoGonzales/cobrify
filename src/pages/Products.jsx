@@ -230,7 +230,8 @@ export default function Products() {
   const [sortField, setSortField] = useState('name') // 'name', 'code', 'price', 'stock', 'category'
   const [sortDirection, setSortDirection] = useState('asc') // 'asc' o 'desc'
 
-  // Variant management state
+  // Presentaciones y Variantes
+  const [showPresentations, setShowPresentations] = useState(false)
   const [hasVariants, setHasVariants] = useState(false)
   const [variantAttributes, setVariantAttributes] = useState([]) // ["size", "color"]
   const [newAttributeName, setNewAttributeName] = useState('')
@@ -471,6 +472,7 @@ export default function Products() {
     })
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
+    setShowPresentations(false)
     setNewPresentation({ name: '', factor: '', price: '' })
     setTaxAffectation('10') // Default: Gravado
     setIgvRate(businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18)
@@ -522,6 +524,7 @@ export default function Products() {
 
     // Load presentations if product has them (venta por presentaciones)
     setPresentations(product.presentations || [])
+    setShowPresentations((product.presentations || []).length > 0)
     setNewPresentation({ name: '', factor: '', price: '' })
 
     // Load pharmacy data if exists (pharmacy mode)
@@ -610,7 +613,9 @@ export default function Products() {
     setModifiers((product.modifiers || []).map(m => ({ ...m, id: undefined })))
 
     // Clonar presentaciones
-    setPresentations((product.presentations || []).map(p => ({ ...p, id: undefined })))
+    const clonedPresentations = (product.presentations || []).map(p => ({ ...p, id: undefined }))
+    setPresentations(clonedPresentations)
+    setShowPresentations(clonedPresentations.length > 0)
     setNewPresentation({ name: '', factor: '', price: '' })
 
     // Cargar datos de farmacia si existen
@@ -674,6 +679,7 @@ export default function Products() {
     setWarehouseInitialStocks({}) // Limpiar stocks por almacén
     setModifiers([]) // Limpiar modificadores
     setPresentations([]) // Limpiar presentaciones
+    setShowPresentations(false)
     setNewPresentation({ name: '', factor: '', price: '' })
     // Limpiar imagen
     if (productImagePreview) {
@@ -3025,13 +3031,15 @@ export default function Products() {
         isOpen={isModalOpen}
         onClose={closeModal}
         title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-        size="lg"
+        size="5xl"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          {/* ═══════════════ LAYOUT 2 COLUMNAS (desktop) ═══════════════ */}
+          <div className="lg:grid lg:grid-cols-2 lg:gap-8">
           {/* ═══════════════════════════════════════════════════════════════════
               SECCIÓN 1: INFORMACIÓN BÁSICA
           ═══════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-4">
+          <div className="space-y-4 mb-5 lg:mb-0">
             <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
               Información Básica
             </h3>
@@ -3046,14 +3054,14 @@ export default function Products() {
             />
 
             {/* Imagen y Descripción en fila */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 items-stretch">
               {/* Image upload - only shown if feature is enabled */}
               {canUseProductImages && (
-                <div className="flex-shrink-0">
+                <div className="flex-shrink-0 flex flex-col">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
-                  <div className="relative">
+                  <div className="relative flex-1">
                     {productImagePreview ? (
-                      <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
+                      <div className="relative w-24 h-full min-h-[6rem] rounded-lg overflow-hidden border border-gray-300 group">
                         <img
                           src={productImagePreview}
                           alt="Preview"
@@ -3078,9 +3086,9 @@ export default function Products() {
                         </label>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 h-full">
                         {/* Opción 1: Subir archivo */}
-                        <label className="cursor-pointer block w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
+                        <label className="cursor-pointer block w-24 flex-1 min-h-[3rem] rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
                           <div className="text-center flex items-center gap-1.5">
                             <Upload className="w-4 h-4 text-gray-400" />
                             <span className="text-xs text-gray-500">Subir</span>
@@ -3097,7 +3105,7 @@ export default function Products() {
                           <button
                             type="button"
                             onClick={handleTakePhoto}
-                            className="w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
+                            className="w-24 flex-1 min-h-[3rem] rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
                           >
                             <div className="text-center flex items-center gap-1.5">
                               <Camera className="w-4 h-4 text-gray-400" />
@@ -3194,7 +3202,7 @@ export default function Products() {
             </h3>
 
             {/* Precios */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Input
                   label="Costo"
@@ -3271,50 +3279,50 @@ export default function Products() {
                   </option>
                 ))}
               </Select>
+            </div>
 
-              {/* Afectación IGV */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Afectación IGV
-                </label>
-                {taxType === 'standard' ? (
-                  <select
-                    value={taxAffectation === '10' ? `10-${igvRate}` : taxAffectation}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (val === '10-18') {
-                        setTaxAffectation('10')
-                        setIgvRate(18)
-                      } else if (val === '10-10') {
-                        setTaxAffectation('10')
-                        setIgvRate(10)
-                      } else if (val === '20') {
-                        setTaxAffectation('20')
-                        setIgvRate(0)
-                      } else if (val === '30') {
-                        setTaxAffectation('30')
-                        setIgvRate(0)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="10-18">Gravado (18%)</option>
-                    <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
-                    <option value="20">Exonerado</option>
-                    <option value="30">Inafecto</option>
-                  </select>
-                ) : (
-                  <select
-                    value={taxAffectation}
-                    onChange={(e) => setTaxAffectation(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="10">Gravado</option>
-                    <option value="20">Exonerado</option>
-                    <option value="30">Inafecto</option>
-                  </select>
-                )}
-              </div>
+            {/* Afectación IGV - ancho completo */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Afectación IGV
+              </label>
+              {taxType === 'standard' ? (
+                <select
+                  value={taxAffectation === '10' ? `10-${igvRate}` : taxAffectation}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val === '10-18') {
+                      setTaxAffectation('10')
+                      setIgvRate(18)
+                    } else if (val === '10-10') {
+                      setTaxAffectation('10')
+                      setIgvRate(10)
+                    } else if (val === '20') {
+                      setTaxAffectation('20')
+                      setIgvRate(0)
+                    } else if (val === '30') {
+                      setTaxAffectation('30')
+                      setIgvRate(0)
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="10-18">Gravado (18%)</option>
+                  <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                </select>
+              ) : (
+                <select
+                  value={taxAffectation}
+                  onChange={(e) => setTaxAffectation(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="10">Gravado</option>
+                  <option value="20">Exonerado</option>
+                  <option value="30">Inafecto</option>
+                </select>
+              )}
             </div>
 
             {/* Categoría */}
@@ -3343,11 +3351,133 @@ export default function Products() {
               )}
             </div>
           </div>
+          </div>{/* ═══════ FIN LAYOUT 2 COLUMNAS ═══════ */}
+
+          {/* ═══════════════════════════════════════════════════════════════════
+              SECCIÓN: OPCIONES DEL PRODUCTO
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Opciones del Producto
+            </h3>
+
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={noStock}
+                  onChange={e => {
+                    setNoStock(e.target.checked)
+                    if (e.target.checked) setValue('stock', '')
+                  }}
+                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">No manejar stock</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Este producto es un servicio</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={allowDecimalQuantity}
+                  onChange={e => setAllowDecimalQuantity(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Permitir decimales</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Vender por kg, litros, etc.</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={trackExpiration}
+                  onChange={e => {
+                    setTrackExpiration(e.target.checked)
+                    if (!e.target.checked) setValue('expirationDate', '')
+                  }}
+                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Control de vencimiento</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Registrar fecha de caducidad</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={catalogVisible}
+                  onChange={e => setCatalogVisible(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Mostrar en catálogo</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Visible en tienda online</p>
+                </div>
+              </label>
+
+              {businessSettings?.presentationsEnabled && (
+                <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showPresentations}
+                    onChange={e => {
+                      setShowPresentations(e.target.checked)
+                      if (!e.target.checked) {
+                        setPresentations([])
+                        setNewPresentation({ name: '', factor: '', price: '' })
+                      }
+                    }}
+                    className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Presentaciones</span>
+                    <p className="text-xs text-gray-500 mt-0.5">Vender en pack, caja, etc.</p>
+                  </div>
+                </label>
+              )}
+
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={hasVariants}
+                  onChange={e => {
+                    setHasVariants(e.target.checked)
+                    if (!e.target.checked) {
+                      setVariantAttributes([])
+                      setVariants([])
+                      setNewAttributeName('')
+                      setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
+                    }
+                  }}
+                  className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">Variantes</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Talla, color, tamaño, etc.</p>
+                </div>
+              </label>
+            </div>
+
+            {/* Fecha de Vencimiento (aparece al activar control de vencimiento) */}
+            {trackExpiration && (
+              <Input
+                label="Fecha de Vencimiento"
+                type="date"
+                error={errors.expirationDate?.message}
+                {...register('expirationDate')}
+              />
+            )}
+          </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
               SECCIÓN: PRESENTACIONES DE VENTA (solo si está habilitado)
           ═══════════════════════════════════════════════════════════════════ */}
-          {businessSettings?.presentationsEnabled && (
+          {showPresentations && (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
                 <Package className="w-4 h-4" />
@@ -3469,64 +3599,14 @@ export default function Products() {
           )}
 
           {/* ═══════════════════════════════════════════════════════════════════
-              SECCIÓN 3: INVENTARIO
+              SECCIÓN 3: INVENTARIO (solo si controla stock)
           ═══════════════════════════════════════════════════════════════════ */}
+          {!noStock && (
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
               Inventario
             </h3>
 
-            {/* Checkboxes de opciones */}
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={noStock}
-                  onChange={e => {
-                    setNoStock(e.target.checked)
-                    if (e.target.checked) setValue('stock', '')
-                  }}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">No manejar stock</span>
-              </label>
-
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={allowDecimalQuantity}
-                  onChange={e => setAllowDecimalQuantity(e.target.checked)}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Permitir decimales</span>
-              </label>
-
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={trackExpiration}
-                  onChange={e => {
-                    setTrackExpiration(e.target.checked)
-                    if (!e.target.checked) setValue('expirationDate', '')
-                  }}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Control de vencimiento</span>
-              </label>
-
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={catalogVisible}
-                  onChange={e => setCatalogVisible(e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Mostrar en catálogo</span>
-              </label>
-            </div>
-
-            {/* Campos de Stock (solo si controla stock) */}
-            {!noStock && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
                 {/* Stock Actual (solo al editar) */}
                 {editingProduct && (
@@ -3612,30 +3692,9 @@ export default function Products() {
                   />
                 )}
 
-                {/* Fecha de Vencimiento (solo si está activado) */}
-                {trackExpiration && (
-                  <Input
-                    label="Fecha de Vencimiento"
-                    type="date"
-                    error={errors.expirationDate?.message}
-                    {...register('expirationDate')}
-                  />
-                )}
               </div>
-            )}
-
-            {/* Fecha de vencimiento fuera del bloque de stock si no controla stock pero sí vencimiento */}
-            {noStock && trackExpiration && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <Input
-                  label="Fecha de Vencimiento"
-                  type="date"
-                  error={errors.expirationDate?.message}
-                  {...register('expirationDate')}
-                />
-              </div>
-            )}
           </div>
+          )}
 
           {/* Campos específicos de Farmacia */}
           {businessMode === 'pharmacy' && (
@@ -3848,31 +3907,11 @@ export default function Products() {
           {/* ═══════════════════════════════════════════════════════════════════
               SECCIÓN 4: VARIANTES (Opcional)
           ═══════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-              <h3 className="text-sm font-semibold text-gray-900">
+          {hasVariants && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
                 Variantes
               </h3>
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hasVariants}
-                  onChange={e => {
-                    setHasVariants(e.target.checked)
-                    if (!e.target.checked) {
-                      setVariantAttributes([])
-                      setVariants([])
-                      setNewAttributeName('')
-                      setNewVariant({ sku: '', attributes: {}, price: '', stock: '' })
-                    }
-                  }}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">Tiene variantes</span>
-              </label>
-            </div>
-
-            {hasVariants && (
               <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                 {/* Variant Attributes Section */}
                 <div>
@@ -4043,8 +4082,8 @@ export default function Products() {
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Modifiers Section - Only in Restaurant Mode */}
           {businessMode === 'restaurant' && (

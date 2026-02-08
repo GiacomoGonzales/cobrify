@@ -500,327 +500,336 @@ const ProductFormModal = ({
       isOpen={isOpen}
       onClose={handleClose}
       title={title}
-      size="lg"
+      size="5xl"
     >
-      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(handleFormSubmit)}>
         {/* ═══════════════════════════════════════════════════════════════════
-            SECCIÓN 1: INFORMACIÓN BÁSICA
+            LAYOUT: 2 columnas en desktop, 1 en móvil
         ═══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
-            Información Básica
-          </h3>
+        <div className="lg:grid lg:grid-cols-2 lg:gap-8 space-y-5 lg:space-y-0">
 
-          {/* Nombre del producto */}
-          <Input
-            label="Nombre"
-            required
-            placeholder="Nombre del producto o servicio"
-            error={errors.name?.message}
-            {...register('name')}
-          />
+          {/* ═══════════════════════════════════════════════════════════════
+              COLUMNA IZQUIERDA: INFORMACIÓN BÁSICA
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Información Básica
+            </h3>
 
-          {/* Imagen y Descripción en fila */}
-          <div className="flex gap-4">
-            {/* Image upload - only shown if feature is enabled */}
-            {canUseProductImages && (
-              <div className="flex-shrink-0">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
-                <div className="relative">
-                  {productImagePreview ? (
-                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
-                      <img
-                        src={productImagePreview}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleImageRemove}
-                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                      <label className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                        Cambiar
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          onChange={handleImageSelect}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      <label className="cursor-pointer block w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-                        <div className="text-center flex items-center gap-1.5">
-                          <Upload className="w-4 h-4 text-gray-400" />
-                          <span className="text-xs text-gray-500">Subir</span>
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif"
-                          onChange={handleImageSelect}
-                          className="hidden"
-                        />
-                      </label>
-                      {Capacitor.isNativePlatform() && (
-                        <button
-                          type="button"
-                          onClick={handleTakePhoto}
-                          className="w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
-                        >
-                          <div className="text-center flex items-center gap-1.5">
-                            <Camera className="w-4 h-4 text-gray-400" />
-                            <span className="text-xs text-gray-500">Foto</span>
-                          </div>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {uploadingImage && (
-                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
-                      <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Descripción */}
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción (Opcional)
-              </label>
-              <textarea
-                {...register('description')}
-                rows={canUseProductImages ? 3 : 2}
-                placeholder="Descripción breve del producto o servicio"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
-              />
-            </div>
-          </div>
-
-          {/* SKU */}
-          {showSku && (
-            <div>
-              <Input
-                label="SKU / Código Interno"
-                placeholder="SKU-001"
-                error={errors.sku?.message}
-                {...register('sku')}
-                helperText="Código interno de tu negocio"
-              />
-              {businessSettings?.autoSku && !initialData && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const nextSku = await getNextSkuNumber(getBusinessId())
-                    setValue('sku', nextSku)
-                  }}
-                  className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
-                >
-                  Generar SKU automático
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Código de Barras con botón de escanear */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Código de Barras
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="7501234567890"
-                className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${errors.code ? 'border-red-500' : 'border-gray-300'}`}
-                {...register('code')}
-              />
-              <button
-                type="button"
-                onClick={handleScanBarcode}
-                disabled={isScanningBarcode}
-                className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                title="Escanear código de barras"
-              >
-                {isScanningBarcode ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <ScanBarcode className="w-5 h-5" />
-                )}
-                <span className="hidden sm:inline">Escanear</span>
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
-            {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
-          </div>
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════════════
-            SECCIÓN 2: PRECIOS Y CLASIFICACIÓN
-        ═══════════════════════════════════════════════════════════════════ */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
-            Precios y Clasificación
-          </h3>
-
-          {/* Precios */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <Input
-                label="Costo"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                error={errors.cost?.message}
-                {...register('cost')}
-              />
-              <p className="text-xs text-gray-500 mt-1">Opcional</p>
-            </div>
-
-            <div>
-              <Input
-                label="Peso (kg)"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                error={errors.weight?.message}
-                {...register('weight')}
-              />
-              <p className="text-xs text-gray-500 mt-1">Opcional</p>
-            </div>
-
+            {/* Nombre del producto */}
             <Input
-              label={showMultiplePrices && businessSettings?.multiplePricesEnabled
-                ? (businessSettings?.priceLabels?.price1 || 'Precio 1')
-                : "Precio de Venta"}
-              type="number"
-              step="0.01"
+              label="Nombre"
               required
-              placeholder="0.00"
-              error={errors.price?.message}
-              {...register('price')}
+              placeholder="Nombre del producto o servicio"
+              error={errors.name?.message}
+              {...register('name')}
             />
 
-            {/* Precios adicionales - solo si está habilitado */}
-            {showMultiplePrices && businessSettings?.multiplePricesEnabled && (
-              <>
-                <Input
-                  label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00 (opcional)"
-                  error={errors.price2?.message}
-                  {...register('price2')}
-                />
-                <Input
-                  label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00 (opcional)"
-                  error={errors.price3?.message}
-                  {...register('price3')}
-                />
-                <Input
-                  label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00 (opcional)"
-                  error={errors.price4?.message}
-                  {...register('price4')}
-                />
-              </>
-            )}
+            {/* Imagen y Descripción en fila */}
+            <div className="flex gap-4">
+              {/* Image upload - only shown if feature is enabled */}
+              {canUseProductImages && (
+                <div className="flex-shrink-0">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
+                  <div className="relative">
+                    {productImagePreview ? (
+                      <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
+                        <img
+                          src={productImagePreview}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleImageRemove}
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <label className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs text-center py-1 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                          Cambiar
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <label className="cursor-pointer block w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
+                          <div className="text-center flex items-center gap-1.5">
+                            <Upload className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs text-gray-500">Subir</span>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                        {Capacitor.isNativePlatform() && (
+                          <button
+                            type="button"
+                            onClick={handleTakePhoto}
+                            className="w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
+                          >
+                            <div className="text-center flex items-center gap-1.5">
+                              <Camera className="w-4 h-4 text-gray-400" />
+                              <span className="text-xs text-gray-500">Foto</span>
+                            </div>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {uploadingImage && (
+                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-            <Select
-              label="Unidad"
-              required
-              error={errors.unit?.message}
-              {...register('unit')}
-            >
-              {UNITS.map(unit => (
-                <option key={unit.value} value={unit.value}>
-                  {unit.label}
-                </option>
-              ))}
-            </Select>
-
-            {/* Afectación IGV */}
-            {showIgvAffectation && (
-              <div>
+              {/* Descripción */}
+              <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Afectación IGV
+                  Descripción (Opcional)
                 </label>
-                {taxType === 'standard' ? (
-                  <select
-                    value={taxAffectation === '10' ? `10-${igvRate}` : taxAffectation}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (val === '10-18') {
-                        setTaxAffectation('10')
-                        setIgvRate(18)
-                      } else if (val === '10-10') {
-                        setTaxAffectation('10')
-                        setIgvRate(10)
-                      } else if (val === '20') {
-                        setTaxAffectation('20')
-                        setIgvRate(0)
-                      } else if (val === '30') {
-                        setTaxAffectation('30')
-                        setIgvRate(0)
-                      }
+                <textarea
+                  {...register('description')}
+                  rows={canUseProductImages ? 3 : 2}
+                  placeholder="Descripción breve del producto o servicio"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+                />
+              </div>
+            </div>
+
+            {/* SKU */}
+            {showSku && (
+              <div>
+                <Input
+                  label="SKU / Código Interno"
+                  placeholder="SKU-001"
+                  error={errors.sku?.message}
+                  {...register('sku')}
+                  helperText="Código interno de tu negocio"
+                />
+                {businessSettings?.autoSku && !initialData && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nextSku = await getNextSkuNumber(getBusinessId())
+                      setValue('sku', nextSku)
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="mt-1 text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
                   >
-                    <option value="10-18">Gravado (18%)</option>
-                    <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
-                    <option value="20">Exonerado</option>
-                    <option value="30">Inafecto</option>
-                  </select>
-                ) : (
-                  <select
-                    value={taxAffectation}
-                    onChange={(e) => setTaxAffectation(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="10">Gravado</option>
-                    <option value="20">Exonerado</option>
-                    <option value="30">Inafecto</option>
-                  </select>
+                    Generar SKU automático
+                  </button>
                 )}
               </div>
             )}
+
+            {/* Código de Barras con botón de escanear */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Código de Barras
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="7501234567890"
+                  className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${errors.code ? 'border-red-500' : 'border-gray-300'}`}
+                  {...register('code')}
+                />
+                <button
+                  type="button"
+                  onClick={handleScanBarcode}
+                  disabled={isScanningBarcode}
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  title="Escanear código de barras"
+                >
+                  {isScanningBarcode ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <ScanBarcode className="w-5 h-5" />
+                  )}
+                  <span className="hidden sm:inline">Escanear</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
+              {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
+            </div>
           </div>
 
-          {/* Categoría */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Categoría (Opcional)
-            </label>
-            <select
-              {...register('category')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Sin categoría</option>
-              {getRootCategories(categories).map(cat => (
-                <React.Fragment key={cat.id}>
-                  <option value={cat.id}>{cat.name}</option>
-                  {getSubcategories(categories, cat.id).map(subcat => (
-                    <option key={subcat.id} value={subcat.id}>└─ {subcat.name}</option>
+          {/* ═══════════════════════════════════════════════════════════════
+              COLUMNA DERECHA: PRECIOS, CLASIFICACIÓN E INVENTARIO
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              Precios y Clasificación
+            </h3>
+
+            {/* Precios - 2 columnas dentro de la columna derecha */}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label={showMultiplePrices && businessSettings?.multiplePricesEnabled
+                  ? (businessSettings?.priceLabels?.price1 || 'Precio 1')
+                  : "Precio de Venta"}
+                type="number"
+                step="0.01"
+                required
+                placeholder="0.00"
+                error={errors.price?.message}
+                {...register('price')}
+              />
+
+              <div>
+                <Input
+                  label="Costo"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  error={errors.cost?.message}
+                  {...register('cost')}
+                />
+                <p className="text-xs text-gray-500 mt-0.5">Opcional</p>
+              </div>
+
+              {/* Precios adicionales - solo si está habilitado */}
+              {showMultiplePrices && businessSettings?.multiplePricesEnabled && (
+                <>
+                  <Input
+                    label={businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00 (opcional)"
+                    error={errors.price2?.message}
+                    {...register('price2')}
+                  />
+                  <Input
+                    label={businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00 (opcional)"
+                    error={errors.price3?.message}
+                    {...register('price3')}
+                  />
+                  <Input
+                    label={businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00 (opcional)"
+                    error={errors.price4?.message}
+                    {...register('price4')}
+                  />
+                </>
+              )}
+
+              <Select
+                label="Unidad"
+                required
+                error={errors.unit?.message}
+                {...register('unit')}
+              >
+                {UNITS.map(unit => (
+                  <option key={unit.value} value={unit.value}>
+                    {unit.label}
+                  </option>
+                ))}
+              </Select>
+
+              {/* Afectación IGV */}
+              {showIgvAffectation && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Afectación IGV
+                  </label>
+                  {taxType === 'standard' ? (
+                    <select
+                      value={taxAffectation === '10' ? `10-${igvRate}` : taxAffectation}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val === '10-18') {
+                          setTaxAffectation('10')
+                          setIgvRate(18)
+                        } else if (val === '10-10') {
+                          setTaxAffectation('10')
+                          setIgvRate(10)
+                        } else if (val === '20') {
+                          setTaxAffectation('20')
+                          setIgvRate(0)
+                        } else if (val === '30') {
+                          setTaxAffectation('30')
+                          setIgvRate(0)
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="10-18">Gravado (18%)</option>
+                      <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                      <option value="20">Exonerado</option>
+                      <option value="30">Inafecto</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={taxAffectation}
+                      onChange={(e) => setTaxAffectation(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="10">Gravado</option>
+                      <option value="20">Exonerado</option>
+                      <option value="30">Inafecto</option>
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Peso y Categoría */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Input
+                  label="Peso (kg)"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  error={errors.weight?.message}
+                  {...register('weight')}
+                />
+                <p className="text-xs text-gray-500 mt-0.5">Opcional</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Categoría
+                </label>
+                <select
+                  {...register('category')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Sin categoría</option>
+                  {getRootCategories(categories).map(cat => (
+                    <React.Fragment key={cat.id}>
+                      <option value={cat.id}>{cat.name}</option>
+                      {getSubcategories(categories, cat.id).map(subcat => (
+                        <option key={subcat.id} value={subcat.id}>└─ {subcat.name}</option>
+                      ))}
+                    </React.Fragment>
                   ))}
-                </React.Fragment>
-              ))}
-            </select>
-            {categories.length === 0 && (
-              <p className="mt-1 text-xs text-gray-500">
-                Crea categorías desde la página de Productos
-              </p>
-            )}
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
+
+        </div>{/* fin grid 2 columnas */}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            SECCIONES DE ANCHO COMPLETO (debajo del grid)
+        ═══════════════════════════════════════════════════════════════════ */}
+        <div className="space-y-5 mt-5">
 
         {/* ═══════════════════════════════════════════════════════════════════
             SECCIÓN: INFORMACIÓN FARMACÉUTICA (solo modo farmacia)
@@ -1289,7 +1298,7 @@ const ProductFormModal = ({
         {/* ═══════════════════════════════════════════════════════════════════
             BOTONES
         ═══════════════════════════════════════════════════════════════════ */}
-        <div className="flex justify-end space-x-3 pt-4">
+        <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting || uploadingImage}>
             Cancelar
           </Button>
@@ -1304,6 +1313,8 @@ const ProductFormModal = ({
             )}
           </Button>
         </div>
+
+        </div>{/* fin secciones ancho completo */}
       </form>
     </Modal>
   )
