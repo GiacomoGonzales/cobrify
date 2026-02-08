@@ -513,7 +513,142 @@ export default function Quotations() {
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredQuotations.map(quotation => (
+                <div key={quotation.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                  {/* Fila superior: Número + acciones */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium text-primary-600 text-sm">{quotation.number}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 300
+                        const spaceAbove = rect.top
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceAbove > menuHeight || spaceAbove > spaceBelow
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === quotation.id ? null : quotation.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                      title="Acciones"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila medio: Cliente */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm font-medium truncate">{quotation.customer?.name || 'Sin cliente'}</p>
+                    {quotation.customer?.documentNumber && (
+                      <span className="text-xs text-gray-500 flex-shrink-0">{quotation.customer.documentNumber}</span>
+                    )}
+                  </div>
+
+                  {/* Fila inferior: Total + fechas + badge estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-sm">{formatCurrency(quotation.total)}</span>
+                      <span className="text-xs text-gray-500">
+                        {quotation.createdAt ? formatDate(getDateFromTimestamp(quotation.createdAt)) : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="scale-90 origin-right">{getStatusBadge(quotation.status)}</div>
+                    </div>
+                  </div>
+
+                  {/* Fila extra: Válida hasta */}
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-xs text-gray-500">
+                      Válida hasta: {quotation.expiryDate ? formatDate(getDateFromTimestamp(quotation.expiryDate)) : 'N/A'}
+                    </span>
+                    {isExpiringSoon(quotation) && (
+                      <AlertTriangle className="w-3 h-3 text-amber-500" />
+                    )}
+                  </div>
+
+                  {/* Portal del menú de acciones */}
+                  {openMenuId === quotation.id && createPortal(
+                    <>
+                      <div className="fixed inset-0 z-[9998]" onClick={() => setOpenMenuId(null)} />
+                      <div
+                        className="fixed w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-[9999]"
+                        style={{
+                          top: `${menuPosition.top}px`,
+                          right: `${menuPosition.right}px`,
+                          transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                          maxHeight: '80vh',
+                          overflowY: 'auto'
+                        }}
+                      >
+                        <button
+                          onClick={() => { setOpenMenuId(null); setViewingQuotation(quotation) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Eye className="w-4 h-4 text-primary-600" />
+                          <span>Ver detalles</span>
+                        </button>
+                        {quotation.status !== 'converted' && (
+                          <button
+                            onClick={() => { setOpenMenuId(null); navigate(`/app/cotizaciones/editar/${quotation.id}`) }}
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <Edit className="w-4 h-4 text-amber-600" />
+                            <span>Editar</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setOpenMenuId(null); handlePreviewPDF(quotation) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Eye className="w-4 h-4 text-purple-600" />
+                          <span>Vista previa / Imprimir</span>
+                        </button>
+                        <button
+                          onClick={() => { setOpenMenuId(null); handleDownloadPDF(quotation) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Download className="w-4 h-4 text-green-600" />
+                          <span>Descargar PDF</span>
+                        </button>
+                        {quotation.status !== 'converted' && quotation.status !== 'expired' && quotation.status !== 'rejected' && (
+                          <>
+                            <div className="border-t border-gray-100 my-1" />
+                            <button
+                              onClick={() => { setOpenMenuId(null); setConvertingQuotation(quotation) }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <Receipt className="w-4 h-4 text-blue-600" />
+                              <span>Convertir a Factura</span>
+                            </button>
+                          </>
+                        )}
+                        <div className="border-t border-gray-100 my-1" />
+                        <button
+                          onClick={() => { setOpenMenuId(null); setDeletingQuotation(quotation) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
+                    </>,
+                    document.body
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -702,7 +837,9 @@ export default function Quotations() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+            </div>
+          </>
+
         )}
       </Card>
 
