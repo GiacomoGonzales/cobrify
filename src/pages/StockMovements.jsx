@@ -614,8 +614,8 @@ export default function StockMovements() {
         <CardHeader>
           <CardTitle>Historial de Movimientos ({filteredMovements.length})</CardTitle>
         </CardHeader>
-        <CardContent>
-          {filteredMovements.length === 0 ? (
+        {filteredMovements.length === 0 ? (
+          <CardContent>
             <div className="text-center py-12">
               <History className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -629,8 +629,9 @@ export default function StockMovements() {
                   : 'Los movimientos aparecerán aquí cuando se realicen compras, ventas o transferencias'}
               </p>
             </div>
-          ) : (
-            <>
+          </CardContent>
+        ) : (
+          <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
               {movementsWithBalance.map(movement => {
@@ -804,9 +805,7 @@ export default function StockMovements() {
               </Table>
             </div>
             </>
-
           )}
-        </CardContent>
       </Card>
     </div>
   )
