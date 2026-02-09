@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -3122,8 +3122,9 @@ export default function Products() {
                 <div className="flex items-center justify-between">
                   <div className="text-xs sm:text-sm text-gray-600">
                     <span className="font-medium">{startIndex + 1}</span>-
-                    <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span> de{' '}
-                    <span className="font-medium">{totalFilteredProducts}</span>
+                    <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span>
+                    <span className="hidden sm:inline"> de{' '}
+                    <span className="font-medium">{totalFilteredProducts}</span></span>
                   </div>
                   <select
                     value={itemsPerPage}
@@ -3142,27 +3143,24 @@ export default function Products() {
 
                 {/* Fila 2: Navegación */}
                 <div className="flex items-center justify-center gap-1">
-                  {/* Primera y Anterior */}
                   <button
                     onClick={() => setCurrentPage(1)}
                     disabled={currentPage === 1}
-                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 flex items-center justify-center text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Primera"
                   >
-                    <span className="hidden sm:inline">Primera</span>
-                    <span className="sm:hidden">««</span>
+                    <ChevronsLeft className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setCurrentPage(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 flex items-center justify-center text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Anterior"
                   >
-                    <span className="hidden sm:inline">Anterior</span>
-                    <span className="sm:hidden">«</span>
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
 
-                  {/* Números de página - menos en móvil */}
+                  {/* Números de página */}
                   <div className="flex items-center gap-1">
                     {Array.from({ length: Math.min(totalPages <= 3 ? totalPages : 3, totalPages) }, (_, i) => {
                       let pageNum
@@ -3192,24 +3190,21 @@ export default function Products() {
                     })}
                   </div>
 
-                  {/* Siguiente y Última */}
                   <button
                     onClick={() => setCurrentPage(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 flex items-center justify-center text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Siguiente"
                   >
-                    <span className="hidden sm:inline">Siguiente</span>
-                    <span className="sm:hidden">»</span>
+                    <ChevronRight className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setCurrentPage(totalPages)}
                     disabled={currentPage === totalPages}
-                    className="p-1.5 sm:px-2 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-8 h-8 flex items-center justify-center text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Última"
                   >
-                    <span className="hidden sm:inline">Última</span>
-                    <span className="sm:hidden">»»</span>
+                    <ChevronsRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
