@@ -11,7 +11,10 @@ import {
   FileSpreadsheet,
   ArrowRightLeft,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Warehouse,
   ArrowUpDown,
   ArrowUp,
@@ -2404,17 +2407,16 @@ export default function Inventory() {
 
               {/* Controles de paginación */}
               {totalFilteredProducts > 0 && (
-                <div className="px-6 py-4 border-t border-gray-200">
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="px-4 lg:px-6 py-3 lg:py-4 border-t border-gray-200">
+                  <div className="flex items-center justify-between gap-2">
                     {/* Info de productos mostrados */}
-                    <div className="text-sm text-gray-600">
-                      Mostrando <span className="font-medium">{startIndex + 1}</span> a{' '}
-                      <span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span> de{' '}
-                      <span className="font-medium">{totalFilteredProducts}</span> productos
+                    <div className="text-xs lg:text-sm text-gray-600">
+                      <span className="font-medium">{startIndex + 1}</span>-<span className="font-medium">{Math.min(endIndex, totalFilteredProducts)}</span>
+                      <span className="hidden sm:inline"> de <span className="font-medium">{totalFilteredProducts}</span></span>
                     </div>
 
                     {/* Controles de paginación */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 lg:gap-2">
                       {/* Selector de items por página */}
                       <select
                         value={itemsPerPage}
@@ -2422,7 +2424,7 @@ export default function Inventory() {
                           setItemsPerPage(Number(e.target.value))
                           setCurrentPage(1)
                         }}
-                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="px-2 lg:px-3 py-1.5 border border-gray-300 rounded-lg text-xs lg:text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         <option value={25}>25</option>
                         <option value={50}>50</option>
@@ -2431,41 +2433,43 @@ export default function Inventory() {
                       </select>
 
                       {/* Botones de navegación */}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5 lg:gap-1">
                         <button
                           onClick={() => setCurrentPage(1)}
                           disabled={currentPage === 1}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Primera"
                         >
-                          Primera
+                          <ChevronsLeft className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setCurrentPage(currentPage - 1)}
                           disabled={currentPage === 1}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Anterior"
                         >
-                          Anterior
+                          <ChevronLeft className="w-4 h-4" />
                         </button>
 
                         {/* Números de página */}
-                        <div className="flex items-center gap-1 px-2">
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        <div className="flex items-center gap-0.5 lg:gap-1">
+                          {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
                             let pageNum
-                            if (totalPages <= 5) {
+                            if (totalPages <= 3) {
                               pageNum = i + 1
-                            } else if (currentPage <= 3) {
+                            } else if (currentPage <= 2) {
                               pageNum = i + 1
-                            } else if (currentPage >= totalPages - 2) {
-                              pageNum = totalPages - 4 + i
+                            } else if (currentPage >= totalPages - 1) {
+                              pageNum = totalPages - 2 + i
                             } else {
-                              pageNum = currentPage - 2 + i
+                              pageNum = currentPage - 1 + i
                             }
 
                             return (
                               <button
                                 key={pageNum}
                                 onClick={() => setCurrentPage(pageNum)}
-                                className={`w-8 h-8 text-sm rounded-lg ${
+                                className={`w-8 h-8 text-xs lg:text-sm rounded-lg ${
                                   currentPage === pageNum
                                     ? 'bg-primary-600 text-white'
                                     : 'border border-gray-300 hover:bg-gray-50'
@@ -2480,16 +2484,18 @@ export default function Inventory() {
                         <button
                           onClick={() => setCurrentPage(currentPage + 1)}
                           disabled={currentPage === totalPages}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Siguiente"
                         >
-                          Siguiente
+                          <ChevronRight className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setCurrentPage(totalPages)}
                           disabled={currentPage === totalPages}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Última"
                         >
-                          Última
+                          <ChevronsRight className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
