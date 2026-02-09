@@ -900,10 +900,13 @@ export default function POS() {
     }
   }
 
-  // Cargar datos iniciales
+  // Obtener el businessId actual para detectar cambios (fix: sub-usuarios)
+  const currentBusinessId = getBusinessId()
+
+  // Cargar datos iniciales (re-ejecutar cuando businessId cambie, ej: al cargar permisos del sub-usuario)
   useEffect(() => {
     loadInitialData()
-  }, [user])
+  }, [user, currentBusinessId])
 
   const loadInitialData = async () => {
     if (!user?.uid) return
@@ -925,9 +928,11 @@ export default function POS() {
       }
 
       const businessId = getBusinessId()
+      console.log('🛒 POS loadInitialData - businessId:', businessId, '| user.uid:', user?.uid)
 
       // Cargar productos
       const productsResult = await getProducts(businessId)
+      console.log('🛒 POS getProducts resultado:', productsResult.success, '| cantidad:', productsResult.data?.length, '| error:', productsResult.error)
       if (productsResult.success) {
         // Mostrar todos los productos (los sin stock se mostrarán deshabilitados)
         setProducts(productsResult.data || [])
