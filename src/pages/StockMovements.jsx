@@ -630,7 +630,69 @@ export default function StockMovements() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {movementsWithBalance.map(movement => {
+                const typeInfo = getMovementTypeInfo(movement.type)
+                const Icon = typeInfo.icon
+                return (
+                  <div key={movement.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                    {/* Fila 1: Producto + cantidad + saldo */}
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{movement.productName}</p>
+                        {movement.productCode && (
+                          <span className="text-xs text-gray-500">{movement.productCode}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                        <span className={`font-bold text-sm ${movement.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {movement.quantity > 0 ? '+' : ''}{movement.quantity}
+                        </span>
+                        <span className="font-semibold text-sm text-gray-700">
+                          {movement.stockAfter !== null ? movement.stockAfter : '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Fila 2: Badge tipo + fecha + almacén */}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <Badge variant={typeInfo.variant} className="text-xs">
+                        <Icon className="w-3 h-3 mr-1 inline" />
+                        {typeInfo.label}
+                      </Badge>
+                      <span className="text-xs text-gray-500">{formatDate(movement.createdAt)}</span>
+                      {movement.type === 'transfer_in' && movement.fromWarehouseName ? (
+                        <span className="text-xs text-gray-500">
+                          {movement.fromWarehouseName} → {movement.warehouseName}
+                        </span>
+                      ) : movement.type === 'transfer_out' && movement.toWarehouseName ? (
+                        <span className="text-xs text-gray-500">
+                          {movement.warehouseName} → {movement.toWarehouseName}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-500">{movement.warehouseName}</span>
+                      )}
+                      {movement.isCrossBranchTransfer && (
+                        <Badge variant="warning" className="text-xs">
+                          <Store className="w-3 h-3 mr-1 inline" />
+                          Entre sucursales
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Fila 3: Motivo (si existe) */}
+                    {(movement.notes || movement.reason) && (
+                      <p className="text-xs text-gray-500 mt-1 truncate">{movement.notes || movement.reason}</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -748,6 +810,8 @@ export default function StockMovements() {
                 </TableBody>
               </Table>
             </div>
+            </>
+
           )}
         </CardContent>
       </Card>
