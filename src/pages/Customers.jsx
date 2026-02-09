@@ -478,7 +478,78 @@ export default function Customers() {
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredCustomers.map(customer => (
+                <div key={customer.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                  {/* Fila 1: Nombre + acciones */}
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{customer.name}</p>
+                      {customer.businessName && customer.businessName !== customer.name && (
+                        <p className="text-xs text-gray-500 truncate">{customer.businessName}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      <button
+                        onClick={() => openEditModal(customer)}
+                        className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeletingCustomer(customer)}
+                        className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Fila 2: Documento + contacto */}
+                  <div className="flex items-center gap-3 mt-1">
+                    {customer.documentType && customer.documentNumber ? (
+                      <div className="flex items-center gap-1">
+                        {getDocumentBadge(customer.documentType)}
+                        <span className="text-xs text-gray-600">{customer.documentNumber}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">Sin documento</span>
+                    )}
+                    {customer.phone && (
+                      <span className="text-xs text-gray-500">{customer.phone}</span>
+                    )}
+                  </div>
+
+                  {/* Fila 3: Métricas + campos condicionales */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-3 text-xs text-gray-600">
+                      {businessSettings?.posCustomFields?.showStudentField && customer.studentName && (
+                        <span>{customer.studentName}</span>
+                      )}
+                      {businessSettings?.posCustomFields?.showVehiclePlateField && customer.vehiclePlate && (
+                        <span className="font-medium uppercase">{customer.vehiclePlate}</span>
+                      )}
+                      {customer.email && (
+                        <span className="text-gray-500 truncate max-w-[160px]">{customer.email}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                        {customer.ordersCount || 0}
+                      </span>
+                      <span className="text-xs font-semibold text-gray-900">{formatCurrency(customer.totalSpent || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -585,7 +656,9 @@ export default function Customers() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+            </div>
+          </>
+
         )}
       </Card>
 
