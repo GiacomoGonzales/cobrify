@@ -571,55 +571,52 @@ export default function DispatchGuides() {
             <div className="lg:hidden divide-y divide-gray-100">
               {filteredGuides.map((guide) => (
                 <div key={guide.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                  {/* Fila superior: Número + estado + acciones */}
+                  {/* Fila 1: Número + fecha + acciones */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm font-medium text-gray-900">{guide.number}</span>
+                      <span className="font-medium text-primary-600 text-sm">{guide.number}</span>
+                      <span className="text-xs text-gray-500">{formatTransferDate(guide.transferDate)}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="scale-90 origin-right">{getStatusBadge(guide.status, guide.sunatStatus)}</div>
-                      <button
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          const menuHeight = 350
-                          const spaceBelow = window.innerHeight - rect.bottom
-                          const openUpward = spaceBelow < menuHeight
-                          setMenuPosition({
-                            top: openUpward ? rect.top - 10 : rect.bottom + 10,
-                            right: window.innerWidth - rect.right,
-                            openUpward
-                          })
-                          setOpenMenuId(openMenuId === guide.id ? null : guide.id)
-                        }}
-                        className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
-                        title="Acciones"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 350
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === guide.id ? null : guide.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                      title="Acciones"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
                   </div>
 
-                  {/* Fila medio: Motivo + transporte + items */}
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-600">
-                    <span>{TRANSFER_REASONS[guide.transferReason] || guide.transferReason}</span>
-                    <span className="flex items-center gap-1">
-                      <Truck className="w-3 h-3 text-gray-400" />
-                      {TRANSPORT_MODES[guide.transportMode] || guide.transportMode}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Package className="w-3 h-3 text-gray-400" />
-                      {guide.items?.length || 0} items
-                    </span>
+                  {/* Fila 2: Destino (entidad principal) */}
+                  <div className="flex items-start gap-1 mt-1 min-w-0">
+                    <MapPin className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm font-medium truncate">{guide.destination?.address || 'Sin destino'}</p>
                   </div>
 
-                  {/* Fila inferior: Destino + fecha */}
-                  <div className="flex items-center justify-between mt-1.5">
-                    <div className="flex items-start gap-1 text-xs text-gray-500 min-w-0 flex-1 mr-3">
-                      <MapPin className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
-                      <span className="truncate">{guide.destination?.address || '-'}</span>
+                  {/* Fila 3: Motivo + transporte + items + estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span>{TRANSFER_REASONS[guide.transferReason] || guide.transferReason}</span>
+                      <span className="flex items-center gap-1">
+                        <Truck className="w-3 h-3 text-gray-400" />
+                        {TRANSPORT_MODES[guide.transportMode] || guide.transportMode}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Package className="w-3 h-3 text-gray-400" />
+                        {guide.items?.length || 0}
+                      </span>
                     </div>
-                    <span className="text-xs text-gray-500 flex-shrink-0">{formatTransferDate(guide.transferDate)}</span>
+                    <div className="scale-90 origin-right">{getStatusBadge(guide.status, guide.sunatStatus)}</div>
                   </div>
                 </div>
               ))}
