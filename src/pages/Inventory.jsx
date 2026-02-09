@@ -1797,7 +1797,84 @@ export default function Inventory() {
             </div>
           ) : (
             <div className="overflow-hidden">
-              <Table className="w-full lg:table-fixed [&_th]:px-2 [&_th]:lg:px-3 [&_td]:px-2 [&_td]:lg:px-3">
+              {/* Vista de tarjetas para móvil */}
+              <div className="lg:hidden divide-y divide-gray-100">
+                {paginatedProducts.map(item => {
+                  const stockStatus = getStockStatus(item)
+                  const realStock = getRealStock(item)
+                  const isProduct = item.itemType === 'product'
+
+                  return (
+                    <div key={`card-${item.itemType}-${item.id}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                      {/* Fila 1: Nombre + acciones */}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium truncate min-w-0 flex-1">{item.name}</p>
+                        {warehouses.length >= 1 && isProduct && (
+                          <button
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              const menuHeight = 200
+                              const spaceBelow = window.innerHeight - rect.bottom
+                              const openUpward = spaceBelow < menuHeight
+                              setMenuPosition({
+                                top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                                right: window.innerWidth - rect.right,
+                                openUpward
+                              })
+                              setOpenMenuId(openMenuId === item.id ? null : item.id)
+                            }}
+                            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                            title="Acciones"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Fila 2: SKU + tipo + categoría */}
+                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                        {(item.sku || item.code) && (
+                          <span className="font-mono text-primary-600">{item.sku || item.code}</span>
+                        )}
+                        <Badge variant={isProduct ? 'default' : 'success'} className="text-xs">
+                          {isProduct ? 'Prod.' : 'Ing.'}
+                        </Badge>
+                        {item.category && (
+                          <span className="truncate">
+                            {isProduct
+                              ? getCategoryPath(productCategories, item.category) || item.category
+                              : item.category
+                            }
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Fila 3: Stock + precio + valor + estado */}
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-3">
+                          {realStock === null ? (
+                            <span className="text-xs text-gray-500">S/C</span>
+                          ) : (
+                            <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock < 4 ? 'text-yellow-600' : 'text-green-600'}`}>
+                              {realStock} uds
+                            </span>
+                          )}
+                          <span className="text-sm text-gray-700">{formatCurrency(isProduct ? item.price : (item.averageCost || 0))}</span>
+                          {realStock !== null && (
+                            <span className="text-sm font-semibold">{formatCurrency(realStock * (isProduct ? item.price : (item.averageCost || 0)))}</span>
+                          )}
+                        </div>
+                        <Badge variant={stockStatus.variant} className="text-xs whitespace-nowrap">
+                          {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Tabla para desktop */}
+              <Table className="hidden lg:table w-full lg:table-fixed [&_th]:px-2 [&_th]:lg:px-3 [&_td]:px-2 [&_td]:lg:px-3">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="lg:w-[7%]">
