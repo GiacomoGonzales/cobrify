@@ -373,7 +373,73 @@ export default function Sellers() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredSellers.map((seller) => (
+                <div key={seller.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                  {/* Fila 1: Código + nombre + acciones */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium text-primary-600 text-sm">{seller.code}</span>
+                      <span className="text-sm font-medium text-gray-900 truncate">{seller.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      <button
+                        onClick={() => handleToggleStatus(seller)}
+                        className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                        title={seller.status === 'active' ? 'Desactivar' : 'Activar'}
+                      >
+                        <UserCheck className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleEdit(seller)}
+                        className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(seller)}
+                        className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Fila 2: DNI + contacto + sucursal */}
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                    {seller.dni && <span>DNI: {seller.dni}</span>}
+                    {seller.phone && <span>{seller.phone}</span>}
+                    {branches.length > 0 && (
+                      <span className="text-blue-600 flex items-center gap-0.5">
+                        <Store className="w-3 h-3" />
+                        {seller.branchId
+                          ? branches.find(b => b.id === seller.branchId)?.name || 'Sucursal'
+                          : 'Principal'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Fila 3: Ventas hoy + órdenes + total + estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-3 text-xs text-gray-600">
+                      <span>Hoy: <span className="font-semibold text-sm text-gray-900">{formatCurrency(seller.todaySales || 0)}</span></span>
+                      <span>{seller.todayOrders || 0} órd.</span>
+                      <span>Total: <span className="font-semibold">{formatCurrency(seller.totalSales || 0)}</span></span>
+                    </div>
+                    <Badge variant={seller.status === 'active' ? 'success' : 'secondary'}>
+                      {seller.status === 'active' ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -461,6 +527,7 @@ export default function Sellers() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
