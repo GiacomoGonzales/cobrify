@@ -1803,71 +1803,186 @@ export default function Inventory() {
                   const stockStatus = getStockStatus(item)
                   const realStock = getRealStock(item)
                   const isProduct = item.itemType === 'product'
+                  const isExpanded = expandedProduct === item.id
+                  const hasWarehouseStocks = item.warehouseStocks && item.warehouseStocks.length > 0
+                  const canExpand = warehouses.length > 0 && realStock !== null && isProduct
 
                   return (
-                    <div key={`card-${item.itemType}-${item.id}`} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                      {/* Fila 1: Nombre + acciones */}
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium truncate min-w-0 flex-1">{item.name}</p>
-                        {warehouses.length >= 1 && isProduct && (
-                          <button
-                            onClick={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect()
-                              const menuHeight = 200
-                              const spaceBelow = window.innerHeight - rect.bottom
-                              const openUpward = spaceBelow < menuHeight
-                              setMenuPosition({
-                                top: openUpward ? rect.top - 8 : rect.bottom + 8,
-                                right: window.innerWidth - rect.right,
-                                openUpward
-                              })
-                              setOpenMenuId(openMenuId === item.id ? null : item.id)
-                            }}
-                            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
-                            title="Acciones"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Fila 2: SKU + tipo + categoría */}
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                        {(item.sku || item.code) && (
-                          <span className="font-mono text-primary-600">{item.sku || item.code}</span>
-                        )}
-                        <Badge variant={isProduct ? 'default' : 'success'} className="text-xs">
-                          {isProduct ? 'Prod.' : 'Ing.'}
-                        </Badge>
-                        {item.category && (
-                          <span className="truncate">
-                            {isProduct
-                              ? getCategoryPath(productCategories, item.category) || item.category
-                              : item.category
-                            }
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Fila 3: Stock + precio + valor + estado */}
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-3">
-                          {realStock === null ? (
-                            <span className="text-xs text-gray-500">S/C</span>
-                          ) : (
-                            <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock < 4 ? 'text-yellow-600' : 'text-green-600'}`}>
-                              {realStock} uds
-                            </span>
-                          )}
-                          <span className="text-sm text-gray-700">{formatCurrency(isProduct ? item.price : (item.averageCost || 0))}</span>
-                          {realStock !== null && (
-                            <span className="text-sm font-semibold">{formatCurrency(realStock * (isProduct ? item.price : (item.averageCost || 0)))}</span>
+                    <div key={`card-${item.itemType}-${item.id}`}>
+                      <div
+                        className={`px-4 py-3 transition-colors ${canExpand ? 'cursor-pointer active:bg-gray-100' : ''} ${isExpanded ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => {
+                          if (canExpand) setExpandedProduct(isExpanded ? null : item.id)
+                        }}
+                      >
+                        {/* Fila 1: Nombre + acciones */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            {canExpand && (
+                              isExpanded
+                                ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            )}
+                            <p className="text-sm font-medium truncate">{item.name}</p>
+                          </div>
+                          {warehouses.length >= 1 && isProduct && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                const menuHeight = 200
+                                const spaceBelow = window.innerHeight - rect.bottom
+                                const openUpward = spaceBelow < menuHeight
+                                setMenuPosition({
+                                  top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                                  right: window.innerWidth - rect.right,
+                                  openUpward
+                                })
+                                setOpenMenuId(openMenuId === item.id ? null : item.id)
+                              }}
+                              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                              title="Acciones"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
-                        <Badge variant={stockStatus.variant} className="text-xs whitespace-nowrap">
-                          {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
-                        </Badge>
+
+                        {/* Fila 2: SKU + tipo + categoría */}
+                        <div className="flex items-center gap-2 mt-1 text-xs text-gray-500" style={canExpand ? { paddingLeft: '1.375rem' } : undefined}>
+                          {(item.sku || item.code) && (
+                            <span className="font-mono text-primary-600">{item.sku || item.code}</span>
+                          )}
+                          <Badge variant={isProduct ? 'default' : 'success'} className="text-xs">
+                            {isProduct ? 'Prod.' : 'Ing.'}
+                          </Badge>
+                          {item.category && (
+                            <span className="truncate">
+                              {isProduct
+                                ? getCategoryPath(productCategories, item.category) || item.category
+                                : item.category
+                              }
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Fila 3: Stock + precio + valor + estado */}
+                        <div className="flex items-center justify-between mt-2" style={canExpand ? { paddingLeft: '1.375rem' } : undefined}>
+                          <div className="flex items-center gap-3">
+                            {realStock === null ? (
+                              <span className="text-xs text-gray-500">S/C</span>
+                            ) : (
+                              <span className={`font-bold text-sm ${realStock === 0 ? 'text-red-600' : realStock < 4 ? 'text-yellow-600' : 'text-green-600'}`}>
+                                {realStock} uds
+                              </span>
+                            )}
+                            <span className="text-sm text-gray-700">{formatCurrency(isProduct ? item.price : (item.averageCost || 0))}</span>
+                            {realStock !== null && (
+                              <span className="text-sm font-semibold">{formatCurrency(realStock * (isProduct ? item.price : (item.averageCost || 0)))}</span>
+                            )}
+                          </div>
+                          <Badge variant={stockStatus.variant} className="text-xs whitespace-nowrap">
+                            {stockStatus.status === 'Sin control' ? 'S/C' : stockStatus.status === 'Stock Bajo' ? 'Bajo' : stockStatus.status}
+                          </Badge>
+                        </div>
                       </div>
+
+                      {/* Expandible: Stock por almacén/sucursal */}
+                      {isExpanded && canExpand && filteredWarehouses.length > 0 && (
+                        <div className="px-4 pb-3 bg-gray-50">
+                          <div className="space-y-2">
+                            {(() => {
+                              const mainBranchWarehouses = filteredWarehouses.filter(w => !w.branchId)
+                              const warehousesByBranch = filteredWarehouses
+                                .filter(w => w.branchId)
+                                .reduce((acc, warehouse) => {
+                                  const branchId = warehouse.branchId
+                                  if (!acc[branchId]) acc[branchId] = []
+                                  acc[branchId].push(warehouse)
+                                  return acc
+                                }, {})
+
+                              return (
+                                <div className="space-y-2">
+                                  {mainBranchWarehouses.length > 0 && (
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                      {filterBranch === 'all' && (
+                                        <div className="bg-primary-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                          <Store className="w-3 h-3 text-primary-600" />
+                                          <span className="text-xs font-medium text-primary-700">Sucursal Principal</span>
+                                          <span className="text-xs text-primary-600 ml-auto">
+                                            {mainBranchWarehouses.reduce((sum, w) => {
+                                              const ws = item.warehouseStocks?.find(ws => ws.warehouseId === w.id)
+                                              return sum + (ws?.stock || 0)
+                                            }, 0)} total
+                                          </span>
+                                        </div>
+                                      )}
+                                      <div className="p-2 space-y-1">
+                                        {mainBranchWarehouses.map(warehouse => {
+                                          const stock = hasWarehouseStocks
+                                            ? (item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)?.stock || 0)
+                                            : 0
+                                          return (
+                                            <div key={warehouse.id} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
+                                              <div className="flex items-center gap-1.5">
+                                                <Warehouse className="w-3 h-3 text-gray-400" />
+                                                <span className="text-xs text-gray-700">{warehouse.name}</span>
+                                                {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                              </div>
+                                              <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                {stock}
+                                              </span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {Object.entries(warehousesByBranch).map(([branchId, branchWarehouses]) => {
+                                    const branch = branches.find(b => b.id === branchId)
+                                    const branchTotal = branchWarehouses.reduce((sum, w) => {
+                                      const ws = item.warehouseStocks?.find(ws => ws.warehouseId === w.id)
+                                      return sum + (ws?.stock || 0)
+                                    }, 0)
+                                    return (
+                                      <div key={branchId} className="border border-gray-200 rounded-lg overflow-hidden">
+                                        {filterBranch === 'all' && (
+                                          <div className="bg-blue-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                                            <Store className="w-3 h-3 text-blue-600" />
+                                            <span className="text-xs font-medium text-blue-700">{branch?.name || 'Sucursal'}</span>
+                                            <span className="text-xs text-blue-600 ml-auto">{branchTotal} total</span>
+                                          </div>
+                                        )}
+                                        <div className="p-2 space-y-1">
+                                          {branchWarehouses.map(warehouse => {
+                                            const stock = hasWarehouseStocks
+                                              ? (item.warehouseStocks.find(ws => ws.warehouseId === warehouse.id)?.stock || 0)
+                                              : 0
+                                            return (
+                                              <div key={warehouse.id} className="flex items-center justify-between px-2 py-1.5 bg-white rounded">
+                                                <div className="flex items-center gap-1.5">
+                                                  <Warehouse className="w-3 h-3 text-gray-400" />
+                                                  <span className="text-xs text-gray-700">{warehouse.name}</span>
+                                                  {warehouse.isDefault && <Badge variant="secondary" className="text-xs">Ppal</Badge>}
+                                                </div>
+                                                <span className={`font-semibold text-xs ${stock >= 4 ? 'text-green-600' : stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                  {stock}
+                                                </span>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
