@@ -528,7 +528,66 @@ export default function StudentPaymentControl() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredStudents.map((student) => {
+                const paymentInfo = getPaymentInfo(student.id)
+                const isPaid = !!paymentInfo
+
+                return (
+                  <div key={student.id} className={`px-4 py-3 ${!isPaid ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
+                    {/* Fila 1: Alumno + badge estado */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900 truncate">{student.studentName}</p>
+                      {isPaid ? (
+                        <Badge variant="success" className="whitespace-nowrap flex-shrink-0">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Pagado
+                        </Badge>
+                      ) : (
+                        <Badge variant="error" className="whitespace-nowrap flex-shrink-0">
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Pendiente
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Fila 2: Apoderado + horario */}
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-xs text-gray-600">{student.name}</span>
+                      {student.studentSchedule && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500">
+                          <Clock className="w-3 h-3" />
+                          {student.studentSchedule}
+                        </span>
+                      )}
+                      {student.phone && (
+                        <span className="text-xs text-gray-500">{student.phone}</span>
+                      )}
+                    </div>
+
+                    {/* Fila 3: Monto + fecha pago + productos */}
+                    {isPaid && (
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold text-green-600">{formatCurrency(paymentInfo.totalPaid)}</span>
+                          {paymentInfo.lastPaymentDate && (
+                            <span className="text-xs text-gray-500">{format(new Date(paymentInfo.lastPaymentDate), 'dd/MM/yyyy')}</span>
+                          )}
+                        </div>
+                        {paymentInfo.products && (
+                          <span className="text-xs text-gray-500 truncate max-w-[140px]">{paymentInfo.products}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -614,6 +673,8 @@ export default function StudentPaymentControl() {
                 </TableBody>
               </Table>
             </div>
+            </>
+
           )}
         </CardContent>
       </Card>
