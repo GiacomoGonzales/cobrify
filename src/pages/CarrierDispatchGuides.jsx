@@ -322,7 +322,7 @@ export default function CarrierDispatchGuides() {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
           <CheckCircle className="w-3 h-3" />
-          Aceptada por SUNAT
+          Aceptada
         </span>
       )
     }
@@ -487,7 +487,65 @@ export default function CarrierDispatchGuides() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Vista de tarjetas para móvil */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredGuides.map((guide) => (
+                <div key={guide.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
+                  {/* Fila 1: Número + fecha + acciones */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`font-medium text-sm ${guide.status === 'draft' ? 'text-gray-400 italic' : 'text-primary-600'}`}>
+                        {guide.number || 'Sin número'}
+                      </span>
+                      <span className="text-xs text-gray-500">{formatTransferDate(guide.transferDate)}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 350
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 10 : rect.bottom + 10,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === guide.id ? null : guide.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                      title="Acciones"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila 2: Destino (entidad principal) */}
+                  <div className="flex items-start gap-1 mt-1 min-w-0">
+                    <MapPin className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm font-medium truncate">{guide.destination?.address || 'Sin destino'}</p>
+                  </div>
+
+                  {/* Fila 3: Remitente + vehículo + estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3 h-3 text-gray-400" />
+                        <span className="truncate max-w-[120px]">{guide.shipper?.businessName || '-'}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Car className="w-3 h-3 text-gray-400" />
+                        {guide.vehicle?.plate || '-'}
+                      </span>
+                    </div>
+                    <div className="scale-90 origin-right">{getStatusBadge(guide.status, guide.sunatStatus)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla para desktop */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -554,7 +612,6 @@ export default function CarrierDispatchGuides() {
                         {getStatusBadge(guide.status, guide.sunatStatus)}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {/* Botón de menú */}
                         <button
                           onClick={(e) => {
                             const rect = e.currentTarget.getBoundingClientRect()
@@ -580,6 +637,8 @@ export default function CarrierDispatchGuides() {
                 </tbody>
               </table>
             </div>
+            </>
+
           )}
         </CardContent>
       </Card>

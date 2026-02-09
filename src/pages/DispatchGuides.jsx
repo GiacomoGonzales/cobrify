@@ -376,7 +376,7 @@ export default function DispatchGuides() {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
           <CheckCircle className="w-3 h-3" />
-          Aceptada por SUNAT
+          Aceptada
         </span>
       )
     }
