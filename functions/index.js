@@ -7606,6 +7606,7 @@ export const checkSubscriptionExpirations = onSchedule(
       let suspendedCount = 0
 
       for (const docSnap of activeSnapshot.docs) {
+        try {
         const sub = docSnap.data()
         const userId = docSnap.id
 
@@ -7634,19 +7635,24 @@ export const checkSubscriptionExpirations = onSchedule(
             updatedAt: FieldValue.serverTimestamp(),
           })
           suspendedCount++
+          console.log(`🔒 Suspendido: ${sub.email || userId} (reseller: ${isResellerAccount}, días: ${daysUntilExpiry})`)
 
           // Crear notificación de suspensión
-          await db.collection('notifications').add({
-            userId,
-            type: 'subscription_expired',
-            title: 'Cuenta Suspendida',
-            message: `Tu suscripción ha vencido y tu cuenta ha sido suspendida. Renueva tu plan para seguir usando Cobrify.`,
-            metadata: { periodEnd: periodEnd.toISOString(), autoSuspended: true },
-            read: false,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-          notificationsCreated++
+          try {
+            await db.collection('notifications').add({
+              userId,
+              type: 'subscription_expired',
+              title: 'Cuenta Suspendida',
+              message: `Tu suscripción ha vencido y tu cuenta ha sido suspendida. Renueva tu plan para seguir usando Cobrify.`,
+              metadata: { periodEnd: periodEnd.toISOString(), autoSuspended: true },
+              read: false,
+              createdAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+            notificationsCreated++
+          } catch (notifErr) {
+            console.error(`⚠️ Error notificación suspensión ${userId}:`, notifErr.message)
+          }
           continue
         }
 
@@ -7671,18 +7677,8 @@ export const checkSubscriptionExpirations = onSchedule(
         }
 
         if (notifTitle) {
-          // Verificar que no se haya creado ya hoy
-          const todayStart = new Date(now)
-          todayStart.setHours(0, 0, 0, 0)
-
-          const existingNotif = await db.collection('notifications')
-            .where('userId', '==', userId)
-            .where('type', '==', notifType)
-            .where('createdAt', '>=', todayStart)
-            .limit(1)
-            .get()
-
-          if (existingNotif.empty) {
+          try {
+            // Crear notificación directamente (sin verificar duplicados para evitar error de índice)
             await db.collection('notifications').add({
               userId,
               type: notifType,
@@ -7694,7 +7690,12 @@ export const checkSubscriptionExpirations = onSchedule(
               updatedAt: FieldValue.serverTimestamp(),
             })
             notificationsCreated++
+          } catch (notifError) {
+            console.error(`⚠️ Error creando notificación para ${userId}:`, notifError.message)
           }
+        }
+        } catch (userError) {
+          console.error(`⚠️ Error procesando usuario ${docSnap.id}:`, userError.message)
         }
       }
 
