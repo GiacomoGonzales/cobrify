@@ -303,7 +303,13 @@ export async function getAnalyticsData() {
     const documentsByUser = []
     let totalDocuments = 0
 
-    // También obtener datos de businesses para métodos de emisión
+    // Cargar todos los businesses de una vez (evita N+1 queries)
+    const businessesSnapshot = await getDocs(collection(db, 'businesses'))
+    const businessesMap = {}
+    businessesSnapshot.docs.forEach(doc => {
+      businessesMap[doc.id] = doc.data()
+    })
+
     for (const doc of subscriptionsSnapshot.docs) {
       const data = doc.data()
       if (data.ownerId) continue
@@ -320,38 +326,29 @@ export async function getAnalyticsData() {
         })
       }
 
-      // Intentar obtener datos del negocio
-      try {
-        const businessRef = collection(db, 'businesses')
-        const businessQuery = query(businessRef, where('__name__', '==', doc.id))
-        const businessSnapshot = await getDocs(businessQuery)
-
-        if (!businessSnapshot.empty) {
-          const businessData = businessSnapshot.docs[0].data()
-
-          // Método de emisión - detectar de múltiples fuentes
-          let method = 'none'
-          if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
-            method = 'qpse'
-          } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
-            method = 'sunat_direct'
-          } else if (businessData.emissionConfig?.method && businessData.emissionConfig.method !== 'none') {
-            method = businessData.emissionConfig.method
-          } else if (businessData.emissionConfig?.qpse?.enabled || businessData.emissionConfig?.qpse?.usuario) {
-            method = 'qpse'
-          } else if (businessData.emissionConfig?.sunat?.enabled || businessData.emissionConfig?.sunat?.solUser) {
-            method = 'sunat_direct'
-          } else if (businessData.emissionMethod) {
-            method = businessData.emissionMethod
-          }
-          emissionMethods[method] = (emissionMethods[method] || 0) + 1
-
-          // Modo de negocio
-          const mode = businessData.businessMode || 'unknown'
-          businessModes[mode] = (businessModes[mode] || 0) + 1
+      // Buscar datos del negocio en el mapa en memoria
+      const businessData = businessesMap[doc.id]
+      if (businessData) {
+        // Método de emisión - detectar de múltiples fuentes
+        let method = 'none'
+        if (businessData.qpse?.enabled || businessData.qpse?.usuario) {
+          method = 'qpse'
+        } else if (businessData.sunat?.enabled || businessData.sunat?.solUser) {
+          method = 'sunat_direct'
+        } else if (businessData.emissionConfig?.method && businessData.emissionConfig.method !== 'none') {
+          method = businessData.emissionConfig.method
+        } else if (businessData.emissionConfig?.qpse?.enabled || businessData.emissionConfig?.qpse?.usuario) {
+          method = 'qpse'
+        } else if (businessData.emissionConfig?.sunat?.enabled || businessData.emissionConfig?.sunat?.solUser) {
+          method = 'sunat_direct'
+        } else if (businessData.emissionMethod) {
+          method = businessData.emissionMethod
         }
-      } catch (e) {
-        // Ignorar errores de business individual
+        emissionMethods[method] = (emissionMethods[method] || 0) + 1
+
+        // Modo de negocio
+        const mode = businessData.businessMode || 'unknown'
+        businessModes[mode] = (businessModes[mode] || 0) + 1
       }
     }
 

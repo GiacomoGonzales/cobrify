@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore'
 import { PLANS } from '@/services/subscriptionService'
-import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan } from '@/services/customPlanService'
+import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan, getHiddenPlans, hidePlan, unhidePlan } from '@/services/customPlanService'
 import {
   Settings,
   Save,
@@ -196,6 +196,8 @@ export default function AdminSettings() {
 function PlansSection({ plans }) {
   const planEntries = Object.entries(plans || {})
   const [customPlans, setCustomPlans] = useState({})
+  const [hiddenPlanKeys, setHiddenPlanKeys] = useState([])
+  const [showHidden, setShowHidden] = useState(false)
   const [loadingCustom, setLoadingCustom] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingPlan, setEditingPlan] = useState(null)
@@ -208,6 +210,7 @@ function PlansSection({ plans }) {
 
   useEffect(() => {
     loadCustomPlans()
+    loadHiddenPlans()
   }, [])
 
   async function loadCustomPlans() {
@@ -221,6 +224,30 @@ function PlansSection({ plans }) {
       setLoadingCustom(false)
     }
   }
+
+  async function loadHiddenPlans() {
+    try {
+      const data = await getHiddenPlans()
+      setHiddenPlanKeys(data)
+    } catch (e) {
+      console.error('Error loading hidden plans:', e)
+    }
+  }
+
+  async function handleHidePlan(planKey) {
+    await hidePlan(planKey)
+    setHiddenPlanKeys(prev => [...prev, planKey])
+  }
+
+  async function handleUnhidePlan(planKey) {
+    await unhidePlan(planKey)
+    setHiddenPlanKeys(prev => prev.filter(k => k !== planKey))
+  }
+
+  const visiblePlanEntries = showHidden
+    ? planEntries
+    : planEntries.filter(([key]) => !hiddenPlanKeys.includes(key))
+  const hiddenCount = planEntries.filter(([key]) => hiddenPlanKeys.includes(key)).length
 
   function resetForm() {
     setForm({
@@ -301,7 +328,17 @@ function PlansSection({ plans }) {
       </div>
 
       {/* Planes estándar */}
-      <h3 className="text-base font-semibold text-gray-900">Planes Estándar</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-gray-900">Planes Estándar</h3>
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => setShowHidden(!showHidden)}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            {showHidden ? 'Ocultar eliminados' : `Mostrar eliminados (${hiddenCount})`}
+          </button>
+        )}
+      </div>
       {planEntries.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
@@ -309,10 +346,12 @@ function PlansSection({ plans }) {
         </div>
       ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {planEntries.map(([key, plan]) => (
+        {visiblePlanEntries.map(([key, plan]) => (
           <div
             key={key}
-            className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5 hover:shadow-md transition-shadow"
+            className={`rounded-xl border p-3 sm:p-5 hover:shadow-md transition-shadow ${
+              hiddenPlanKeys.includes(key) ? 'bg-gray-50 border-dashed border-gray-300 opacity-60' : 'bg-white border-gray-200'
+            }`}
           >
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <h3 className="font-bold text-gray-900 text-sm sm:text-base">{plan.name}</h3>
@@ -390,6 +429,24 @@ function PlansSection({ plans }) {
                 </ul>
               </div>
             )}
+
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              {hiddenPlanKeys.includes(key) ? (
+                <button
+                  onClick={() => handleUnhidePlan(key)}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Restaurar
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleHidePlan(key)}
+                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -186,10 +186,10 @@ export default function AdminLayout() {
         </div>
       )}
 
-      <div className="flex w-full">
-        {/* Sidebar - Desktop */}
+      <div className="w-full">
+        {/* Sidebar - Desktop (fixed) */}
         <aside
-          className={`hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white min-h-screen transition-all duration-300 relative ${
+          className={`hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white h-screen fixed top-0 left-0 z-30 transition-all duration-300 ${
             sidebarCollapsed ? 'w-20' : 'w-72'
           }`}
         >
@@ -213,7 +213,7 @@ export default function AdminLayout() {
           </div>
 
           {/* Navigation */}
-          <nav className="relative z-10 flex-1 p-4 space-y-1.5">
+          <nav className="relative z-10 flex-1 p-4 space-y-1.5 overflow-y-auto">
             {navItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path)
               return (
@@ -279,7 +279,7 @@ export default function AdminLayout() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-h-screen min-w-0 overflow-x-hidden">
+        <main className={`min-h-screen min-w-0 overflow-x-hidden transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'}`}>
           {/* Top Bar */}
           <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-gray-200/50 px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
@@ -311,15 +311,6 @@ export default function AdminLayout() {
                     className="bg-transparent border-none outline-none text-sm w-48 placeholder-gray-400"
                   />
                 </div>
-
-                {/* Back to App */}
-                <NavLink
-                  to="/app/dashboard"
-                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 rounded-xl transition-all shadow-md hover:shadow-lg"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span className="hidden sm:inline">Volver</span>
-                </NavLink>
               </div>
             </div>
           </header>

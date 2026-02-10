@@ -148,3 +148,48 @@ export function invalidateCustomPlansCache() {
   plansCache = null
   plansCacheTime = null
 }
+
+/**
+ * Obtiene la lista de planes estándar ocultos
+ */
+export async function getHiddenPlans() {
+  try {
+    const docRef = doc(db, 'settings', 'hiddenPlans')
+    const docSnap = await getDoc(docRef)
+    return docSnap.exists() ? (docSnap.data().plans || []) : []
+  } catch (error) {
+    console.error('Error loading hidden plans:', error)
+    return []
+  }
+}
+
+/**
+ * Oculta un plan estándar
+ */
+export async function hidePlan(planKey) {
+  try {
+    const current = await getHiddenPlans()
+    if (current.includes(planKey)) return { success: true }
+    const updated = [...current, planKey]
+    await setDoc(doc(db, 'settings', 'hiddenPlans'), { plans: updated })
+    return { success: true }
+  } catch (error) {
+    console.error('Error hiding plan:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Restaura un plan estándar oculto
+ */
+export async function unhidePlan(planKey) {
+  try {
+    const current = await getHiddenPlans()
+    const updated = current.filter(k => k !== planKey)
+    await setDoc(doc(db, 'settings', 'hiddenPlans'), { plans: updated })
+    return { success: true }
+  } catch (error) {
+    console.error('Error unhiding plan:', error)
+    return { success: false, error: error.message }
+  }
+}
