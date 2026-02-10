@@ -694,6 +694,15 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     }
   }
 
+  // Vendedor (si existe)
+  if (quotation.sellerName) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('VENDEDOR:', colRightX, rightY)
+    doc.setFont('helvetica', 'normal')
+    doc.text(quotation.sellerName, rightValueX, rightY)
+    rightY += dataLineHeight
+  }
+
   currentY = Math.max(leftY, rightY) + 10
 
   // ========== PREPARAR DATOS ==========
