@@ -22,6 +22,7 @@ import {
 } from '@/services/userManagementService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
+import { getSellers } from '@/services/sellerService'
 import { formatDate } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { collection, getDocs } from 'firebase/firestore'
@@ -43,6 +44,10 @@ export default function Users() {
   const [selectedBranches, setSelectedBranches] = useState([])
   const [selectedAgentId, setSelectedAgentId] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [allowedDocumentTypes, setAllowedDocumentTypes] = useState([])
+  const [allowedPaymentMethods, setAllowedPaymentMethods] = useState([])
+  const [posSellers, setPosSellers] = useState([])
+  const [assignedSellerId, setAssignedSellerId] = useState('')
 
   // Verificar si estamos en modo inmobiliaria
   const isRealEstateMode = businessMode === 'real_estate'
@@ -110,6 +115,7 @@ export default function Users() {
     loadUsers()
     loadWarehouses()
     loadBranches()
+    loadPosSellers()
     if (isRealEstateMode) {
       loadAgents()
     }
@@ -175,6 +181,20 @@ export default function Users() {
     }
   }
 
+  const loadPosSellers = async () => {
+    try {
+      const businessId = getBusinessId()
+      if (!businessId) return
+      const result = await getSellers(businessId)
+      if (result.success) {
+        setPosSellers((result.data || []).filter(s => s.status === 'active'))
+      }
+    } catch (error) {
+      console.log('Error loading sellers:', error.message)
+      setPosSellers([])
+    }
+  }
+
   const openCreateModal = () => {
     setIsEditMode(false)
     setSelectedUser(null)
@@ -182,6 +202,9 @@ export default function Users() {
     setSelectedWarehouses([])
     setSelectedBranches([])
     setSelectedAgentId('')
+    setAllowedDocumentTypes([])
+    setAllowedPaymentMethods([])
+    setAssignedSellerId('')
     reset({
       email: '',
       password: '',
@@ -197,6 +220,9 @@ export default function Users() {
     setSelectedWarehouses(userToEdit.allowedWarehouses || [])
     setSelectedBranches(userToEdit.allowedBranches || [])
     setSelectedAgentId(userToEdit.agentId || '')
+    setAllowedDocumentTypes(userToEdit.allowedDocumentTypes || [])
+    setAllowedPaymentMethods(userToEdit.allowedPaymentMethods || [])
+    setAssignedSellerId(userToEdit.assignedSellerId || '')
     reset({
       email: userToEdit.email,
       displayName: userToEdit.displayName,
@@ -272,10 +298,15 @@ export default function Users() {
 
       if (isEditMode) {
         // Actualizar usuario existente
+        const selectedSellerObj = posSellers.find(s => s.id === assignedSellerId)
         const updateData = {
           displayName: data.displayName,
           allowedWarehouses: selectedWarehouses,
           allowedBranches: selectedBranches,
+          allowedDocumentTypes,
+          allowedPaymentMethods,
+          assignedSellerId: assignedSellerId || null,
+          assignedSellerName: selectedSellerObj?.name || null,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -297,6 +328,7 @@ export default function Users() {
         }
       } else {
         // Crear nuevo usuario
+        const selectedSellerForCreate = posSellers.find(s => s.id === assignedSellerId)
         const userData = {
           email: data.email,
           password: data.password,
@@ -304,6 +336,10 @@ export default function Users() {
           allowedPages: selectedPages,
           allowedWarehouses: selectedWarehouses,
           allowedBranches: selectedBranches,
+          allowedDocumentTypes,
+          allowedPaymentMethods,
+          assignedSellerId: assignedSellerId || null,
+          assignedSellerName: selectedSellerForCreate?.name || null,
         }
 
         // Si es modo inmobiliaria, agregar datos del agente
@@ -716,6 +752,118 @@ export default function Users() {
                       </label>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Restricciones POS (solo si POS está en selectedPages) */}
+              {selectedPages.includes('pos') && (
+                <div className="bg-purple-50 rounded-xl p-4 space-y-4">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-purple-600" />
+                    Restricciones POS
+                  </h3>
+                  <p className="text-xs text-purple-700">
+                    Si no se selecciona ninguno, se permiten todos
+                  </p>
+
+                  {/* Tipos de comprobante */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Tipos de Comprobante:</p>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { id: 'boleta', label: 'Boleta de Venta' },
+                        { id: 'factura', label: 'Factura Electrónica' },
+                        { id: 'nota_venta', label: 'Nota de Venta' },
+                      ].map(docType => (
+                        <label
+                          key={docType.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                            allowedDocumentTypes.includes(docType.id)
+                              ? 'bg-purple-200 text-purple-900'
+                              : 'bg-white hover:bg-purple-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={allowedDocumentTypes.includes(docType.id)}
+                            onChange={() => {
+                              setAllowedDocumentTypes(prev =>
+                                prev.includes(docType.id)
+                                  ? prev.filter(d => d !== docType.id)
+                                  : [...prev, docType.id]
+                              )
+                            }}
+                            className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+                          />
+                          <span>{docType.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Métodos de pago */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'cash', label: 'Efectivo' },
+                        { id: 'card', label: 'Tarjeta' },
+                        { id: 'transfer', label: 'Transferencia' },
+                        { id: 'yape', label: 'Yape' },
+                        { id: 'plin', label: 'Plin' },
+                        ...(businessMode === 'restaurant' ? [
+                          { id: 'rappiPay', label: 'Rappi' },
+                          { id: 'pedidosYa', label: 'PedidosYa' },
+                          { id: 'didifood', label: 'DiDiFood' },
+                        ] : []),
+                      ].map(method => (
+                        <label
+                          key={method.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                            allowedPaymentMethods.includes(method.id)
+                              ? 'bg-purple-200 text-purple-900'
+                              : 'bg-white hover:bg-purple-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={allowedPaymentMethods.includes(method.id)}
+                            onChange={() => {
+                              setAllowedPaymentMethods(prev =>
+                                prev.includes(method.id)
+                                  ? prev.filter(m => m !== method.id)
+                                  : [...prev, method.id]
+                              )
+                            }}
+                            className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+                          />
+                          <span>{method.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Vendedor asignado */}
+                  {posSellers.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Vendedor Asignado:</p>
+                      <select
+                        value={assignedSellerId}
+                        onChange={(e) => setAssignedSellerId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                      >
+                        <option value="">Sin asignar (puede elegir cualquiera)</option>
+                        {posSellers.map(seller => (
+                          <option key={seller.id} value={seller.id}>
+                            {seller.code ? `${seller.code} - ` : ''}{seller.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-purple-600">
+                        Si se asigna, el vendedor queda fijo en el POS y no se puede cambiar
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -210,6 +210,10 @@ export const createManagedUser = async (ownerId, userData) => {
       role: 'user', // Rol genérico para usuarios creados
       allowedPages: allowedPages || [], // Array de IDs de páginas permitidas
       allowedWarehouses: allowedWarehouses || [], // Array de IDs de almacenes permitidos (vacío = todos)
+      allowedDocumentTypes: userData.allowedDocumentTypes || [], // Tipos de comprobante permitidos en POS (vacío = todos)
+      allowedPaymentMethods: userData.allowedPaymentMethods || [], // Métodos de pago permitidos en POS (vacío = todos)
+      assignedSellerId: userData.assignedSellerId || null, // Vendedor asignado al sub-usuario en POS
+      assignedSellerName: userData.assignedSellerName || null,
       ownerId, // ID del usuario que lo creó (dueño del negocio)
       isActive: true,
       createdAt: serverTimestamp(),

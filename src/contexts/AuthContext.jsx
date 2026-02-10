@@ -27,6 +27,10 @@ export const AuthProvider = ({ children }) => {
   const [allowedPages, setAllowedPages] = useState([]) // Páginas permitidas
   const [allowedWarehouses, setAllowedWarehouses] = useState([]) // Almacenes permitidos (vacío = todos)
   const [allowedBranches, setAllowedBranches] = useState([]) // Sucursales permitidas (vacío = todas)
+  const [allowedDocumentTypes, setAllowedDocumentTypes] = useState([]) // Tipos de comprobante POS (vacío = todos)
+  const [allowedPaymentMethods, setAllowedPaymentMethods] = useState([]) // Métodos de pago POS (vacío = todos)
+  const [assignedSellerId, setAssignedSellerId] = useState(null) // Vendedor asignado al sub-usuario
+  const [assignedSellerName, setAssignedSellerName] = useState(null)
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
@@ -144,6 +148,10 @@ export const AuthProvider = ({ children }) => {
                 setAllowedPages(userData.allowedPages || [])
                 setAllowedWarehouses(userData.allowedWarehouses || [])
                 setAllowedBranches(userData.allowedBranches || [])
+                setAllowedDocumentTypes(userData.allowedDocumentTypes || [])
+                setAllowedPaymentMethods(userData.allowedPaymentMethods || [])
+                setAssignedSellerId(userData.assignedSellerId || null)
+                setAssignedSellerName(userData.assignedSellerName || null)
                 console.log('✅ Permisos cargados:', userData.allowedPages)
                 console.log('🏪 Almacenes permitidos:', userData.allowedWarehouses || 'Todos')
                 console.log('🏢 Sucursales permitidas:', userData.allowedBranches || 'Todas')
@@ -159,16 +167,28 @@ export const AuthProvider = ({ children }) => {
                 // Usuario no tiene datos en Firestore, permitir acceso total temporalmente
                 setAllowedPages([])
                 setAllowedWarehouses([])
+                setAllowedDocumentTypes([])
+                setAllowedPaymentMethods([])
+                setAssignedSellerId(null)
+                setAssignedSellerName(null)
               }
             } catch (error) {
               console.error('Error al cargar permisos:', error)
               setAllowedPages([])
               setAllowedWarehouses([])
+              setAllowedDocumentTypes([])
+              setAllowedPaymentMethods([])
+              setAssignedSellerId(null)
+              setAssignedSellerName(null)
             }
           } else {
             // Super Admin o Business Owner tienen acceso total
             setAllowedPages([])
             setAllowedWarehouses([])
+            setAllowedDocumentTypes([])
+            setAllowedPaymentMethods([])
+            setAssignedSellerId(null)
+            setAssignedSellerName(null)
             console.log('👑 Business Owner o Admin - Acceso total a todos los almacenes')
           }
 
@@ -325,6 +345,10 @@ export const AuthProvider = ({ children }) => {
           setUserPermissions(null)
           setAllowedPages([])
           setAllowedWarehouses([])
+          setAllowedDocumentTypes([])
+          setAllowedPaymentMethods([])
+          setAssignedSellerId(null)
+          setAssignedSellerName(null)
           setBusinessMode(null) // null cuando no hay usuario
           setBusinessSettings(null)
           setUserFeatures({ productImages: false })
@@ -475,6 +499,10 @@ export const AuthProvider = ({ children }) => {
       setUserPermissions(null)
       setAllowedPages([])
       setAllowedWarehouses([])
+      setAllowedDocumentTypes([])
+      setAllowedPaymentMethods([])
+      setAssignedSellerId(null)
+      setAssignedSellerName(null)
       setBusinessMode(null) // null para que muestre skeleton hasta que se cargue el nuevo modo
       setBusinessSettings(null)
       setUserFeatures({ productImages: false })
@@ -654,6 +682,10 @@ export const AuthProvider = ({ children }) => {
     allowedPages,
     allowedWarehouses, // Almacenes permitidos para el usuario
     allowedBranches, // Sucursales permitidas para el usuario
+    allowedDocumentTypes, // Tipos de comprobante permitidos en POS
+    allowedPaymentMethods, // Métodos de pago permitidos en POS
+    assignedSellerId, // Vendedor asignado al sub-usuario en POS
+    assignedSellerName,
     hasPageAccess,
     hasWarehouseAccess, // Función para verificar acceso a un almacén
     filterWarehousesByAccess, // Función para filtrar almacenes según permisos

@@ -85,6 +85,18 @@ const PAYMENT_METHODS = {
   DIDIFOOD: 'DiDiFood',
 }
 
+// Mapeo de IDs de restricción (lowercase) a keys del POS (uppercase)
+const PAYMENT_METHOD_ID_TO_KEY = {
+  cash: 'CASH',
+  card: 'CARD',
+  transfer: 'TRANSFER',
+  yape: 'YAPE',
+  plin: 'PLIN',
+  rappiPay: 'RAPPI',
+  pedidosYa: 'PEDIDOSYA',
+  didifood: 'DIDIFOOD',
+}
+
 const ORDER_TYPES = {
   'dine-in': 'En Mesa',
   'takeaway': 'Para Llevar',
@@ -232,13 +244,22 @@ const getProductExpirationStatus = (product) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches } = useAuth()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
   const ticketRef = useRef(null)
   const { isOnline, isOffline } = useOnlineStatus()
+
+  // Si solo hay un método de pago permitido, pre-seleccionarlo
+  const getDefaultPaymentMethod = () => {
+    if (allowedPaymentMethods && allowedPaymentMethods.length === 1) {
+      return PAYMENT_METHOD_ID_TO_KEY[allowedPaymentMethods[0]] || ''
+    }
+    return ''
+  }
+
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -247,7 +268,12 @@ export default function POS() {
   const [cart, setCart] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
-  const [documentType, setDocumentType] = useState('boleta')
+  const [documentType, setDocumentType] = useState(() => {
+    if (allowedDocumentTypes && allowedDocumentTypes.length > 0) {
+      return allowedDocumentTypes[0]
+    }
+    return 'boleta'
+  })
   // Obtener fecha local en formato YYYY-MM-DD (sin usar toISOString que convierte a UTC)
   const getLocalDateString = (date = new Date()) => {
     const year = date.getFullYear()
@@ -310,7 +336,7 @@ export default function POS() {
   const PRODUCTS_PER_PAGE = 12
 
   // Pagos múltiples - lista simple y vertical
-  const [payments, setPayments] = useState([{ method: '', amount: '' }])
+  const [payments, setPayments] = useState([{ method: getDefaultPaymentMethod(), amount: '' }])
 
   // Tipo de pedido (para reportes)
   const [orderType, setOrderType] = useState('takeaway')
@@ -419,6 +445,13 @@ export default function POS() {
 
   // Clave única para el localStorage basada en el businessId
   const getDraftKey = () => `pos_draft_${getBusinessId()}`
+
+  // Auto-seleccionar primer tipo de comprobante permitido si el actual no está permitido
+  useEffect(() => {
+    if (allowedDocumentTypes && allowedDocumentTypes.length > 0 && !allowedDocumentTypes.includes(documentType)) {
+      setDocumentType(allowedDocumentTypes[0])
+    }
+  }, [allowedDocumentTypes])
 
   // Cargar borrador del localStorage al iniciar
   useEffect(() => {
@@ -1078,6 +1111,11 @@ export default function POS() {
         // Filtrar solo vendedores activos
         const activeSellers = (sellersResult.data || []).filter(s => s.status === 'active')
         setSellers(activeSellers)
+        // Auto-seleccionar vendedor asignado al sub-usuario
+        if (assignedSellerId) {
+          const assigned = activeSellers.find(s => s.id === assignedSellerId)
+          if (assigned) setSelectedSeller(assigned)
+        }
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -1843,7 +1881,7 @@ export default function POS() {
       detractionAmount: '',
       goodsServiceCode: '',
     })
-    setPayments([{ method: '', amount: '' }])
+    setPayments([{ method: getDefaultPaymentMethod(), amount: '' }])
     setLastInvoiceData(null)
     setSaleCompleted(false) // Desbloquear carrito para nueva venta
     setDiscountAmount('')
@@ -2431,7 +2469,7 @@ export default function POS() {
           detractionAmount: '',
           goodsServiceCode: '',
         })
-        setPayments([{ id: Date.now(), method: '', amount: '' }])
+        setPayments([{ id: Date.now(), method: getDefaultPaymentMethod(), amount: '' }])
         setSelectedCustomer(null)
         setDiscountAmount('')
         setDiscountPercentage('')
@@ -3766,7 +3804,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         const seller = sellers.find(s => s.id === e.target.value)
                         setSelectedSeller(seller || null)
                       }}
-                      className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      disabled={!!assignedSellerId}
+                      className={`w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${assignedSellerId ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'bg-white'}`}
                     >
                       <option value="">Seleccionar vendedor</option>
                       {filteredSellers.map(seller => (
@@ -3805,9 +3844,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     }}
                     className="flex-1 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                   >
-                    <option value="boleta">Boleta de Venta</option>
-                    <option value="factura">Factura Electrónica</option>
-                    <option value="nota_venta">Nota de Venta</option>
+                    {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('boleta')) && (
+                      <option value="boleta">Boleta de Venta</option>
+                    )}
+                    {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('factura')) && (
+                      <option value="factura">Factura Electrónica</option>
+                    )}
+                    {(!allowedDocumentTypes || allowedDocumentTypes.length === 0 || allowedDocumentTypes.includes('nota_venta')) && (
+                      <option value="nota_venta">Nota de Venta</option>
+                    )}
                   </select>
                   {cart.length > 0 && (
                     <span className="bg-primary-600 text-white text-xs font-bold px-2 py-1 rounded-full">
@@ -5146,18 +5191,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         disabled={lastInvoiceData !== null}
                       >
                         <option value="">Seleccionar</option>
-                        <option value="CASH">Efectivo</option>
-                        <option value="CARD">Tarjeta</option>
-                        <option value="TRANSFER">Transferencia</option>
-                        <option value="YAPE">Yape</option>
-                        <option value="PLIN">Plin</option>
-                        {businessMode === 'restaurant' && (
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('cash')) && (
+                          <option value="CASH">Efectivo</option>
+                        )}
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('card')) && (
+                          <option value="CARD">Tarjeta</option>
+                        )}
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('transfer')) && (
+                          <option value="TRANSFER">Transferencia</option>
+                        )}
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('yape')) && (
+                          <option value="YAPE">Yape</option>
+                        )}
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('plin')) && (
+                          <option value="PLIN">Plin</option>
+                        )}
+                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('rappiPay')) && (
                           <option value="RAPPI">Rappi</option>
                         )}
-                        {businessMode === 'restaurant' && (
+                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('pedidosYa')) && (
                           <option value="PEDIDOSYA">PedidosYa</option>
                         )}
-                        {businessMode === 'restaurant' && (
+                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('didifood')) && (
                           <option value="DIDIFOOD">DiDiFood</option>
                         )}
                       </Select>
