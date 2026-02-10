@@ -1457,10 +1457,17 @@ export const openCashRegister = async (userId, openingAmount, branchId = null) =
  */
 export const closeCashRegister = async (userId, sessionId, closingData) => {
   try {
+    // Verificar que la sesión no esté ya cerrada (protección contra doble clic)
+    const sessionRef = doc(db, 'businesses', userId, 'cashSessions', sessionId)
+    const sessionSnap = await getDoc(sessionRef)
+    if (sessionSnap.exists() && sessionSnap.data().status === 'closed') {
+      return { success: true, alreadyClosed: true }
+    }
+
     const { cash, card, transfer, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, totalIncome, totalExpense, expectedAmount, difference, invoiceCount } = closingData
     const closingAmount = cash + card + transfer
 
-    await updateDoc(doc(db, 'businesses', userId, 'cashSessions', sessionId), {
+    await updateDoc(sessionRef, {
       closingAmount,
       closingCash: cash,
       closingCard: card,

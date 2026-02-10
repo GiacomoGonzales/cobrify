@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -68,6 +68,8 @@ export default function CashRegister() {
   const [showMovementModal, setShowMovementModal] = useState(false)
   const [closedSuccessfully, setClosedSuccessfully] = useState(false)
   const [closedSessionData, setClosedSessionData] = useState(null)
+  const [isClosing, setIsClosing] = useState(false)
+  const [isOpening, setIsOpening] = useState(false)
   const [showHistoryDetailModal, setShowHistoryDetailModal] = useState(false)
 
   // Form states
@@ -457,11 +459,13 @@ export default function CashRegister() {
   }, [activeTab, user?.uid, selectedBranch])
 
   const handleOpenCashRegister = async () => {
+    if (isOpening) return
     if (!openingAmount || parseFloat(openingAmount) < 0) {
       toast.error('Ingresa un monto inicial válido')
       return
     }
 
+    setIsOpening(true)
     try {
       // MODO DEMO: Simular apertura sin guardar en Firebase
       if (isDemoMode) {
@@ -496,14 +500,18 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error al abrir caja:', error)
       toast.error('Error al abrir la caja')
+    } finally {
+      setIsOpening(false)
     }
   }
 
   const handleCloseCashRegister = async () => {
+    if (isClosing) return
     const cash = parseFloat(closingCounts.cash) || 0
     const card = parseFloat(closingCounts.card) || 0
     const transfer = parseFloat(closingCounts.transfer) || 0
 
+    setIsClosing(true)
     try {
       // Cargar datos del negocio para la impresión del ticket
       const businessResult = await getCompanySettings(getBusinessId())
@@ -575,6 +583,8 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error al cerrar caja:', error)
       toast.error('Error al cerrar la caja')
+    } finally {
+      setIsClosing(false)
     }
   }
 
@@ -2059,9 +2069,18 @@ export default function CashRegister() {
             >
               Cancelar
             </Button>
-            <Button onClick={handleOpenCashRegister}>
-              <Unlock className="w-4 h-4 mr-2" />
-              Abrir Caja
+            <Button onClick={handleOpenCashRegister} disabled={isOpening}>
+              {isOpening ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Abriendo...
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-4 h-4 mr-2" />
+                  Abrir Caja
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -2225,9 +2244,19 @@ export default function CashRegister() {
                 variant="danger"
                 onClick={handleCloseCashRegister}
                 className="w-full"
+                disabled={isClosing}
               >
-                <Lock className="w-4 h-4 mr-2" />
-                Cerrar Caja
+                {isClosing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cerrando...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 mr-2" />
+                    Cerrar Caja
+                  </>
+                )}
               </Button>
             </div>
           </div>
