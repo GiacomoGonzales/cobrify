@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -93,6 +93,8 @@ export default function CreateQuotation() {
   const { businessSettings } = useAppContext()
   const navigate = useNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
+  const [searchParams] = useSearchParams()
+  const cloneId = searchParams.get('clone') // Si hay clone, duplicar cotización
   const toast = useToast()
   const [customers, setCustomers] = useState([])
   const [products, setProducts] = useState([])
@@ -159,7 +161,7 @@ export default function CreateQuotation() {
 
   useEffect(() => {
     loadData()
-  }, [user, quotationId])
+  }, [user, quotationId, cloneId])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -254,6 +256,69 @@ export default function CreateQuotation() {
         } else {
           toast.error('No se encontró la cotización')
           navigate('/app/cotizaciones')
+        }
+      }
+
+      // Si hay cloneId, cargar datos de la cotización para duplicar (sin modo edición)
+      if (cloneId && !quotationId) {
+        const cloneResult = await getQuotation(user.uid, cloneId)
+        if (cloneResult.success) {
+          const q = cloneResult.data
+
+          // Cargar datos del cliente
+          if (q.customer) {
+            const existingCustomer = customersResult.data?.find(c => c.id === q.customer.id)
+            if (existingCustomer) {
+              setCustomerMode('select')
+              setSelectedCustomer(existingCustomer)
+            } else {
+              setCustomerMode('manual')
+              setManualCustomer({
+                documentType: q.customer.documentType || 'DNI',
+                documentNumber: q.customer.documentNumber || '',
+                name: q.customer.name || '',
+                email: q.customer.email || '',
+                phone: q.customer.phone || '',
+                address: q.customer.address || '',
+              })
+            }
+          }
+
+          // Cargar items
+          if (q.items && q.items.length > 0) {
+            setQuotationItems(q.items.map(item => ({
+              productId: item.productId || '',
+              name: item.name || '',
+              description: item.description || '',
+              quantity: item.quantity || 1,
+              unitPrice: item.unitPrice || 0,
+              unit: item.unit || 'NIU',
+              searchTerm: item.name || '',
+            })))
+          }
+
+          // Cargar configuración
+          setValidityDays(q.validityDays || 30)
+          setDiscount(q.discount || 0)
+          setDiscountType(q.discountType || 'fixed')
+          setTerms(q.terms || '')
+          setNotes(q.notes || '')
+          setHideIgv(q.hideIgv || false)
+
+          // Cargar destinatario
+          setRecipientName(q.recipientName || '')
+          setRecipientPosition(q.recipientPosition || '')
+
+          // Cargar sucursal si existe
+          if (q.branchId && branchesResult.data) {
+            const branch = branchesResult.data.find(b => b.id === q.branchId)
+            if (branch) {
+              setSelectedBranch(branch)
+            }
+          }
+
+          // NO copiar serie/número personalizado (se genera nuevo)
+          toast.success('Cotización duplicada. Revisa los datos y guarda.')
         }
       }
     } catch (error) {

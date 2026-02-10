@@ -19,6 +19,7 @@ import {
   MoreVertical,
   Receipt,
   Store,
+  Copy,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -619,6 +620,13 @@ export default function Quotations() {
                           <Download className="w-4 h-4 text-green-600" />
                           <span>Descargar PDF</span>
                         </button>
+                        <button
+                          onClick={() => { setOpenMenuId(null); navigate(`/app/cotizaciones/nueva?clone=${quotation.id}`) }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Copy className="w-4 h-4 text-cyan-600" />
+                          <span>Duplicar</span>
+                        </button>
                         {quotation.status !== 'converted' && quotation.status !== 'expired' && quotation.status !== 'rejected' && (
                           <>
                             <div className="border-t border-gray-100 my-1" />
@@ -793,6 +801,18 @@ export default function Quotations() {
                                 >
                                   <Download className="w-4 h-4 text-green-600" />
                                   <span>Descargar PDF</span>
+                                </button>
+
+                                {/* Duplicar cotización */}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null)
+                                    navigate(`/app/cotizaciones/nueva?clone=${quotation.id}`)
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                                >
+                                  <Copy className="w-4 h-4 text-cyan-600" />
+                                  <span>Duplicar</span>
                                 </button>
 
                                 {/* Convertir a factura */}
