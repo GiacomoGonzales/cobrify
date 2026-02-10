@@ -2160,7 +2160,53 @@ export default function Reports() {
               <CardTitle>Últimas Ventas</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {filteredInvoices.slice(0, 20).map(invoice => {
+                  let paymentMethods = 'Efectivo'
+                  if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
+                    paymentMethods = invoice.paymentHistory.length === 1 ? (invoice.paymentHistory[0].method || 'Efectivo') : 'Múltiples'
+                  } else if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
+                    paymentMethods = invoice.payments.length === 1 ? (invoice.payments[0].method || 'Efectivo') : 'Múltiples'
+                  } else if (invoice.paymentMethod) {
+                    paymentMethods = invoice.paymentMethod
+                  }
+                  return (
+                    <div key={invoice.id} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="font-medium text-gray-900">{invoice.number}</p>
+                          <p className="text-sm text-gray-600">{invoice.customer?.name || 'Cliente General'}</p>
+                        </div>
+                        <p className="font-bold text-gray-900">{formatCurrency(invoice.total)}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <Badge variant={invoice.documentType === 'factura' ? 'primary' : 'default'}>
+                          {invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                        </Badge>
+                        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'pending' ? 'warning' : 'default'}>
+                          {invoice.status === 'paid' ? 'Pagada' : 'Pendiente'}
+                        </Badge>
+                        <Badge variant="default">{paymentMethods}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <span className="text-gray-500">
+                          {invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-'}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-green-600">+{formatCurrency(invoice.profit || 0)}</span>
+                          <span className={`font-medium ${(invoice.profitMargin || 0) >= 30 ? 'text-green-600' : (invoice.profitMargin || 0) >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {(invoice.profitMargin || 0).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2328,7 +2374,40 @@ export default function Reports() {
               <CardTitle>Todos los Productos Vendidos</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {topProducts.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos de productos en este período</p>
+                ) : (
+                  topProducts.map((product, index) => (
+                    <div key={index} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {index + 1}
+                          </div>
+                          <span className="font-medium text-gray-900">{product.name}</span>
+                        </div>
+                        <span className="font-bold text-gray-900">{formatCurrency(product.revenue)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <span className="text-gray-500">{product.quantity.toFixed(2)} uds</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`font-medium ${product.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            +{formatCurrency(product.profit)}
+                          </span>
+                          <span className={`font-medium ${product.profitMargin >= 30 ? 'text-green-600' : product.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {product.profitMargin.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2403,7 +2482,35 @@ export default function Reports() {
               <CardTitle>Ventas por Categoría</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {salesByCategory.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos de categorías en este período</p>
+                ) : (
+                  salesByCategory.map((category, index) => (
+                    <div key={index} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{category.name}</span>
+                        <span className="font-bold text-gray-900">{formatCurrency(category.revenue)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <span className="text-gray-500">{category.itemCount} ventas · {category.quantity.toFixed(0)} uds</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`font-medium ${category.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            +{formatCurrency(category.profit)}
+                          </span>
+                          <span className={`font-medium ${category.profitMargin >= 30 ? 'text-green-600' : category.profitMargin >= 15 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {category.profitMargin.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2498,7 +2605,40 @@ export default function Reports() {
               <CardTitle>Detalles de Clientes</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {topCustomers.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos de clientes</p>
+                ) : (
+                  topCustomers.map((customer, index) => (
+                    <div key={customer.id} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {index + 1}
+                          </div>
+                          <span className="font-medium text-gray-900">{customer.name}</span>
+                        </div>
+                        <span className="font-bold text-gray-900">{formatCurrency(customer.totalSpent || 0)}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={customer.documentType === '6' ? 'primary' : 'default'}>
+                            {customer.documentType === '6' ? 'RUC' : 'DNI'}
+                          </Badge>
+                          <span className="text-gray-500">{customer.documentNumber}</span>
+                        </div>
+                        <div className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                          <span className="text-xs font-semibold">{customer.ordersCount || 0} pedidos</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2648,7 +2788,41 @@ export default function Reports() {
               <CardTitle>Detalles de Ventas por Vendedor</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {sellerStats.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos de vendedores</p>
+                ) : (
+                  sellerStats.map((seller, index) => (
+                    <div key={seller.id} className="bg-white border rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-gray-200 text-gray-700' : index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{seller.name}</p>
+                            {seller.email && <p className="text-xs text-gray-500">{seller.email}</p>}
+                          </div>
+                        </div>
+                        <span className="font-bold text-green-600">{formatCurrency(seller.totalRevenue)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <div className="inline-flex items-center justify-center px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                          <span className="text-xs font-semibold">{seller.salesCount} ventas</span>
+                        </div>
+                        <Badge variant="primary">{seller.facturas} F</Badge>
+                        <Badge variant="default">{seller.boletas} B</Badge>
+                        {seller.notasCredito > 0 && <Badge variant="warning">{seller.notasCredito} NC</Badge>}
+                        {seller.notasDebito > 0 && <Badge variant="danger">{seller.notasDebito} ND</Badge>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2932,7 +3106,38 @@ export default function Reports() {
               <CardTitle>Últimos Gastos Registrados</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {filteredExpenses.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay gastos registrados en este período</p>
+                ) : (
+                  filteredExpenses.slice(0, 20).map(expense => {
+                    const category = EXPENSE_CATEGORIES.find(c => c.id === expense.category)
+                    return (
+                      <div key={expense.id} className="bg-white border rounded-lg px-4 py-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{expense.description}</p>
+                            {expense.reference && <p className="text-xs text-gray-500">Ref: {expense.reference}</p>}
+                          </div>
+                          <span className="font-bold text-red-600">{formatCurrency(expense.amount)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <Badge variant="default">{category?.name || expense.category}</Badge>
+                          <span className="text-sm text-gray-500 capitalize">{expense.paymentMethod || 'Efectivo'}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
+                          <span>{expense.date instanceof Date ? expense.date.toLocaleDateString('es-PE') : new Date(expense.date).toLocaleDateString('es-PE')}</span>
+                          {expense.supplier && <span>{expense.supplier}</span>}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -3356,7 +3561,58 @@ export default function Reports() {
               <CardTitle>Detalle por Período</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-3">
+                {profitabilityByPeriod.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">No hay datos disponibles en este período</p>
+                ) : (
+                  <>
+                    {profitabilityByPeriod.map((period, index) => {
+                      const margin = period.ingresos > 0 ? (period.utilidad / period.ingresos) * 100 : 0
+                      return (
+                        <div key={index} className="bg-white border rounded-lg px-4 py-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-900">{period.period}</span>
+                            <span className={`font-bold ${period.utilidad >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {formatCurrency(period.utilidad)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-2 text-sm">
+                            <div className="flex items-center gap-3">
+                              <span className="text-blue-600">+{formatCurrency(period.ingresos)}</span>
+                              <span className="text-red-600">-{formatCurrency(period.gastos)}</span>
+                            </div>
+                            <span className={`font-medium ${margin >= 20 ? 'text-emerald-600' : margin >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                              {margin.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {/* Totals Card */}
+                    <div className="bg-gray-50 border-2 border-gray-300 rounded-lg px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-gray-900">TOTAL</span>
+                        <span className={`font-bold ${profitabilityStats.utilidadNeta >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {formatCurrency(profitabilityStats.utilidadNeta)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-sm">
+                        <div className="flex items-center gap-3">
+                          <span className="text-blue-700 font-semibold">+{formatCurrency(profitabilityStats.totalIngresos)}</span>
+                          <span className="text-red-700 font-semibold">-{formatCurrency(profitabilityStats.totalGastos)}</span>
+                        </div>
+                        <span className={`font-bold ${profitabilityStats.margenNeto >= 20 ? 'text-emerald-700' : profitabilityStats.margenNeto >= 0 ? 'text-yellow-600' : 'text-red-700'}`}>
+                          {profitabilityStats.margenNeto.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>

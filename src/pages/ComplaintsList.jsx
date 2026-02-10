@@ -519,19 +519,22 @@ export default function ComplaintsList() {
                     </div>
 
                     {/* Acciones */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewDetail(complaint)}
+                        className="flex-1 sm:flex-none"
                       >
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-4 h-4 sm:mr-0 mr-1" />
+                        <span className="sm:hidden">Ver</span>
                       </Button>
                       {complaint.status !== 'resolved' && (
                         <Button
                           variant="primary"
                           size="sm"
                           onClick={() => handleOpenResponseModal(complaint)}
+                          className="flex-1 sm:flex-none"
                         >
                           <MessageSquare className="w-4 h-4 mr-1" />
                           Responder
@@ -541,8 +544,10 @@ export default function ComplaintsList() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDownloadPDF(complaint)}
+                        className="flex-1 sm:flex-none"
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className="w-4 h-4 sm:mr-0 mr-1" />
+                        <span className="sm:hidden">PDF</span>
                       </Button>
                     </div>
                   </div>

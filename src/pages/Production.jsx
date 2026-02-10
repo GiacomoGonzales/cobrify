@@ -534,7 +534,44 @@ export default function Production() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Vista móvil - Tarjetas */}
+              <div className="lg:hidden divide-y divide-gray-100">
+                {paginatedProductions.map((production) => {
+                  const warehouseName = warehouses.find(w => w.id === production.warehouseId)?.name || '-'
+                  return (
+                    <div key={production.id} className="px-4 py-3">
+                      {/* Fila 1: Producto + Cantidad */}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium line-clamp-1 flex-1">{production.productName}</p>
+                        <span className="text-sm font-bold text-gray-900">{production.quantity} und</span>
+                      </div>
+
+                      {/* Fila 2: Fecha + Almacén */}
+                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                        <span>{formatDate(production.createdAt)}</span>
+                        <span className="text-gray-300">•</span>
+                        <span className="truncate">{warehouseName}</span>
+                      </div>
+
+                      {/* Fila 3: Modo + Costo */}
+                      <div className="flex items-center justify-between mt-2">
+                        {getModeBadge(production.mode)}
+                        <span className="text-sm text-gray-600">
+                          {production.totalCost ? formatCurrency(production.totalCost) : '-'}
+                        </span>
+                      </div>
+
+                      {/* Fila 4: Notas (si hay) */}
+                      {production.notes && (
+                        <p className="text-xs text-gray-400 mt-1 line-clamp-1">{production.notes}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Vista desktop - Tabla */}
+              <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>

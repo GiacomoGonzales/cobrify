@@ -36,6 +36,7 @@ import {
   Megaphone,
   Building,
   MoreHorizontal,
+  MoreVertical,
   Zap,
   AlertTriangle,
   Store
@@ -163,6 +164,10 @@ export default function Expenses() {
   const [saving, setSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Mobile menu states
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   // Form state
   const [form, setForm] = useState({
@@ -619,8 +624,125 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Mobile Cards */}
+      <div className="lg:hidden space-y-3">
+        {loading ? (
+          <div className="bg-white rounded-xl p-8 text-center border border-gray-200">
+            <Loader2 className="w-8 h-8 text-gray-400 animate-spin mx-auto mb-2" />
+            <p className="text-gray-500">Cargando gastos...</p>
+          </div>
+        ) : filteredExpenses.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center border border-gray-200">
+            <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+            <p className="text-gray-500">No hay gastos registrados</p>
+            <button
+              onClick={openCreateModal}
+              className="mt-3 text-red-600 hover:text-red-700 font-medium"
+            >
+              Registrar primer gasto
+            </button>
+          </div>
+        ) : (
+          <>
+            {filteredExpenses.map(expense => {
+              const CategoryIcon = CATEGORY_ICONS[expense.category] || MoreHorizontal
+              const categoryColor = CATEGORY_COLORS[expense.category] || CATEGORY_COLORS.otros
+              return (
+                <div key={expense.id} className="bg-white border border-gray-200 rounded-lg px-4 py-3 relative">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900">{expense.description}</p>
+                      {expense.reference && <p className="text-xs text-gray-500">Ref: {expense.reference}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-red-600">{formatCurrency(expense.amount)}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (openMenuId === expense.id) {
+                            setOpenMenuId(null)
+                          } else {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            const spaceBelow = window.innerHeight - rect.bottom
+                            setMenuPosition({
+                              top: rect.bottom + window.scrollY,
+                              right: window.innerWidth - rect.right,
+                              openUpward: spaceBelow < 120
+                            })
+                            setOpenMenuId(expense.id)
+                          }
+                        }}
+                        className="p-1.5 hover:bg-gray-100 rounded-lg"
+                      >
+                        <MoreVertical className="w-4 h-4 text-gray-500" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${categoryColor}`}>
+                      <CategoryIcon className="w-3 h-3" />
+                      {EXPENSE_CATEGORIES.find(c => c.id === expense.category)?.name || expense.category}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {EXPENSE_PAYMENT_METHODS.find(m => m.id === expense.paymentMethod)?.name || expense.paymentMethod}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
+                    <span>{formatDate(expense.date)}</span>
+                    <div className="flex items-center gap-2">
+                      {expense.supplier && <span>{expense.supplier}</span>}
+                      {branches.length > 0 && (
+                        <span className="text-xs text-blue-600">
+                          <Store className="w-3 h-3 inline mr-0.5" />
+                          {getBranchName(expense.branchId)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Floating Menu */}
+                  {openMenuId === expense.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                      <div
+                        className="fixed z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[140px]"
+                        style={{
+                          top: menuPosition.openUpward ? 'auto' : menuPosition.top,
+                          bottom: menuPosition.openUpward ? `${window.innerHeight - menuPosition.top + 40}px` : 'auto',
+                          right: menuPosition.right
+                        }}
+                      >
+                        <button
+                          onClick={() => { openEditModal(expense); setOpenMenuId(null) }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <Edit2 className="w-4 h-4" /> Editar
+                        </button>
+                        <button
+                          onClick={() => { setShowDeleteConfirm(expense.id); setOpenMenuId(null) }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        >
+                          <Trash2 className="w-4 h-4" /> Eliminar
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+            {/* Mobile Total */}
+            <div className="bg-gray-50 border-2 border-gray-300 rounded-lg px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-gray-700">TOTAL:</span>
+                <span className="font-bold text-red-600 text-lg">{formatCurrency(totals.total)}</span>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Desktop Table */}
+      <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">

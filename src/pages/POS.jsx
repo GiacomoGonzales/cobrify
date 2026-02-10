@@ -3562,7 +3562,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div className={`grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`columns-2 md:columns-3 gap-3 sm:gap-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
@@ -3584,7 +3584,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   key={product.id}
                   onClick={() => addToCart(product)}
                   disabled={isDisabled}
-                  className={`p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left relative ${
+                  className={`w-full p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 sm:mb-4 inline-block ${
                     isExpired
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock
@@ -3612,11 +3612,58 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {isExpired ? 'VENCIDO' : `${expirationStatus.days}d`}
                     </div>
                   )}
-                  <div className="flex gap-2 sm:gap-3 h-full">
-                    {/* Product Image + Stock below */}
+
+                  {/* Mobile: Vertical layout */}
+                  <div className="flex flex-col sm:hidden">
+                    {/* Image */}
                     {product.imageUrl && (
-                      <div className="flex-shrink-0 flex flex-col items-center">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-gray-100">
+                      <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 mb-2">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+                    {/* Name */}
+                    <p className={`font-semibold text-sm leading-tight ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
+                      {product.name}
+                    </p>
+                    {/* Variants badge */}
+                    {product.hasVariants && (
+                      <div className="mt-1">
+                        <Badge variant="secondary" className="text-xs">
+                          {product.variants?.length || 0} variantes
+                        </Badge>
+                      </div>
+                    )}
+                    {/* Codes */}
+                    <div className="mt-1 space-y-0.5 text-xs text-gray-500">
+                      {product.sku && <p>SKU: {product.sku}</p>}
+                      {product.code && <p>Cód: {product.code}</p>}
+                      {product.barcode && <p className="font-mono">{product.barcode}</p>}
+                    </div>
+                    {/* Pharmacy info */}
+                    {product.genericName && (
+                      <p className="text-xs text-gray-500 mt-1">{product.genericName} {product.concentration}</p>
+                    )}
+                    {/* Price and Stock */}
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                      <p className={`text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                        {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                      </p>
+                      {!product.hasVariants && getStockBadge(product)}
+                      {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
+                    </div>
+                  </div>
+
+                  {/* Desktop: Horizontal layout */}
+                  <div className="hidden sm:flex gap-3 h-full">
+                    {/* Product Image */}
+                    {product.imageUrl && (
+                      <div className="flex-shrink-0">
+                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-gray-100">
                           <img
                             src={product.imageUrl}
                             alt={product.name}
@@ -3624,19 +3671,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             loading="lazy"
                           />
                         </div>
-                        {/* Stock debajo de la imagen */}
-                        {!product.hasVariants && (
-                          <div className="mt-1">
-                            {getStockBadge(product)}
-                          </div>
-                        )}
                       </div>
                     )}
                     {/* Product Info - Right side */}
                     <div className="flex flex-col flex-1 min-w-0">
                       <div className="flex-1">
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <p className={`font-semibold line-clamp-2 text-sm sm:text-base flex-1 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={`font-semibold line-clamp-2 text-base flex-1 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
                             {product.name}
                           </p>
                           {product.hasVariants && (
@@ -3645,29 +3686,23 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                             </Badge>
                           )}
                         </div>
-                        {/* SKU o Código debajo del nombre */}
-                        {(product.sku || product.code) && !product.hasVariants && (
-                          <p className="text-xs text-gray-500">
-                            {product.sku || product.code}
-                          </p>
-                        )}
+                        {/* Códigos y detalles */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                          {product.sku && <span>SKU: {product.sku}</span>}
+                          {product.code && <span>Cód: {product.code}</span>}
+                          {product.barcode && <span className="font-mono">{product.barcode}</span>}
+                        </div>
                         {/* Mostrar info de farmacia si existe */}
                         {product.genericName && (
-                          <p className="text-xs text-gray-500 truncate">{product.genericName} {product.concentration}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{product.genericName} {product.concentration}</p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-auto pt-1">
-                        <p className={`text-base sm:text-lg font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                          {product.hasVariants
-                            ? formatCurrency(product.basePrice)
-                            : formatCurrency(product.price)
-                          }
+                      <div className="flex items-center justify-between mt-1 pt-1">
+                        <p className={`text-lg font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                          {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
                         </p>
-                        {/* Stock al lado del precio solo si NO hay imagen */}
-                        {!product.imageUrl && !product.hasVariants && getStockBadge(product)}
-                        {product.hasVariants && (
-                          <span className="text-xs text-gray-500">Ver opciones</span>
-                        )}
+                        {!product.hasVariants && getStockBadge(product)}
+                        {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
                       </div>
                     </div>
                   </div>

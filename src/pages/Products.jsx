@@ -2407,7 +2407,7 @@ export default function Products() {
         ) : (
           <>
             {/* Vista de tarjetas para móvil */}
-            <div className="lg:hidden divide-y divide-gray-100">
+            <div className="lg:hidden p-3 space-y-3 bg-gray-50">
               {paginatedProducts.map((product) => {
                 const realStock = getRealStockValue(product)
                 const categoryPath = product.category ? getCategoryPath(categories, product.category) : ''
@@ -2417,180 +2417,176 @@ export default function Products() {
                   : realStock
 
                 return (
-                  <div key={product.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                    {/* Fila superior: checkbox + imagen + nombre + acciones */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => toggleProductSelection(product.id)}
-                        className="p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
-                      >
-                        {selectedProducts.has(product.id) ? (
-                          <CheckSquare className="w-5 h-5 text-primary-600" />
-                        ) : (
-                          <Square className="w-5 h-5 text-gray-400" />
-                        )}
-                      </button>
-
-                      {visibleColumns.image && (
-                        <div className="flex-shrink-0">
-                          {product.imageUrl ? (
-                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-100">
-                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
-                            </div>
-                          ) : (
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                              <Package className="w-5 h-5 text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{product.name}</p>
-                      </div>
-
-                      <div className="relative flex-shrink-0">
+                  <div key={product.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div className="flex">
+                      {/* Checkbox + Imagen */}
+                      <div className="flex-shrink-0 p-3 flex items-start gap-2 bg-gray-50">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (actionMenuOpen === product.id) {
-                              setActionMenuOpen(null)
-                            } else {
-                              const rect = e.currentTarget.getBoundingClientRect()
-                              const menuHeight = 180
-                              const spaceBelow = window.innerHeight - rect.bottom
-                              const openUp = spaceBelow < menuHeight
-
-                              setActionMenuPosition({
-                                top: openUp ? rect.top - menuHeight : rect.bottom + 4,
-                                left: rect.right - 176,
-                                openUp
-                              })
-                              setActionMenuOpen(product.id)
-                            }
-                          }}
-                          className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Acciones"
+                          onClick={() => toggleProductSelection(product.id)}
+                          className="p-1 hover:bg-gray-200 rounded transition-colors"
                         >
-                          <MoreVertical className="w-4 h-4" />
+                          {selectedProducts.has(product.id) ? (
+                            <CheckSquare className="w-5 h-5 text-primary-600" />
+                          ) : (
+                            <Square className="w-5 h-5 text-gray-400" />
+                          )}
                         </button>
 
-                        {actionMenuOpen === product.id && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => setActionMenuOpen(null)}
-                            />
-                            <div
-                              className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
-                              style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
-                            >
-                              <button
-                                onClick={() => {
-                                  setViewingProduct(product)
-                                  setIsViewModalOpen(true)
-                                  setActionMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                              >
-                                <Eye className="w-4 h-4 text-green-600" />
-                                Ver detalles
-                              </button>
-                              <button
-                                onClick={() => {
-                                  openEditModal(product)
-                                  setActionMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                              >
-                                <Edit className="w-4 h-4 text-blue-600" />
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => {
-                                  openCloneModal(product)
-                                  setActionMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                              >
-                                <Copy className="w-4 h-4 text-purple-600" />
-                                Clonar
-                              </button>
-                              <div className="border-t border-gray-100 my-1" />
-                              <button
-                                onClick={() => {
-                                  setDeletingProduct(product)
-                                  setActionMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                Eliminar
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Fila de tags: SKU + código de barras + categoría */}
-                    {(visibleColumns.sku || visibleColumns.code || categoryPath) && (
-                      <div className="flex items-center gap-2 mt-1.5 ml-8 flex-wrap">
-                        {visibleColumns.sku && product.sku && (
-                          <span className="inline-block font-mono text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded">
-                            {product.sku}
-                          </span>
-                        )}
-                        {visibleColumns.code && product.code && (
-                          <span className="inline-block font-mono text-xs text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded">
-                            {product.code}
-                          </span>
-                        )}
-                        {categoryPath && (
-                          <span className="inline-block text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded truncate max-w-[200px]">
-                            {categoryPath}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Fila inferior: precio + utilidad + stock */}
-                    <div className="flex items-center justify-between mt-2 ml-8">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <span className="text-sm font-semibold">{formatCurrency(price)}</span>
-                          {product.hasVariants && (
-                            <span className="text-xs text-gray-500 ml-1">({product.variants?.length || 0} var.)</span>
-                          )}
-                          {!product.hasVariants && product.unit && (
-                            <span className="text-xs text-gray-500 ml-1">/ {product.unit}</span>
-                          )}
-                        </div>
-                        {visibleColumns.cost && !product.hasVariants && product.cost !== undefined && product.cost !== null && (
-                          <span className="text-xs font-semibold text-green-600">
-                            +{formatCurrency(product.price - product.cost)}
-                            <span className="text-gray-400 font-normal ml-0.5">
-                              ({product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'})
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        {stockDisplay !== null ? (
-                          <span
-                            className={`font-medium text-sm ${
-                              stockDisplay >= 4
-                                ? 'text-green-600'
-                                : stockDisplay > 0
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
-                            }`}
-                          >
-                            {stockDisplay} uds
-                          </span>
+                        {product.imageUrl ? (
+                          <div className="w-20 h-20 rounded-lg overflow-hidden bg-white shadow-sm border border-gray-100">
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          </div>
                         ) : (
-                          <span className="text-gray-400 text-xs">Sin stock</span>
+                          <div className="w-20 h-20 rounded-lg bg-white border border-gray-100 flex items-center justify-center">
+                            <Package className="w-8 h-8 text-gray-300" />
+                          </div>
                         )}
+                      </div>
+
+                      {/* Contenido principal */}
+                      <div className="flex-1 p-3 min-w-0 flex flex-col justify-between">
+                        {/* Nombre y acciones */}
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{product.name}</h3>
+                          <div className="relative flex-shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (actionMenuOpen === product.id) {
+                                  setActionMenuOpen(null)
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  const menuHeight = 180
+                                  const spaceBelow = window.innerHeight - rect.bottom
+                                  const openUp = spaceBelow < menuHeight
+
+                                  setActionMenuPosition({
+                                    top: openUp ? rect.top - menuHeight : rect.bottom + 4,
+                                    left: rect.right - 176,
+                                    openUp
+                                  })
+                                  setActionMenuOpen(product.id)
+                                }
+                              }}
+                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Acciones"
+                            >
+                              <MoreVertical className="w-5 h-5" />
+                            </button>
+
+                            {actionMenuOpen === product.id && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={() => setActionMenuOpen(null)}
+                                />
+                                <div
+                                  className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+                                  style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
+                                >
+                                  <button
+                                    onClick={() => {
+                                      setViewingProduct(product)
+                                      setIsViewModalOpen(true)
+                                      setActionMenuOpen(null)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                  >
+                                    <Eye className="w-4 h-4 text-green-600" />
+                                    Ver detalles
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      openEditModal(product)
+                                      setActionMenuOpen(null)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                  >
+                                    <Edit className="w-4 h-4 text-blue-600" />
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      openCloneModal(product)
+                                      setActionMenuOpen(null)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                                  >
+                                    <Copy className="w-4 h-4 text-purple-600" />
+                                    Clonar
+                                  </button>
+                                  <div className="border-t border-gray-100 my-1" />
+                                  <button
+                                    onClick={() => {
+                                      setDeletingProduct(product)
+                                      setActionMenuOpen(null)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Eliminar
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Tags: SKU + código + categoría */}
+                        {(visibleColumns.sku || visibleColumns.code || categoryPath) && (
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            {visibleColumns.sku && product.sku && (
+                              <span className="inline-block font-mono text-xs text-primary-700 bg-primary-50 px-2 py-0.5 rounded-full font-medium">
+                                {product.sku}
+                              </span>
+                            )}
+                            {visibleColumns.code && product.code && (
+                              <span className="inline-block font-mono text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
+                                {product.code}
+                              </span>
+                            )}
+                            {categoryPath && (
+                              <span className="inline-block text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full truncate max-w-[120px]">
+                                {categoryPath}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Precio y stock */}
+                        <div className="flex items-end justify-between mt-2">
+                          <div>
+                            <span className="text-lg font-bold text-gray-900">{formatCurrency(price)}</span>
+                            {product.hasVariants && (
+                              <span className="text-xs text-gray-500 ml-1">({product.variants?.length || 0} var.)</span>
+                            )}
+                            {!product.hasVariants && product.unit && (
+                              <span className="text-xs text-gray-400 ml-1">/ {product.unit}</span>
+                            )}
+                            {visibleColumns.cost && !product.hasVariants && product.cost !== undefined && product.cost !== null && (
+                              <div className="text-xs text-green-600 font-medium mt-0.5">
+                                +{formatCurrency(product.price - product.cost)} ({product.price > 0 ? `${(((product.price - product.cost) / product.price) * 100).toFixed(0)}%` : '0%'})
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            {stockDisplay !== null ? (
+                              <span
+                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  stockDisplay >= 4
+                                    ? 'bg-green-100 text-green-700'
+                                    : stockDisplay > 0
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-red-100 text-red-700'
+                                }`}
+                              >
+                                {stockDisplay} uds
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">Sin stock</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>

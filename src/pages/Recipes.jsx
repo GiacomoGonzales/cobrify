@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package, MoreVertical } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -66,6 +66,8 @@ export default function Recipes() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedRecipe, setSelectedRecipe] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   // Form data
   const [formData, setFormData] = useState({
@@ -486,77 +488,176 @@ export default function Recipes() {
             )}
           </CardContent>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{texts.tableHeaderProduct}</TableHead>
-                <TableHead>{texts.tableHeaderIngredients}</TableHead>
-                <TableHead>Porciones</TableHead>
-                <TableHead>Costo Total</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <div className="overflow-hidden">
+            {/* Vista móvil - Tarjetas */}
+            <div className="lg:hidden divide-y divide-gray-100">
               {filteredRecipes.map(recipe => (
-                <TableRow key={recipe.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{recipe.productName}</p>
+                <div key={recipe.id} className="px-4 py-3 hover:bg-gray-50">
+                  {/* Fila 1: Nombre + acciones */}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium line-clamp-2 flex-1">{recipe.productName}</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 120
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === recipe.id ? null : recipe.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila 2: Ingredientes */}
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {recipe.ingredients.slice(0, 3).map((ing, idx) => (
+                      <Badge key={idx} variant="outline" className="text-xs">
+                        {ing.ingredientName}
+                      </Badge>
+                    ))}
+                    {recipe.ingredients.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{recipe.ingredients.length - 3}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Fila 3: Porciones + Tiempo + Costo */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                      <span>{recipe.portions} porción{recipe.portions > 1 ? 'es' : ''}</span>
                       {recipe.preparationTime > 0 && (
-                        <p className="text-xs text-gray-500">{recipe.preparationTime} min</p>
+                        <>
+                          <span className="text-gray-300">•</span>
+                          <span>{recipe.preparationTime} min</span>
+                        </>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {recipe.ingredients.slice(0, 3).map((ing, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {ing.ingredientName}
-                        </Badge>
-                      ))}
-                      {recipe.ingredients.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{recipe.ingredients.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm">{recipe.portions}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-semibold text-green-600">
+                    <span className="text-sm font-bold text-green-600">
                       {formatCurrency(recipe.totalCost || 0)}
                     </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditModal(recipe)}
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedRecipe(recipe)
-                          setShowDeleteModal(true)
-                        }}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+
+            {/* Vista desktop - Tabla */}
+            <div className="hidden lg:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{texts.tableHeaderProduct}</TableHead>
+                    <TableHead>{texts.tableHeaderIngredients}</TableHead>
+                    <TableHead>Porciones</TableHead>
+                    <TableHead>Costo Total</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRecipes.map(recipe => (
+                    <TableRow key={recipe.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{recipe.productName}</p>
+                          {recipe.preparationTime > 0 && (
+                            <p className="text-xs text-gray-500">{recipe.preparationTime} min</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {recipe.ingredients.slice(0, 3).map((ing, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {ing.ingredientName}
+                            </Badge>
+                          ))}
+                          {recipe.ingredients.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{recipe.ingredients.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{recipe.portions}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-green-600">
+                          {formatCurrency(recipe.totalCost || 0)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditModal(recipe)}
+                            title="Editar"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedRecipe(recipe)
+                              setShowDeleteModal(true)
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Menú de acciones flotante */}
+            {openMenuId && (() => {
+              const menuRecipe = filteredRecipes.find(r => r.id === openMenuId)
+              if (!menuRecipe) return null
+              return (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                  <div
+                    className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                    style={{
+                      top: `${menuPosition.top}px`,
+                      right: `${menuPosition.right}px`,
+                      transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                    }}
+                  >
+                    <button
+                      onClick={() => { openEditModal(menuRecipe); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Edit className="w-4 h-4 text-blue-600" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => { setSelectedRecipe(menuRecipe); setShowDeleteModal(true); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
         )}
       </Card>
 

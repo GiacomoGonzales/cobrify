@@ -525,15 +525,15 @@ const ProductFormModal = ({
               {...register('name')}
             />
 
-            {/* Imagen y Descripción en fila */}
-            <div className="flex gap-4">
+            {/* Imagen y Descripción */}
+            <div className={`flex gap-4 ${Capacitor.isNativePlatform() && canUseProductImages ? 'flex-col' : 'flex-row'}`}>
               {/* Image upload - only shown if feature is enabled */}
               {canUseProductImages && (
-                <div className="flex-shrink-0">
+                <div className={Capacitor.isNativePlatform() ? 'w-full' : 'flex-shrink-0'}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
                   <div className="relative">
                     {productImagePreview ? (
-                      <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-300 group">
+                      <div className={`relative rounded-lg overflow-hidden border border-gray-300 group ${Capacitor.isNativePlatform() ? 'w-full h-32' : 'w-24 h-24'}`}>
                         <img
                           src={productImagePreview}
                           alt="Preview"
@@ -556,11 +556,36 @@ const ProductFormModal = ({
                           />
                         </label>
                       </div>
+                    ) : Capacitor.isNativePlatform() ? (
+                      <div className="flex gap-3">
+                        <label className="cursor-pointer flex-1 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
+                          <div className="text-center flex items-center gap-2">
+                            <Upload className="w-5 h-5 text-gray-400" />
+                            <span className="text-sm text-gray-500">Subir imagen</span>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleTakePhoto}
+                          className="flex-1 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
+                        >
+                          <div className="text-center flex items-center gap-2">
+                            <Camera className="w-5 h-5 text-gray-400" />
+                            <span className="text-sm text-gray-500">Tomar foto</span>
+                          </div>
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex flex-col gap-2">
-                        <label className="cursor-pointer block w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
-                          <div className="text-center flex items-center gap-1.5">
-                            <Upload className="w-4 h-4 text-gray-400" />
+                        <label className="cursor-pointer block w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors">
+                          <div className="text-center flex flex-col items-center gap-1">
+                            <Upload className="w-5 h-5 text-gray-400" />
                             <span className="text-xs text-gray-500">Subir</span>
                           </div>
                           <input
@@ -570,18 +595,6 @@ const ProductFormModal = ({
                             className="hidden"
                           />
                         </label>
-                        {Capacitor.isNativePlatform() && (
-                          <button
-                            type="button"
-                            onClick={handleTakePhoto}
-                            className="w-24 h-12 rounded-lg border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-gray-100 flex items-center justify-center bg-gray-50 transition-colors"
-                          >
-                            <div className="text-center flex items-center gap-1.5">
-                              <Camera className="w-4 h-4 text-gray-400" />
-                              <span className="text-xs text-gray-500">Foto</span>
-                            </div>
-                          </button>
-                        )}
                       </div>
                     )}
                     {uploadingImage && (
@@ -600,7 +613,7 @@ const ProductFormModal = ({
                 </label>
                 <textarea
                   {...register('description')}
-                  rows={canUseProductImages ? 3 : 2}
+                  rows={canUseProductImages && !Capacitor.isNativePlatform() ? 3 : 2}
                   placeholder="Descripción breve del producto o servicio"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
                 />

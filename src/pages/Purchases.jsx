@@ -21,6 +21,7 @@ import {
   Clock,
   List,
   Store,
+  MoreVertical,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -76,6 +77,8 @@ export default function Purchases() {
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [viewingPayments, setViewingPayments] = useState(null) // Para ver historial de pagos
   const [editingPaymentDate, setEditingPaymentDate] = useState(null) // { purchaseId, paymentIndex, date }
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   // Ordenamiento
   const [sortField, setSortField] = useState('date') // 'date', 'amount', 'supplier'
@@ -979,63 +982,41 @@ export default function Purchases() {
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>N° Factura</TableHead>
-                  <TableHead>
+          <div className="overflow-hidden">
+            {/* Vista móvil - Tarjetas */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredPurchases.map(purchase => (
+                <div key={purchase.id} className="px-4 py-3 hover:bg-gray-50">
+                  {/* Fila 1: Proveedor + acciones */}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium line-clamp-1 flex-1">
+                      {purchase.supplier?.businessName || 'N/A'}
+                    </p>
                     <button
-                      onClick={() => handleSort('supplier')}
-                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 200
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === purchase.id ? null : purchase.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
                     >
-                      Proveedor
-                      {getSortIcon('supplier')}
+                      <MoreVertical className="w-4 h-4" />
                     </button>
-                  </TableHead>
-                  <TableHead>
-                    <button
-                      onClick={() => handleSort('date')}
-                      className="flex items-center gap-1 hover:text-primary-600 transition-colors"
-                    >
-                      Fecha
-                      {getSortIcon('date')}
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-center hidden md:table-cell">Productos</TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      onClick={() => handleSort('amount')}
-                      className="flex items-center gap-1 hover:text-primary-600 transition-colors ml-auto"
-                    >
-                      Monto
-                      {getSortIcon('amount')}
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-center">Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPurchases.map(purchase => (
-                  <TableRow key={purchase.id}>
-                    <TableCell className="font-medium">{purchase.invoiceNumber || '-'}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{purchase.supplier?.businessName || 'N/A'}</p>
-                        <p className="text-xs text-gray-500">
-                          {purchase.supplier?.documentNumber || ''}
-                        </p>
-                        {branches.length > 0 && (
-                          <p className="text-xs text-blue-600 mt-0.5">
-                            <Store className="w-3 h-3 inline mr-1" />
-                            {getBranchName(purchase)}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {/* Mostrar invoiceDate (fecha de factura) en lugar de createdAt (fecha de registro) */}
+                  </div>
+
+                  {/* Fila 2: Factura + Fecha */}
+                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    <span>{purchase.invoiceNumber || 'S/N'}</span>
+                    <span className="text-gray-300">•</span>
+                    <span>
                       {(purchase.invoiceDate || purchase.createdAt)
                         ? formatDate(
                             (purchase.invoiceDate || purchase.createdAt).toDate
@@ -1043,140 +1024,293 @@ export default function Purchases() {
                               : (purchase.invoiceDate || purchase.createdAt)
                           )
                         : '-'}
-                    </TableCell>
-                    <TableCell className="text-center hidden md:table-cell">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <Badge>{purchase.items?.length || 0} items</Badge>
-                        {purchase.items?.some(i => i.itemType === 'ingredient') && (
-                          <span className="text-[10px] text-green-600">
-                            {purchase.items.filter(i => i.itemType === 'ingredient').length} ing.
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
+                    </span>
+                    <span className="text-gray-300">•</span>
+                    <span>{purchase.items?.length || 0} items</span>
+                  </div>
+
+                  {/* Fila 3: Monto + Estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm font-bold text-gray-900">
                       {formatCurrency(purchase.total)}
-                    </TableCell>
-                    <TableCell className="text-center">
+                    </span>
+                    <div>
                       {purchase.paymentType === 'credito' ? (
-                        purchase.creditType === 'cuotas' ? (
-                          // Compra en cuotas (legacy)
-                          <div className="flex flex-col items-center">
-                            {purchase.paymentStatus === 'paid' ? (
-                              <Badge variant="success" className="text-xs">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Pagado
-                              </Badge>
-                            ) : (
-                              <Badge variant="warning" className="text-xs">
-                                <List className="w-3 h-3 mr-1" />
-                                {purchase.paidInstallments || 0}/{purchase.totalInstallments} cuotas
-                              </Badge>
-                            )}
-                          </div>
+                        purchase.paymentStatus === 'paid' ? (
+                          <Badge variant="success" className="text-xs">Pagado</Badge>
                         ) : (
-                          // Pagos parciales (nuevo sistema)
-                          <div className="flex flex-col items-center">
-                            {purchase.paymentStatus === 'paid' ? (
-                              <Badge variant="success" className="text-xs">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Pagado
-                              </Badge>
-                            ) : (
-                              <>
-                                <Badge variant="warning" className="text-xs">
-                                  <DollarSign className="w-3 h-3 mr-1" />
-                                  {Math.round(((purchase.paidAmount || 0) / purchase.total) * 100)}%
-                                </Badge>
-                                <span className="text-xs text-gray-500 mt-0.5">
-                                  {formatCurrency(purchase.paidAmount || 0)} / {formatCurrency(purchase.total)}
-                                </span>
-                              </>
-                            )}
-                          </div>
+                          <Badge variant="warning" className="text-xs">
+                            {Math.round(((purchase.paidAmount || 0) / purchase.total) * 100)}% pagado
+                          </Badge>
                         )
                       ) : (
-                        <Badge variant="default" className="text-xs bg-gray-100 text-gray-700">
-                          Contado
-                        </Badge>
+                        <Badge variant="default" className="text-xs bg-gray-100 text-gray-700">Contado</Badge>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end space-x-1">
-                        {/* Botón ver cuotas (solo para compras antiguas en cuotas) */}
-                        {purchase.creditType === 'cuotas' && purchase.installments?.length > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewingInstallments(purchase)}
-                            className="text-purple-600 hover:bg-purple-50"
-                            title="Ver cuotas"
-                          >
-                            <List className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {/* Botón registrar abono (para crédito pendiente sin cuotas) */}
-                        {purchase.paymentType === 'credito' &&
-                         purchase.paymentStatus === 'pending' &&
-                         purchase.creditType !== 'cuotas' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openPaymentModal(purchase)}
-                            className="text-green-600 hover:bg-green-50"
-                            title="Registrar abono"
-                          >
-                            <DollarSign className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {/* Botón ver historial de pagos */}
-                        {purchase.paymentType === 'credito' &&
-                         purchase.creditType !== 'cuotas' &&
-                         (purchase.payments?.length > 0 || purchase.paidAmount > 0) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewingPayments(purchase)}
-                            className="text-blue-600 hover:bg-blue-50"
-                            title="Ver historial de pagos"
-                          >
-                            <List className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setViewingPurchase(purchase)}
-                          title="Ver detalles"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        {!purchase._isIngredientPurchase && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/app/compras/editar/${purchase.id}`)}
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeletingPurchase(purchase)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vista desktop - Tabla */}
+            <div className="hidden lg:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>N° Factura</TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('supplier')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      >
+                        Proveedor
+                        {getSortIcon('supplier')}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        onClick={() => handleSort('date')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors"
+                      >
+                        Fecha
+                        {getSortIcon('date')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-center">Productos</TableHead>
+                    <TableHead className="text-right">
+                      <button
+                        onClick={() => handleSort('amount')}
+                        className="flex items-center gap-1 hover:text-primary-600 transition-colors ml-auto"
+                      >
+                        Monto
+                        {getSortIcon('amount')}
+                      </button>
+                    </TableHead>
+                    <TableHead className="text-center">Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredPurchases.map(purchase => (
+                    <TableRow key={purchase.id}>
+                      <TableCell className="font-medium">{purchase.invoiceNumber || '-'}</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{purchase.supplier?.businessName || 'N/A'}</p>
+                          <p className="text-xs text-gray-500">
+                            {purchase.supplier?.documentNumber || ''}
+                          </p>
+                          {branches.length > 0 && (
+                            <p className="text-xs text-blue-600 mt-0.5">
+                              <Store className="w-3 h-3 inline mr-1" />
+                              {getBranchName(purchase)}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {(purchase.invoiceDate || purchase.createdAt)
+                          ? formatDate(
+                              (purchase.invoiceDate || purchase.createdAt).toDate
+                                ? (purchase.invoiceDate || purchase.createdAt).toDate()
+                                : (purchase.invoiceDate || purchase.createdAt)
+                            )
+                          : '-'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Badge>{purchase.items?.length || 0} items</Badge>
+                          {purchase.items?.some(i => i.itemType === 'ingredient') && (
+                            <span className="text-[10px] text-green-600">
+                              {purchase.items.filter(i => i.itemType === 'ingredient').length} ing.
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(purchase.total)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {purchase.paymentType === 'credito' ? (
+                          purchase.creditType === 'cuotas' ? (
+                            <div className="flex flex-col items-center">
+                              {purchase.paymentStatus === 'paid' ? (
+                                <Badge variant="success" className="text-xs">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Pagado
+                                </Badge>
+                              ) : (
+                                <Badge variant="warning" className="text-xs">
+                                  <List className="w-3 h-3 mr-1" />
+                                  {purchase.paidInstallments || 0}/{purchase.totalInstallments} cuotas
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              {purchase.paymentStatus === 'paid' ? (
+                                <Badge variant="success" className="text-xs">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Pagado
+                                </Badge>
+                              ) : (
+                                <>
+                                  <Badge variant="warning" className="text-xs">
+                                    <DollarSign className="w-3 h-3 mr-1" />
+                                    {Math.round(((purchase.paidAmount || 0) / purchase.total) * 100)}%
+                                  </Badge>
+                                  <span className="text-xs text-gray-500 mt-0.5">
+                                    {formatCurrency(purchase.paidAmount || 0)} / {formatCurrency(purchase.total)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          )
+                        ) : (
+                          <Badge variant="default" className="text-xs bg-gray-100 text-gray-700">
+                            Contado
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end space-x-1">
+                          {purchase.creditType === 'cuotas' && purchase.installments?.length > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setViewingInstallments(purchase)}
+                              className="text-purple-600 hover:bg-purple-50"
+                              title="Ver cuotas"
+                            >
+                              <List className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {purchase.paymentType === 'credito' &&
+                           purchase.paymentStatus === 'pending' &&
+                           purchase.creditType !== 'cuotas' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openPaymentModal(purchase)}
+                              className="text-green-600 hover:bg-green-50"
+                              title="Registrar abono"
+                            >
+                              <DollarSign className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {purchase.paymentType === 'credito' &&
+                           purchase.creditType !== 'cuotas' &&
+                           (purchase.payments?.length > 0 || purchase.paidAmount > 0) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setViewingPayments(purchase)}
+                              className="text-blue-600 hover:bg-blue-50"
+                              title="Ver historial de pagos"
+                            >
+                              <List className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewingPurchase(purchase)}
+                            title="Ver detalles"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          {!purchase._isIngredientPurchase && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/app/compras/editar/${purchase.id}`)}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingPurchase(purchase)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Menú de acciones flotante */}
+            {openMenuId && (() => {
+              const menuPurchase = filteredPurchases.find(p => p.id === openMenuId)
+              if (!menuPurchase) return null
+              return (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                  <div
+                    className="fixed w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                    style={{
+                      top: `${menuPosition.top}px`,
+                      right: `${menuPosition.right}px`,
+                      transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                    }}
+                  >
+                    <button
+                      onClick={() => { setViewingPurchase(menuPurchase); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Eye className="w-4 h-4 text-gray-500" />
+                      Ver detalles
+                    </button>
+                    {menuPurchase.paymentType === 'credito' &&
+                     menuPurchase.paymentStatus === 'pending' &&
+                     menuPurchase.creditType !== 'cuotas' && (
+                      <button
+                        onClick={() => { openPaymentModal(menuPurchase); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50"
+                      >
+                        <DollarSign className="w-4 h-4" />
+                        Registrar abono
+                      </button>
+                    )}
+                    {menuPurchase.paymentType === 'credito' &&
+                     menuPurchase.creditType !== 'cuotas' &&
+                     (menuPurchase.payments?.length > 0 || menuPurchase.paidAmount > 0) && (
+                      <button
+                        onClick={() => { setViewingPayments(menuPurchase); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50"
+                      >
+                        <List className="w-4 h-4" />
+                        Ver pagos
+                      </button>
+                    )}
+                    {!menuPurchase._isIngredientPurchase && (
+                      <button
+                        onClick={() => { navigate(`/app/compras/editar/${menuPurchase.id}`); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Editar
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setDeletingPurchase(menuPurchase); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
           </div>
         )}
       </Card>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Bell, Search, User, LogOut, Menu, FileText, Users, Package, X, Download } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useBranding } from '@/contexts/BrandingContext'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useStore } from '@/stores/useStore'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
@@ -11,7 +12,8 @@ import NotificationPanel from './NotificationPanel'
 import Button from './ui/Button'
 
 function Navbar() {
-  const { user, logout, subscription, isDemoMode, demoData } = useAppContext()
+  const { user, logout, subscription, isDemoMode, demoData, businessSettings } = useAppContext()
+  const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   const navigate = useAppNavigate()
   const { isInstallable, promptInstall } = usePWAInstall()
@@ -379,9 +381,19 @@ function Navbar() {
           </div>
 
           <div className="flex items-center space-x-1 sm:space-x-2">
-            <button className="p-2 rounded-lg bg-primary-100 text-primary-600">
-              <User className="w-5 h-5" />
-            </button>
+            {(businessSettings?.logoUrl || branding?.logoUrl) ? (
+              <div className="h-9 max-w-[120px] flex-shrink-0">
+                <img
+                  src={businessSettings?.logoUrl || branding?.logoUrl}
+                  alt="Logo"
+                  className="h-full w-auto object-contain rounded-lg"
+                />
+              </div>
+            ) : (
+              <div className="w-9 h-9 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                <User className="w-5 h-5 text-primary-600" />
+              </div>
+            )}
 
             <button
               onClick={logout}

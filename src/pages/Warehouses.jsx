@@ -17,6 +17,7 @@ import {
   Phone,
   Store,
   Search,
+  MoreVertical,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -66,6 +67,8 @@ export default function Warehouses() {
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   const {
     register,
@@ -547,109 +550,210 @@ export default function Warehouses() {
               )}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Sucursal</TableHead>
-                  <TableHead>Ubicación</TableHead>
-                  <TableHead>Series</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Principal</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="overflow-hidden">
+              {/* Vista móvil - Tarjetas */}
+              <div className="lg:hidden divide-y divide-gray-100">
                 {filteredWarehouses.map((warehouse) => {
-                  // Buscar series: por sucursal si tiene branchId, o globales si es Sucursal Principal
                   const wSeries = warehouse.branchId
                     ? branchSeries[warehouse.branchId]
                     : globalSeries
                   return (
-                    <TableRow key={warehouse.id}>
-                      <TableCell>
+                    <div key={warehouse.id} className="px-4 py-3 hover:bg-gray-50">
+                      {/* Fila 1: Nombre + acciones */}
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium truncate flex-1">{warehouse.name}</p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            const menuHeight = 120
+                            const spaceBelow = window.innerHeight - rect.bottom
+                            const openUpward = spaceBelow < menuHeight
+                            setMenuPosition({
+                              top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                              right: window.innerWidth - rect.right,
+                              openUpward
+                            })
+                            setOpenMenuId(openMenuId === warehouse.id ? null : warehouse.id)
+                          }}
+                          className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Fila 2: Sucursal + Ubicación */}
+                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Store className="w-3 h-3" />
+                          {getBranchName(warehouse.branchId)}
+                        </span>
+                        {warehouse.location && (
+                          <>
+                            <span className="text-gray-300">•</span>
+                            <span className="flex items-center gap-1 truncate">
+                              <MapPin className="w-3 h-3" />
+                              {warehouse.location}
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Fila 3: Series + Badges */}
+                      <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-2">
-                          <Warehouse className="w-4 h-4 text-gray-400" />
-                          <span className="font-medium">{warehouse.name}</span>
+                          {warehouse.isDefault && (
+                            <Badge variant="primary" className="text-xs">Principal</Badge>
+                          )}
+                          {warehouse.isActive ? (
+                            <Badge variant="success" className="text-xs">Activo</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">Inactivo</Badge>
+                          )}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <Store className="w-4 h-4" />
-                          <span className="text-sm">{getBranchName(warehouse.branchId)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <MapPin className="w-4 h-4" />
-                          <span>{warehouse.location || 'No especificada'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
                         {wSeries && (wSeries.factura || wSeries.boleta) ? (
-                          <div className="flex items-center gap-1">
-                            <FileText className="w-4 h-4 text-blue-500" />
-                            <div className="text-xs">
-                              <span className="font-mono text-gray-700">
-                                F:{wSeries.factura?.serie || '-'}
-                              </span>
-                              <span className="mx-1 text-gray-400">|</span>
-                              <span className="font-mono text-gray-700">
-                                B:{wSeries.boleta?.serie || '-'}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-amber-600 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Sin configurar
+                          <span className="text-xs font-mono text-gray-500">
+                            F:{wSeries.factura?.serie || '-'} B:{wSeries.boleta?.serie || '-'}
                           </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {warehouse.isActive ? (
-                          <Badge variant="success" className="flex items-center gap-1 w-fit">
-                            <CheckCircle className="w-3 h-3" />
-                            Activo
-                          </Badge>
                         ) : (
-                          <Badge variant="secondary" className="flex items-center gap-1 w-fit">
-                            <XCircle className="w-3 h-3" />
-                            Inactivo
-                          </Badge>
+                          <span className="text-xs text-amber-600">Sin series</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {warehouse.isDefault ? (
-                          <Badge variant="primary" className="w-fit">Principal</Badge>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(warehouse)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeletingWarehouse(warehouse)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </div>
                   )
                 })}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Vista desktop - Tabla */}
+              <div className="hidden lg:block">
+                <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+                  <div className="col-span-2">Nombre</div>
+                  <div className="col-span-2">Sucursal</div>
+                  <div className="col-span-2">Ubicación</div>
+                  <div className="col-span-2">Series</div>
+                  <div className="col-span-1">Estado</div>
+                  <div className="col-span-1">Principal</div>
+                  <div className="col-span-2 text-right">Acciones</div>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {filteredWarehouses.map((warehouse) => {
+                    const wSeries = warehouse.branchId
+                      ? branchSeries[warehouse.branchId]
+                      : globalSeries
+                    return (
+                      <div key={warehouse.id} className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-gray-50">
+                        <div className="col-span-2">
+                          <div className="flex items-center gap-2">
+                            <Warehouse className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium text-sm">{warehouse.name}</span>
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <Store className="w-4 h-4" />
+                            <span className="text-sm">{getBranchName(warehouse.branchId)}</span>
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <MapPin className="w-4 h-4" />
+                            <span className="text-sm">{warehouse.location || 'No especificada'}</span>
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          {wSeries && (wSeries.factura || wSeries.boleta) ? (
+                            <div className="flex items-center gap-1">
+                              <FileText className="w-4 h-4 text-blue-500" />
+                              <div className="text-xs">
+                                <span className="font-mono text-gray-700">
+                                  F:{wSeries.factura?.serie || '-'}
+                                </span>
+                                <span className="mx-1 text-gray-400">|</span>
+                                <span className="font-mono text-gray-700">
+                                  B:{wSeries.boleta?.serie || '-'}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-amber-600 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Sin configurar
+                            </span>
+                          )}
+                        </div>
+                        <div className="col-span-1">
+                          {warehouse.isActive ? (
+                            <Badge variant="success" className="text-xs">Activo</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">Inactivo</Badge>
+                          )}
+                        </div>
+                        <div className="col-span-1">
+                          {warehouse.isDefault ? (
+                            <Badge variant="primary" className="text-xs">Principal</Badge>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </div>
+                        <div className="col-span-2">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditModal(warehouse)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingWarehouse(warehouse)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Menú de acciones flotante */}
+              {openMenuId && (() => {
+                const menuWarehouse = filteredWarehouses.find(w => w.id === openMenuId)
+                if (!menuWarehouse) return null
+                return (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                    <div
+                      className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                      style={{
+                        top: `${menuPosition.top}px`,
+                        right: `${menuPosition.right}px`,
+                        transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                      }}
+                    >
+                      <button
+                        onClick={() => { openEditModal(menuWarehouse); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <Edit className="w-4 h-4 text-blue-600" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => { setDeletingWarehouse(menuWarehouse); setOpenMenuId(null) }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Eliminar
+                      </button>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
           )}
         </CardContent>
       </Card>

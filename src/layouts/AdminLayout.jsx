@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
 import {
   LayoutDashboard,
   Users,
@@ -76,6 +78,41 @@ export default function AdminLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const location = useLocation()
 
+  // Cambiar color del StatusBar para admin (tema oscuro/púrpura)
+  useEffect(() => {
+    const configureAdminStatusBar = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await StatusBar.setStyle({ style: Style.Dark })
+          if (Capacitor.getPlatform() === 'android') {
+            await StatusBar.setBackgroundColor({ color: '#1e1b4b' }) // indigo-950
+          }
+        } catch (error) {
+          console.warn('Error configurando StatusBar admin:', error)
+        }
+      }
+    }
+
+    const restoreDefaultStatusBar = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await StatusBar.setStyle({ style: Style.Dark })
+          if (Capacitor.getPlatform() === 'android') {
+            await StatusBar.setBackgroundColor({ color: '#1e40af' }) // primary-800
+          }
+        } catch (error) {
+          console.warn('Error restaurando StatusBar:', error)
+        }
+      }
+    }
+
+    configureAdminStatusBar()
+
+    return () => {
+      restoreDefaultStatusBar()
+    }
+  }, [])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -94,7 +131,10 @@ export default function AdminLayout() {
   const currentPage = navItems.find(item => location.pathname.startsWith(item.path))
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-safe overflow-x-hidden max-w-full">
+    <div className="min-h-screen bg-gray-50 overflow-x-hidden max-w-full">
+      {/* iOS Status Bar */}
+      <div className="ios-status-bar bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 lg:hidden flex-shrink-0" />
+
       {/* Mobile Header */}
       <div className="lg:hidden bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 text-white p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

@@ -1599,12 +1599,12 @@ export default function Inventory() {
             </div>
 
             {/* Filters Group */}
-            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 flex-wrap">
+            <div className="grid grid-cols-2 sm:flex sm:flex-row gap-3 lg:gap-4 sm:flex-wrap">
               {/* Category Multi-Select Filter */}
               <div className="relative">
                 <button
                   onClick={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}
-                  className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterCategories.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
+                  className={`w-full flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterCategories.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
                 >
                   <Tag className="w-4 h-4 text-gray-500" />
                   <span className="max-w-[150px] truncate">
@@ -1656,7 +1656,7 @@ export default function Inventory() {
               <div className="relative">
                 <button
                   onClick={() => setOpenDropdown(openDropdown === 'statuses' ? null : 'statuses')}
-                  className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterStatuses.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
+                  className={`w-full flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterStatuses.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
                 >
                   <Activity className="w-4 h-4 text-gray-500" />
                   <span className="max-w-[150px] truncate">
@@ -1706,7 +1706,7 @@ export default function Inventory() {
 
               {/* Branch Filter (single select - stays the same) */}
               {branches.length > 0 && (
-                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
                   <Store className="w-4 h-4 text-gray-500" />
                   <select
                     value={filterBranch}
@@ -1727,7 +1727,7 @@ export default function Inventory() {
                 <div className="relative">
                   <button
                     onClick={() => setOpenDropdown(openDropdown === 'warehouses' ? null : 'warehouses')}
-                    className={`flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterWarehouses.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
+                    className={`w-full flex items-center gap-2 bg-white border rounded-lg px-3 py-2 shadow-sm text-sm cursor-pointer hover:border-primary-400 transition-colors ${filterWarehouses.length > 0 ? 'border-primary-500 bg-primary-50' : 'border-gray-300'}`}
                   >
                     <Warehouse className="w-4 h-4 text-gray-500" />
                     <span className="max-w-[150px] truncate">
@@ -1826,7 +1826,7 @@ export default function Inventory() {
                                 ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
                                 : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
                             )}
-                            <p className="text-sm font-medium truncate">{item.name}</p>
+                            <p className="text-sm font-medium line-clamp-2">{item.name}</p>
                           </div>
                           {warehouses.length >= 1 && isProduct && (
                             <button

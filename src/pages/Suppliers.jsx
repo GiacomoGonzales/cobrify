@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Truck, Loader2, AlertTriangle, MoreVertical, Phone, Mail, MapPin } from 'lucide-react'
 import { z } from 'zod'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -43,6 +43,8 @@ export default function Suppliers() {
   const [deletingSupplier, setDeletingSupplier] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   const {
     register,
@@ -356,29 +358,90 @@ export default function Suppliers() {
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Razón Social</TableHead>
-                  <TableHead>Documento</TableHead>
-                  <TableHead>Contacto</TableHead>
-                  <TableHead className="hidden lg:table-cell">Dirección</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <div className="overflow-hidden">
+            {/* Vista móvil - Tarjetas */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredSuppliers.map(supplier => (
+                <div key={supplier.id} className="px-4 py-3 hover:bg-gray-50">
+                  {/* Fila 1: Nombre + acciones */}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium line-clamp-2 flex-1">{supplier.businessName}</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 120
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === supplier.id ? null : supplier.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila 2: Documento + Contacto */}
+                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    {supplier.documentType && supplier.documentNumber ? (
+                      <span className="flex items-center gap-1">
+                        {getDocumentBadge(supplier.documentType)}
+                        <span>{supplier.documentNumber}</span>
+                      </span>
+                    ) : null}
+                    {supplier.contactName && (
+                      <>
+                        {supplier.documentNumber && <span className="text-gray-300">•</span>}
+                        <span>{supplier.contactName}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Fila 3: Email + Teléfono */}
+                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-3">
+                      {supplier.phone && (
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          {supplier.phone}
+                        </span>
+                      )}
+                      {supplier.email && (
+                        <span className="flex items-center gap-1 truncate">
+                          <Mail className="w-3 h-3" />
+                          {supplier.email}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vista desktop - Tabla */}
+            <div className="hidden lg:block">
+              <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-700">
+                <div className="col-span-3">Razón Social</div>
+                <div className="col-span-2">Documento</div>
+                <div className="col-span-3">Contacto</div>
+                <div className="col-span-3">Dirección</div>
+                <div className="col-span-1 text-right">Acciones</div>
+              </div>
+              <div className="divide-y divide-gray-100">
                 {filteredSuppliers.map(supplier => (
-                  <TableRow key={supplier.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{supplier.businessName}</p>
-                        {supplier.contactName && (
-                          <p className="text-xs text-gray-500">Contacto: {supplier.contactName}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
+                  <div key={supplier.id} className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-gray-50">
+                    <div className="col-span-3">
+                      <p className="font-medium text-sm">{supplier.businessName}</p>
+                      {supplier.contactName && (
+                        <p className="text-xs text-gray-500">Contacto: {supplier.contactName}</p>
+                      )}
+                    </div>
+                    <div className="col-span-2">
                       {supplier.documentType && supplier.documentNumber ? (
                         <div className="flex items-center space-x-2">
                           {getDocumentBadge(supplier.documentType)}
@@ -387,24 +450,17 @@ export default function Suppliers() {
                       ) : (
                         <span className="text-sm text-gray-400">-</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        {supplier.email && <p className="text-sm">{supplier.email}</p>}
-                        {supplier.phone && <p className="text-xs text-gray-500">{supplier.phone}</p>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <p className="text-sm text-gray-600">{supplier.address || '-'}</p>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditModal(supplier)}
-                          title="Editar"
-                        >
+                    </div>
+                    <div className="col-span-3">
+                      {supplier.email && <p className="text-sm">{supplier.email}</p>}
+                      {supplier.phone && <p className="text-xs text-gray-500">{supplier.phone}</p>}
+                    </div>
+                    <div className="col-span-3">
+                      <p className="text-sm text-gray-600 truncate">{supplier.address || '-'}</p>
+                    </div>
+                    <div className="col-span-1">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditModal(supplier)}>
                           <Edit className="w-4 h-4" />
                         </Button>
                         <Button
@@ -412,16 +468,49 @@ export default function Suppliers() {
                           size="sm"
                           onClick={() => setDeletingSupplier(supplier)}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </div>
+
+            {/* Menú de acciones flotante */}
+            {openMenuId && (() => {
+              const menuSupplier = filteredSuppliers.find(s => s.id === openMenuId)
+              if (!menuSupplier) return null
+              return (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                  <div
+                    className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                    style={{
+                      top: `${menuPosition.top}px`,
+                      right: `${menuPosition.right}px`,
+                      transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                    }}
+                  >
+                    <button
+                      onClick={() => { openEditModal(menuSupplier); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Edit className="w-4 h-4 text-blue-600" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => { setDeletingSupplier(menuSupplier); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
           </div>
         )}
       </Card>

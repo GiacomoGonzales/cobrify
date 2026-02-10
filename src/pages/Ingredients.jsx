@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download, Store } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, ShoppingCart, TrendingUp, TrendingDown, Loader2, Receipt, History, Upload, Download, Store, MoreVertical } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
@@ -101,6 +101,8 @@ export default function Ingredients() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [selectedIngredient, setSelectedIngredient] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   // Form data
   const [formData, setFormData] = useState({
@@ -675,93 +677,204 @@ export default function Ingredients() {
             )}
           </CardContent>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{texts.tableHeader}</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Stock Actual</TableHead>
-                <TableHead>Costo Promedio</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <div className="overflow-hidden">
+            {/* Vista móvil - Tarjetas */}
+            <div className="lg:hidden divide-y divide-gray-100">
               {filteredIngredients.map(ingredient => (
-                <TableRow key={ingredient.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{ingredient.name}</p>
-                      {ingredient.supplier && (
-                        <p className="text-xs text-gray-500">{ingredient.supplier}</p>
-                      )}
+                <div key={ingredient.id} className="px-4 py-3 hover:bg-gray-50">
+                  {/* Fila 1: Nombre + acciones */}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium line-clamp-2 flex-1">{ingredient.name}</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 200
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === ingredient.id ? null : ingredient.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila 2: Categoría + Proveedor */}
+                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    <span>{getCategoryLabel(ingredient.category)}</span>
+                    {ingredient.supplier && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span className="truncate">{ingredient.supplier}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Fila 3: Stock + Costo + Estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold">
+                        {parseFloat(getStockForBranch(ingredient)).toFixed(2)} {ingredient.purchaseUnit}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {formatCurrency(ingredient.averageCost)}/{ingredient.purchaseUnit}
+                      </span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm">{getCategoryLabel(ingredient.category)}</span>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-semibold">{parseFloat(getStockForBranch(ingredient)).toFixed(2)} {ingredient.purchaseUnit}</p>
-                      <p className="text-xs text-gray-500">Mín: {parseFloat(ingredient.minimumStock || 0).toFixed(2)}</p>
-                      {filterBranch !== 'all' && ingredient.currentStock !== getStockForBranch(ingredient) && (
-                        <p className="text-xs text-blue-500">Total: {parseFloat(ingredient.currentStock || 0).toFixed(2)}</p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium">{formatCurrency(ingredient.averageCost)}</span>
-                    <span className="text-xs text-gray-500">/{ingredient.purchaseUnit}</span>
-                  </TableCell>
-                  <TableCell>
                     {getStockStatus(ingredient)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openPurchaseModal(ingredient)}
-                        className="text-green-600 hover:bg-green-50"
-                        title="Registrar compra"
-                      >
-                        <ShoppingCart className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const basePath = isDemoMode ? '/demo' : '/app'
-                          navigate(`${basePath}/ingredientes/historial?ingredientId=${ingredient.id}`)
-                        }}
-                        className="text-purple-600 hover:bg-purple-50"
-                        title="Ver historial"
-                      >
-                        <History className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditModal(ingredient)}
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openDeleteModal(ingredient)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+
+            {/* Vista desktop - Tabla */}
+            <div className="hidden lg:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{texts.tableHeader}</TableHead>
+                    <TableHead>Categoría</TableHead>
+                    <TableHead>Stock Actual</TableHead>
+                    <TableHead>Costo Promedio</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredIngredients.map(ingredient => (
+                    <TableRow key={ingredient.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{ingredient.name}</p>
+                          {ingredient.supplier && (
+                            <p className="text-xs text-gray-500">{ingredient.supplier}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{getCategoryLabel(ingredient.category)}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-semibold">{parseFloat(getStockForBranch(ingredient)).toFixed(2)} {ingredient.purchaseUnit}</p>
+                          <p className="text-xs text-gray-500">Mín: {parseFloat(ingredient.minimumStock || 0).toFixed(2)}</p>
+                          {filterBranch !== 'all' && ingredient.currentStock !== getStockForBranch(ingredient) && (
+                            <p className="text-xs text-blue-500">Total: {parseFloat(ingredient.currentStock || 0).toFixed(2)}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">{formatCurrency(ingredient.averageCost)}</span>
+                        <span className="text-xs text-gray-500">/{ingredient.purchaseUnit}</span>
+                      </TableCell>
+                      <TableCell>
+                        {getStockStatus(ingredient)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openPurchaseModal(ingredient)}
+                            className="text-green-600 hover:bg-green-50"
+                            title="Registrar compra"
+                          >
+                            <ShoppingCart className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const basePath = isDemoMode ? '/demo' : '/app'
+                              navigate(`${basePath}/ingredientes/historial?ingredientId=${ingredient.id}`)
+                            }}
+                            className="text-purple-600 hover:bg-purple-50"
+                            title="Ver historial"
+                          >
+                            <History className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditModal(ingredient)}
+                            title="Editar"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteModal(ingredient)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Menú de acciones flotante */}
+            {openMenuId && (() => {
+              const menuIngredient = filteredIngredients.find(i => i.id === openMenuId)
+              if (!menuIngredient) return null
+              return (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                  <div
+                    className="fixed w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                    style={{
+                      top: `${menuPosition.top}px`,
+                      right: `${menuPosition.right}px`,
+                      transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                    }}
+                  >
+                    <button
+                      onClick={() => { openPurchaseModal(menuIngredient); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-green-600 hover:bg-green-50"
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                      Registrar compra
+                    </button>
+                    <button
+                      onClick={() => {
+                        const basePath = isDemoMode ? '/demo' : '/app'
+                        navigate(`${basePath}/ingredientes/historial?ingredientId=${menuIngredient.id}`)
+                        setOpenMenuId(null)
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 hover:bg-purple-50"
+                    >
+                      <History className="w-4 h-4" />
+                      Ver historial
+                    </button>
+                    <button
+                      onClick={() => { openEditModal(menuIngredient); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Edit className="w-4 h-4 text-blue-600" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => { openDeleteModal(menuIngredient); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
         )}
       </Card>
 

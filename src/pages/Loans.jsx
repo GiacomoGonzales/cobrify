@@ -16,6 +16,7 @@ import {
   User,
   X,
   Pencil,
+  MoreVertical,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -143,6 +144,10 @@ export default function Loans() {
   // Filtros
   const [typeFilter, setTypeFilter] = useState('all') // 'all', 'bank', 'third_party'
   const [statusFilter, setStatusFilter] = useState('all') // 'all', 'active', 'paid'
+
+  // Menú móvil
+  const [openMenuId, setOpenMenuId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: false })
 
   // Formulario de nuevo préstamo
   const [formData, setFormData] = useState({
@@ -629,101 +634,206 @@ export default function Loans() {
             )}
           </CardContent>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Prestamista</TableHead>
-                  <TableHead className="hidden sm:table-cell">Emisión</TableHead>
-                  <TableHead className="text-right">Monto</TableHead>
-                  <TableHead className="text-center">Cuotas</TableHead>
-                  <TableHead className="text-center">Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLoans.map(loan => (
-                  <TableRow key={loan.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {loan.type === 'bank' ? (
-                          <Building2 className="w-4 h-4 text-blue-600" />
-                        ) : (
-                          <User className="w-4 h-4 text-purple-600" />
-                        )}
-                        <span className="text-sm">
-                          {loan.type === 'bank' ? 'Banco' : 'Tercero'}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{loan.lenderName}</p>
-                        {loan.description && (
-                          <p className="text-xs text-gray-500">{loan.description}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
-                        <Calendar className="w-3 h-3" />
-                        {loan.issueDate ? formatDate(new Date(loan.issueDate)) : '-'}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div>
-                        <p className="font-semibold">{formatCurrency(loan.amount)}</p>
-                        {loan.interestRate > 0 && (
-                          <p className="text-xs text-gray-500">{loan.interestRate}% interés</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
+          <div className="overflow-hidden">
+            {/* Vista móvil - Tarjetas */}
+            <div className="lg:hidden divide-y divide-gray-100">
+              {filteredLoans.map(loan => (
+                <div key={loan.id} className="px-4 py-3 hover:bg-gray-50">
+                  {/* Fila 1: Prestamista + acciones */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {loan.type === 'bank' ? (
+                        <Building2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      ) : (
+                        <User className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                      )}
+                      <p className="text-sm font-medium truncate">{loan.lenderName}</p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const menuHeight = 120
+                        const spaceBelow = window.innerHeight - rect.bottom
+                        const openUpward = spaceBelow < menuHeight
+                        setMenuPosition({
+                          top: openUpward ? rect.top - 8 : rect.bottom + 8,
+                          right: window.innerWidth - rect.right,
+                          openUpward
+                        })
+                        setOpenMenuId(openMenuId === loan.id ? null : loan.id)
+                      }}
+                      className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Fila 2: Descripción + Fecha */}
+                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    {loan.description && (
+                      <>
+                        <span className="truncate">{loan.description}</span>
+                        <span className="text-gray-300">•</span>
+                      </>
+                    )}
+                    <span>{loan.issueDate ? formatDate(new Date(loan.issueDate)) : '-'}</span>
+                  </div>
+
+                  {/* Fila 3: Monto + Cuotas + Estado */}
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm font-bold text-gray-900">
+                      {formatCurrency(loan.amount)}
+                      {loan.interestRate > 0 && (
+                        <span className="font-normal text-xs text-gray-500 ml-1">({loan.interestRate}%)</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2">
                       <Badge variant={loan.status === 'paid' ? 'success' : 'warning'} className="text-xs">
-                        <List className="w-3 h-3 mr-1" />
                         {loan.paidInstallments || 0}/{loan.totalInstallments}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
                       {loan.status === 'paid' ? (
-                        <Badge variant="success" className="text-xs">
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                          Pagado
-                        </Badge>
+                        <Badge variant="success" className="text-xs">Pagado</Badge>
                       ) : (
-                        <Badge variant="warning" className="text-xs">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Activo
-                        </Badge>
+                        <Badge variant="warning" className="text-xs">Activo</Badge>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setViewingLoan(loan)}
-                          className="text-purple-600 hover:bg-purple-50"
-                          title="Ver cuotas"
-                        >
-                          <List className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeletingLoan(loan)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vista desktop - Tabla */}
+            <div className="hidden lg:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Prestamista</TableHead>
+                    <TableHead>Emisión</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-center">Cuotas</TableHead>
+                    <TableHead className="text-center">Estado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredLoans.map(loan => (
+                    <TableRow key={loan.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {loan.type === 'bank' ? (
+                            <Building2 className="w-4 h-4 text-blue-600" />
+                          ) : (
+                            <User className="w-4 h-4 text-purple-600" />
+                          )}
+                          <span className="text-sm">
+                            {loan.type === 'bank' ? 'Banco' : 'Tercero'}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{loan.lenderName}</p>
+                          {loan.description && (
+                            <p className="text-xs text-gray-500">{loan.description}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <Calendar className="w-3 h-3" />
+                          {loan.issueDate ? formatDate(new Date(loan.issueDate)) : '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div>
+                          <p className="font-semibold">{formatCurrency(loan.amount)}</p>
+                          {loan.interestRate > 0 && (
+                            <p className="text-xs text-gray-500">{loan.interestRate}% interés</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={loan.status === 'paid' ? 'success' : 'warning'} className="text-xs">
+                          <List className="w-3 h-3 mr-1" />
+                          {loan.paidInstallments || 0}/{loan.totalInstallments}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {loan.status === 'paid' ? (
+                          <Badge variant="success" className="text-xs">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Pagado
+                          </Badge>
+                        ) : (
+                          <Badge variant="warning" className="text-xs">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Activo
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewingLoan(loan)}
+                            className="text-purple-600 hover:bg-purple-50"
+                            title="Ver cuotas"
+                          >
+                            <List className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingLoan(loan)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Menú de acciones flotante */}
+            {openMenuId && (() => {
+              const menuLoan = filteredLoans.find(l => l.id === openMenuId)
+              if (!menuLoan) return null
+              return (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                  <div
+                    className="fixed w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
+                    style={{
+                      top: `${menuPosition.top}px`,
+                      right: `${menuPosition.right}px`,
+                      transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
+                    }}
+                  >
+                    <button
+                      onClick={() => { setViewingLoan(menuLoan); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <List className="w-4 h-4 text-purple-600" />
+                      Ver cuotas
+                    </button>
+                    <button
+                      onClick={() => { setDeletingLoan(menuLoan); setOpenMenuId(null) }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
           </div>
         )}
       </Card>
