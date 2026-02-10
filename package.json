@@ -1,7 +1,7 @@
 {
   "name": "cobrify",
   "private": true,
-  "version": "3.9.0",
+  "version": "4.1.0",
   "type": "module",
   "description": "Sistema de facturación y cobranza moderno para negocios en Perú",
   "scripts": {
