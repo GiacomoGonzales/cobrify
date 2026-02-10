@@ -2537,6 +2537,16 @@ export default function POS() {
       const balance = isCreditSaleForInvoice ? amounts.total : (isPartialPayment ? amounts.total - amountPaid : 0)
       const paymentStatus = isCreditSaleForInvoice ? 'pending' : (isPartialPayment ? (balance > 0 ? 'partial' : 'completed') : 'completed')
 
+      console.log('🧾 [POS] Datos de pago parcial calculados:', {
+        documentType,
+        enablePartialPayment,
+        partialAmount,
+        isPartialPayment,
+        amountPaid,
+        balance,
+        paymentStatus
+      })
+
       const invoiceData = {
         number: numberResult.number,
         series: numberResult.series,

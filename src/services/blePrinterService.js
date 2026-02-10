@@ -662,6 +662,10 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       // Pago
       paymentMethod,
       payments,
+      paymentStatus,
+      amountPaid,
+      balance,
+      paymentHistory,
       // Otros
       notes,
       sunatHash,
@@ -946,6 +950,35 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         }
       } else if (paymentMethod) {
         commands.push(ESCPOSCommands.text(convertSpanishText(paymentMethod) + ': S/ ' + (total || 0).toFixed(2) + '\n'));
+      }
+    }
+
+    // ========== Estado de Pago (Pago Parcial / Saldo) ==========
+    console.log('🧾 [BLE] Datos de pago parcial:', { paymentStatus, amountPaid, balance, paymentHistoryLength: paymentHistory?.length });
+    if (paymentStatus === 'partial' || (paymentHistory && paymentHistory.length > 0)) {
+      commands.push(ESCPOSCommands.text(separator + '\n'));
+      commands.push(ESCPOSCommands.align(0));
+
+      const statusTitle = paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS';
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text(statusTitle + '\n'));
+      commands.push(ESCPOSCommands.bold(false));
+
+      if (paymentStatus === 'partial') {
+        commands.push(ESCPOSCommands.text('Pagado: S/ ' + (amountPaid || 0).toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.bold(true));
+        commands.push(ESCPOSCommands.text('Saldo Pendiente: S/ ' + (balance || 0).toFixed(2) + '\n'));
+        commands.push(ESCPOSCommands.bold(false));
+      }
+
+      if (paymentHistory && paymentHistory.length > 0) {
+        commands.push(ESCPOSCommands.text('Historial de pagos:\n'));
+        for (const payment of paymentHistory) {
+          const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+          const dateStr = paymentDate.toLocaleDateString('es-PE');
+          const amountStr = (payment.amount || 0).toFixed(2);
+          commands.push(ESCPOSCommands.text(' ' + dateStr + ' S/' + amountStr + ' (' + convertSpanishText(payment.method || 'Efectivo') + ')\n'));
+        }
       }
     }
 

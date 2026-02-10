@@ -986,7 +986,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
     }
 
     // ========== Estado de Pago para Notas de Venta (parcial/crédito) ==========
-    if (invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
+    console.log('🧾 [WiFi] Datos de pago parcial:', { paymentStatus: invoice.paymentStatus, amountPaid: invoice.amountPaid, balance: invoice.balance, paymentHistoryLength: invoice.paymentHistory?.length });
+    if (invoice.paymentStatus === 'partial' || (invoice.paymentHistory && invoice.paymentHistory.length > 0)) {
       printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
       const statusTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS';
@@ -1004,12 +1005,14 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
           .clearFormatting();
       }
 
-      printer = printer.text(convertSpanishText('Historial de pagos:\n'));
-      for (const payment of invoice.paymentHistory) {
-        const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
-        const dateStr = paymentDate.toLocaleDateString('es-PE');
-        const amountStr = (payment.amount || 0).toFixed(2);
-        printer = printer.text(convertSpanishText(` ${dateStr} S/${amountStr} (${payment.method || 'Efectivo'})\n`));
+      if (invoice.paymentHistory && invoice.paymentHistory.length > 0) {
+        printer = printer.text(convertSpanishText('Historial de pagos:\n'));
+        for (const payment of invoice.paymentHistory) {
+          const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+          const dateStr = paymentDate.toLocaleDateString('es-PE');
+          const amountStr = (payment.amount || 0).toFixed(2);
+          printer = printer.text(convertSpanishText(` ${dateStr} S/${amountStr} (${payment.method || 'Efectivo'})\n`));
+        }
       }
     }
 
@@ -1523,6 +1526,10 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       // Pago
       paymentMethod: invoice.paymentMethod || '',
       payments: invoice.payments || [],
+      paymentStatus: invoice.paymentStatus || '',
+      amountPaid: invoice.amountPaid || 0,
+      balance: invoice.balance || 0,
+      paymentHistory: invoice.paymentHistory || [],
 
       // Otros
       notes: invoice.notes || '',
@@ -1532,6 +1539,13 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       // Vendedor
       sellerName: invoice.sellerName || '',
     };
+
+    console.log('🧾 [thermal->BLE] Datos de pago parcial del invoice:', {
+      paymentStatus: invoice.paymentStatus,
+      amountPaid: invoice.amountPaid,
+      balance: invoice.balance,
+      paymentHistoryLength: invoice.paymentHistory?.length
+    });
 
     // Usar la función printBLEReceipt del servicio BLE
     const result = await BLEPrinter.printBLEReceipt(receiptData, paperWidth);
