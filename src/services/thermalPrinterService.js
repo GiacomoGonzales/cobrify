@@ -956,12 +956,60 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
         .text('FORMA DE PAGO\n')
         .clearFormatting();
 
-      if (invoice.payments && invoice.payments.length > 0) {
+      const totalPaid = invoice.payments && invoice.payments.length > 0
+        ? invoice.payments.reduce((sum, p) => sum + (p.amount || 0), 0)
+        : 0;
+      const isCreditSale = totalPaid === 0;
+
+      if (isCreditSale && !invoice.paymentMethod) {
+        // Venta al crédito (sin pagos)
+        printer = printer
+          .bold()
+          .text(convertSpanishText('AL CREDITO\n'))
+          .clearFormatting();
+        printer = printer.text(convertSpanishText(`Saldo Pendiente: S/ ${(invoice.total || 0).toFixed(2)}\n`));
+      } else if (invoice.payments && invoice.payments.length > 0) {
         invoice.payments.forEach(payment => {
           printer = printer.text(convertSpanishText(`${payment.method}: S/ ${payment.amount.toFixed(2)}\n`));
         });
+        // Mostrar saldo pendiente si el pago es menor al total
+        if (totalPaid < (invoice.total || 0)) {
+          const saldoPendiente = (invoice.total || 0) - totalPaid;
+          printer = printer
+            .bold()
+            .text(convertSpanishText(`Saldo Pendiente: S/ ${saldoPendiente.toFixed(2)}\n`))
+            .clearFormatting();
+        }
       } else if (invoice.paymentMethod) {
         printer = printer.text(convertSpanishText(`${invoice.paymentMethod}: S/ ${(invoice.total || 0).toFixed(2)}\n`));
+      }
+    }
+
+    // ========== Estado de Pago para Notas de Venta (parcial/crédito) ==========
+    if (invoice.documentType === 'nota_venta' && invoice.paymentStatus && invoice.paymentHistory && invoice.paymentHistory.length > 0) {
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+
+      const statusTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS';
+      printer = printer
+        .align('left')
+        .bold()
+        .text(convertSpanishText(`${statusTitle}\n`))
+        .clearFormatting();
+
+      if (invoice.paymentStatus === 'partial') {
+        printer = printer.text(convertSpanishText(`Pagado: S/ ${(invoice.amountPaid || 0).toFixed(2)}\n`));
+        printer = printer
+          .bold()
+          .text(convertSpanishText(`Saldo Pendiente: S/ ${(invoice.balance || 0).toFixed(2)}\n`))
+          .clearFormatting();
+      }
+
+      printer = printer.text(convertSpanishText('Historial de pagos:\n'));
+      for (const payment of invoice.paymentHistory) {
+        const paymentDate = payment.date?.toDate ? payment.date.toDate() : new Date(payment.date);
+        const dateStr = paymentDate.toLocaleDateString('es-PE');
+        const amountStr = (payment.amount || 0).toFixed(2);
+        printer = printer.text(convertSpanishText(` ${dateStr} S/${amountStr} (${payment.method || 'Efectivo'})\n`));
       }
     }
 
