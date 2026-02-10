@@ -392,14 +392,42 @@ export const AuthProvider = ({ children }) => {
 
         // Actualizar la suscripción completa
         setSubscription(subscriptionData)
+
+        // Re-evaluar acceso cuando cambia la suscripción (ej: suspendida por Cloud Function)
+        const accessResult = hasActiveAccess(subscriptionData)
+        if (accessResult === 'grace') {
+          setHasAccess(true)
+          setIsInGracePeriod(true)
+        } else {
+          setHasAccess(accessResult)
+          setIsInGracePeriod(false)
+        }
       }
     }, (error) => {
       console.error('Error en listener de suscripción:', error)
     })
 
+    // Chequeo periódico: detectar expiración aunque el documento no cambie
+    const accessCheckInterval = setInterval(() => {
+      setSubscription(current => {
+        if (current) {
+          const accessResult = hasActiveAccess(current)
+          if (accessResult === 'grace') {
+            setHasAccess(true)
+            setIsInGracePeriod(true)
+          } else {
+            setHasAccess(accessResult)
+            setIsInGracePeriod(false)
+          }
+        }
+        return current
+      })
+    }, 5 * 60 * 1000) // Cada 5 minutos
+
     return () => {
       console.log('🔕 Limpiando listener de suscripción')
       unsubscribeSnapshot()
+      clearInterval(accessCheckInterval)
     }
   }, [subscriptionOwnerId])
 

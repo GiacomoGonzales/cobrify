@@ -443,6 +443,11 @@ export const hasActiveAccess = (subscription) => {
   const periodEnd = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd;
 
   if (periodEnd && periodEnd < now) {
+    // Cuentas de reseller: sin período de gracia, suspensión inmediata
+    if (subscription.resellerId) {
+      return false;
+    }
+
     // Verificar período de gracia (24 horas después del vencimiento)
     const gracePeriodMs = 24 * 60 * 60 * 1000; // 24 horas
     const timeSinceExpiry = now.getTime() - new Date(periodEnd).getTime();

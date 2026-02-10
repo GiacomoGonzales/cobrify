@@ -232,8 +232,8 @@ export default function ResellerBalance() {
 
       {/* Recharge Modal */}
       {showRechargeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Recargar Saldo</h2>
               <button
@@ -264,10 +264,10 @@ export default function ResellerBalance() {
                     <span className="font-medium text-gray-900">Yape / Plin</span>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
-                    <span className="font-mono text-lg">987 654 321</span>
+                    <span className="font-mono text-lg">926 258 059</span>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText('987654321')
+                        navigator.clipboard.writeText('926258059')
                         alert('Número copiado')
                       }}
                       className="p-2 hover:bg-gray-200 rounded-lg"
@@ -288,12 +288,12 @@ export default function ResellerBalance() {
                   <div className="space-y-2">
                     <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-gray-500">Cuenta Soles</p>
-                        <span className="font-mono">191-12345678-0-12</span>
+                        <p className="text-xs text-gray-500">Cuenta Soles - Quantio Solutions EIRL</p>
+                        <span className="font-mono">193-7311451-0-39</span>
                       </div>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText('19112345678012')
+                          navigator.clipboard.writeText('1937311451039')
                           alert('Número copiado')
                         }}
                         className="p-2 hover:bg-gray-200 rounded-lg"
@@ -304,11 +304,11 @@ export default function ResellerBalance() {
                     <div className="bg-gray-50 rounded-lg p-3 flex items-center justify-between">
                       <div>
                         <p className="text-xs text-gray-500">CCI</p>
-                        <span className="font-mono text-sm">002-191-12345678012-34</span>
+                        <span className="font-mono text-sm">002-19300731145103916</span>
                       </div>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText('00219112345678012')
+                          navigator.clipboard.writeText('00219300731145103916')
                           alert('CCI copiado')
                         }}
                         className="p-2 hover:bg-gray-200 rounded-lg"
@@ -322,7 +322,7 @@ export default function ResellerBalance() {
 
               {/* WhatsApp Button */}
               <a
-                href="https://wa.me/51987654321?text=Hola,%20quiero%20recargar%20mi%20saldo%20de%20reseller"
+                href="https://wa.me/51900434988?text=Hola,%20quiero%20recargar%20mi%20saldo%20de%20reseller"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"

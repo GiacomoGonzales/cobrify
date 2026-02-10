@@ -101,15 +101,15 @@
 
   /* Custom scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
-    @apply w-2;
+    @apply w-1.5;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-gray-100 rounded;
+    @apply bg-transparent;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 rounded hover:bg-gray-400;
+    @apply bg-gray-300/60 rounded-full hover:bg-gray-400/80;
   }
 
   /* Animation classes */

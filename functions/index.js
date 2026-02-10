@@ -7620,8 +7620,12 @@ export const checkSubscriptionExpirations = onSchedule(
         const diffMs = periodEnd.getTime() - now.getTime()
         const daysUntilExpiry = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
 
-        // 1 día después del vencimiento → suspender
-        if (daysUntilExpiry <= -1) {
+        // Cuentas de reseller: suspender inmediatamente al vencer (sin período de gracia)
+        const isResellerAccount = !!sub.resellerId
+        const suspendThreshold = isResellerAccount ? 0 : -1
+
+        // Suspender cuando corresponda según tipo de cuenta
+        if (daysUntilExpiry <= suspendThreshold) {
           await db.collection('subscriptions').doc(userId).update({
             status: 'suspended',
             accessBlocked: true,
@@ -7660,7 +7664,7 @@ export const checkSubscriptionExpirations = onSchedule(
         } else if (daysUntilExpiry === 1) {
           notifTitle = 'Tu suscripción vence mañana'
           notifMessage = `¡Último día! Tu plan vence mañana ${periodEnd.toLocaleDateString('es-PE')}. Renueva hoy para no perder acceso.`
-        } else if (daysUntilExpiry === 0) {
+        } else if (daysUntilExpiry === 0 && !isResellerAccount) {
           notifTitle = 'Tu suscripción vence hoy'
           notifMessage = `Tu plan vence hoy. Tienes 24 horas de gracia para renovar antes de que tu cuenta sea suspendida.`
           notifType = 'subscription_expired'
