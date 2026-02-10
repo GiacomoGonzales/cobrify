@@ -1101,167 +1101,316 @@ export default function CreateQuotation() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              {/* Desktop: Tabla compacta */}
+              <div className="hidden lg:block">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[35%]">Producto</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[8%]">Cant.</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[18%]">Unidad</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[14%]">P. Unit.</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase px-4 py-3 w-[14%]">Subtotal</th>
+                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-2 py-3 w-[5%]"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {quotationItems.map((item, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        {/* Producto - búsqueda inline */}
+                        <td className="px-4 py-2">
+                          <div className="relative">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                              <input
+                                type="text"
+                                value={item.productId ? item.name : item.searchTerm}
+                                onChange={e => {
+                                  if (item.productId) {
+                                    updateItem(index, 'name', e.target.value)
+                                  } else {
+                                    updateItem(index, 'searchTerm', e.target.value)
+                                    setShowProductSearch(index)
+                                  }
+                                }}
+                                onFocus={() => !item.productId && setShowProductSearch(index)}
+                                placeholder="Buscar producto o escribir nombre..."
+                                className={`w-full pl-7 pr-7 py-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                                  item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                                }`}
+                              />
+                              {item.productId && (
+                                <button
+                                  type="button"
+                                  onClick={() => clearProductSelection(index)}
+                                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {/* Dropdown de resultados */}
+                            {showProductSearch === index && !item.productId && (
+                              <>
+                                <div
+                                  className="fixed inset-0 z-10"
+                                  onClick={() => setShowProductSearch(null)}
+                                />
+                                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                  {getFilteredProducts(item.searchTerm).length > 0 ? (
+                                    getFilteredProducts(item.searchTerm).map(product => {
+                                      const hasPresentations = businessSettings?.presentationsEnabled &&
+                                                               product.presentations?.length > 0
+                                      const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
+                                                                (product.price2 || product.price3 || product.price4)
+                                      return (
+                                        <button
+                                          key={product.id}
+                                          type="button"
+                                          onClick={() => selectProduct(index, product)}
+                                          className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                                        >
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                              <p className="font-medium text-sm truncate">{product.name}</p>
+                                              {hasMultiplePrices && (
+                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 flex-shrink-0">
+                                                  <Tag className="w-2.5 h-2.5 mr-0.5" />
+                                                  Precios
+                                                </span>
+                                              )}
+                                              {hasPresentations && (
+                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 flex-shrink-0">
+                                                  <Package className="w-2.5 h-2.5 mr-0.5" />
+                                                  Pres.
+                                                </span>
+                                              )}
+                                            </div>
+                                            {product.code && (
+                                              <p className="text-xs text-gray-500">{product.code}</p>
+                                            )}
+                                          </div>
+                                          <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
+                                            {formatCurrency(product.price)}
+                                          </span>
+                                        </button>
+                                      )
+                                    })
+                                  ) : (
+                                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                      No se encontraron productos
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        {/* Cantidad */}
+                        <td className="px-2 py-2">
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={item.quantity}
+                            onChange={e => updateItem(index, 'quantity', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                        {/* Unidad */}
+                        <td className="px-2 py-2">
+                          <select
+                            value={item.unit}
+                            onChange={e => updateItem(index, 'unit', e.target.value)}
+                            className="w-full px-1 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                          >
+                            {UNITS.map(unit => (
+                              <option key={unit.value} value={unit.value}>
+                                {unit.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        {/* Precio Unitario */}
+                        <td className="px-2 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.unitPrice}
+                            onChange={e => updateItem(index, 'unitPrice', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                        </td>
+                        {/* Subtotal */}
+                        <td className="px-4 py-2 text-right">
+                          <span className="font-semibold text-sm text-gray-900">
+                            {formatCurrency(calculateItemTotal(item))}
+                          </span>
+                        </td>
+                        {/* Eliminar */}
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            disabled={quotationItems.length === 1}
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Móvil: Lista compacta */}
+              <div className="lg:hidden divide-y divide-gray-200">
                 {quotationItems.map((item, index) => (
-                  <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-medium text-gray-700">Item {index + 1}</h4>
-                      {quotationItems.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeItem(index)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                  <div key={index} className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500">#{index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(index)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        disabled={quotationItems.length === 1}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Búsqueda de producto */}
+                    <div className="relative">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={item.productId ? item.name : item.searchTerm}
+                          onChange={e => {
+                            if (item.productId) {
+                              updateItem(index, 'name', e.target.value)
+                            } else {
+                              updateItem(index, 'searchTerm', e.target.value)
+                              setShowProductSearch(index)
+                            }
+                          }}
+                          onFocus={() => !item.productId && setShowProductSearch(index)}
+                          placeholder="Buscar producto o escribir nombre..."
+                          className={`w-full pl-8 pr-8 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 ${
+                            item.productId ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                          }`}
+                        />
+                        {item.productId && (
+                          <button
+                            type="button"
+                            onClick={() => clearProductSelection(index)}
+                            className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      {/* Dropdown de resultados */}
+                      {showProductSearch === index && !item.productId && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setShowProductSearch(null)}
+                          />
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {getFilteredProducts(item.searchTerm).length > 0 ? (
+                              getFilteredProducts(item.searchTerm).map(product => {
+                                const hasPresentations = businessSettings?.presentationsEnabled &&
+                                                         product.presentations?.length > 0
+                                const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
+                                                          (product.price2 || product.price3 || product.price4)
+                                return (
+                                  <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => selectProduct(index, product)}
+                                    className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="font-medium text-sm truncate">{product.name}</p>
+                                        {hasMultiplePrices && (
+                                          <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 flex-shrink-0">
+                                            <Tag className="w-2.5 h-2.5 mr-0.5" />
+                                            Precios
+                                          </span>
+                                        )}
+                                        {hasPresentations && (
+                                          <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700 flex-shrink-0">
+                                            <Package className="w-2.5 h-2.5 mr-0.5" />
+                                            Pres.
+                                          </span>
+                                        )}
+                                      </div>
+                                      {product.code && (
+                                        <p className="text-xs text-gray-500">{product.code}</p>
+                                      )}
+                                    </div>
+                                    <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
+                                      {formatCurrency(product.price)}
+                                    </span>
+                                  </button>
+                                )
+                              })
+                            ) : (
+                              <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                No se encontraron productos
+                              </div>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Buscador de Productos */}
-                      <div className="sm:col-span-2 relative">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Buscar Producto
-                        </label>
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <input
-                            type="text"
-                            value={item.searchTerm}
-                            onChange={e => {
-                              updateItem(index, 'searchTerm', e.target.value)
-                              setShowProductSearch(index)
-                            }}
-                            onFocus={() => setShowProductSearch(index)}
-                            placeholder="Buscar por nombre o código..."
-                            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          {item.productId && (
-                            <button
-                              type="button"
-                              onClick={() => clearProductSelection(index)}
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
+                    {/* Unidad */}
+                    <select
+                      value={item.unit}
+                      onChange={e => updateItem(index, 'unit', e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                    >
+                      {UNITS.map(unit => (
+                        <option key={unit.value} value={unit.value}>
+                          {unit.label}
+                        </option>
+                      ))}
+                    </select>
 
-                        {/* Dropdown de resultados */}
-                        {showProductSearch === index && !item.productId && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setShowProductSearch(null)}
-                            />
-                            <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                              {getFilteredProducts(item.searchTerm).length > 0 ? (
-                                getFilteredProducts(item.searchTerm).map(product => {
-                                  const hasPresentations = businessSettings?.presentationsEnabled &&
-                                                           product.presentations?.length > 0
-                                  const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
-                                                            (product.price2 || product.price3 || product.price4)
-
-                                  return (
-                                    <button
-                                      key={product.id}
-                                      type="button"
-                                      onClick={() => selectProduct(index, product)}
-                                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center justify-between"
-                                    >
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                          <p className="font-medium text-sm">{product.name}</p>
-                                          {hasMultiplePrices && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
-                                              <Tag className="w-3 h-3 mr-0.5" />
-                                              Precios
-                                            </span>
-                                          )}
-                                          {hasPresentations && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                                              <Package className="w-3 h-3 mr-0.5" />
-                                              Presentaciones
-                                            </span>
-                                          )}
-                                        </div>
-                                        {product.code && (
-                                          <p className="text-xs text-gray-500">Código: {product.code}</p>
-                                        )}
-                                      </div>
-                                      <span className="text-sm font-semibold text-primary-600 ml-2">
-                                        {formatCurrency(product.price)}
-                                        {(hasMultiplePrices || hasPresentations) && (
-                                          <span className="text-xs text-gray-400 block">base</span>
-                                        )}
-                                      </span>
-                                    </button>
-                                  )
-                                })
-                              ) : (
-                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                                  No se encontraron productos
-                                </div>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Input
-                          label="Nombre del Producto/Servicio *"
-                          value={item.name}
-                          onChange={e => updateItem(index, 'name', e.target.value)}
-                          placeholder="Nombre del producto o servicio"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Input
-                          label="Descripción (opcional)"
-                          value={item.description || ''}
-                          onChange={e => updateItem(index, 'description', e.target.value)}
-                          placeholder="Descripción detallada del producto o servicio"
-                        />
-                      </div>
-
-                      <Input
-                        type="number"
-                        label="Cantidad *"
-                        value={item.quantity}
-                        onChange={e => updateItem(index, 'quantity', e.target.value)}
-                        min="0.01"
-                        step="0.01"
-                      />
-
-                      <Select
-                        label="Unidad *"
-                        value={item.unit}
-                        onChange={e => updateItem(index, 'unit', e.target.value)}
-                      >
-                        {UNITS.map(unit => (
-                          <option key={unit.value} value={unit.value}>
-                            {unit.label}
-                          </option>
-                        ))}
-                      </Select>
-
-                      <Input
-                        type="number"
-                        label="Precio Unitario *"
-                        value={item.unitPrice}
-                        onChange={e => updateItem(index, 'unitPrice', e.target.value)}
-                        min="0"
-                        step="0.01"
-                      />
-
+                    {/* Cant | P.Unit | Subtotal */}
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Subtotal
-                        </label>
-                        <div className="h-10 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg flex items-center">
-                          <span className="font-semibold text-gray-900">
+                        <label className="block text-xs text-gray-500 mb-1">Cant.</label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={item.quantity}
+                          onChange={e => updateItem(index, 'quantity', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">P. Unit.</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.unitPrice}
+                          onChange={e => updateItem(index, 'unitPrice', e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Subtotal</label>
+                        <div className="h-[34px] flex items-center justify-center bg-gray-50 border border-gray-200 rounded">
+                          <span className="font-semibold text-sm text-gray-900">
                             {formatCurrency(calculateItemTotal(item))}
                           </span>
                         </div>
