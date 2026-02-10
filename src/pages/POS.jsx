@@ -3562,7 +3562,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div className={`columns-2 md:columns-3 gap-3 sm:gap-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`columns-2 sm:columns-3 md:columns-4 lg:grid lg:grid-cols-3 gap-3 lg:gap-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
@@ -3579,12 +3579,17 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   const isExpired = expirationStatus && !expirationStatus.canSell
                   const isDisabled = isOutOfStock || isExpired
 
+                  // Calcular cantidad en carrito (suma de todas las variantes/lotes del producto)
+                  const quantityInCart = cart
+                    .filter(item => item.id === product.id)
+                    .reduce((sum, item) => sum + item.quantity, 0)
+
                   return (
                 <button
                   key={product.id}
                   onClick={() => addToCart(product)}
                   disabled={isDisabled}
-                  className={`w-full p-3 sm:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 sm:mb-4 inline-block ${
+                  className={`w-full p-3 lg:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 lg:mb-0 ${
                     isExpired
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock
@@ -3598,6 +3603,13 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                               : 'border-gray-200 hover:border-primary-500 hover:shadow-md'
                   }`}
                 >
+                  {/* Badge de cantidad en carrito */}
+                  {quantityInCart > 0 && (
+                    <div className="absolute -top-2 -left-2 w-6 h-6 bg-primary-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg z-10">
+                      {quantityInCart}
+                    </div>
+                  )}
+
                   {/* Badge de vencimiento */}
                   {expirationStatus && expirationStatus.status !== 'ok' && (
                     <div className={`absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -3613,11 +3625,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     </div>
                   )}
 
-                  {/* Mobile: Vertical layout */}
-                  <div className="flex flex-col sm:hidden">
+                  {/* Mobile/Tablet: Vertical layout */}
+                  <div className="flex flex-col lg:hidden">
                     {/* Image */}
                     {product.imageUrl && (
-                      <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 mb-2">
+                      <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 mb-1.5 sm:mb-2">
                         <img
                           src={product.imageUrl}
                           alt={product.name}
@@ -3626,40 +3638,57 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         />
                       </div>
                     )}
-                    {/* Name */}
-                    <p className={`font-semibold text-sm leading-tight ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
+                    {/* Name - más pequeño en móvil, truncado en tablet */}
+                    <p className={`font-semibold text-xs sm:text-sm leading-tight sm:line-clamp-2 ${isExpired ? 'text-red-700' : 'text-gray-900'}`}>
                       {product.name}
                     </p>
                     {/* Variants badge */}
                     {product.hasVariants && (
-                      <div className="mt-1">
-                        <Badge variant="secondary" className="text-xs">
-                          {product.variants?.length || 0} variantes
+                      <div className="mt-0.5 sm:mt-1">
+                        <Badge variant="secondary" className="text-[10px] sm:text-xs px-1.5 py-0.5">
+                          {product.variants?.length || 0} vars
                         </Badge>
                       </div>
                     )}
-                    {/* Codes */}
-                    <div className="mt-1 space-y-0.5 text-xs text-gray-500">
+                    {/* Codes - más compactos en móvil, ocultos en tablet */}
+                    <div className="mt-0.5 space-y-0 text-[10px] text-gray-500 sm:hidden">
                       {product.sku && <p>SKU: {product.sku}</p>}
                       {product.code && <p>Cód: {product.code}</p>}
                       {product.barcode && <p className="font-mono">{product.barcode}</p>}
                     </div>
+                    {/* Tablet: código compacto en una línea */}
+                    <p className="hidden sm:block text-xs text-gray-500 mt-1 truncate">
+                      {product.sku || product.code || product.barcode || ''}
+                    </p>
                     {/* Pharmacy info */}
                     {product.genericName && (
-                      <p className="text-xs text-gray-500 mt-1">{product.genericName} {product.concentration}</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1 sm:truncate">{product.genericName} {product.concentration}</p>
                     )}
                     {/* Price and Stock */}
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                      <p className={`text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
-                        {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
-                      </p>
-                      {!product.hasVariants && getStockBadge(product)}
-                      {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
+                    <div className="mt-1.5 sm:mt-2 pt-1.5 sm:pt-2 border-t border-gray-100">
+                      {/* Móvil: precio y stock en línea */}
+                      <div className="flex items-center justify-between sm:hidden gap-2">
+                        <p className={`text-sm font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                          {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                        </p>
+                        {!product.hasVariants && getStockBadge(product)}
+                        {product.hasVariants && <span className="text-[10px] text-gray-500">Ver opciones</span>}
+                      </div>
+                      {/* Tablet: precio arriba, stock abajo */}
+                      <div className="hidden sm:block lg:hidden">
+                        <p className={`text-base font-bold ${isExpired ? 'text-red-600' : 'text-primary-600'}`}>
+                          {product.hasVariants ? formatCurrency(product.basePrice) : formatCurrency(product.price)}
+                        </p>
+                        <div className="mt-1">
+                          {!product.hasVariants && getStockBadge(product)}
+                          {product.hasVariants && <span className="text-xs text-gray-500">Ver opciones</span>}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   {/* Desktop: Horizontal layout */}
-                  <div className="hidden sm:flex gap-3 h-full">
+                  <div className="hidden lg:flex gap-3 h-full">
                     {/* Product Image */}
                     {product.imageUrl && (
                       <div className="flex-shrink-0">
