@@ -84,7 +84,7 @@ export default function MySubscription() {
             <div>
               <p className="text-sm text-gray-500">Nombre del Plan</p>
               <p className="text-xl font-bold text-primary-600 capitalize">
-                {planInfo.name || subscription.plan}
+                {subscription.planName || planInfo.name || subscription.plan}
               </p>
             </div>
             <div>

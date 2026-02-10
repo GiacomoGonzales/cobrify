@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
 import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
+import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import { useToast } from '@/contexts/ToastContext'
@@ -182,9 +183,22 @@ export default function AdminUsers() {
   const [contactNameInput, setContactNameInput] = useState('')
   const [savingContact, setSavingContact] = useState(false)
 
+  // Planes personalizados
+  const [customPlans, setCustomPlans] = useState({})
+
   useEffect(() => {
     loadUsers()
+    loadCustomPlansData()
   }, [])
+
+  async function loadCustomPlansData() {
+    try {
+      const plans = await getCustomPlans()
+      setCustomPlans(plans)
+    } catch (e) {
+      console.error('Error loading custom plans:', e)
+    }
+  }
 
   async function loadUsers() {
     setLoading(true)
@@ -305,6 +319,7 @@ export default function AdminUsers() {
           emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
           plan: data.plan || 'unknown',
+          planName: data.planName || null,
           status,
           createdAt,
           periodEnd,
@@ -312,20 +327,20 @@ export default function AdminUsers() {
           currentPeriodEnd: data.currentPeriodEnd,
           currentPeriodStart: data.currentPeriodStart,
           lastCounterReset: data.lastCounterReset,
-          monthlyPrice: PLANS[data.plan]?.pricePerMonth || 0,
-          limits: data.limits || PLANS[data.plan]?.limits || {},
+          monthlyPrice: (PLANS[data.plan] || customPlans[data.plan])?.pricePerMonth || 0,
+          limits: data.limits || (PLANS[data.plan] || customPlans[data.plan])?.limits || {},
           usage: data.usage || { invoicesThisMonth: 0 },
           paymentHistory: data.paymentHistory || [],
           blockReason: data.blockReason || null,
           // Campos originales
-          planLimit: PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0, // Límite base del plan
+          planLimit: (PLANS[data.plan] || customPlans[data.plan])?.limits?.maxInvoicesPerMonth || 0, // Límite base del plan
           bonusInvoices: data.bonusInvoices || 0, // Comprobantes extra dados manualmente
           // Usar el límite real de la BD si existe, sino calcular con plan + bonus
           limit: (data.limits?.maxInvoicesPerMonth !== undefined && data.limits?.maxInvoicesPerMonth !== null)
             ? data.limits.maxInvoicesPerMonth
-            : (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) === -1
+            : ((PLANS[data.plan] || customPlans[data.plan])?.limits?.maxInvoicesPerMonth || 0) === -1
               ? -1
-              : (PLANS[data.plan]?.limits?.maxInvoicesPerMonth || 0) + (data.bonusInvoices || 0),
+              : ((PLANS[data.plan] || customPlans[data.plan])?.limits?.maxInvoicesPerMonth || 0) + (data.bonusInvoices || 0),
           accessBlocked: data.accessBlocked || false,
           lastPayment: data.paymentHistory?.slice(-1)[0]?.date?.toDate?.() || null,
           subUsersCount: subUsersCountMap[doc.id] || 0,
@@ -574,7 +589,7 @@ export default function AdminUsers() {
       u.email,
       u.businessName,
       u.ruc,
-      PLANS[u.plan]?.name || u.plan,
+      u.planName || PLANS[u.plan]?.name || u.plan,
       STATUS_LABELS[u.status],
       u.createdAt?.toLocaleDateString() || 'N/A',
       u.usage?.invoicesThisMonth || 0,
@@ -1222,7 +1237,7 @@ export default function AdminUsers() {
   async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null) {
     setProcessingPayment(true)
     try {
-      const plan = PLANS[planKey]
+      const plan = PLANS[planKey] || customPlans[planKey]
       if (!plan) {
         toast.error('Plan no válido')
         return
@@ -1260,6 +1275,7 @@ export default function AdminUsers() {
       // Actualizar suscripción
       await updateDoc(subscriptionRef, {
         plan: planKey,
+        planName: plan.name,
         status: 'active',
         currentPeriodStart: Timestamp.now(),
         currentPeriodEnd: Timestamp.fromDate(newEndDate),
@@ -1292,7 +1308,7 @@ export default function AdminUsers() {
   // Función para cambiar plan
   async function handleChangePlan(userId, newPlanKey) {
     try {
-      const plan = PLANS[newPlanKey]
+      const plan = PLANS[newPlanKey] || customPlans[newPlanKey]
       if (!plan) {
         toast.error('Plan no válido')
         return
@@ -1301,6 +1317,7 @@ export default function AdminUsers() {
       const subscriptionRef = doc(db, 'subscriptions', userId)
       await updateDoc(subscriptionRef, {
         plan: newPlanKey,
+        planName: plan.name,
         limits: plan.limits,
         updatedAt: Timestamp.now()
       })
@@ -1507,7 +1524,7 @@ export default function AdminUsers() {
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[user.status]}`}>
                         {STATUS_LABELS[user.status]}
                       </span>
-                      <p className="text-xs text-gray-400 mt-1">{PLANS[user.plan]?.name || user.plan}</p>
+                      <p className="text-xs text-gray-400 mt-1">{user.planName || PLANS[user.plan]?.name || user.plan}</p>
                     </div>
                   </div>
                 </div>
@@ -1646,7 +1663,7 @@ export default function AdminUsers() {
                     {/* Plan */}
                     <td className="px-2 py-2">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {PLANS[user.plan]?.name || user.plan}
+                        {user.planName || PLANS[user.plan]?.name || user.plan}
                       </span>
                     </td>
                     {/* Estado */}
@@ -1873,7 +1890,7 @@ export default function AdminUsers() {
                       {STATUS_LABELS[selectedUser.status]}
                     </span>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                      {PLANS[selectedUser.plan]?.name || selectedUser.plan}
+                      {selectedUser.planName || PLANS[selectedUser.plan]?.name || selectedUser.plan}
                     </span>
                   </div>
                 </div>
@@ -2734,6 +2751,7 @@ export default function AdminUsers() {
           onRegisterPayment={handleRegisterPayment}
           loading={processingPayment}
           toast={toast}
+          customPlans={customPlans}
         />
       )}
 
@@ -2749,6 +2767,7 @@ export default function AdminUsers() {
           onChangePlan={handleChangePlan}
           loading={processingPayment}
           toast={toast}
+          customPlans={customPlans}
         />
       )}
 

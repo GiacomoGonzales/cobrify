@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { PLANS } from './subscriptionService'
+import { getCustomPlans } from './customPlanService'
 
 /**
  * Obtiene estadísticas generales del sistema
@@ -92,6 +93,7 @@ export async function getAdminStats() {
             email: data.email,
             businessName: data.businessName,
             plan: data.plan,
+            planName: data.planName,
             createdAt
           })
         }
@@ -146,10 +148,13 @@ export async function getAdminStats() {
     const growthChartData = prepareGrowthChartData(monthlyGrowth)
 
     // Preparar datos para gráfico de distribución por plan
+    let customPlansData = {}
+    try { customPlansData = await getCustomPlans() } catch (e) { /* ignore */ }
+    const allPlans = { ...PLANS, ...customPlansData }
     const planDistribution = Object.entries(usersByPlan)
       .filter(([_, count]) => count > 0)
       .map(([plan, count]) => ({
-        name: PLANS[plan]?.name || plan,
+        name: allPlans[plan]?.name || plan,
         value: count,
         plan
       }))

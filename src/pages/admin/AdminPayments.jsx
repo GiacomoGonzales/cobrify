@@ -142,7 +142,7 @@ export default function AdminPayments() {
       p.businessName,
       p.amount,
       PAYMENT_METHODS[p.method]?.name || p.method,
-      PLANS[p.plan]?.name || p.plan,
+      p.planName || PLANS[p.plan]?.name || p.plan,
       p.status,
       p.notes || ''
     ])
@@ -441,7 +441,7 @@ export default function AdminPayments() {
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PAYMENT_METHODS[payment.method]?.color || 'bg-gray-100 text-gray-800'}`}>
                       {PAYMENT_METHODS[payment.method]?.name || payment.method}
                     </span>
-                    <span className="text-gray-500">{PLANS[payment.plan]?.name || payment.plan}</span>
+                    <span className="text-gray-500">{payment.planName || PLANS[payment.plan]?.name || payment.plan}</span>
                   </div>
                   {payment.status === 'completed' ? (
                     <span className="inline-flex items-center gap-1 text-green-600">
@@ -561,7 +561,7 @@ export default function AdminPayments() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">
-                        {PLANS[payment.plan]?.name || payment.plan}
+                        {payment.planName || PLANS[payment.plan]?.name || payment.plan}
                       </span>
                     </td>
                     <td className="px-4 py-3">

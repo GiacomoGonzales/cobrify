@@ -283,7 +283,7 @@ export default function AdminExpirations() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-700">
-                          {PLANS[sub.plan]?.name || sub.plan}
+                          {sub.planName || PLANS[sub.plan]?.name || sub.plan}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">

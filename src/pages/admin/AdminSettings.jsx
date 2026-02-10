@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { db } from '@/lib/firebase'
 import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore'
 import { PLANS } from '@/services/subscriptionService'
+import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan } from '@/services/customPlanService'
 import {
   Settings,
   Save,
@@ -20,7 +21,10 @@ import {
   Clock,
   Users,
   Trash2,
-  Wrench
+  Wrench,
+  Plus,
+  Edit2,
+  X
 } from 'lucide-react'
 
 export default function AdminSettings() {
@@ -191,16 +195,113 @@ export default function AdminSettings() {
 
 function PlansSection({ plans }) {
   const planEntries = Object.entries(plans || {})
+  const [customPlans, setCustomPlans] = useState({})
+  const [loadingCustom, setLoadingCustom] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingPlan, setEditingPlan] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    name: '', months: 1, totalPrice: 0, emissionMethod: 'qpse',
+    maxInvoicesPerMonth: 500, maxBranches: 1,
+    sunatIntegration: true, multiUser: true, notes: ''
+  })
+
+  useEffect(() => {
+    loadCustomPlans()
+  }, [])
+
+  async function loadCustomPlans() {
+    setLoadingCustom(true)
+    try {
+      const data = await getCustomPlans()
+      setCustomPlans(data)
+    } catch (e) {
+      console.error('Error loading custom plans:', e)
+    } finally {
+      setLoadingCustom(false)
+    }
+  }
+
+  function resetForm() {
+    setForm({
+      name: '', months: 1, totalPrice: 0, emissionMethod: 'qpse',
+      maxInvoicesPerMonth: 500, maxBranches: 1,
+      sunatIntegration: true, multiUser: true, notes: ''
+    })
+    setEditingPlan(null)
+    setShowForm(false)
+  }
+
+  function openEdit(planId, plan) {
+    setEditingPlan(planId)
+    setForm({
+      name: plan.name || '',
+      months: plan.months || 1,
+      totalPrice: plan.totalPrice || 0,
+      emissionMethod: plan.emissionMethod || 'qpse',
+      maxInvoicesPerMonth: plan.limits?.maxInvoicesPerMonth ?? 500,
+      maxBranches: plan.limits?.maxBranches ?? 1,
+      sunatIntegration: plan.limits?.sunatIntegration ?? true,
+      multiUser: plan.limits?.multiUser ?? true,
+      notes: plan.notes || ''
+    })
+    setShowForm(true)
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      const planData = {
+        name: form.name.trim(),
+        months: parseInt(form.months) || 1,
+        totalPrice: parseFloat(form.totalPrice) || 0,
+        emissionMethod: form.emissionMethod,
+        limits: {
+          maxInvoicesPerMonth: parseInt(form.maxInvoicesPerMonth) || 500,
+          maxBranches: parseInt(form.maxBranches) || 1,
+          sunatIntegration: form.sunatIntegration,
+          multiUser: form.multiUser
+        },
+        notes: form.notes
+      }
+
+      if (editingPlan) {
+        await updateCustomPlan(editingPlan, planData)
+      } else {
+        await createCustomPlan(planData)
+      }
+
+      await loadCustomPlans()
+      resetForm()
+    } catch (e) {
+      console.error('Error saving custom plan:', e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(planId) {
+    if (!confirm('¿Eliminar este plan personalizado?')) return
+    try {
+      await deleteCustomPlan(planId)
+      await loadCustomPlans()
+    } catch (e) {
+      console.error('Error deleting custom plan:', e)
+    }
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex items-start gap-2 text-amber-600 bg-amber-50 p-3 sm:p-4 rounded-lg">
         <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <p className="text-xs sm:text-sm">
-          Los planes se configuran en el código. Aquí puedes ver la configuración actual.
+          Los planes estándar se configuran en el código. Los planes personalizados se gestionan abajo.
         </p>
       </div>
 
+      {/* Planes estándar */}
+      <h3 className="text-base font-semibold text-gray-900">Planes Estándar</h3>
       {planEntries.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
@@ -293,6 +394,211 @@ function PlansSection({ plans }) {
         ))}
       </div>
       )}
+
+      {/* Planes Personalizados */}
+      <div className="border-t pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-900">Planes Personalizados</h3>
+          <button
+            onClick={() => { resetForm(); setShowForm(true) }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Crear Plan
+          </button>
+        </div>
+
+        {/* Formulario inline */}
+        {showForm && (
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-amber-900">
+                {editingPlan ? 'Editar Plan' : 'Nuevo Plan Personalizado'}
+              </h4>
+              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Nombre *</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Ej: Plan Especial - Restaurante Juan"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Método de emisión</label>
+                <select
+                  value={form.emissionMethod}
+                  onChange={(e) => setForm({ ...form, emissionMethod: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="qpse">QPse</option>
+                  <option value="sunat_direct">SUNAT Directo</option>
+                  <option value="offline">Sin conexión</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Meses</label>
+                <input
+                  type="number" min="1" max="36"
+                  value={form.months}
+                  onChange={(e) => setForm({ ...form, months: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Precio Total (S/)</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={form.totalPrice}
+                  onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Comprobantes/mes</label>
+                <input
+                  type="number" min="-1"
+                  value={form.maxInvoicesPerMonth}
+                  onChange={(e) => setForm({ ...form, maxInvoicesPerMonth: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                />
+                <p className="text-xs text-gray-400 mt-0.5">-1 = ilimitado</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Sucursales</label>
+                <input
+                  type="number" min="1"
+                  value={form.maxBranches}
+                  onChange={(e) => setForm({ ...form, maxBranches: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox" checked={form.sunatIntegration}
+                  onChange={(e) => setForm({ ...form, sunatIntegration: e.target.checked })}
+                  className="w-4 h-4 text-amber-600 rounded"
+                />
+                Integración SUNAT
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox" checked={form.multiUser}
+                  onChange={(e) => setForm({ ...form, multiUser: e.target.checked })}
+                  className="w-4 h-4 text-amber-600 rounded"
+                />
+                Multi-usuario
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Notas</label>
+              <input
+                type="text"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Notas internas del admin..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            {form.months > 0 && form.totalPrice > 0 && (
+              <p className="text-xs text-amber-700">
+                Precio por mes: S/ {(parseFloat(form.totalPrice) / parseInt(form.months)).toFixed(2)}
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.name.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-sm"
+              >
+                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {editingPlan ? 'Actualizar' : 'Crear'}
+              </button>
+              <button onClick={resetForm} className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Grid de planes personalizados */}
+        {loadingCustom ? (
+          <div className="text-center py-6 text-gray-500">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+            <p className="text-sm">Cargando planes personalizados...</p>
+          </div>
+        ) : Object.keys(customPlans).length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-4">No hay planes personalizados aún.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {Object.entries(customPlans).map(([key, plan]) => (
+              <div
+                key={key}
+                className="bg-white rounded-xl border-2 border-amber-200 p-3 sm:p-5 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-gray-900 text-sm sm:text-base truncate flex-1 mr-2">{plan.name}</h3>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 flex-shrink-0">
+                    Custom
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-gray-500">Precio total</span>
+                    <span className="font-bold text-amber-700">S/ {plan.totalPrice?.toFixed?.(2) || plan.totalPrice}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-gray-500">Período</span>
+                    <span className="font-medium">{plan.months}m (S/ {plan.pricePerMonth?.toFixed?.(2) || '0.00'}/mes)</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-gray-500">Comprobantes</span>
+                    <span className="font-medium">{plan.limits?.maxInvoicesPerMonth === -1 ? '∞' : plan.limits?.maxInvoicesPerMonth}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs sm:text-sm">
+                    <span className="text-gray-500">Emisión</span>
+                    <span className="font-medium">
+                      {plan.emissionMethod === 'qpse' ? 'QPse' : plan.emissionMethod === 'sunat_direct' ? 'SUNAT' : 'Sin conexión'}
+                    </span>
+                  </div>
+                  {plan.notes && (
+                    <p className="text-xs text-gray-500 italic mt-1">{plan.notes}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 mt-3 pt-3 border-t border-amber-100">
+                  <button
+                    onClick={() => openEdit(key, plan)}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(key)}
+                    className="flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

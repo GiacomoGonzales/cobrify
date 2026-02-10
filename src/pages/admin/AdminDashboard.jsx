@@ -610,7 +610,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-right">
                     <span className="px-2 py-1 text-xs font-medium bg-white text-gray-700 rounded-lg shadow-sm border border-gray-100">
-                      {PLANS[user.plan]?.name || user.plan}
+                      {user.planName || PLANS[user.plan]?.name || user.plan}
                     </span>
                     <p className="text-xs text-gray-400 mt-1">
                       {format(user.createdAt, 'dd MMM', { locale: es })}
@@ -658,7 +658,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg">
-                    {PLANS[payment.plan]?.name || payment.plan}
+                    {payment.planName || PLANS[payment.plan]?.name || payment.plan}
                   </span>
                   <span className="text-xs text-gray-500 font-medium">{format(payment.date, 'dd/MM/yy', { locale: es })}</span>
                 </div>
@@ -709,7 +709,7 @@ export default function AdminDashboard() {
                     </td>
                     <td className="py-4 px-4">
                       <span className="px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-lg">
-                        {PLANS[payment.plan]?.name || payment.plan}
+                        {payment.planName || PLANS[payment.plan]?.name || payment.plan}
                       </span>
                     </td>
                     <td className="py-4 px-4 text-sm text-gray-600 hidden md:table-cell font-medium">
