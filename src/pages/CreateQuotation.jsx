@@ -15,6 +15,7 @@ import { getCustomers, getProducts, createCustomer } from '@/services/firestoreS
 import { createQuotation, getNextQuotationNumber, getQuotation, updateQuotation } from '@/services/quotationService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { getActiveBranches } from '@/services/branchService'
+import { getSellers } from '@/services/sellerService'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 // Reordenadas: las más comunes primero (UNIDAD, HORA, SERVICIO)
@@ -145,6 +146,10 @@ export default function CreateQuotation() {
   // Sucursales
   const [branches, setBranches] = useState([])
   const [selectedBranch, setSelectedBranch] = useState(null)
+
+  // Vendedores
+  const [sellers, setSellers] = useState([])
+  const [selectedSeller, setSelectedSeller] = useState(null)
   const [quotationItems, setQuotationItems] = useState([
     { productId: '', name: '', quantity: 1, unitPrice: 0, unit: 'UNIDAD', searchTerm: '' },
   ])
@@ -168,10 +173,11 @@ export default function CreateQuotation() {
 
     setIsLoading(true)
     try {
-      const [customersResult, productsResult, branchesResult] = await Promise.all([
+      const [customersResult, productsResult, branchesResult, sellersResult] = await Promise.all([
         getCustomers(user.uid),
         getProducts(user.uid),
         getActiveBranches(user.uid),
+        getSellers(user.uid),
       ])
 
       if (customersResult.success) {
@@ -185,6 +191,10 @@ export default function CreateQuotation() {
       if (branchesResult.success) {
         setBranches(branchesResult.data || [])
       }
+
+      // Cargar vendedores activos
+      const activeSellers = (sellersResult.data || []).filter(s => s.status === 'active')
+      setSellers(activeSellers)
 
       // Si hay quotationId, cargar la cotización para edición
       if (quotationId) {
@@ -245,6 +255,12 @@ export default function CreateQuotation() {
             if (branch) {
               setSelectedBranch(branch)
             }
+          }
+
+          // Cargar vendedor si existe
+          if (q.sellerId && activeSellers.length > 0) {
+            const seller = activeSellers.find(s => s.id === q.sellerId)
+            if (seller) setSelectedSeller(seller)
           }
 
           // Cargar serie/número personalizado si existe
@@ -315,6 +331,12 @@ export default function CreateQuotation() {
             if (branch) {
               setSelectedBranch(branch)
             }
+          }
+
+          // Cargar vendedor si existe
+          if (q.sellerId && activeSellers.length > 0) {
+            const seller = activeSellers.find(s => s.id === q.sellerId)
+            if (seller) setSelectedSeller(seller)
           }
 
           // NO copiar serie/número personalizado (se genera nuevo)
@@ -728,6 +750,9 @@ export default function CreateQuotation() {
           branchId: selectedBranch?.id || null,
           branchName: selectedBranch?.name || null,
           branchAddress: selectedBranch?.address || null,
+          sellerId: selectedSeller?.id || null,
+          sellerName: selectedSeller?.name || null,
+          sellerCode: selectedSeller?.code || null,
         }
 
         const result = await updateQuotation(user.uid, quotationId, quotationData)
@@ -776,6 +801,9 @@ export default function CreateQuotation() {
           branchId: selectedBranch?.id || null,
           branchName: selectedBranch?.name || null,
           branchAddress: selectedBranch?.address || null,
+          sellerId: selectedSeller?.id || null,
+          sellerName: selectedSeller?.name || null,
+          sellerCode: selectedSeller?.code || null,
         }
 
         const result = await createQuotation(user.uid, quotationData)
@@ -934,6 +962,41 @@ export default function CreateQuotation() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Vendedor (solo si hay vendedores configurados) */}
+          {sellers.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Vendedor
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <select
+                  value={selectedSeller?.id || ''}
+                  onChange={e => {
+                    const seller = sellers.find(s => s.id === e.target.value)
+                    setSelectedSeller(seller || null)
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Sin vendedor asignado</option>
+                  {sellers
+                    .filter(s => {
+                      if (!selectedBranch) return !s.branchId
+                      return s.branchId === selectedBranch.id
+                    })
+                    .map(seller => (
+                      <option key={seller.id} value={seller.id}>
+                        {seller.code ? `${seller.code} - ` : ''}{seller.name}
+                      </option>
+                    ))
+                  }
+                </select>
               </CardContent>
             </Card>
           )}
@@ -1194,7 +1257,11 @@ export default function CreateQuotation() {
                                   if (item.productId) {
                                     updateItem(index, 'name', e.target.value)
                                   } else {
-                                    updateItem(index, 'searchTerm', e.target.value)
+                                    const val = e.target.value
+                                    const newItems = [...quotationItems]
+                                    newItems[index].searchTerm = val
+                                    newItems[index].name = val
+                                    setQuotationItems(newItems)
                                     setShowProductSearch(index)
                                   }
                                 }}
@@ -1358,7 +1425,11 @@ export default function CreateQuotation() {
                             if (item.productId) {
                               updateItem(index, 'name', e.target.value)
                             } else {
-                              updateItem(index, 'searchTerm', e.target.value)
+                              const val = e.target.value
+                              const newItems = [...quotationItems]
+                              newItems[index].searchTerm = val
+                              newItems[index].name = val
+                              setQuotationItems(newItems)
                               setShowProductSearch(index)
                             }
                           }}
