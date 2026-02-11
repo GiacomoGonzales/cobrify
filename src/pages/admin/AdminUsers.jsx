@@ -182,6 +182,11 @@ export default function AdminUsers() {
   const [userToEditContact, setUserToEditContact] = useState(null)
   const [contactNameInput, setContactNameInput] = useState('')
   const [savingContact, setSavingContact] = useState(false)
+  const [assigningNumbers, setAssigningNumbers] = useState(false)
+  const [showNumberModal, setShowNumberModal] = useState(false)
+  const [userToEditNumber, setUserToEditNumber] = useState(null)
+  const [numberInput, setNumberInput] = useState('')
+  const [savingNumber, setSavingNumber] = useState(false)
 
   // Planes personalizados
   const [customPlans, setCustomPlans] = useState({})
@@ -304,6 +309,7 @@ export default function AdminUsers() {
         usersData.push({
           id: doc.id,
           userId: doc.id, // Alias para compatibilidad con UserDetailsModal
+          userNumber: data.userNumber || null,
           email: data.email || 'N/A',
           businessName: business.razonSocial || business.businessName || data.businessName || 'Sin nombre',
           ruc: business.ruc || data.ruc || null,
@@ -583,9 +589,102 @@ export default function AdminUsers() {
     }
   }
 
+  // Guardar número de usuario editado
+  async function handleSaveUserNumber() {
+    if (!userToEditNumber) return
+
+    const num = parseInt(numberInput)
+    if (isNaN(num) || num < 1) {
+      toast.error('Ingresa un número válido mayor a 0')
+      return
+    }
+
+    // Verificar que no esté duplicado
+    const duplicate = users.find(u => u.userNumber === num && u.id !== userToEditNumber.id)
+    if (duplicate) {
+      toast.error(`El número ${num} ya está asignado a ${duplicate.businessName}`)
+      return
+    }
+
+    setSavingNumber(true)
+    try {
+      await updateDoc(doc(db, 'subscriptions', userToEditNumber.id), { userNumber: num })
+      toast.success(`Número ${num} asignado a ${userToEditNumber.businessName}`)
+      setShowNumberModal(false)
+      setUserToEditNumber(null)
+      setNumberInput('')
+      loadUsers()
+    } catch (error) {
+      console.error('Error guardando número:', error)
+      toast.error('Error al guardar el número')
+    } finally {
+      setSavingNumber(false)
+    }
+  }
+
+  // Asignar números correlativos a usuarios
+  async function assignUserNumbers() {
+    setAssigningNumbers(true)
+    try {
+      // Ordenar todos los usuarios por fecha de creación (más antiguo primero)
+      const sorted = [...users].sort((a, b) => {
+        const aTime = a.createdAt?.getTime?.() || 0
+        const bTime = b.createdAt?.getTime?.() || 0
+        return aTime - bTime
+      })
+
+      // Encontrar el mayor número ya asignado
+      let maxNumber = 0
+      sorted.forEach(u => {
+        if (u.userNumber && u.userNumber > maxNumber) maxNumber = u.userNumber
+      })
+
+      // Asignar números solo a los que no tienen
+      let nextNumber = maxNumber > 0 ? maxNumber + 1 : 1
+      const updates = []
+
+      // Si ninguno tiene número, asignar a todos en orden
+      if (maxNumber === 0) {
+        sorted.forEach((u, i) => {
+          updates.push({ id: u.id, userNumber: i + 1 })
+        })
+      } else {
+        // Solo asignar a los que no tienen número
+        sorted.forEach(u => {
+          if (!u.userNumber) {
+            updates.push({ id: u.id, userNumber: nextNumber })
+            nextNumber++
+          }
+        })
+      }
+
+      if (updates.length === 0) {
+        toast.success('Todos los usuarios ya tienen número asignado')
+        setAssigningNumbers(false)
+        return
+      }
+
+      // Guardar en Firestore
+      await Promise.all(
+        updates.map(u =>
+          updateDoc(doc(db, 'subscriptions', u.id), { userNumber: u.userNumber })
+        )
+      )
+
+      toast.success(`Números asignados a ${updates.length} usuarios`)
+      loadUsers()
+    } catch (error) {
+      console.error('Error asignando números:', error)
+      toast.error('Error al asignar números')
+    } finally {
+      setAssigningNumbers(false)
+    }
+  }
+
   function exportToCSV() {
-    const headers = ['Email', 'Negocio', 'RUC', 'Plan', 'Estado', 'Creado', 'Uso', 'Límite']
+    const headers = ['N°', 'Email', 'Negocio', 'RUC', 'Plan', 'Estado', 'Creado', 'Uso', 'Límite']
     const rows = filteredUsers.map(u => [
+      u.userNumber || '',
       u.email,
       u.businessName,
       u.ruc,
@@ -1475,6 +1574,16 @@ export default function AdminUsers() {
             </button>
 
             <button
+              onClick={assignUserNumbers}
+              disabled={assigningNumbers || loading}
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs sm:text-sm disabled:opacity-50"
+              title="Asignar números correlativos"
+            >
+              {assigningNumbers ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+              <span className="hidden sm:inline">Asignar N°</span>
+            </button>
+
+            <button
               onClick={exportToCSV}
               className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs sm:text-sm"
             >
@@ -1514,7 +1623,11 @@ export default function AdminUsers() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-5 h-5 text-indigo-600" />
+                      {user.userNumber ? (
+                        <span className="text-xs font-bold text-indigo-600">{user.userNumber}</span>
+                      ) : (
+                        <Building2 className="w-5 h-5 text-indigo-600" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 truncate text-sm">{user.businessName}</p>
@@ -1538,6 +1651,14 @@ export default function AdminUsers() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50/80 border-b border-gray-200 sticky top-0">
               <tr>
+                <th
+                  className="px-2 py-2.5 text-center text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors w-12"
+                  onClick={() => handleSort('userNumber')}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    N° <SortIcon field="userNumber" />
+                  </div>
+                </th>
                 <th
                   className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 transition-colors"
                   onClick={() => handleSort('businessName')}
@@ -1608,14 +1729,14 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center">
+                  <td colSpan={11} className="px-4 py-12 text-center">
                     <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
                     <p className="text-sm text-gray-500">Cargando usuarios...</p>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center">
+                  <td colSpan={11} className="px-4 py-12 text-center">
                     <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                     <p className="text-sm text-gray-500">No se encontraron usuarios</p>
                   </td>
@@ -1627,6 +1748,25 @@ export default function AdminUsers() {
                     className="hover:bg-indigo-50/50 cursor-pointer transition-colors"
                     onClick={() => setSelectedUser(user)}
                   >
+                    {/* N° */}
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          setUserToEditNumber(user)
+                          setNumberInput(user.userNumber ? String(user.userNumber) : '')
+                          setShowNumberModal(true)
+                        }}
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-bold transition-colors ${
+                          user.userNumber
+                            ? 'bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700'
+                            : 'bg-gray-50 text-gray-300 hover:bg-indigo-50 hover:text-indigo-400 border border-dashed border-gray-300'
+                        }`}
+                        title="Editar número"
+                      >
+                        {user.userNumber || '+'}
+                      </button>
+                    </td>
                     {/* Negocio + Email + RUC */}
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -3260,6 +3400,85 @@ export default function AdminUsers() {
       )}
 
       {/* Modal de editar nombre de contacto */}
+      {/* Modal editar número de usuario */}
+      {showNumberModal && userToEditNumber && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                  <Edit2 className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Editar N° de Usuario</h2>
+                  <p className="text-sm text-gray-500 truncate">{userToEditNumber.businessName}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Número
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={numberInput}
+                  onChange={(e) => setNumberInput(e.target.value)}
+                  placeholder="Ej: 1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-lg font-bold text-center"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleSaveUserNumber()
+                  }}
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500">
+                  <span className="font-medium">Email:</span> {userToEditNumber.email}
+                </p>
+                <p className="text-xs text-gray-500">
+                  <span className="font-medium">Actual:</span> {userToEditNumber.userNumber || 'Sin asignar'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowNumberModal(false)
+                  setUserToEditNumber(null)
+                  setNumberInput('')
+                }}
+                disabled={savingNumber}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveUserNumber}
+                disabled={savingNumber || !numberInput.trim()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingNumber ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Guardar
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showContactModal && userToEditContact && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-md">
