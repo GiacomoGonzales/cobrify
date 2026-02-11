@@ -1602,7 +1602,7 @@ export default function AdminUsers() {
       {/* Users Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
         {/* Vista móvil - Cards */}
-        <div className="sm:hidden">
+        <div className="sm:hidden divide-y divide-gray-200">
           {loading ? (
             <div className="p-8 text-center">
               <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
@@ -1614,35 +1614,132 @@ export default function AdminUsers() {
               <p className="text-sm text-gray-500">No se encontraron usuarios</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
-              {filteredUsers.map(user => (
-                <div
-                  key={user.id}
-                  onClick={() => setSelectedUser(user)}
-                  className="p-3 hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+            filteredUsers.map(user => (
+              <div
+                key={user.id}
+                className="p-3 hover:bg-gray-50"
+              >
+                {/* Header: Negocio + Estado */}
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${user.createdByReseller ? 'bg-purple-100' : 'bg-indigo-100'}`}>
                       {user.userNumber ? (
-                        <span className="text-xs font-bold text-indigo-600">{user.userNumber}</span>
+                        <span className="text-[10px] font-bold text-indigo-600">{user.userNumber}</span>
                       ) : (
-                        <Building2 className="w-5 h-5 text-indigo-600" />
+                        <Building2 className={`w-4 h-4 ${user.createdByReseller ? 'text-purple-600' : 'text-indigo-600'}`} />
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate text-sm">{user.businessName}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900 text-sm truncate">{user.businessName}</p>
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[user.status]}`}>
-                        {STATUS_LABELS[user.status]}
-                      </span>
-                      <p className="text-xs text-gray-400 mt-1">{user.planName || PLANS[user.plan]?.name || user.plan}</p>
+                      {user.createdByReseller && (
+                        <p className="text-[10px] text-purple-600 truncate">↳ {user.resellerName}</p>
+                      )}
                     </div>
                   </div>
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${STATUS_COLORS[user.status]}`}>
+                    {STATUS_LABELS[user.status]}
+                  </span>
                 </div>
-              ))}
-            </div>
+
+                {/* Info Row: Plan + SUNAT + Vencimiento */}
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                      {user.planName || PLANS[user.plan]?.name || user.plan}
+                    </span>
+                    {user.emissionMethod && user.emissionMethod !== 'none' && (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        user.emissionMethod === 'qpse' ? 'bg-emerald-50 text-emerald-700' :
+                        user.emissionMethod === 'sunat_direct' ? 'bg-sky-50 text-sky-700' :
+                        'bg-gray-50 text-gray-600'
+                      }`}>
+                        {user.emissionMethod === 'qpse' ? 'QPse' :
+                         user.emissionMethod === 'sunat_direct' ? 'SUNAT' : user.emissionMethod}
+                      </span>
+                    )}
+                  </div>
+                  {user.periodEnd && (
+                    <span className={`text-[11px] font-medium ${
+                      user.periodEnd < new Date() ? 'text-red-600' :
+                      user.periodEnd < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) ? 'text-amber-600' :
+                      'text-gray-500'
+                    }`}>
+                      Vence: {user.periodEnd.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
+                      {user.periodEnd < new Date() && <span className="ml-1 text-red-500 font-bold">!</span>}
+                    </span>
+                  )}
+                </div>
+
+                {/* Uso de facturación */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.9
+                          ? 'bg-red-500'
+                          : user.limit > 0 && (user.usage?.invoicesThisMonth || 0) / user.limit > 0.7
+                            ? 'bg-yellow-500'
+                            : 'bg-emerald-500'
+                      }`}
+                      style={{ width: user.limit > 0 ? `${Math.min(((user.usage?.invoicesThisMonth || 0) / user.limit) * 100, 100)}%` : '10%' }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-gray-500 tabular-nums flex-shrink-0">
+                    {user.usage?.invoicesThisMonth || 0}/{user.limit === -1 || user.limit === 0 ? '∞' : user.limit}
+                  </span>
+                </div>
+
+                {/* Contacto + Ubicación */}
+                {(user.contactName || user.phone || user.department) && (
+                  <div className="flex items-center gap-3 text-[11px] text-gray-500 mb-2">
+                    {(user.contactName || user.phone) && (
+                      <span className="truncate">
+                        {user.contactName}{user.contactName && user.phone && ' · '}{user.phone}
+                      </span>
+                    )}
+                    {user.department && (
+                      <span className="text-gray-400 truncate">{user.department}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Acciones */}
+                <div className="flex items-center justify-end gap-1 pt-2 border-t border-gray-100">
+                  <button
+                    onClick={() => setSelectedUser(user)}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Ver
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUserToEditContact(user)
+                      setContactNameInput(user.contactName || '')
+                      setShowContactModal(true)
+                    }}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Editar
+                  </button>
+                  {user.status !== 'suspended' ? (
+                    <button
+                      onClick={() => toggleUserAccess(user.id, true)}
+                      className="flex items-center gap-1 px-2 py-1.5 text-xs text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                    >
+                      <Ban className="w-3.5 h-3.5" /> Suspender
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => toggleUserAccess(user.id, false)}
+                      className="flex items-center gap-1 px-2 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Reactivar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
           )}
         </div>
 

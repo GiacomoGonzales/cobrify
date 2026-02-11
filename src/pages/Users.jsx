@@ -447,37 +447,138 @@ export default function Users() {
         </Button>
       </div>
 
-      {/* Tabla de usuarios */}
+      {/* Usuarios */}
       <Card>
         <CardHeader>
           <CardTitle>Usuarios Registrados ({users.length})</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Estado</TableHead>
-                  {isRealEstateMode && <TableHead>Agente</TableHead>}
-                  <TableHead>Páginas</TableHead>
-                  <TableHead>Almacenes</TableHead>
-                  <TableHead>Creado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.length === 0 ? (
+        <CardContent className="p-0 sm:p-6">
+          {/* Estado vacío */}
+          {users.length === 0 && (
+            <div className="text-center py-8 text-gray-500 px-4">
+              <UsersIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+              <p>No hay usuarios creados</p>
+              <p className="text-sm">Crea tu primer usuario para comenzar</p>
+            </div>
+          )}
+
+          {/* Vista móvil - Tarjetas */}
+          {users.length > 0 && (
+            <div className="sm:hidden divide-y divide-gray-200">
+              {users.map((userItem) => (
+                <div key={userItem.id} className="p-4 hover:bg-gray-50">
+                  {/* Header: Nombre + Estado */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        userItem.isActive ? 'bg-primary-100' : 'bg-gray-100'
+                      }`}>
+                        <UsersIcon className={`w-5 h-5 ${userItem.isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-900 truncate">{userItem.displayName}</p>
+                        <p className="text-sm text-gray-500 truncate">{userItem.email}</p>
+                      </div>
+                    </div>
+                    <Badge variant={userItem.isActive ? 'success' : 'default'} className="flex-shrink-0">
+                      {userItem.isActive ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                  </div>
+
+                  {/* Info: Permisos */}
+                  <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 text-primary-700 rounded-lg">
+                      <Shield className="w-3 h-3" />
+                      {userItem.allowedPages?.length || 0} páginas
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg">
+                      <Warehouse className="w-3 h-3" />
+                      {!userItem.allowedWarehouses || userItem.allowedWarehouses.length === 0
+                        ? 'Todos los almacenes'
+                        : `${userItem.allowedWarehouses.length} almacén(es)`
+                      }
+                    </span>
+                    {userItem.allowedBranches && userItem.allowedBranches.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-cyan-50 text-cyan-700 rounded-lg">
+                        <Store className="w-3 h-3" />
+                        {userItem.allowedBranches.length} sucursal(es)
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Agente (solo modo inmobiliaria) */}
+                  {isRealEstateMode && userItem.agentName && (
+                    <div className="mb-3">
+                      <span className="inline-flex items-center gap-1 text-sm text-cyan-700 bg-cyan-50 px-2 py-1 rounded-lg">
+                        <UserCheck className="w-3 h-3" />
+                        {userItem.agentName}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Fecha de creación */}
+                  <p className="text-xs text-gray-400 mb-3">
+                    Creado: {userItem.createdAt
+                      ? formatDate(
+                          userItem.createdAt.toDate
+                            ? userItem.createdAt.toDate()
+                            : userItem.createdAt
+                        )
+                      : '-'}
+                  </p>
+
+                  {/* Acciones */}
+                  <div className="flex items-center justify-end gap-1 pt-3 border-t border-gray-100">
+                    <button
+                      onClick={() => handleToggleStatus(userItem.id, userItem.isActive)}
+                      className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                        userItem.isActive
+                          ? 'text-yellow-600 hover:bg-yellow-50'
+                          : 'text-green-600 hover:bg-green-50'
+                      }`}
+                    >
+                      {userItem.isActive ? (
+                        <><EyeOff className="w-3.5 h-3.5" /> Desactivar</>
+                      ) : (
+                        <><Eye className="w-3.5 h-3.5" /> Activar</>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => openEditModal(userItem)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Editar
+                    </button>
+                    <button
+                      onClick={() => handleDelete(userItem.id)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Vista desktop - Tabla */}
+          {users.length > 0 && (
+            <div className="hidden sm:block overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={isRealEstateMode ? 8 : 7} className="text-center py-8 text-gray-500">
-                      <UsersIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p>No hay usuarios creados</p>
-                      <p className="text-sm">Crea tu primer usuario para comenzar</p>
-                    </TableCell>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Estado</TableHead>
+                    {isRealEstateMode && <TableHead>Agente</TableHead>}
+                    <TableHead>Páginas</TableHead>
+                    <TableHead>Almacenes</TableHead>
+                    <TableHead>Creado</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
-                ) : (
-                  users.map((userItem) => (
+                </TableHeader>
+                <TableBody>
+                  {users.map((userItem) => (
                     <TableRow key={userItem.id}>
                       <TableCell className="font-medium">{userItem.displayName}</TableCell>
                       <TableCell>{userItem.email}</TableCell>
@@ -555,11 +656,11 @@ export default function Users() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
