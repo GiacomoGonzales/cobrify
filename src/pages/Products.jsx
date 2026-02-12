@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, Loader2, AlertTriangle, DollarSign, Folder, FolderPlus, Tag, X, FileSpreadsheet, Upload, ChevronDown, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Warehouse, CheckSquare, Square, CheckCheck, FolderEdit, Calendar, Eye, EyeOff, Truck, ArrowUpDown, ArrowUp, ArrowDown, Image, Camera, Pill, ScanBarcode, Store, Copy, MoreVertical, SlidersHorizontal, Check } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera'
@@ -285,6 +285,9 @@ export default function Products() {
   })
   const [laboratories, setLaboratories] = useState([]) // Lista de laboratorios para el select
 
+  // Product location state (for enableProductLocation preference, works in all modes)
+  const [productLocation, setProductLocation] = useState('')
+
   // Presentations state (venta por presentaciones: unidad, pack, caja, etc.)
   const [presentations, setPresentations] = useState([])
   const [newPresentation, setNewPresentation] = useState({ name: '', factor: '', price: '' })
@@ -293,6 +296,15 @@ export default function Products() {
   const [productImage, setProductImage] = useState(null) // File object
   const [productImagePreview, setProductImagePreview] = useState(null) // URL preview
   const [uploadingImage, setUploadingImage] = useState(false)
+
+  // Column visibility preferences (persisted in localStorage)
+  const [columnPreferences, setColumnPreferences] = useState(() => {
+    try {
+      const saved = localStorage.getItem('products_visible_columns')
+      return saved ? JSON.parse(saved) : {}
+    } catch { return {} }
+  })
+  const [columnSelectorOpen, setColumnSelectorOpen] = useState(false)
 
   // Verificar si las imágenes de productos están habilitadas (por admin O por preferencia del usuario)
   const canUseProductImages = hasFeature('productImages') || businessSettings?.enableProductImages
@@ -492,6 +504,7 @@ export default function Products() {
       sanitaryRegistry: '',
       location: '',
     })
+    setProductLocation('')
     setIsModalOpen(true)
   }
 
@@ -543,6 +556,7 @@ export default function Products() {
       sanitaryRegistry: product.sanitaryRegistry || '',
       location: product.location || '',
     })
+    setProductLocation(product.location || '')
 
     // Load tax affectation (default to '10' = Gravado if not set for backwards compatibility)
     setTaxAffectation(product.taxAffectation || '10')
@@ -634,6 +648,7 @@ export default function Products() {
       sanitaryRegistry: product.sanitaryRegistry || '',
       location: product.location || '',
     })
+    setProductLocation(product.location || '')
 
     setTaxAffectation(product.taxAffectation || '10')
     setIgvRate(product.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
@@ -772,6 +787,8 @@ export default function Products() {
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         ...(taxType === 'standard' && taxAffectation === '10' && { igvRate }), // Per-product IGV rate (18% or 10%)
         catalogVisible: catalogVisible, // Visible en catálogo público
+        // Product location (works in all modes when enabled)
+        location: businessMode === 'pharmacy' ? (pharmacyData.location || null) : (productLocation || null),
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
         // Add presentations if enabled (venta por presentaciones)
@@ -790,7 +807,6 @@ export default function Products() {
           saleCondition: pharmacyData.saleCondition || 'sin_receta',
           requiresPrescription: pharmacyData.saleCondition !== 'sin_receta',
           sanitaryRegistry: pharmacyData.sanitaryRegistry || null,
-          location: pharmacyData.location || null,
         } : {}),
       }
 
@@ -2113,17 +2129,54 @@ export default function Products() {
   const { totalValue, lowStockCount, expiringProductsCount } = statistics
 
   // Calcular qué columnas tienen datos (para ocultar columnas vacías)
+  const columnsWithData = React.useMemo(() => ({
+    image: products.some(p => p.imageUrl),
+    sku: products.some(p => p.sku && p.sku.trim() !== ''),
+    code: products.some(p => p.code && p.code.trim() !== ''),
+    description: products.some(p => p.description && p.description.trim() !== ''),
+    cost: products.some(p => p.cost !== undefined && p.cost !== null),
+    category: products.some(p => p.category && p.category.trim() !== ''),
+    location: products.some(p => p.location && p.location.trim() !== ''),
+    expiration: products.some(p => p.trackExpiration && p.expirationDate),
+  }), [products])
+
+  // Columnas visibles = tienen datos Y el usuario no las ha desactivado
   const visibleColumns = React.useMemo(() => {
-    return {
-      image: products.some(p => p.imageUrl),
-      sku: products.some(p => p.sku && p.sku.trim() !== ''),
-      code: products.some(p => p.code && p.code.trim() !== ''),
-      description: products.some(p => p.description && p.description.trim() !== ''),
-      cost: products.some(p => p.cost !== undefined && p.cost !== null),
-      category: products.some(p => p.category && p.category.trim() !== ''),
-      expiration: products.some(p => p.trackExpiration && p.expirationDate),
+    const result = {}
+    for (const key of Object.keys(columnsWithData)) {
+      result[key] = columnsWithData[key] && columnPreferences[key] !== false
     }
-  }, [products])
+    return result
+  }, [columnsWithData, columnPreferences])
+
+  // Labels para el selector de columnas
+  const columnLabels = {
+    image: 'Imagen',
+    sku: 'SKU',
+    code: 'Código de barras',
+    description: 'Descripción',
+    cost: 'Costo / Utilidad',
+    category: 'Categoría',
+    location: 'Ubicación',
+    expiration: 'Vencimiento',
+  }
+
+  const toggleColumnPreference = (key) => {
+    setColumnPreferences(prev => {
+      const next = { ...prev, [key]: prev[key] === false ? true : false }
+      localStorage.setItem('products_visible_columns', JSON.stringify(next))
+      return next
+    })
+  }
+
+  const resetColumnPreferences = () => {
+    setColumnPreferences({})
+    localStorage.removeItem('products_visible_columns')
+  }
+
+  const hasHiddenColumns = Object.keys(columnsWithData).some(
+    key => columnsWithData[key] && columnPreferences[key] === false
+  )
 
   if (isLoading) {
     return (
@@ -2164,6 +2217,66 @@ export default function Products() {
             Exportar Excel
           </Button>
           <div className="flex gap-2">
+            {/* Selector de columnas visibles */}
+            <div className="relative">
+              <Button
+                variant="outline"
+                onClick={() => setColumnSelectorOpen(!columnSelectorOpen)}
+                className={`flex-1 sm:flex-initial ${hasHiddenColumns ? 'border-primary-400 text-primary-700' : ''}`}
+                title="Columnas visibles"
+              >
+                <SlidersHorizontal className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Columnas</span>
+              </Button>
+              {columnSelectorOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setColumnSelectorOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-500 uppercase">Columnas visibles</p>
+                    </div>
+                    {Object.keys(columnLabels).map(key => {
+                      if (!columnsWithData[key]) return null
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => toggleColumnPreference(key)}
+                          className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                            columnPreferences[key] !== false
+                              ? 'bg-primary-600 border-primary-600'
+                              : 'border-gray-300'
+                          }`}>
+                            {columnPreferences[key] !== false && (
+                              <Check className="w-3 h-3 text-white" />
+                            )}
+                          </div>
+                          {columnLabels[key]}
+                        </button>
+                      )
+                    })}
+                    {hasHiddenColumns && (
+                      <>
+                        <div className="border-t border-gray-100 my-1" />
+                        <button
+                          onClick={() => {
+                            resetColumnPreferences()
+                            setColumnSelectorOpen(false)
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm text-primary-600 hover:bg-gray-50 font-medium"
+                        >
+                          Mostrar todas
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             <Button
               variant="outline"
               onClick={openCategoryModal}
@@ -2532,8 +2645,8 @@ export default function Products() {
                           </div>
                         </div>
 
-                        {/* Tags: SKU + código + categoría */}
-                        {(visibleColumns.sku || visibleColumns.code || categoryPath) && (
+                        {/* Tags: SKU + código + categoría + ubicación */}
+                        {(visibleColumns.sku || visibleColumns.code || categoryPath || (visibleColumns.location && product.location)) && (
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             {visibleColumns.sku && product.sku && (
                               <span className="inline-block font-mono text-xs text-primary-700 bg-primary-50 px-2 py-0.5 rounded-full font-medium">
@@ -2548,6 +2661,11 @@ export default function Products() {
                             {categoryPath && (
                               <span className="inline-block text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full truncate max-w-[120px]">
                                 {categoryPath}
+                              </span>
+                            )}
+                            {visibleColumns.location && product.location && (
+                              <span className="inline-block font-mono text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                                {product.location}
                               </span>
                             )}
                           </div>
@@ -2675,6 +2793,9 @@ export default function Products() {
                       </button>
                     </TableHead>
                   )}
+                  {visibleColumns.location && (
+                    <TableHead className="hidden md:table-cell max-w-[110px]">Ubicación</TableHead>
+                  )}
                   <TableHead className="max-w-[80px]">
                     <button
                       onClick={() => handleSort('stock')}
@@ -2786,6 +2907,17 @@ export default function Products() {
                             {product.category ? (
                               <span className="text-xs text-gray-700 truncate block" title={getCategoryPath(categories, product.category)}>
                                 {getCategoryPath(categories, product.category) || product.category}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                        )}
+                        {visibleColumns.location && (
+                          <TableCell className="hidden md:table-cell max-w-[110px]">
+                            {product.location ? (
+                              <span className="text-xs font-mono text-gray-700 truncate block" title={product.location}>
+                                {product.location}
                               </span>
                             ) : (
                               <span className="text-xs text-gray-400">-</span>
@@ -3375,6 +3507,23 @@ export default function Products() {
               <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
               {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
             </div>
+
+            {/* Ubicación del producto (habilitado desde Preferencias) */}
+            {businessSettings?.enableProductLocation && businessMode !== 'pharmacy' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ubicación del Producto
+                </label>
+                <input
+                  type="text"
+                  value={productLocation}
+                  onChange={(e) => setProductLocation(e.target.value)}
+                  placeholder="Ej: P1-3A-4R (Pasillo 1, Estante 3A, Fila 4)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Ubicación física en el almacén</p>
+              </div>
+            )}
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
@@ -4507,6 +4656,16 @@ export default function Products() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* Ubicación del producto (para modos no farmacia) */}
+            {businessMode !== 'pharmacy' && viewingProduct.location && (
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Ubicación</label>
+                  <p className="text-sm text-gray-900 font-mono font-medium mt-1">{viewingProduct.location}</p>
                 </div>
               </div>
             )}
