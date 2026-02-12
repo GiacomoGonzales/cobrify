@@ -853,7 +853,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           </div>
         )}
 
-        {!(invoice.documentType === 'nota_venta' && companySettings?.hideRucIgvInNotaVenta) && (
+        {!(invoice.documentType === 'nota_venta' && (companySettings?.hideRucIgvInNotaVenta || companySettings?.hideOnlyIgvInNotaVenta)) && (
           <>
             <div className="total-row">
               <span>{invoice.discount && invoice.discount > 0 ? 'OP. Gravada:' : 'Subtotal:'}</span>

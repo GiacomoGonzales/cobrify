@@ -722,13 +722,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Detectar si debe ocultar RUC e IGV en notas de venta
   const isNotaVenta = invoice.documentType === 'nota_venta'
   const hideRucIgvInNotaVenta = companySettings?.hideRucIgvInNotaVenta === true
-  const shouldHideRucIgv = isNotaVenta && hideRucIgvInNotaVenta
+  const hideOnlyIgvInNotaVenta = companySettings?.hideOnlyIgvInNotaVenta === true
+  const shouldHideRuc = isNotaVenta && hideRucIgvInNotaVenta
+  const shouldHideIgv = isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta)
 
   // RUC (texto blanco sobre fondo de color) - Ocultar en notas de venta si está configurado
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(255, 255, 255)
-  if (!shouldHideRucIgv) {
+  if (!shouldHideRuc) {
     doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
   }
   doc.setTextColor(...BLACK) // Restaurar color negro para el resto
@@ -1335,12 +1337,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // Calcular filas de totales (usado para posicionar elementos después)
   // Si oculta IGV: solo 1 fila (total), sino: 3 base + extras
-  const totalsSectionRows = shouldHideRucIgv
+  const totalsSectionRows = shouldHideIgv
     ? 1
     : (3 + extraIgvRows + (HAS_DISCOUNT ? 1 : 0) + (HAS_RECARGO_CONSUMO ? 1 : 0) + (HAS_DETRACTION ? 2 : 0))
 
   // Si es nota de venta con ocultar IGV, solo mostrar TOTAL
-  if (shouldHideRucIgv) {
+  if (shouldHideIgv) {
     // Solo mostrar el TOTAL sin desglose
     const totalRowHeight = totalsRowHeight + 6
     doc.setDrawColor(...BLACK)
@@ -1436,7 +1438,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   // Filas de DETRACCIÓN (si aplica) - Solo si no se oculta el IGV
-  if (HAS_DETRACTION && !shouldHideRucIgv) {
+  if (HAS_DETRACTION && !shouldHideIgv) {
     // Fila: DETRACCIÓN (estilo neutro como las otras filas)
     doc.setFillColor(250, 250, 250) // Gris claro neutro
     doc.rect(totalsX, footerY, totalsWidth, totalsRowHeight, 'F')

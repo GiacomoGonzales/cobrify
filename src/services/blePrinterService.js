@@ -632,6 +632,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       logoUrl,
       // Configuración
       hideRucIgvInNotaVenta,
+      hideOnlyIgvInNotaVenta,
       // Documento
       documentType,
       isNotaVenta,
@@ -916,7 +917,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     // ========== Totales ==========
     commands.push(ESCPOSCommands.align(2)); // Derecha
 
-    if (!(isNotaVenta && hideRucIgvInNotaVenta)) {
+    if (!(isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta))) {
       const subtotalValue = subtotal || 0;
       const taxValue = tax || igv || 0;
       commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotalValue.toFixed(2) + '\n'));

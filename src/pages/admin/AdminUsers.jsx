@@ -47,7 +47,10 @@ import {
   MapPin,
   Phone,
   FileText,
-  PlusCircle
+  PlusCircle,
+  TrendingUp,
+  TrendingDown,
+  ChevronRight
 } from 'lucide-react'
 import {
   getBranches,
@@ -187,6 +190,8 @@ export default function AdminUsers() {
   const [userToEditNumber, setUserToEditNumber] = useState(null)
   const [numberInput, setNumberInput] = useState('')
   const [savingNumber, setSavingNumber] = useState(false)
+
+  const [showRenewalDetails, setShowRenewalDetails] = useState(false)
 
   // Planes personalizados
   const [customPlans, setCustomPlans] = useState({})
@@ -505,6 +510,109 @@ export default function AdminUsers() {
       cobrify: users.filter(u => !u.createdByReseller).length,
       reseller: users.filter(u => u.createdByReseller).length
     }
+  }, [users])
+
+  // Métricas de renovación mensual
+  const renewalStats = useMemo(() => {
+    if (!users.length) return null
+
+    const now = new Date()
+    const months = []
+    const monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1)
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59)
+
+      let due = 0        // candidatos a renovar (vencimiento en este mes)
+      let renewed = 0    // renovados
+      let revenue = 0    // ingresos totales del mes
+      let newClients = 0 // clientes nuevos (primer pago)
+
+      for (const u of users) {
+        if (u.status === 'suspended') continue
+
+        // Contar pagos de este usuario en este mes
+        const paymentsThisMonth = (u.paymentHistory || []).filter(p => {
+          const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
+          return pDate && pDate >= monthStart && pDate <= monthEnd
+        })
+
+        // Ingresos: sumar amount de pagos del mes
+        for (const p of paymentsThisMonth) {
+          revenue += (p.amount || 0)
+        }
+
+        // Determinar si es nuevo cliente (primer pago es en este mes)
+        const allPayments = (u.paymentHistory || []).map(p => {
+          const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
+          return pDate
+        }).filter(Boolean).sort((a, b) => a - b)
+
+        if (allPayments.length > 0 && allPayments[0] >= monthStart && allPayments[0] <= monthEnd) {
+          newClients++
+          continue // Nuevo cliente, no es candidato a renovar
+        }
+
+        // Candidato a renovar: tenía algún periodo que vencía en este mes
+        // Miramos si algún pago previo generó un currentPeriodEnd en este mes
+        const payments = (u.paymentHistory || []).map(p => {
+          const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
+          return { ...p, parsedDate: pDate }
+        }).filter(p => p.parsedDate).sort((a, b) => a.parsedDate - b.parsedDate)
+
+        let wasDueThisMonth = false
+        for (let pi = 0; pi < payments.length; pi++) {
+          const p = payments[pi]
+          const pMonths = p.months || 1
+          const endDate = new Date(p.parsedDate)
+          endDate.setMonth(endDate.getMonth() + pMonths)
+          if (endDate >= monthStart && endDate <= monthEnd) {
+            wasDueThisMonth = true
+            break
+          }
+        }
+
+        // Also check currentPeriodEnd directly for users with a single payment or no computed end
+        if (!wasDueThisMonth) {
+          const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() :
+            (u.periodEnd instanceof Date ? u.periodEnd : null)
+          if (pEnd && pEnd >= monthStart && pEnd <= monthEnd) {
+            wasDueThisMonth = true
+          }
+        }
+
+        if (wasDueThisMonth) {
+          due++
+          // Check if they renewed (payment in this month or next month)
+          const nextMonthEnd = new Date(d.getFullYear(), d.getMonth() + 2, 0, 23, 59, 59)
+          const didRenew = (u.paymentHistory || []).some(p => {
+            const pDate = p.date?.toDate?.() ? p.date.toDate() : (p.date instanceof Date ? p.date : null)
+            return pDate && pDate >= monthStart && pDate <= nextMonthEnd
+          })
+          if (didRenew) renewed++
+        }
+      }
+
+      const expired = due - renewed
+      const rate = due > 0 ? Math.round((renewed / due) * 100) : null
+
+      months.push({
+        label: `${monthLabels[d.getMonth()]} ${d.getFullYear()}`,
+        renewed,
+        due,
+        expired,
+        rate,
+        revenue,
+        newClients
+      })
+    }
+
+    const currentMonth = months[months.length - 1]
+    const previousMonth = months[months.length - 2]
+
+    return { currentMonth, previousMonth, months }
   }, [users])
 
   function handleSort(field) {
@@ -1501,6 +1609,117 @@ export default function AdminUsers() {
           <p className="text-xs sm:text-sm text-gray-500 mt-1 text-center sm:text-left">Suspendidos</p>
         </div>
       </div>
+
+      {/* Tasa de Renovación */}
+      {renewalStats && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setShowRenewalDetails(!showRenewalDetails)}
+            className="w-full p-3 sm:p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+              <div className="p-2 rounded-lg bg-indigo-50">
+                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+              </div>
+              <div className="text-left min-w-0">
+                <p className="text-xs sm:text-sm text-gray-500">Tasa de Renovación</p>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className={`text-xl sm:text-2xl font-bold ${
+                    renewalStats.currentMonth.rate === null ? 'text-gray-400' :
+                    renewalStats.currentMonth.rate > 70 ? 'text-green-600' :
+                    renewalStats.currentMonth.rate >= 40 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {renewalStats.currentMonth.rate !== null ? `${renewalStats.currentMonth.rate}%` : '—'}
+                  </span>
+                  {renewalStats.currentMonth.rate !== null && renewalStats.previousMonth.rate !== null && (
+                    <span className={`flex items-center gap-0.5 text-xs sm:text-sm font-medium ${
+                      renewalStats.currentMonth.rate >= renewalStats.previousMonth.rate ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {renewalStats.currentMonth.rate >= renewalStats.previousMonth.rate ?
+                        <TrendingUp className="w-3.5 h-3.5" /> :
+                        <TrendingDown className="w-3.5 h-3.5" />
+                      }
+                      {Math.abs(renewalStats.currentMonth.rate - renewalStats.previousMonth.rate)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-6 ml-auto mr-4 text-sm">
+                <div className="text-center">
+                  <p className="text-gray-500 text-xs">Renovados</p>
+                  <p className="font-semibold text-gray-900">{renewalStats.currentMonth.renewed}/{renewalStats.currentMonth.due}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-500 text-xs">Nuevos</p>
+                  <p className="font-semibold text-blue-600">{renewalStats.currentMonth.newClients}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-gray-500 text-xs">Ingresos</p>
+                  <p className="font-semibold text-green-600">S/ {renewalStats.currentMonth.revenue.toFixed(0)}</p>
+                </div>
+              </div>
+            </div>
+            <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${showRenewalDetails ? 'rotate-90' : ''}`} />
+          </button>
+
+          {/* Resumen móvil */}
+          <div className="sm:hidden px-3 pb-2 flex gap-3 text-xs text-center">
+            <div className="flex-1">
+              <p className="text-gray-500">Renovados</p>
+              <p className="font-semibold">{renewalStats.currentMonth.renewed}/{renewalStats.currentMonth.due}</p>
+            </div>
+            <div className="flex-1">
+              <p className="text-gray-500">Nuevos</p>
+              <p className="font-semibold text-blue-600">{renewalStats.currentMonth.newClients}</p>
+            </div>
+            <div className="flex-1">
+              <p className="text-gray-500">Ingresos</p>
+              <p className="font-semibold text-green-600">S/ {renewalStats.currentMonth.revenue.toFixed(0)}</p>
+            </div>
+          </div>
+
+          {/* Tabla detallada */}
+          {showRenewalDetails && (
+            <div className="border-t border-gray-200 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 text-xs uppercase">
+                    <th className="px-3 sm:px-4 py-2 text-left font-medium">Mes</th>
+                    <th className="px-3 sm:px-4 py-2 text-center font-medium">Renovados</th>
+                    <th className="px-3 sm:px-4 py-2 text-center font-medium hidden sm:table-cell">Vencidos</th>
+                    <th className="px-3 sm:px-4 py-2 text-center font-medium">Tasa</th>
+                    <th className="px-3 sm:px-4 py-2 text-center font-medium">Nuevos</th>
+                    <th className="px-3 sm:px-4 py-2 text-right font-medium">Ingresos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {renewalStats.months.map((m, idx) => (
+                    <tr key={idx} className={`border-t border-gray-100 ${idx === renewalStats.months.length - 1 ? 'bg-indigo-50/50' : ''}`}>
+                      <td className="px-3 sm:px-4 py-2 font-medium text-gray-900">{m.label}</td>
+                      <td className="px-3 sm:px-4 py-2 text-center text-gray-700">{m.renewed}/{m.due}</td>
+                      <td className="px-3 sm:px-4 py-2 text-center text-gray-500 hidden sm:table-cell">{m.expired}</td>
+                      <td className="px-3 sm:px-4 py-2 text-center">
+                        {m.rate !== null ? (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            m.rate > 70 ? 'bg-green-100 text-green-700' :
+                            m.rate >= 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {m.rate}%
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 sm:px-4 py-2 text-center text-blue-600">{m.newClients}</td>
+                      <td className="px-3 sm:px-4 py-2 text-right text-gray-700">S/ {m.revenue.toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4">

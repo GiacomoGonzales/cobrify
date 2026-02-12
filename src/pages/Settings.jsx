@@ -138,11 +138,13 @@ export default function Settings() {
   const [allowNameEdit, setAllowNameEdit] = useState(false)
   const [autoSku, setAutoSku] = useState(false)
   const [enableProductImages, setEnableProductImages] = useState(false)
+  const [enableProductLocation, setEnableProductLocation] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
 
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
+  const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
   const [allowPartialPayments, setAllowPartialPayments] = useState(false)
 
   // Estados para configuración de comprobantes
@@ -675,6 +677,7 @@ export default function Settings() {
         setAllowNameEdit(businessData.allowNameEdit || false)
         setAutoSku(businessData.autoSku || false)
         setEnableProductImages(businessData.enableProductImages || false)
+        setEnableProductLocation(businessData.enableProductLocation || false)
         setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
 
         // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
@@ -683,6 +686,7 @@ export default function Settings() {
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
+        setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
         setAllowPartialPayments(businessData.allowPartialPayments || false)
 
         // Cargar configuración de comprobantes
@@ -2434,6 +2438,26 @@ export default function Settings() {
                 </div>
               </label>
 
+              {/* Ubicación de productos */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={enableProductLocation}
+                  onChange={(e) => setEnableProductLocation(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Habilitar ubicación de productos
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {enableProductLocation
+                      ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
+                      : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
+                  </p>
+                </div>
+              </label>
+
               {/* Guías de Remisión */}
               <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                 <input
@@ -2816,6 +2840,7 @@ export default function Settings() {
                       restaurantConfig: restaurantConfig,
                       posCustomFields: posCustomFields,
                       enableProductImages: enableProductImages,
+                      enableProductLocation: enableProductLocation,
                       dispatchGuidesEnabled: dispatchGuidesEnabled,
                       hiddenMenuItems: hiddenMenuItems,
                       termsTemplates: termsTemplates,
@@ -3722,7 +3747,10 @@ export default function Settings() {
                     <input
                       type="checkbox"
                       checked={hideRucIgvInNotaVenta}
-                      onChange={(e) => setHideRucIgvInNotaVenta(e.target.checked)}
+                      onChange={(e) => {
+                        setHideRucIgvInNotaVenta(e.target.checked)
+                        if (e.target.checked) setHideOnlyIgvInNotaVenta(false)
+                      }}
                       className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
                     <div className="flex-1">
@@ -3733,6 +3761,28 @@ export default function Settings() {
                         {hideRucIgvInNotaVenta
                           ? '✓ Habilitado: Las notas de venta no mostrarán el RUC de la empresa ni el desglose del IGV en la impresión. Solo se mostrará el total final.'
                           : '✗ Deshabilitado: Las notas de venta mostrarán el RUC de la empresa y el desglose de subtotal e IGV (18%) como es usual.'}
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={hideOnlyIgvInNotaVenta}
+                      onChange={(e) => {
+                        setHideOnlyIgvInNotaVenta(e.target.checked)
+                        if (e.target.checked) setHideRucIgvInNotaVenta(false)
+                      }}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Ocultar solo IGV en Notas de Venta
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {hideOnlyIgvInNotaVenta
+                          ? '✓ Habilitado: Las notas de venta no mostrarán el desglose de subtotal e IGV, pero sí mostrarán el RUC de la empresa.'
+                          : '✗ Deshabilitado: Las notas de venta mostrarán el desglose completo de subtotal e IGV (18%).'}
                       </p>
                     </div>
                   </label>
@@ -3791,6 +3841,7 @@ export default function Settings() {
                       autoSku: autoSku,
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
+                      hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
                       allowPartialPayments: allowPartialPayments,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
