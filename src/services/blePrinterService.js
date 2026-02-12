@@ -938,7 +938,23 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.bold(false));
 
     // ========== Forma de Pago ==========
-    if (paymentMethod || (payments && payments.length > 0)) {
+    const totalPaid = payments && payments.length > 0
+      ? payments.reduce((sum, p) => sum + (p.amount || 0), 0)
+      : 0;
+    const isCreditSale = totalPaid === 0 && !paymentMethod && paymentStatus === 'pending';
+
+    if (isCreditSale) {
+      // Venta totalmente a crédito (sin pagos)
+      commands.push(ESCPOSCommands.text(separator + '\n'));
+      commands.push(ESCPOSCommands.align(0));
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('FORMA DE PAGO\n'));
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text(convertSpanishText('AL CREDITO') + '\n'));
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.text('Saldo Pendiente: S/ ' + (total || 0).toFixed(2) + '\n'));
+    } else if (paymentMethod || (payments && payments.length > 0)) {
       commands.push(ESCPOSCommands.text(separator + '\n'));
       commands.push(ESCPOSCommands.align(0));
       commands.push(ESCPOSCommands.bold(true));
@@ -948,6 +964,13 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       if (payments && payments.length > 0) {
         for (const payment of payments) {
           commands.push(ESCPOSCommands.text(convertSpanishText(payment.method) + ': S/ ' + payment.amount.toFixed(2) + '\n'));
+        }
+        // Mostrar saldo pendiente si el pago es menor al total
+        if (totalPaid < (total || 0)) {
+          const saldoPendiente = (total || 0) - totalPaid;
+          commands.push(ESCPOSCommands.bold(true));
+          commands.push(ESCPOSCommands.text('Saldo Pendiente: S/ ' + saldoPendiente.toFixed(2) + '\n'));
+          commands.push(ESCPOSCommands.bold(false));
         }
       } else if (paymentMethod) {
         commands.push(ESCPOSCommands.text(convertSpanishText(paymentMethod) + ': S/ ' + (total || 0).toFixed(2) + '\n'));
