@@ -1862,8 +1862,14 @@ export default function POS() {
           }
           return item
         })
-        .filter(item => item.quantity > 0)
     )
+  }
+
+  // Eliminar del carrito si la cantidad queda en 0 al salir del input
+  const handleQuantityBlur = (itemId, currentQuantity) => {
+    if (currentQuantity <= 0) {
+      removeFromCart(itemId)
+    }
   }
 
   const removeFromCart = itemId => {
@@ -4955,6 +4961,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                       type="number"
                                       value={item.quantity}
                                       onChange={(e) => setQuantityDirectly(itemId, e.target.value)}
+                                      onBlur={() => handleQuantityBlur(itemId, item.quantity)}
+                                      onFocus={(e) => e.target.select()}
                                       step="0.001"
                                       min="0.001"
                                       className="w-20 px-2 py-1.5 text-sm text-center font-semibold border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -4979,6 +4987,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                                           setQuantityDirectly(itemId, val)
                                         }
                                       }}
+                                      onBlur={() => handleQuantityBlur(itemId, item.quantity)}
                                       onFocus={(e) => e.target.select()}
                                       min="1"
                                       className="w-14 text-center font-bold text-base border border-gray-300 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
