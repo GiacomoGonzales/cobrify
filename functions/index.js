@@ -379,6 +379,32 @@ export const sendInvoiceToSunat = onRequest(
 
       console.log(`📤 Iniciando envío a SUNAT - Usuario: ${userId}, Factura: ${invoiceId}`)
 
+      // Verificar flag global de pausa para restaurantes con IGV reducido
+      try {
+        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+        if (adminSettingsDoc.exists()) {
+          const pauseSunat = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+          if (pauseSunat) {
+            const businessDoc = await db.collection('businesses').doc(userId).get()
+            if (businessDoc.exists()) {
+              const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+              const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+              if (isReducedIgv) {
+                console.log(`⏸️ Envío pausado por admin para negocio ${userId} (IGV reducido)`)
+                res.status(200).json({
+                  success: false,
+                  paused: true,
+                  message: 'Envío a SUNAT pausado temporalmente por el administrador para negocios con IGV reducido. El comprobante queda pendiente.'
+                })
+                return
+              }
+            }
+          }
+        }
+      } catch (pauseCheckError) {
+        console.warn('⚠️ Error verificando pausa admin:', pauseCheckError.message)
+      }
+
       // 1. Obtener datos de la factura usando una transacción para prevenir envíos duplicados
       const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId)
 
@@ -1165,6 +1191,28 @@ export const sendCreditNoteToSunat = onRequest(
 
       console.log(`📤 Iniciando envío de NOTA DE CRÉDITO a SUNAT - Usuario: ${userId}, NC: ${creditNoteId}`)
 
+      // Verificar flag global de pausa para restaurantes con IGV reducido
+      try {
+        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+        if (adminSettingsDoc.exists()) {
+          const pauseSunat = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+          if (pauseSunat) {
+            const businessDoc = await db.collection('businesses').doc(userId).get()
+            if (businessDoc.exists()) {
+              const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+              const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+              if (isReducedIgv) {
+                console.log(`⏸️ Envío NC pausado por admin para negocio ${userId} (IGV reducido)`)
+                res.status(200).json({ success: false, paused: true, message: 'Envío a SUNAT pausado temporalmente por el administrador.' })
+                return
+              }
+            }
+          }
+        }
+      } catch (pauseCheckError) {
+        console.warn('⚠️ Error verificando pausa admin:', pauseCheckError.message)
+      }
+
       // 1. Obtener datos de la nota de crédito usando una transacción para prevenir envíos duplicados
       const creditNoteRef = db.collection('businesses').doc(userId).collection('invoices').doc(creditNoteId)
 
@@ -1812,6 +1860,28 @@ export const sendDebitNoteToSunat = onRequest(
       }
 
       console.log(`📤 Iniciando envío de NOTA DE DÉBITO a SUNAT - Usuario: ${userId}, ND: ${debitNoteId}`)
+
+      // Verificar flag global de pausa para restaurantes con IGV reducido
+      try {
+        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+        if (adminSettingsDoc.exists()) {
+          const pauseSunat = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+          if (pauseSunat) {
+            const businessDoc = await db.collection('businesses').doc(userId).get()
+            if (businessDoc.exists()) {
+              const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+              const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+              if (isReducedIgv) {
+                console.log(`⏸️ Envío ND pausado por admin para negocio ${userId} (IGV reducido)`)
+                res.status(200).json({ success: false, paused: true, message: 'Envío a SUNAT pausado temporalmente por el administrador.' })
+                return
+              }
+            }
+          }
+        }
+      } catch (pauseCheckError) {
+        console.warn('⚠️ Error verificando pausa admin:', pauseCheckError.message)
+      }
 
       // 1. Obtener datos de la nota de débito usando una transacción para prevenir envíos duplicados
       const debitNoteRef = db.collection('businesses').doc(userId).collection('invoices').doc(debitNoteId)
@@ -3752,7 +3822,7 @@ export const retryPendingInvoices = onSchedule(
         // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido
         if (pauseSunatRestaurants) {
           const taxConfig = businessData.emissionConfig?.taxConfig
-          const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5 || taxConfig?.igvRate === 10
+          const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
           if (isReducedIgv) {
             console.log(`⏸️ [RETRY] Negocio ${businessId}: Saltando (IGV reducido, pausa activa)`)
             continue
@@ -3987,7 +4057,7 @@ export const testRetryPendingInvoices = onRequest(
         // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido
         if (pauseSunatRestaurants) {
           const taxConfig = businessData.emissionConfig?.taxConfig
-          const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5 || taxConfig?.igvRate === 10
+          const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
           if (isReducedIgv) {
             console.log(`⏸️ [RETRY-TEST] Negocio ${businessId}: Saltando (IGV reducido, pausa activa)`)
             continue

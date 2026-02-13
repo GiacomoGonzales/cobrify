@@ -2911,7 +2911,7 @@ export default function POS() {
           const adminSettingsSnap = await getDocSnap(docRef(fireDb, 'config', 'adminSettings'))
           if (adminSettingsSnap.exists()) {
             const adminConfig = adminSettingsSnap.data()
-            const isReducedIgv = taxConfig.taxType === 'reduced' || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 10
+            const isReducedIgv = taxConfig.taxType === 'reduced' || taxConfig.igvRate === 10.5
             if (adminConfig.system?.pauseSunatRestaurants && isReducedIgv) {
               isPausedByAdmin = true
               console.log('⏸️ Envío a SUNAT pausado por admin (restaurantes IGV reducido)')
