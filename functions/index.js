@@ -7833,6 +7833,7 @@ export const migrateProductsIgvRate = onRequest(
     timeoutSeconds: 540,
     memory: '512MiB',
     cors: true,
+    invoker: 'public',
   },
   async (req, res) => {
     setCorsHeaders(res)
