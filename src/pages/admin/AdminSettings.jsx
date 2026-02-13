@@ -43,7 +43,8 @@ export default function AdminSettings() {
       maintenanceMode: false,
       allowNewRegistrations: true,
       defaultTrialDays: 7,
-      pauseSunatRestaurants: false
+      pauseSunatRestaurants: false,
+      pauseSunatExceptions: []
     }
   })
   const [saved, setSaved] = useState(false)
@@ -749,6 +750,83 @@ function NotificationsSection({ settings, onChange }) {
   )
 }
 
+function ExceptionsList({ exceptions, onChange }) {
+  const [inputId, setInputId] = useState('')
+  const [businessNames, setBusinessNames] = useState({})
+
+  useEffect(() => {
+    if (exceptions.length === 0) return
+    const loadNames = async () => {
+      const names = {}
+      for (const id of exceptions) {
+        if (businessNames[id]) continue
+        try {
+          const snap = await getDoc(doc(db, 'businesses', id))
+          if (snap.exists()) {
+            names[id] = snap.data().businessName || snap.data().name || id
+          } else {
+            names[id] = id + ' (no encontrado)'
+          }
+        } catch { names[id] = id }
+      }
+      if (Object.keys(names).length > 0) setBusinessNames(prev => ({ ...prev, ...names }))
+    }
+    loadNames()
+  }, [exceptions])
+
+  const addException = () => {
+    const id = inputId.trim()
+    if (!id || exceptions.includes(id)) return
+    onChange([...exceptions, id])
+    setInputId('')
+  }
+
+  const removeException = (id) => {
+    onChange(exceptions.filter(e => e !== id))
+    setBusinessNames(prev => { const n = { ...prev }; delete n[id]; return n })
+  }
+
+  return (
+    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+      <p className="font-medium text-gray-900 mb-1">Excepciones a la pausa</p>
+      <p className="text-sm text-gray-500 mb-3">Negocios con IGV reducido que SÍ pueden enviar a SUNAT (ej: ya compraron comprobantes)</p>
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text"
+          value={inputId}
+          onChange={e => setInputId(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addException()}
+          placeholder="Business ID"
+          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+        <button
+          onClick={addException}
+          className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center gap-1"
+        >
+          <Plus className="w-4 h-4" /> Agregar
+        </button>
+      </div>
+      {exceptions.length === 0 ? (
+        <p className="text-sm text-gray-400 italic">No hay excepciones</p>
+      ) : (
+        <div className="space-y-2">
+          {exceptions.map(id => (
+            <div key={id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-green-100">
+              <div>
+                <p className="text-sm font-medium text-gray-800">{businessNames[id] || 'Cargando...'}</p>
+                <p className="text-xs text-gray-400 font-mono">{id}</p>
+              </div>
+              <button onClick={() => removeException(id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SystemSection({ settings, onChange }) {
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState(null)
@@ -883,6 +961,14 @@ function SystemSection({ settings, onChange }) {
               className="w-5 h-5 text-amber-600 rounded focus:ring-amber-500"
             />
           </label>
+
+          {/* Excepciones a la pausa SUNAT */}
+          {settings.pauseSunatRestaurants && (
+            <ExceptionsList
+              exceptions={settings.pauseSunatExceptions || []}
+              onChange={(list) => onChange('pauseSunatExceptions', list)}
+            />
+          )}
 
           {/* Detectar productos IGV 10% → 10.5% */}
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">

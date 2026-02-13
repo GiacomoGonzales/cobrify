@@ -383,8 +383,10 @@ export const sendInvoiceToSunat = onRequest(
       try {
         const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
         if (adminSettingsDoc.exists) {
-          const pauseSunat = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
-          if (pauseSunat) {
+          const adminData = adminSettingsDoc.data()
+          const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
+          const exceptions = adminData?.system?.pauseSunatExceptions || []
+          if (pauseSunat && !exceptions.includes(userId)) {
             const businessDoc = await db.collection('businesses').doc(userId).get()
             if (businessDoc.exists) {
               const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
@@ -1195,8 +1197,10 @@ export const sendCreditNoteToSunat = onRequest(
       try {
         const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
         if (adminSettingsDoc.exists) {
-          const pauseSunat = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
-          if (pauseSunat) {
+          const adminData = adminSettingsDoc.data()
+          const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
+          const exceptions = adminData?.system?.pauseSunatExceptions || []
+          if (pauseSunat && !exceptions.includes(userId)) {
             const businessDoc = await db.collection('businesses').doc(userId).get()
             if (businessDoc.exists) {
               const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
@@ -1865,8 +1869,10 @@ export const sendDebitNoteToSunat = onRequest(
       try {
         const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
         if (adminSettingsDoc.exists) {
-          const pauseSunat = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
-          if (pauseSunat) {
+          const adminData = adminSettingsDoc.data()
+          const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
+          const exceptions = adminData?.system?.pauseSunatExceptions || []
+          if (pauseSunat && !exceptions.includes(userId)) {
             const businessDoc = await db.collection('businesses').doc(userId).get()
             if (businessDoc.exists) {
               const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
@@ -3789,10 +3795,13 @@ export const retryPendingInvoices = onSchedule(
     try {
       // Verificar flag global de pausa para restaurantes
       let pauseSunatRestaurants = false
+      let pauseSunatExceptions = []
       try {
         const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
         if (adminSettingsDoc.exists) {
-          pauseSunatRestaurants = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+          const adminData = adminSettingsDoc.data()
+          pauseSunatRestaurants = adminData?.system?.pauseSunatRestaurants === true
+          pauseSunatExceptions = adminData?.system?.pauseSunatExceptions || []
         }
       } catch (adminErr) {
         console.warn('⚠️ [RETRY] No se pudo leer adminSettings:', adminErr.message)
@@ -3800,6 +3809,9 @@ export const retryPendingInvoices = onSchedule(
 
       if (pauseSunatRestaurants) {
         console.log('⏸️ [RETRY] Pausa activa para restaurantes con IGV reducido')
+        if (pauseSunatExceptions.length > 0) {
+          console.log(`✅ [RETRY] Excepciones: ${pauseSunatExceptions.join(', ')}`)
+        }
       }
 
       // Obtener todos los negocios
@@ -3819,8 +3831,8 @@ export const retryPendingInvoices = onSchedule(
           continue // Saltar negocios sin configuración SUNAT
         }
 
-        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido
-        if (pauseSunatRestaurants) {
+        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido (excepto excepciones)
+        if (pauseSunatRestaurants && !pauseSunatExceptions.includes(businessId)) {
           const taxConfig = businessData.emissionConfig?.taxConfig
           const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
           if (isReducedIgv) {
@@ -4017,10 +4029,13 @@ export const testRetryPendingInvoices = onRequest(
     try {
       // Verificar flag global de pausa para restaurantes
       let pauseSunatRestaurants = false
+      let pauseSunatExceptions = []
       try {
         const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
         if (adminSettingsDoc.exists) {
-          pauseSunatRestaurants = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+          const adminData = adminSettingsDoc.data()
+          pauseSunatRestaurants = adminData?.system?.pauseSunatRestaurants === true
+          pauseSunatExceptions = adminData?.system?.pauseSunatExceptions || []
         }
       } catch (adminErr) {
         console.warn('⚠️ [RETRY-TEST] No se pudo leer adminSettings:', adminErr.message)
@@ -4054,8 +4069,8 @@ export const testRetryPendingInvoices = onRequest(
           continue
         }
 
-        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido
-        if (pauseSunatRestaurants) {
+        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido (excepto excepciones)
+        if (pauseSunatRestaurants && !pauseSunatExceptions.includes(businessId)) {
           const taxConfig = businessData.emissionConfig?.taxConfig
           const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
           if (isReducedIgv) {
