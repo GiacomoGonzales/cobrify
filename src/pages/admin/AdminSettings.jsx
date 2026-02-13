@@ -750,54 +750,80 @@ function NotificationsSection({ settings, onChange }) {
 }
 
 function SystemSection({ settings, onChange }) {
-  const [migratingIgv, setMigratingIgv] = useState(false)
-  const [migratePreview, setMigratePreview] = useState(null)
-  const [migrateResult, setMigrateResult] = useState(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
+  const [migrating, setMigrating] = useState(false)
+  const [migrateMsg, setMigrateMsg] = useState(null)
 
-  async function callMigrateEndpoint(dryRun) {
-    const { getAuth } = await import('firebase/auth')
-    const idToken = await getAuth().currentUser.getIdToken()
-    const response = await fetch('https://migrateproductsigvrate-tb5ph5ddsq-uc.a.run.app', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-      body: JSON.stringify({ dryRun })
-    })
-    return response.json()
-  }
-
-  async function previewMigration() {
-    setMigratingIgv(true)
-    setMigratePreview(null)
-    setMigrateResult(null)
+  async function scanProducts() {
+    setScanning(true)
+    setScanResult(null)
+    setMigrateMsg(null)
     try {
-      const result = await callMigrateEndpoint(true)
-      if (result.success) {
-        setMigratePreview(result)
-      } else {
-        setMigrateResult({ success: false, message: result.error })
+      // Buscar negocios con IGV reducido
+      const { collection: colRef, getDocs: getDocsSnap, query, where } = await import('firebase/firestore')
+      const businessesSnap = await getDocsSnap(colRef(db, 'businesses'))
+      const results = []
+
+      for (const bizDoc of businessesSnap.docs) {
+        const bizData = bizDoc.data()
+        const tc = bizData.emissionConfig?.taxConfig
+        if (tc?.taxType !== 'reduced' && tc?.igvRate !== 10.5) continue
+
+        // Buscar productos con igvRate = 10 en este negocio
+        const productsQuery = query(colRef(db, 'businesses', bizDoc.id, 'products'), where('igvRate', '==', 10))
+        const productsSnap = await getDocsSnap(productsQuery)
+        if (productsSnap.empty) continue
+
+        results.push({
+          businessId: bizDoc.id,
+          businessName: bizData.razonSocial || bizData.businessName || bizDoc.id,
+          products: productsSnap.docs.map(p => ({ id: p.id, name: p.data().name }))
+        })
       }
+      setScanResult(results)
     } catch (error) {
-      setMigrateResult({ success: false, message: error.message })
+      setMigrateMsg({ success: false, message: error.message })
     } finally {
-      setMigratingIgv(false)
+      setScanning(false)
     }
   }
 
-  async function executeMigration() {
-    setMigratingIgv(true)
-    setMigrateResult(null)
+  async function fixProducts(businessId, productIds) {
+    setMigrating(true)
     try {
-      const result = await callMigrateEndpoint(false)
-      if (result.success) {
-        setMigrateResult({ success: true, message: `${result.totalProducts} productos migrados en ${result.totalBusinesses} negocios` })
-        setMigratePreview(null)
-      } else {
-        setMigrateResult({ success: false, message: result.error })
+      const { doc: docRef, updateDoc, deleteField } = await import('firebase/firestore')
+      for (const pid of productIds) {
+        await updateDoc(docRef(db, 'businesses', businessId, 'products', pid), { igvRate: deleteField() })
       }
+      // Quitar del resultado
+      setScanResult(prev => prev.map(r => r.businessId === businessId ? { ...r, products: [] } : r).filter(r => r.products.length > 0))
+      setMigrateMsg({ success: true, message: `${productIds.length} productos corregidos` })
     } catch (error) {
-      setMigrateResult({ success: false, message: error.message })
+      setMigrateMsg({ success: false, message: error.message })
     } finally {
-      setMigratingIgv(false)
+      setMigrating(false)
+    }
+  }
+
+  async function fixAll() {
+    if (!scanResult?.length) return
+    setMigrating(true)
+    let total = 0
+    try {
+      const { doc: docRef, updateDoc, deleteField } = await import('firebase/firestore')
+      for (const biz of scanResult) {
+        for (const p of biz.products) {
+          await updateDoc(docRef(db, 'businesses', biz.businessId, 'products', p.id), { igvRate: deleteField() })
+          total++
+        }
+      }
+      setScanResult([])
+      setMigrateMsg({ success: true, message: `${total} productos corregidos en total` })
+    } catch (error) {
+      setMigrateMsg({ success: false, message: error.message })
+    } finally {
+      setMigrating(false)
     }
   }
   return (
@@ -857,55 +883,55 @@ function SystemSection({ settings, onChange }) {
             />
           </label>
 
-          {/* Migrar productos IGV 10% → 10.5% */}
+          {/* Detectar productos IGV 10% → 10.5% */}
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-gray-900">Migrar productos IGV 10% → 10.5%</p>
-                <p className="text-sm text-gray-500">Detecta y actualiza productos creados con IGV 10% para que usen el 10.5% global</p>
+                <p className="font-medium text-gray-900">Productos con IGV 10% (deben ser 10.5%)</p>
+                <p className="text-sm text-gray-500">Detecta negocios con IGV reducido cuyos productos aún tienen 10% guardado</p>
               </div>
-              {!migratePreview ? (
-                <button
-                  onClick={previewMigration}
-                  disabled={migratingIgv}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
-                >
-                  {migratingIgv ? 'Analizando...' : 'Analizar'}
-                </button>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setMigratePreview(null)}
-                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={executeMigration}
-                    disabled={migratingIgv || migratePreview.totalProducts === 0}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
-                  >
-                    {migratingIgv ? 'Migrando...' : `Confirmar (${migratePreview.totalProducts})`}
-                  </button>
-                </div>
-              )}
+              <button
+                onClick={scanProducts}
+                disabled={scanning}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+              >
+                {scanning ? 'Escaneando...' : 'Escanear'}
+              </button>
             </div>
 
-            {/* Preview */}
-            {migratePreview && (
-              <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-60 overflow-y-auto">
-                {migratePreview.totalProducts === 0 ? (
-                  <p className="text-green-700 font-medium">No hay productos con IGV 10% para migrar.</p>
+            {/* Resultados del escaneo */}
+            {scanResult !== null && (
+              <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-80 overflow-y-auto">
+                {scanResult.length === 0 ? (
+                  <p className="text-green-700 font-medium">Todo correcto. No hay productos con IGV 10%.</p>
                 ) : (
                   <>
-                    <p className="font-medium text-gray-900 mb-2">
-                      {migratePreview.totalProducts} productos en {migratePreview.details.length} negocios:
-                    </p>
-                    {migratePreview.details.map(d => (
-                      <div key={d.businessId} className="mb-2 pb-2 border-b last:border-0">
-                        <p className="font-medium text-gray-800">{d.businessName} ({d.count} productos)</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-medium text-gray-900">
+                        {scanResult.reduce((sum, r) => sum + r.products.length, 0)} productos en {scanResult.length} negocios
+                      </p>
+                      <button
+                        onClick={fixAll}
+                        disabled={migrating}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-xs font-medium"
+                      >
+                        {migrating ? 'Corrigiendo...' : 'Corregir todos'}
+                      </button>
+                    </div>
+                    {scanResult.map(biz => (
+                      <div key={biz.businessId} className="mb-3 pb-3 border-b last:border-0">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-gray-800">{biz.businessName} ({biz.products.length})</p>
+                          <button
+                            onClick={() => fixProducts(biz.businessId, biz.products.map(p => p.id))}
+                            disabled={migrating}
+                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 disabled:opacity-50"
+                          >
+                            Corregir
+                          </button>
+                        </div>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {d.products.map(p => (
+                          {biz.products.map(p => (
                             <span key={p.id} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{p.name}</span>
                           ))}
                         </div>
@@ -916,10 +942,10 @@ function SystemSection({ settings, onChange }) {
               </div>
             )}
 
-            {/* Resultado */}
-            {migrateResult && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${migrateResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-                <p className="font-medium">{migrateResult.message}</p>
+            {/* Mensaje */}
+            {migrateMsg && (
+              <div className={`mt-3 p-3 rounded-lg text-sm ${migrateMsg.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                <p className="font-medium">{migrateMsg.message}</p>
               </div>
             )}
           </div>
