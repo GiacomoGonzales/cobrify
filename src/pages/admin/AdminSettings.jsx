@@ -757,7 +757,7 @@ function SystemSection({ settings, onChange }) {
   async function callMigrateEndpoint(dryRun) {
     const { getAuth } = await import('firebase/auth')
     const idToken = await getAuth().currentUser.getIdToken()
-    const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/migrateProductsIgvRate', {
+    const response = await fetch('https://migrateproductsigvrate-tb5ph5ddsq-uc.a.run.app', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
       body: JSON.stringify({ dryRun })
