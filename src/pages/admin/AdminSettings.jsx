@@ -751,25 +751,48 @@ function NotificationsSection({ settings, onChange }) {
 
 function SystemSection({ settings, onChange }) {
   const [migratingIgv, setMigratingIgv] = useState(false)
+  const [migratePreview, setMigratePreview] = useState(null)
   const [migrateResult, setMigrateResult] = useState(null)
 
-  async function migrateProductsIgv() {
-    if (!confirm('¿Migrar productos de IGV 10% a 10.5% en todos los negocios con IGV reducido?')) return
+  async function callMigrateEndpoint(dryRun) {
+    const { getAuth } = await import('firebase/auth')
+    const idToken = await getAuth().currentUser.getIdToken()
+    const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/migrateProductsIgvRate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify({ dryRun })
+    })
+    return response.json()
+  }
+
+  async function previewMigration() {
+    setMigratingIgv(true)
+    setMigratePreview(null)
+    setMigrateResult(null)
+    try {
+      const result = await callMigrateEndpoint(true)
+      if (result.success) {
+        setMigratePreview(result)
+      } else {
+        setMigrateResult({ success: false, message: result.error })
+      }
+    } catch (error) {
+      setMigrateResult({ success: false, message: error.message })
+    } finally {
+      setMigratingIgv(false)
+    }
+  }
+
+  async function executeMigration() {
     setMigratingIgv(true)
     setMigrateResult(null)
     try {
-      const { getAuth } = await import('firebase/auth')
-      const authInstance = getAuth()
-      const idToken = await authInstance.currentUser.getIdToken()
-      const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/migrateProductsIgvRate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` }
-      })
-      const result = await response.json()
+      const result = await callMigrateEndpoint(false)
       if (result.success) {
-        setMigrateResult({ success: true, message: `${result.totalProducts} productos actualizados en ${result.totalBusinesses} negocios`, details: result.details })
+        setMigrateResult({ success: true, message: `${result.totalProducts} productos migrados en ${result.totalBusinesses} negocios` })
+        setMigratePreview(null)
       } else {
-        setMigrateResult({ success: false, message: result.error || 'Error desconocido' })
+        setMigrateResult({ success: false, message: result.error })
       }
     } catch (error) {
       setMigrateResult({ success: false, message: error.message })
@@ -839,22 +862,64 @@ function SystemSection({ settings, onChange }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-gray-900">Migrar productos IGV 10% → 10.5%</p>
-                <p className="text-sm text-gray-500">Actualiza productos creados con IGV 10% para que usen el 10.5% global</p>
+                <p className="text-sm text-gray-500">Detecta y actualiza productos creados con IGV 10% para que usen el 10.5% global</p>
               </div>
-              <button
-                onClick={migrateProductsIgv}
-                disabled={migratingIgv}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
-              >
-                {migratingIgv ? 'Migrando...' : 'Migrar'}
-              </button>
+              {!migratePreview ? (
+                <button
+                  onClick={previewMigration}
+                  disabled={migratingIgv}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  {migratingIgv ? 'Analizando...' : 'Analizar'}
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setMigratePreview(null)}
+                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={executeMigration}
+                    disabled={migratingIgv || migratePreview.totalProducts === 0}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium"
+                  >
+                    {migratingIgv ? 'Migrando...' : `Confirmar (${migratePreview.totalProducts})`}
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Preview */}
+            {migratePreview && (
+              <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-60 overflow-y-auto">
+                {migratePreview.totalProducts === 0 ? (
+                  <p className="text-green-700 font-medium">No hay productos con IGV 10% para migrar.</p>
+                ) : (
+                  <>
+                    <p className="font-medium text-gray-900 mb-2">
+                      {migratePreview.totalProducts} productos en {migratePreview.details.length} negocios:
+                    </p>
+                    {migratePreview.details.map(d => (
+                      <div key={d.businessId} className="mb-2 pb-2 border-b last:border-0">
+                        <p className="font-medium text-gray-800">{d.businessName} ({d.count} productos)</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {d.products.map(p => (
+                            <span key={p.id} className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{p.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Resultado */}
             {migrateResult && (
               <div className={`mt-3 p-3 rounded-lg text-sm ${migrateResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
                 <p className="font-medium">{migrateResult.message}</p>
-                {migrateResult.details?.filter(d => d.updated > 0).map(d => (
-                  <p key={d.businessId} className="text-xs mt-1">{d.businessName}: {d.updated} productos</p>
-                ))}
               </div>
             )}
           </div>

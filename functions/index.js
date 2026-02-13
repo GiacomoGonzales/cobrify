@@ -7852,7 +7852,8 @@ export const migrateProductsIgvRate = onRequest(
         res.status(403).json({ error: 'Solo administradores' }); return
       }
 
-      console.log('🔄 [MIGRATE-IGV] Iniciando migración de productos IGV 10% → 10.5%...')
+      const dryRun = req.body?.dryRun === true
+      console.log(`🔄 [MIGRATE-IGV] ${dryRun ? 'PREVIEW' : 'EJECUTANDO'} migración de productos IGV 10% → 10.5%...`)
 
       // Buscar negocios con IGV reducido
       const businessesSnapshot = await db.collection('businesses').get()
@@ -7874,29 +7875,30 @@ export const migrateProductsIgvRate = onRequest(
         const productsRef = db.collection('businesses').doc(businessId).collection('products')
         const productsSnapshot = await productsRef.where('igvRate', '==', 10).get()
 
-        if (productsSnapshot.empty) {
-          details.push({ businessId, businessName, updated: 0 })
-          continue
-        }
+        const count = productsSnapshot.size
+        const products = productsSnapshot.docs.map(d => ({ id: d.id, name: d.data().name }))
 
-        // Batch update: eliminar igvRate para que use el global
-        const batch = db.batch()
-        let count = 0
-        for (const productDoc of productsSnapshot.docs) {
-          batch.update(productDoc.ref, { igvRate: FieldValue.delete() })
-          count++
+        if (count === 0) continue
+
+        if (!dryRun) {
+          // Batch update: eliminar igvRate para que use el global
+          const batch = db.batch()
+          for (const productDoc of productsSnapshot.docs) {
+            batch.update(productDoc.ref, { igvRate: FieldValue.delete() })
+          }
+          await batch.commit()
+          console.log(`✅ [MIGRATE-IGV] ${businessName}: ${count} productos actualizados`)
         }
-        await batch.commit()
 
         totalProducts += count
-        details.push({ businessId, businessName, updated: count })
-        console.log(`✅ [MIGRATE-IGV] ${businessName}: ${count} productos actualizados`)
+        details.push({ businessId, businessName, count, products })
       }
 
-      console.log(`📊 [MIGRATE-IGV] Resumen: ${totalBusinesses} negocios, ${totalProducts} productos migrados`)
+      console.log(`📊 [MIGRATE-IGV] Resumen: ${totalBusinesses} negocios, ${totalProducts} productos ${dryRun ? 'detectados' : 'migrados'}`)
 
       res.status(200).json({
         success: true,
+        dryRun,
         totalBusinesses,
         totalProducts,
         details
