@@ -86,6 +86,7 @@ export default function AdminUsers() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:ID'
+  const [modeFilter, setModeFilter] = useState('all') // 'all' | 'retail' | 'restaurant' | 'pharmacy' | etc.
   const [resellers, setResellers] = useState([]) // Lista de resellers para el filtro
   const [sortField, setSortField] = useState('createdAt')
   const [sortDirection, setSortDirection] = useState('desc')
@@ -472,6 +473,15 @@ export default function AdminUsers() {
       result = result.filter(u => u.plan === planFilter)
     }
 
+    // Filtro de modo de negocio
+    if (modeFilter !== 'all') {
+      if (modeFilter === 'retail') {
+        result = result.filter(u => u.businessMode === 'retail' || !u.businessMode)
+      } else {
+        result = result.filter(u => u.businessMode === modeFilter)
+      }
+    }
+
     // Filtro de origen (Cobrify vs Reseller vs Reseller específico)
     if (sourceFilter === 'cobrify') {
       result = result.filter(u => !u.createdByReseller)
@@ -497,7 +507,7 @@ export default function AdminUsers() {
     })
 
     return result
-  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, sortField, sortDirection])
+  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, sortField, sortDirection])
 
   // Estadísticas rápidas
   const stats = useMemo(() => {
@@ -1781,6 +1791,19 @@ export default function AdminUsers() {
                   })}
                 </optgroup>
               )}
+            </select>
+
+            <select
+              value={modeFilter}
+              onChange={e => setModeFilter(e.target.value)}
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">Modo</option>
+              <option value="retail">Retail ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
+              <option value="restaurant">Restaurante ({users.filter(u => u.businessMode === 'restaurant').length})</option>
+              <option value="pharmacy">Farmacia ({users.filter(u => u.businessMode === 'pharmacy').length})</option>
+              <option value="real_estate">Inmobiliaria ({users.filter(u => u.businessMode === 'real_estate').length})</option>
+              <option value="transport">Transporte ({users.filter(u => u.businessMode === 'transport').length})</option>
             </select>
 
             <button
