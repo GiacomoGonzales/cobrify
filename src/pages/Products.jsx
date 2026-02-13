@@ -3635,9 +3635,9 @@ export default function Products() {
                     if (val === '10-18') {
                       setTaxAffectation('10')
                       setIgvRate(18)
-                    } else if (val === '10-10') {
+                    } else if (val === '10-10.5') {
                       setTaxAffectation('10')
-                      setIgvRate(10)
+                      setIgvRate(10.5)
                     } else if (val === '20') {
                       setTaxAffectation('20')
                       setIgvRate(0)
@@ -3649,7 +3649,7 @@ export default function Products() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="10-18">Gravado (18%)</option>
-                  <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                  <option value="10-10.5">Gravado (10.5% - Ley Restaurantes)</option>
                   <option value="20">Exonerado</option>
                   <option value="30">Inafecto</option>
                 </select>
