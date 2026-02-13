@@ -1096,11 +1096,12 @@ export default function POS() {
       // Cargar configuración de empresa
       const settingsResult = await getCompanySettings(businessId)
       if (settingsResult.success && settingsResult.data) {
-        setCompanySettings(settingsResult.data)
+        const businessData = settingsResult.data
+        setCompanySettings(businessData)
 
         // Pre-cargar logo en background para que esté listo al generar PDF
-        if (settingsResult.data.logoUrl) {
-          preloadLogo(settingsResult.data.logoUrl).catch(() => {
+        if (businessData.logoUrl) {
+          preloadLogo(businessData.logoUrl).catch(() => {
             // Ignorar errores de pre-carga, se intentará de nuevo al generar PDF
           })
         }
@@ -1115,54 +1116,36 @@ export default function POS() {
           const savedDraft = localStorage.getItem(draftKey)
           const hasDraft = savedDraft && JSON.parse(savedDraft)?.cart?.length > 0
 
-          if (!hasDraft && settingsResult.data.defaultDocumentType) {
-            setDocumentType(settingsResult.data.defaultDocumentType)
+          if (!hasDraft && businessData.defaultDocumentType) {
+            setDocumentType(businessData.defaultDocumentType)
           }
         }
-      }
 
-      // Cargar configuración de impuestos (taxConfig) desde el documento del business
-      try {
-        console.log('🔍 Cargando taxConfig para businessId:', businessId)
-        const businessRef = doc(db, 'businesses', businessId)
-        const businessSnap = await getDoc(businessRef)
-
-        console.log('📄 Business documento existe?', businessSnap.exists())
-
-        if (businessSnap.exists()) {
-          const businessData = businessSnap.data()
-          console.log('📦 emissionConfig encontrado:', businessData.emissionConfig)
-          console.log('💰 taxConfig encontrado:', businessData.emissionConfig?.taxConfig)
-
-          if (businessData.emissionConfig?.taxConfig) {
-            const newTaxConfig = {
-              igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
-              igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false,
-              exemptionReason: businessData.emissionConfig.taxConfig.exemptionReason ?? '',
-              exemptionCode: businessData.emissionConfig.taxConfig.exemptionCode ?? '10',
-              taxType: businessData.emissionConfig.taxConfig.taxType || (businessData.emissionConfig.taxConfig.igvExempt ? 'exempt' : 'standard')
-            }
-            console.log('✅ TaxConfig a aplicar:', newTaxConfig)
-            setTaxConfig(newTaxConfig)
-          } else {
-            console.warn('⚠️ taxConfig no existe en emissionConfig, usando valores por defecto')
+        // Cargar configuración de impuestos (taxConfig) desde emissionConfig
+        const tc = businessData.emissionConfig?.taxConfig
+        console.log('💰 taxConfig desde emissionConfig:', tc)
+        if (tc) {
+          const newTaxConfig = {
+            igvRate: tc.igvRate ?? 18,
+            igvExempt: tc.igvExempt ?? false,
+            exemptionReason: tc.exemptionReason ?? '',
+            exemptionCode: tc.exemptionCode ?? '10',
+            taxType: tc.taxType || (tc.igvExempt ? 'exempt' : 'standard')
           }
-
-          // Cargar configuración de Recargo al Consumo (solo para restaurantes)
-          if (businessData.restaurantConfig) {
-            const rcConfig = {
-              enabled: businessData.restaurantConfig.recargoConsumoEnabled ?? false,
-              rate: businessData.restaurantConfig.recargoConsumoRate ?? 10
-            }
-            console.log('✅ RecargoConsumo config:', rcConfig)
-            setRecargoConsumoConfig(rcConfig)
-          }
+          console.log('✅ TaxConfig a aplicar:', newTaxConfig)
+          setTaxConfig(newTaxConfig)
         } else {
-          console.warn('⚠️ Documento business no existe para businessId:', businessId)
+          console.warn('⚠️ taxConfig no existe en emissionConfig, usando valores por defecto')
         }
-      } catch (error) {
-        console.error('❌ Error al cargar taxConfig:', error)
-        // Si hay error, mantener los valores por defecto (IGV 18%)
+
+        // Cargar configuración de Recargo al Consumo (solo para restaurantes)
+        if (businessData.restaurantConfig) {
+          const rcConfig = {
+            enabled: businessData.restaurantConfig.recargoConsumoEnabled ?? false,
+            rate: businessData.restaurantConfig.recargoConsumoRate ?? 10
+          }
+          setRecargoConsumoConfig(rcConfig)
+        }
       }
 
       // Cargar categorías
