@@ -378,7 +378,7 @@ export default function POS() {
     quantity: 1,
     unit: 'NIU',
     taxAffectation: '10', // '10'=Gravado 18%, '20'=Exonerado, '30'=Inafecto
-    igvRate: 18, // Per-product IGV rate (18% or 10%)
+    igvRate: 18, // Per-product IGV rate (18% or 10.5%)
     addIgv: false // Si true, se agrega IGV al precio ingresado
   })
 
@@ -1812,7 +1812,7 @@ export default function POS() {
     toast.success('Producto personalizado agregado al carrito')
 
     // Resetear y cerrar modal
-    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', igvRate: 18, addIgv: false })
+    setCustomProduct({ name: '', price: '', quantity: 1, unit: 'NIU', taxAffectation: '10', igvRate: taxConfig.igvRate || 18, addIgv: false })
     setShowCustomProductModal(false)
   }
 
@@ -5743,8 +5743,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     const val = e.target.value
                     if (val === '10-18') {
                       setCustomProduct({ ...customProduct, taxAffectation: '10', igvRate: 18 })
-                    } else if (val === '10-10') {
-                      setCustomProduct({ ...customProduct, taxAffectation: '10', igvRate: 10 })
+                    } else if (val === '10-10.5') {
+                      setCustomProduct({ ...customProduct, taxAffectation: '10', igvRate: 10.5 })
                     } else if (val === '20') {
                       setCustomProduct({ ...customProduct, taxAffectation: val, igvRate: 0 })
                     } else if (val === '30') {
@@ -5754,7 +5754,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="10-18">Gravado (18%)</option>
-                  <option value="10-10">Gravado (10% - Ley Restaurantes)</option>
+                  <option value="10-10.5">Gravado (10.5% - Ley Restaurantes)</option>
                   <option value="20">Exonerado</option>
                   <option value="30">Inafecto</option>
                 </select>
