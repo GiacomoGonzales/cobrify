@@ -884,7 +884,7 @@ export default function AdminUsers() {
           igvExempt: taxConfig.igvExempt || false,
           igvRate: taxConfig.igvRate || 18,
           // Determinar taxType basado en configuración existente
-          // Nota: Ley 31556 = 10% temporalmente (SUNAT no acepta 10.5% aún), también aceptar 10.5% y 8% por compatibilidad
+          // Ley 31556: aceptar 10, 10.5 y 8 como 'reduced' por compatibilidad con configs antiguas
           taxType: taxConfig.igvExempt ? 'exempt' : (taxConfig.igvRate === 10 || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 8 ? 'reduced' : 'standard')
         })
       } else {
@@ -971,10 +971,10 @@ export default function AdminUsers() {
       }
 
       // Determinar igvExempt e igvRate basado en taxType
-      // Nota: Ley 31556 es 10.5% real (8% IGV + 2.5% IPM), pero SUNAT solo acepta 10% por ahora
+      // Ley 31556: 8% IGV + 2.5% IPM = 10.5% (vigente desde 01/01/2026)
       const taxTypeConfig = {
         standard: { igvExempt: false, igvRate: 18 },
-        reduced: { igvExempt: false, igvRate: 10 }, // Ley 31556: temporalmente 10% hasta que SUNAT acepte 10.5%
+        reduced: { igvExempt: false, igvRate: 10.5 }, // Ley 31556: 8% IGV + 2.5% IPM
         exempt: { igvExempt: true, igvRate: 0 }
       }
       const selectedTaxConfig = taxTypeConfig[sunatForm.taxType] || taxTypeConfig.standard
@@ -2656,8 +2656,8 @@ export default function AdminUsers() {
                         className="mt-1 text-blue-600 focus:ring-blue-500"
                       />
                       <div>
-                        <span className="font-medium text-gray-900">IGV Reducido (10%) - Ley N° 31556</span>
-                        <p className="text-xs text-gray-500">MYPES de restaurantes, hoteles y alojamientos turísticos (ventas ≤ S/ 7.8M anuales). Vigente hasta 31/12/2026. Nota: tasa real 10.5%, SUNAT acepta 10% temporalmente.</p>
+                        <span className="font-medium text-gray-900">IGV Reducido (10.5%) - Ley N° 31556</span>
+                        <p className="text-xs text-gray-500">MYPES de restaurantes, hoteles y alojamientos turísticos (ventas ≤ S/ 7.8M anuales). Tasa: 8% IGV + 2.5% IPM = 10.5%. Vigente hasta 31/12/2026.</p>
                       </div>
                     </label>
 
