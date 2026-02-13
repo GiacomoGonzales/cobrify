@@ -805,14 +805,18 @@ export default function POS() {
     }
   }, [location.state, customers])
 
-  // Cargar documento para edición si viene editInvoiceId en la URL
+  // Cargar documento para edición o duplicación si viene en la URL
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search)
     const editId = searchParams.get('editInvoiceId')
+    const duplicateId = searchParams.get('duplicateInvoiceId')
 
     if (editId && !editInvoiceLoadedRef.current && user?.uid) {
       editInvoiceLoadedRef.current = true
       loadInvoiceForEdit(editId)
+    } else if (duplicateId && !editInvoiceLoadedRef.current && user?.uid) {
+      editInvoiceLoadedRef.current = true
+      loadInvoiceForDuplicate(duplicateId)
     }
   }, [location.search, user])
 
@@ -934,6 +938,111 @@ export default function POS() {
     } catch (error) {
       console.error('Error al cargar documento para editar:', error)
       toast.error('Error al cargar el documento')
+      navigate('/app/facturas')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Función para duplicar un documento existente (pre-llenar POS sin vincular al original)
+  const loadInvoiceForDuplicate = async (invoiceId) => {
+    try {
+      setIsLoading(true)
+      const businessId = getBusinessId()
+
+      const { doc, getDoc } = await import('firebase/firestore')
+      const { db } = await import('@/lib/firebase')
+
+      const invoiceRef = doc(db, 'businesses', businessId, 'invoices', invoiceId)
+      const invoiceSnap = await getDoc(invoiceRef)
+
+      if (!invoiceSnap.exists()) {
+        toast.error('No se pudo cargar el documento para duplicar')
+        navigate('/app/facturas')
+        return
+      }
+
+      const invoice = { id: invoiceSnap.id, ...invoiceSnap.data() }
+
+      // Desbloquear UI (por si venía de una venta completada)
+      setSaleCompleted(false)
+
+      // NO setear editingInvoiceId/editingInvoiceData → es un documento NUEVO
+      setEditingInvoiceId(null)
+      setEditingInvoiceData(null)
+
+      // Cargar tipo de documento
+      setDocumentType(invoice.documentType)
+
+      // Cargar cliente
+      setCustomerData({
+        documentType: invoice.customer?.documentType || '',
+        documentNumber: invoice.customer?.documentNumber || '',
+        businessName: invoice.customer?.businessName || '',
+        name: invoice.customer?.name || '',
+        address: invoice.customer?.address || '',
+        email: invoice.customer?.email || '',
+        phone: invoice.customer?.phone || '',
+        studentName: invoice.customer?.studentName || '',
+        studentSchedule: invoice.customer?.studentSchedule || '',
+        vehiclePlate: invoice.customer?.vehiclePlate || '',
+        originAddress: invoice.customer?.originAddress || '',
+        destinationAddress: invoice.customer?.destinationAddress || '',
+        tripDetail: invoice.customer?.tripDetail || '',
+        serviceReferenceValue: invoice.customer?.serviceReferenceValue || '',
+        effectiveLoadValue: invoice.customer?.effectiveLoadValue || '',
+        usefulLoadValue: invoice.customer?.usefulLoadValue || '',
+      })
+
+      // Cargar items al carrito
+      const cartItems = (invoice.items || []).map((item, index) => ({
+        id: item.productId || `dup-item-${index}`,
+        productId: item.productId,
+        name: item.name || item.description,
+        description: item.description,
+        price: item.unitPrice || item.price,
+        quantity: item.quantity,
+        discount: item.discount || 0,
+        discountType: item.discountType || 'percent',
+        observations: item.observations || '',
+        unit: item.unit || 'NIU',
+        igvType: item.igvType || 'gravado',
+      }))
+      setCart(cartItems)
+
+      // Cargar detracción si existe
+      if (invoice.hasDetraction) {
+        setHasDetraction(true)
+        setDetractionType(invoice.detractionType || '')
+        setDetractionBankAccount(invoice.detractionBankAccount || '')
+      }
+
+      // Cargar forma de pago
+      if (invoice.paymentType) {
+        setPaymentType(invoice.paymentType)
+        if (invoice.paymentType === 'credito') {
+          setPaymentDueDate(invoice.paymentDueDate || '')
+          setPaymentInstallments(invoice.paymentInstallments || [])
+        }
+      }
+
+      // Cargar descuento global
+      if (invoice.globalDiscount) {
+        setDiscountAmount(invoice.globalDiscount.toString())
+      }
+
+      // Usar fecha de HOY (no la del documento original)
+      setEmissionDate(getLocalDateString())
+
+      const docName = invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
+      toast.success(`Comprobante duplicado. Revisa los datos y emite el nuevo ${docName}.`)
+
+      // Limpiar URL sin recargar
+      navigate('/app/pos', { replace: true })
+
+    } catch (error) {
+      console.error('Error al duplicar documento:', error)
+      toast.error('Error al cargar el documento para duplicar')
       navigate('/app/facturas')
     } finally {
       setIsLoading(false)

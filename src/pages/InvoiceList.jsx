@@ -32,6 +32,7 @@ import {
   Store,
   User,
   ShoppingCart,
+  Copy,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -1788,6 +1789,20 @@ Gracias por tu preferencia.`
                     >
                       <Edit className="w-4 h-4 text-blue-600" />
                       <span className="text-blue-600 font-medium">Editar documento</span>
+                    </button>
+                  )}
+
+                  {/* Duplicar documento */}
+                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        navigate(`/app/pos?duplicateInvoiceId=${invoice.id}`)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 flex items-center gap-3"
+                    >
+                      <Copy className="w-4 h-4 text-purple-600" />
+                      <span className="text-purple-600 font-medium">Duplicar comprobante</span>
                     </button>
                   )}
 
