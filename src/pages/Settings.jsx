@@ -141,6 +141,7 @@ export default function Settings() {
   const [enableProductLocation, setEnableProductLocation] = useState(false)
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
+  const [autoResetPOS, setAutoResetPOS] = useState(false)
 
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
@@ -683,6 +684,7 @@ export default function Settings() {
         // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
         setAdminToolsEnabled(businessData.adminTools?.enabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
+        setAutoResetPOS(businessData.autoResetPOS || false)
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
@@ -3551,6 +3553,26 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  {/* Auto-reset POS después de acción post-venta */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={autoResetPOS}
+                      onChange={(e) => setAutoResetPOS(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Reiniciar POS automáticamente después de imprimir/descargar
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {autoResetPOS
+                          ? '✓ Habilitado: Al imprimir ticket, descargar PDF, ver vista previa o enviar por WhatsApp, el POS se reiniciará automáticamente para una nueva venta.'
+                          : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Nueva Venta" manualmente para continuar.'}
+                      </p>
+                    </div>
+                  </label>
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -3839,6 +3861,7 @@ export default function Settings() {
                       allowPriceEdit: allowPriceEdit,
                       allowNameEdit: allowNameEdit,
                       autoSku: autoSku,
+                      autoResetPOS: autoResetPOS,
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,

@@ -3160,6 +3160,7 @@ export default function POS() {
 
               if (result.success) {
                 toast.success('Comprobante impreso en ticketera')
+                if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 500)
                 return
               } else {
                 toast.error('Error al imprimir en ticketera: ' + result.error)
@@ -3175,6 +3176,7 @@ export default function POS() {
 
       // Fallback: impresión estándar (web o si falla la térmica)
       window.print()
+      if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
     } finally {
       setIsPrintingTicket(false)
     }
@@ -3272,6 +3274,7 @@ Gracias por tu preferencia.`
         document.body.removeChild(link)
       }
 
+      if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
       setSendingWhatsApp(false)
       return
     } catch (error) {
@@ -5431,6 +5434,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         setIsLoadingPreview(true)
                         try {
                           await previewInvoicePDF(lastInvoiceData, companySettings, branding)
+                          if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
                         } catch (error) {
                           console.error('Error al generar vista previa:', error)
                           toast.error('Error al generar la vista previa')
@@ -5459,6 +5463,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       onClick={() => {
                         try {
                           generateInvoicePDF(lastInvoiceData, companySettings, true, branding, branches)
+                          if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
                         } catch (error) {
                           console.error('Error al generar PDF:', error)
                           toast.error('Error al generar el PDF')
