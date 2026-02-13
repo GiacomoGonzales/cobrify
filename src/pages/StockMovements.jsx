@@ -192,7 +192,20 @@ export default function StockMovements() {
       movement.fromWarehouse === filterWarehouse ||
       movement.toWarehouse === filterWarehouse
 
-    const matchesType = filterType === 'all' || movement.type === filterType
+    let matchesType = true
+    if (filterType !== 'all') {
+      if (filterType === 'exits') {
+        matchesType = movement.type === 'exit' || movement.type === 'sale'
+      } else if (filterType === 'entries') {
+        matchesType = movement.type === 'entry'
+      } else if (filterType === 'transfers') {
+        matchesType = movement.type === 'transfer_in' || movement.type === 'transfer_out'
+      } else if (filterType === 'productions') {
+        matchesType = movement.type === 'production' || movement.type === 'production_manual' || movement.type === 'production_consumption'
+      } else {
+        matchesType = movement.type === filterType
+      }
+    }
 
     // Filtro de fechas
     let matchesDate = true
@@ -522,16 +535,12 @@ export default function StockMovements() {
                 onChange={e => setFilterType(e.target.value)}
               >
                 <option value="all">Todos los tipos</option>
-                <option value="entry">Entradas</option>
-                <option value="exit">Salidas</option>
-                <option value="sale">Ventas</option>
-                <option value="transfer_in">Transferencias Entrada</option>
-                <option value="transfer_out">Transferencias Salida</option>
+                <option value="entries">Entradas</option>
+                <option value="exits">Salidas</option>
+                <option value="transfers">Transferencias</option>
                 <option value="adjustment">Ajustes</option>
                 <option value="damage">Merma/Dañado</option>
-                <option value="production">Producción</option>
-                <option value="production_manual">Producción Manual</option>
-                <option value="production_consumption">Consumo Producción</option>
+                <option value="productions">Producción</option>
               </Select>
 
               {/* Fecha desde */}
@@ -587,7 +596,7 @@ export default function StockMovements() {
           <CardContent className="p-4">
             <p className="text-xs text-gray-600 mb-1">Entradas</p>
             <p className="text-2xl font-bold text-green-600">
-              {filteredMovements.filter(m => m.type === 'entry' || m.type === 'transfer_in').length}
+              {filteredMovements.filter(m => m.type === 'entry').length}
             </p>
           </CardContent>
         </Card>
@@ -595,7 +604,7 @@ export default function StockMovements() {
           <CardContent className="p-4">
             <p className="text-xs text-gray-600 mb-1">Salidas</p>
             <p className="text-2xl font-bold text-red-600">
-              {filteredMovements.filter(m => m.type === 'exit' || m.type === 'transfer_out' || m.type === 'sale').length}
+              {filteredMovements.filter(m => m.type === 'exit' || m.type === 'sale').length}
             </p>
           </CardContent>
         </Card>
