@@ -3717,6 +3717,21 @@ export const retryPendingInvoices = onSchedule(
     const BATCH_SIZE = 20 // Procesar máximo 20 por ejecución
 
     try {
+      // Verificar flag global de pausa para restaurantes
+      let pauseSunatRestaurants = false
+      try {
+        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+        if (adminSettingsDoc.exists()) {
+          pauseSunatRestaurants = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+        }
+      } catch (adminErr) {
+        console.warn('⚠️ [RETRY] No se pudo leer adminSettings:', adminErr.message)
+      }
+
+      if (pauseSunatRestaurants) {
+        console.log('⏸️ [RETRY] Pausa activa para restaurantes con IGV reducido')
+      }
+
       // Obtener todos los negocios
       const businessesSnapshot = await db.collection('businesses').get()
 
@@ -3732,6 +3747,16 @@ export const retryPendingInvoices = onSchedule(
         // Verificar que el negocio tenga configuración de emisión
         if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
           continue // Saltar negocios sin configuración SUNAT
+        }
+
+        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido
+        if (pauseSunatRestaurants) {
+          const taxConfig = businessData.emissionConfig?.taxConfig
+          const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5 || taxConfig?.igvRate === 10
+          if (isReducedIgv) {
+            console.log(`⏸️ [RETRY] Negocio ${businessId}: Saltando (IGV reducido, pausa activa)`)
+            continue
+          }
         }
 
         // Buscar facturas/boletas pendientes de este negocio
@@ -3920,6 +3945,17 @@ export const testRetryPendingInvoices = onRequest(
     const filterBusinessId = req.body?.businessId || req.query?.businessId
 
     try {
+      // Verificar flag global de pausa para restaurantes
+      let pauseSunatRestaurants = false
+      try {
+        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+        if (adminSettingsDoc.exists()) {
+          pauseSunatRestaurants = adminSettingsDoc.data()?.system?.pauseSunatRestaurants === true
+        }
+      } catch (adminErr) {
+        console.warn('⚠️ [RETRY-TEST] No se pudo leer adminSettings:', adminErr.message)
+      }
+
       let businessQuery = db.collection('businesses')
 
       if (filterBusinessId) {
@@ -3946,6 +3982,16 @@ export const testRetryPendingInvoices = onRequest(
 
         if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
           continue
+        }
+
+        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido
+        if (pauseSunatRestaurants) {
+          const taxConfig = businessData.emissionConfig?.taxConfig
+          const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5 || taxConfig?.igvRate === 10
+          if (isReducedIgv) {
+            console.log(`⏸️ [RETRY-TEST] Negocio ${businessId}: Saltando (IGV reducido, pausa activa)`)
+            continue
+          }
         }
 
         const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
