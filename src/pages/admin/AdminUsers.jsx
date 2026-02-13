@@ -87,6 +87,7 @@ export default function AdminUsers() {
   const [planFilter, setPlanFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all') // 'all' | 'cobrify' | 'reseller' | 'reseller:ID'
   const [modeFilter, setModeFilter] = useState('all') // 'all' | 'retail' | 'restaurant' | 'pharmacy' | etc.
+  const [igvFilter, setIgvFilter] = useState('all') // 'all' | 'reduced' | 'exempt' | 'standard'
   const [resellers, setResellers] = useState([]) // Lista de resellers para el filtro
   const [sortField, setSortField] = useState('createdAt')
   const [sortDirection, setSortDirection] = useState('desc')
@@ -330,6 +331,8 @@ export default function AdminUsers() {
             (data.email ? data.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null),
           emissionMethod: emissionMethod,
           businessMode: business.businessMode || 'retail',
+          igvRate: business.emissionConfig?.taxConfig?.igvRate ?? 18,
+          taxType: business.emissionConfig?.taxConfig?.taxType || 'standard',
           plan: data.plan || 'unknown',
           planName: data.planName || null,
           status,
@@ -482,6 +485,17 @@ export default function AdminUsers() {
       }
     }
 
+    // Filtro de IGV
+    if (igvFilter !== 'all') {
+      if (igvFilter === 'reduced') {
+        result = result.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5)
+      } else if (igvFilter === 'exempt') {
+        result = result.filter(u => u.taxType === 'exempt' || u.igvRate === 0)
+      } else if (igvFilter === 'standard') {
+        result = result.filter(u => u.taxType === 'standard' && u.igvRate === 18)
+      }
+    }
+
     // Filtro de origen (Cobrify vs Reseller vs Reseller específico)
     if (sourceFilter === 'cobrify') {
       result = result.filter(u => !u.createdByReseller)
@@ -507,7 +521,7 @@ export default function AdminUsers() {
     })
 
     return result
-  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, sortField, sortDirection])
+  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, sortField, sortDirection])
 
   // Estadísticas rápidas
   const stats = useMemo(() => {
@@ -1804,6 +1818,17 @@ export default function AdminUsers() {
               <option value="pharmacy">Farmacia ({users.filter(u => u.businessMode === 'pharmacy').length})</option>
               <option value="real_estate">Inmobiliaria ({users.filter(u => u.businessMode === 'real_estate').length})</option>
               <option value="transport">Transporte ({users.filter(u => u.businessMode === 'transport').length})</option>
+            </select>
+
+            <select
+              value={igvFilter}
+              onChange={e => setIgvFilter(e.target.value)}
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">IGV</option>
+              <option value="reduced">10.5% ({users.filter(u => u.taxType === 'reduced' || u.igvRate === 10.5).length})</option>
+              <option value="exempt">Exonerado ({users.filter(u => u.taxType === 'exempt' || u.igvRate === 0).length})</option>
+              <option value="standard">18% ({users.filter(u => u.taxType === 'standard' && u.igvRate === 18).length})</option>
             </select>
 
             <button
