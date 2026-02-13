@@ -1053,7 +1053,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         if (emissionDate && typeof emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(emissionDate)) {
           fecha = emissionDate;
         } else {
-          fecha = invoiceDate.toISOString().split('T')[0];
+          fecha = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}-${String(invoiceDate.getDate()).padStart(2, '0')}`;
         }
         const docCliente = isInvoice ? '6' : '1';
         const numDocCliente = custDoc;

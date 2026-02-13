@@ -145,13 +145,20 @@ export default function Operations() {
       agentCommissionPercent: '',
       agentCommission: '',
       status: 'en_proceso',
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })(),
       endDate: '',
       notes: '',
     })
     setModalMode('create')
     setSelectedOperation(null)
     setShowModal(true)
+  }
+
+  const toLocalDateStr = (val) => {
+    if (!val) return ''
+    if (typeof val === 'string') return val.split('T')[0]
+    const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val))
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
   function openEditModal(operation) {
@@ -166,8 +173,8 @@ export default function Operations() {
       agentCommissionPercent: operation.agentCommissionPercent || '',
       agentCommission: operation.agentCommission || '',
       status: operation.status || 'en_proceso',
-      startDate: operation.startDate ? operation.startDate.toISOString().split('T')[0] : '',
-      endDate: operation.endDate ? operation.endDate.toISOString().split('T')[0] : '',
+      startDate: toLocalDateStr(operation.startDate),
+      endDate: toLocalDateStr(operation.endDate),
       notes: operation.notes || '',
     })
     setModalMode('edit')

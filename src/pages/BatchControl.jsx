@@ -165,7 +165,8 @@ function BatchControl() {
     setBatchData({
       batchNumber: batch.batchNumber || '',
       expirationDate: batch.expirationDate
-        ? (batch.expirationDate.toDate ? batch.expirationDate.toDate() : new Date(batch.expirationDate)).toISOString().split('T')[0]
+        ? (typeof batch.expirationDate === 'string' ? batch.expirationDate.split('T')[0]
+          : (() => { const d = batch.expirationDate.toDate ? batch.expirationDate.toDate() : new Date(batch.expirationDate); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })())
         : '',
       quantity: batch.quantity || 0
     })

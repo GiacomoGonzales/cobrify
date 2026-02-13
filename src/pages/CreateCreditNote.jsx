@@ -61,7 +61,7 @@ export default function CreateCreditNote() {
   const [externalData, setExternalData] = useState({
     documentNumber: '', // Serie-Correlativo (ej: F001-00001234)
     documentType: '01', // 01 = Factura, 03 = Boleta
-    issueDate: new Date().toISOString().split('T')[0],
+    issueDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })(),
     customerDocType: '6', // 6 = RUC, 1 = DNI
     customerDocNumber: '',
     customerName: '',

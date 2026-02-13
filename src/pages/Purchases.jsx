@@ -72,7 +72,7 @@ export default function Purchases() {
   // Estado para registrar pagos parciales (abonos) - nuevo sistema
   const [registeringPayment, setRegisteringPayment] = useState(null) // La compra a la que se registra el pago
   const [paymentAmount, setPaymentAmount] = useState('')
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [paymentDate, setPaymentDate] = useState((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })())
   const [paymentNotes, setPaymentNotes] = useState('')
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false)
   const [viewingPayments, setViewingPayments] = useState(null) // Para ver historial de pagos
@@ -508,7 +508,7 @@ export default function Purchases() {
     const remaining = (purchase.total || 0) - (purchase.paidAmount || 0)
     setRegisteringPayment(purchase)
     setPaymentAmount(remaining.toFixed(2)) // Sugerir el saldo pendiente
-    setPaymentDate(new Date().toISOString().split('T')[0]) // Fecha de hoy por defecto
+    setPaymentDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()) // Fecha de hoy por defecto
     setPaymentNotes('')
   }
 
@@ -1735,7 +1735,7 @@ export default function Purchases() {
                 onClick={() => {
                   setRegisteringPayment(null)
                   setPaymentAmount('')
-                  setPaymentDate(new Date().toISOString().split('T')[0])
+                  setPaymentDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })())
                   setPaymentNotes('')
                 }}
                 disabled={isRegisteringPayment}
@@ -1854,9 +1854,8 @@ export default function Purchases() {
                             <span className="font-bold text-green-600">+{formatCurrency(payment.amount)}</span>
                             <button
                               onClick={() => {
-                                const dateStr = paymentDate instanceof Date
-                                  ? paymentDate.toISOString().split('T')[0]
-                                  : new Date(paymentDate).toISOString().split('T')[0]
+                                const pd = paymentDate instanceof Date ? paymentDate : new Date(paymentDate)
+                                const dateStr = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}-${String(pd.getDate()).padStart(2, '0')}`
                                 setEditingPaymentDate({ paymentIndex: idx, date: dateStr })
                               }}
                               className="text-gray-400 hover:text-primary-600 p-1 rounded transition-colors"

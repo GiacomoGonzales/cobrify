@@ -915,8 +915,15 @@ export default function POS() {
 
       // Cargar fecha de emisión
       if (invoice.emissionDate) {
-        const emDate = invoice.emissionDate.toDate ? invoice.emissionDate.toDate() : new Date(invoice.emissionDate)
-        setEmissionDate(getLocalDateString(emDate))
+        if (invoice.emissionDate.toDate) {
+          // Firestore Timestamp → convertir a fecha local
+          setEmissionDate(getLocalDateString(invoice.emissionDate.toDate()))
+        } else if (typeof invoice.emissionDate === 'string') {
+          // Ya es string YYYY-MM-DD, usar directo (no pasar por new Date que parsea como UTC)
+          setEmissionDate(invoice.emissionDate)
+        } else {
+          setEmissionDate(getLocalDateString(new Date(invoice.emissionDate)))
+        }
       }
 
       toast.info(`Editando ${invoice.documentType === 'factura' ? 'Factura' : 'Boleta'} ${invoice.series}-${invoice.number}`)

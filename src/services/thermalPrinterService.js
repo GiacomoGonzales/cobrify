@@ -938,7 +938,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       if (invoice.emissionDate && typeof invoice.emissionDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(invoice.emissionDate)) {
         fecha = invoice.emissionDate;
       } else {
-        fecha = new Date(invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date()).toISOString().split('T')[0];
+        const rawDate = invoice.issueDate?.toDate ? invoice.issueDate.toDate() : invoice.issueDate || invoice.createdAt?.toDate ? invoice.createdAt.toDate() : invoice.createdAt || new Date();
+        const d = rawDate instanceof Date ? rawDate : new Date(rawDate);
+        fecha = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
       const docCliente = isInvoice ? '6' : '1'; // 6=RUC, 1=DNI
       const numDocCliente = invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || invoice.customerDni || '';
@@ -2108,7 +2110,7 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       // QR Code (si hay datos)
       if (business.ruc && invoice.series) {
         const tipoDoc = isInvoice ? '01' : '03';
-        const fecha = invoiceDate.toISOString().split('T')[0];
+        const fecha = `${invoiceDate.getFullYear()}-${String(invoiceDate.getMonth() + 1).padStart(2, '0')}-${String(invoiceDate.getDate()).padStart(2, '0')}`;
         const docCliente = isInvoice ? '6' : '1';
         const numDocCliente = invoice.customer?.documentNumber || '';
         const qrData = `${business.ruc}|${tipoDoc}|${invoice.series}|${invoice.correlativeNumber || invoice.number}|${(invoice.tax || 0).toFixed(2)}|${(invoice.total || 0).toFixed(2)}|${fecha}|${docCliente}|${numDocCliente}`;

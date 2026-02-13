@@ -572,8 +572,12 @@ export default function Products() {
     // Format expiration date if exists (from Firestore Timestamp to YYYY-MM-DD)
     let formattedExpirationDate = ''
     if (product.expirationDate) {
-      const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
-      formattedExpirationDate = expDate.toISOString().split('T')[0]
+      if (typeof product.expirationDate === 'string') {
+        formattedExpirationDate = product.expirationDate.split('T')[0]
+      } else {
+        const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
+        formattedExpirationDate = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`
+      }
     }
 
     reset({
@@ -661,8 +665,12 @@ export default function Products() {
     // Formatear fecha de expiración si existe
     let formattedExpirationDate = ''
     if (product.expirationDate) {
-      const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
-      formattedExpirationDate = expDate.toISOString().split('T')[0]
+      if (typeof product.expirationDate === 'string') {
+        formattedExpirationDate = product.expirationDate.split('T')[0]
+      } else {
+        const expDate = product.expirationDate.toDate ? product.expirationDate.toDate() : new Date(product.expirationDate)
+        formattedExpirationDate = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}-${String(expDate.getDate()).padStart(2, '0')}`
+      }
     }
 
     reset({

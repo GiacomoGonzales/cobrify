@@ -211,30 +211,22 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     setIsM1LVehicle(guide.isM1LVehicle || false)
     setAdditionalInfo(guide.additionalInfo || '')
 
+    // Helper para convertir fecha a YYYY-MM-DD sin perder día por timezone
+    const toLocalDateStr = (val) => {
+      if (!val) return ''
+      if (typeof val === 'string') return val.split('T')[0]
+      const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val))
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+
     // Fecha de emisión
     if (guide.issueDate) {
-      let dateStr = ''
-      if (typeof guide.issueDate === 'string') {
-        dateStr = guide.issueDate.split('T')[0]
-      } else if (guide.issueDate.toDate) {
-        dateStr = guide.issueDate.toDate().toISOString().split('T')[0]
-      } else if (guide.issueDate instanceof Date) {
-        dateStr = guide.issueDate.toISOString().split('T')[0]
-      }
-      setIssueDate(dateStr)
+      setIssueDate(toLocalDateStr(guide.issueDate))
     }
 
     // Fecha de traslado
     if (guide.transferDate) {
-      let dateStr = ''
-      if (typeof guide.transferDate === 'string') {
-        dateStr = guide.transferDate.split('T')[0]
-      } else if (guide.transferDate.toDate) {
-        dateStr = guide.transferDate.toDate().toISOString().split('T')[0]
-      } else if (guide.transferDate instanceof Date) {
-        dateStr = guide.transferDate.toISOString().split('T')[0]
-      }
-      setTransferDate(dateStr)
+      setTransferDate(toLocalDateStr(guide.transferDate))
     }
 
     // Destinatario

@@ -41,7 +41,7 @@ export default function RegisterPurchase() {
   const [purchaseInfo, setPurchaseInfo] = useState({
     supplier: '',
     invoiceNumber: '',
-    purchaseDate: new Date().toISOString().split('T')[0],
+    purchaseDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })(),
     warehouseId: ''
   })
 
@@ -212,7 +212,7 @@ export default function RegisterPurchase() {
       setPurchaseInfo({
         supplier: '',
         invoiceNumber: '',
-        purchaseDate: new Date().toISOString().split('T')[0],
+        purchaseDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })(),
         warehouseId: defaultWarehouse?.id || ''
       })
 

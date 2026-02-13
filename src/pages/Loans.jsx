@@ -134,7 +134,7 @@ export default function Loans() {
 
   // Modal de pago con fecha
   const [paymentModal, setPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [paymentDate, setPaymentDate] = useState((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })())
 
   // Modal de edición de pago
   const [editPaymentModal, setEditPaymentModal] = useState({ open: false, loan: null, installmentIndex: null })
@@ -285,7 +285,7 @@ export default function Loans() {
 
   // Abrir modal de pago
   const openPaymentModal = (loan, installmentIndex) => {
-    setPaymentDate(new Date().toISOString().split('T')[0]) // Reset a fecha actual
+    setPaymentDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()) // Reset a fecha actual
     setPaymentModal({ open: true, loan, installmentIndex })
   }
 
@@ -345,7 +345,12 @@ export default function Loans() {
   // Abrir modal de edición de pago
   const openEditPaymentModal = (loan, installmentIndex) => {
     const installment = loan.installments[installmentIndex]
-    const paidDate = installment.paidAt ? new Date(installment.paidAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+    let paidDate = todayStr
+    if (installment.paidAt) {
+      const d = installment.paidAt.toDate ? installment.paidAt.toDate() : new Date(installment.paidAt)
+      paidDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
     setEditPaymentDate(paidDate)
     setEditPaymentModal({ open: true, loan, installmentIndex })
   }
