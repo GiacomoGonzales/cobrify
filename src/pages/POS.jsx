@@ -1181,39 +1181,45 @@ export default function POS() {
   }, [searchTerm, selectedCategoryFilter])
 
   // Auto-agregar producto cuando se escanea código de barras o SKU
+  // Debounce de 500ms para evitar que códigos cortos (ej: L34) se agreguen
+  // antes de terminar de escribir códigos más largos (ej: L340)
   useEffect(() => {
     // Solo ejecutar si hay un término de búsqueda
     if (!searchTerm || searchTerm.length < 3) return
 
-    // Buscar productos que coincidan exactamente con el código de barras o SKU
-    const searchLower = searchTerm.toLowerCase()
-    const exactMatches = products.filter(p =>
-      p.code?.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower
-    )
+    const timer = setTimeout(() => {
+      // Buscar productos que coincidan exactamente con el código de barras o SKU
+      const searchLower = searchTerm.toLowerCase()
+      const exactMatches = products.filter(p =>
+        p.code?.toLowerCase() === searchLower || p.sku?.toLowerCase() === searchLower
+      )
 
-    // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
-    if (exactMatches.length === 1) {
-      const product = exactMatches[0]
+      // Si hay exactamente una coincidencia exacta por código, agregarlo automáticamente
+      if (exactMatches.length === 1) {
+        const product = exactMatches[0]
 
-      // Verificar que el producto tenga stock disponible en el almacén seleccionado
-      // IMPORTANTE: Usar getStockInWarehouse para verificar stock real del almacén
-      const warehouseStock = selectedWarehouse
-        ? getStockInWarehouse(product, selectedWarehouse.id)
-        : (product.stock || 0)
+        // Verificar que el producto tenga stock disponible en el almacén seleccionado
+        // IMPORTANTE: Usar getStockInWarehouse para verificar stock real del almacén
+        const warehouseStock = selectedWarehouse
+          ? getStockInWarehouse(product, selectedWarehouse.id)
+          : (product.stock || 0)
 
-      const hasStock = warehouseStock > 0 || !product.trackStock || product.stock === null || companySettings?.allowNegativeStock
+        const hasStock = warehouseStock > 0 || !product.trackStock || product.stock === null || companySettings?.allowNegativeStock
 
-      if (hasStock) {
-        addToCart(product)
-        // Limpiar el campo de búsqueda después de agregar
-        setSearchTerm('')
-        // Mostrar feedback al usuario
-        toast.success(`${product.name} agregado al carrito`)
-      } else {
-        toast.error(`${product.name} no tiene stock disponible en ${selectedWarehouse?.name || 'este almacén'}`)
-        setSearchTerm('')
+        if (hasStock) {
+          addToCart(product)
+          // Limpiar el campo de búsqueda después de agregar
+          setSearchTerm('')
+          // Mostrar feedback al usuario
+          toast.success(`${product.name} agregado al carrito`)
+        } else {
+          toast.error(`${product.name} no tiene stock disponible en ${selectedWarehouse?.name || 'este almacén'}`)
+          setSearchTerm('')
+        }
       }
-    }
+    }, 500)
+
+    return () => clearTimeout(timer)
   }, [searchTerm, products, companySettings, selectedWarehouse])
 
   // Función para escanear código de barras
@@ -3665,10 +3671,11 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       {product.sku && <p>SKU: {product.sku}</p>}
                       {product.code && <p>Cód: {product.code}</p>}
                       {product.barcode && <p className="font-mono">{product.barcode}</p>}
+                      {product.location && <p className="font-mono text-blue-600">{product.location}</p>}
                     </div>
                     {/* Tablet: código compacto en una línea */}
                     <p className="hidden sm:block text-xs text-gray-500 mt-1 truncate">
-                      {product.sku || product.code || product.barcode || ''}
+                      {product.sku || product.code || product.barcode || ''}{product.location ? ` | ${product.location}` : ''}
                     </p>
                     {/* Pharmacy info */}
                     {product.genericName && (
@@ -3730,6 +3737,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                           {product.sku && <span>SKU: {product.sku}</span>}
                           {product.code && <span>Cód: {product.code}</span>}
                           {product.barcode && <span className="font-mono">{product.barcode}</span>}
+                          {product.location && <span className="font-mono text-blue-600">{product.location}</span>}
                         </div>
                         {/* Mostrar info de farmacia si existe */}
                         {product.genericName && (
