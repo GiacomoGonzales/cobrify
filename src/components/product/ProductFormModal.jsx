@@ -229,6 +229,9 @@ const ProductFormModal = ({
     location: '',
   })
 
+  // Product location state (for enableProductLocation preference, all modes)
+  const [productLocation, setProductLocation] = useState('')
+
   // Check if product images are enabled
   const canUseProductImages = showImages && (hasFeature?.('productImages') || businessSettings?.enableProductImages)
 
@@ -268,6 +271,7 @@ const ProductFormModal = ({
       setTaxAffectation(initialData.taxAffectation || '10')
       setIgvRate(initialData.igvRate ?? (businessSettings?.emissionConfig?.taxConfig?.igvRate ?? 18))
       setPresentations(initialData.presentations || [])
+      setProductLocation(initialData.location || '')
       if (initialData.imageUrl) {
         setProductImagePreview(initialData.imageUrl)
       }
@@ -313,6 +317,7 @@ const ProductFormModal = ({
         sanitaryRegistry: '',
         location: '',
       })
+      setProductLocation('')
     }
   }, [isOpen, initialData, reset])
 
@@ -443,6 +448,9 @@ const ProductFormModal = ({
       warehouseInitialStocks: showWarehouseStock ? warehouseInitialStocks : {},
     }
 
+    // Product location (works in all modes when enabled)
+    productData.location = businessMode === 'pharmacy' ? (pharmacyData.location || null) : (productLocation || null)
+
     // Include pharmacy data if in pharmacy mode
     if (businessMode === 'pharmacy') {
       productData.genericName = pharmacyData.genericName || null
@@ -457,7 +465,6 @@ const ProductFormModal = ({
       productData.saleCondition = pharmacyData.saleCondition || 'sin_receta'
       productData.requiresPrescription = pharmacyData.saleCondition !== 'sin_receta'
       productData.sanitaryRegistry = pharmacyData.sanitaryRegistry || null
-      productData.location = pharmacyData.location || null
     }
 
     // Handle image upload if there's a new image
@@ -675,6 +682,23 @@ const ProductFormModal = ({
               <p className="text-xs text-gray-500 mt-1">EAN, UPC u otro</p>
               {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
             </div>
+
+            {/* Ubicación del producto (habilitado desde Preferencias) */}
+            {businessSettings?.enableProductLocation && businessMode !== 'pharmacy' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ubicación del Producto
+                </label>
+                <input
+                  type="text"
+                  value={productLocation}
+                  onChange={(e) => setProductLocation(e.target.value)}
+                  placeholder="Ej: P1-3A-4R (Pasillo 1, Estante 3A, Fila 4)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Ubicación física en el almacén</p>
+              </div>
+            )}
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════

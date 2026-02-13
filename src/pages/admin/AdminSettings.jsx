@@ -42,7 +42,8 @@ export default function AdminSettings() {
     system: {
       maintenanceMode: false,
       allowNewRegistrations: true,
-      defaultTrialDays: 7
+      defaultTrialDays: 7,
+      pauseSunatRestaurants: false
     }
   })
   const [saved, setSaved] = useState(false)
@@ -784,6 +785,25 @@ function SystemSection({ settings, onChange }) {
               checked={settings.maintenanceMode}
               onChange={e => onChange('maintenanceMode', e.target.checked)}
               className="w-5 h-5 text-red-600 rounded focus:ring-red-500"
+            />
+          </label>
+
+          <label className={`flex items-center justify-between p-4 rounded-lg cursor-pointer ${settings.pauseSunatRestaurants ? 'bg-amber-50 hover:bg-amber-100 border border-amber-300' : 'bg-gray-50 hover:bg-gray-100'}`}>
+            <div className="flex items-center gap-3">
+              <Shield className="w-5 h-5 text-amber-600" />
+              <div>
+                <p className="font-medium text-gray-900">Pausar SUNAT para restaurantes (IGV 10.5%)</p>
+                <p className="text-sm text-gray-500">Suspende el envio automatico a SUNAT para negocios con IGV reducido (Ley 31556). Las facturas se generan normalmente pero quedan pendientes de envio.</p>
+                {settings.pauseSunatRestaurants && (
+                  <p className="text-xs text-amber-700 font-medium mt-1">ACTIVO: Los restaurantes con IGV 10.5% NO envian automaticamente a SUNAT</p>
+                )}
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settings.pauseSunatRestaurants}
+              onChange={e => onChange('pauseSunatRestaurants', e.target.checked)}
+              className="w-5 h-5 text-amber-600 rounded focus:ring-amber-500"
             />
           </label>
         </div>

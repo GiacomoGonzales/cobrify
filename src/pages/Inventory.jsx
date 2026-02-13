@@ -108,7 +108,7 @@ const getRealStockValue = (item) => {
 }
 
 export default function Inventory() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings } = useAppContext()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
   const [products, setProducts] = useState([])
@@ -1865,6 +1865,11 @@ export default function Inventory() {
                                 ? getCategoryPath(productCategories, item.category) || item.category
                                 : item.category
                               }
+                            </span>
+                          )}
+                          {item.location && (
+                            <span className="font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                              {item.location}
                             </span>
                           )}
                         </div>

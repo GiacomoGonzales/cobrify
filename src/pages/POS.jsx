@@ -2919,7 +2919,28 @@ export default function POS() {
       const shouldAutoSend = companySettings?.autoSendToSunat === true
       const canSendToSunat = documentType === 'factura' || documentType === 'boleta'
 
+      // Verificar si el envío está pausado globalmente para restaurantes con IGV reducido
+      let isPausedByAdmin = false
       if (shouldAutoSend && canSendToSunat) {
+        try {
+          const { doc: docRef, getDoc: getDocSnap } = await import('firebase/firestore')
+          const { db: fireDb } = await import('@/lib/firebase')
+          const adminSettingsSnap = await getDocSnap(docRef(fireDb, 'config', 'adminSettings'))
+          if (adminSettingsSnap.exists()) {
+            const adminConfig = adminSettingsSnap.data()
+            const isReducedIgv = taxConfig.taxType === 'reduced' || taxConfig.igvRate === 10.5 || taxConfig.igvRate === 10
+            if (adminConfig.system?.pauseSunatRestaurants && isReducedIgv) {
+              isPausedByAdmin = true
+              console.log('⏸️ Envío a SUNAT pausado por admin (restaurantes IGV reducido)')
+              toast.warning('Envío a SUNAT pausado temporalmente por el administrador. El comprobante queda pendiente.', 6000)
+            }
+          }
+        } catch (adminCheckError) {
+          console.warn('No se pudo verificar config admin:', adminCheckError)
+        }
+      }
+
+      if (shouldAutoSend && canSendToSunat && !isPausedByAdmin) {
         console.log('🚀 Enviando automáticamente a SUNAT (background)...')
         toast.info('Enviando a SUNAT en segundo plano...', 3000)
 

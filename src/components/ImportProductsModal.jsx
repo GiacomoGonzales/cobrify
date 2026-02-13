@@ -390,6 +390,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           codigo_barras: '7501234567890',
           nombre: 'Producto con Stock',
           descripcion: 'Descripción del producto',
+          ubicacion: 'P1-3A-4R',
           costo: 8.50,
           precio: 10.50,
           precio2: 9.50,
@@ -407,6 +408,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           codigo_barras: '',
           nombre: 'Servicio (Sin Stock)',
           descripcion: 'No controla inventario',
+          ubicacion: '',
           costo: 20.00,
           precio: 25.00,
           precio2: '',
@@ -424,6 +426,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
           codigo_barras: '7509876543210',
           nombre: 'Producto Solo con Barras',
           descripcion: 'Sin código interno',
+          ubicacion: 'P2-1B-2R',
           costo: 12.00,
           precio: 15.00,
           precio2: 13.50,
@@ -478,6 +481,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport }) {
         { wch: 18 }, // codigo_barras
         { wch: 30 }, // nombre
         { wch: 40 }, // descripcion
+        { wch: 15 }, // ubicacion
         { wch: 10 }, // costo
         { wch: 10 }, // precio
         { wch: 10 }, // precio2

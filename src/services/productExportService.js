@@ -98,6 +98,7 @@ export const exportProductsForImport = async (products, categories, businessMode
         codigo_barras: product.code || '',
         nombre: product.name || '',
         descripcion: product.description || '',
+        ubicacion: product.location || '',
         costo: product.cost || '',
         precio: getEffectivePrice(product),
         precio2: product.price2 || '',
@@ -150,6 +151,7 @@ export const exportProductsForImport = async (products, categories, businessMode
       { wch: 18 }, // codigo_barras
       { wch: 35 }, // nombre
       { wch: 40 }, // descripcion
+      { wch: 15 }, // ubicacion
       { wch: 10 }, // costo
       { wch: 10 }, // precio
       { wch: 10 }, // precio2
