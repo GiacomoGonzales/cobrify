@@ -7823,3 +7823,88 @@ export const checkSubscriptionExpirations = onSchedule(
   }
 )
 
+/**
+ * Migrar productos de IGV 10% a 10.5% para negocios con IGV reducido
+ * Elimina el campo igvRate de productos que tienen igvRate=10 para que usen el global (10.5%)
+ */
+export const migrateProductsIgvRate = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+
+    try {
+      // Verificar autenticación admin
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado' }); return
+      }
+      const idToken = authHeader.split('Bearer ')[1]
+      const decodedToken = await auth.verifyIdToken(idToken)
+      const adminDoc = await db.collection('admins').doc(decodedToken.uid).get()
+      if (!adminDoc.exists || !adminDoc.data()?.isAdmin) {
+        res.status(403).json({ error: 'Solo administradores' }); return
+      }
+
+      console.log('🔄 [MIGRATE-IGV] Iniciando migración de productos IGV 10% → 10.5%...')
+
+      // Buscar negocios con IGV reducido
+      const businessesSnapshot = await db.collection('businesses').get()
+      let totalBusinesses = 0
+      let totalProducts = 0
+      const details = []
+
+      for (const businessDoc of businessesSnapshot.docs) {
+        const businessData = businessDoc.data()
+        const taxConfig = businessData.emissionConfig?.taxConfig
+        const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+        if (!isReducedIgv) continue
+
+        totalBusinesses++
+        const businessId = businessDoc.id
+        const businessName = businessData.razonSocial || businessData.businessName || businessId
+
+        // Buscar productos con igvRate = 10
+        const productsRef = db.collection('businesses').doc(businessId).collection('products')
+        const productsSnapshot = await productsRef.where('igvRate', '==', 10).get()
+
+        if (productsSnapshot.empty) {
+          details.push({ businessId, businessName, updated: 0 })
+          continue
+        }
+
+        // Batch update: eliminar igvRate para que use el global
+        const batch = db.batch()
+        let count = 0
+        for (const productDoc of productsSnapshot.docs) {
+          batch.update(productDoc.ref, { igvRate: FieldValue.delete() })
+          count++
+        }
+        await batch.commit()
+
+        totalProducts += count
+        details.push({ businessId, businessName, updated: count })
+        console.log(`✅ [MIGRATE-IGV] ${businessName}: ${count} productos actualizados`)
+      }
+
+      console.log(`📊 [MIGRATE-IGV] Resumen: ${totalBusinesses} negocios, ${totalProducts} productos migrados`)
+
+      res.status(200).json({
+        success: true,
+        totalBusinesses,
+        totalProducts,
+        details
+      })
+    } catch (error) {
+      console.error('❌ [MIGRATE-IGV] Error:', error)
+      res.status(500).json({ error: error.message })
+    }
+  }
+)
+

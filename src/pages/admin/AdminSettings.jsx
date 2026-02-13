@@ -750,6 +750,33 @@ function NotificationsSection({ settings, onChange }) {
 }
 
 function SystemSection({ settings, onChange }) {
+  const [migratingIgv, setMigratingIgv] = useState(false)
+  const [migrateResult, setMigrateResult] = useState(null)
+
+  async function migrateProductsIgv() {
+    if (!confirm('¿Migrar productos de IGV 10% a 10.5% en todos los negocios con IGV reducido?')) return
+    setMigratingIgv(true)
+    setMigrateResult(null)
+    try {
+      const { getAuth } = await import('firebase/auth')
+      const authInstance = getAuth()
+      const idToken = await authInstance.currentUser.getIdToken()
+      const response = await fetch('https://us-central1-cobrify-395fe.cloudfunctions.net/migrateProductsIgvRate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` }
+      })
+      const result = await response.json()
+      if (result.success) {
+        setMigrateResult({ success: true, message: `${result.totalProducts} productos actualizados en ${result.totalBusinesses} negocios`, details: result.details })
+      } else {
+        setMigrateResult({ success: false, message: result.error || 'Error desconocido' })
+      }
+    } catch (error) {
+      setMigrateResult({ success: false, message: error.message })
+    } finally {
+      setMigratingIgv(false)
+    }
+  }
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -806,6 +833,31 @@ function SystemSection({ settings, onChange }) {
               className="w-5 h-5 text-amber-600 rounded focus:ring-amber-500"
             />
           </label>
+
+          {/* Migrar productos IGV 10% → 10.5% */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-gray-900">Migrar productos IGV 10% → 10.5%</p>
+                <p className="text-sm text-gray-500">Actualiza productos creados con IGV 10% para que usen el 10.5% global</p>
+              </div>
+              <button
+                onClick={migrateProductsIgv}
+                disabled={migratingIgv}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+              >
+                {migratingIgv ? 'Migrando...' : 'Migrar'}
+              </button>
+            </div>
+            {migrateResult && (
+              <div className={`mt-3 p-3 rounded-lg text-sm ${migrateResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                <p className="font-medium">{migrateResult.message}</p>
+                {migrateResult.details?.filter(d => d.updated > 0).map(d => (
+                  <p key={d.businessId} className="text-xs mt-1">{d.businessName}: {d.updated} productos</p>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
