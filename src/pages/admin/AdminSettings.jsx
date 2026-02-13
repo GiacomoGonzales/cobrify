@@ -767,17 +767,18 @@ function SystemSection({ settings, onChange }) {
 
       for (const bizDoc of businessesSnap.docs) {
         const bizData = bizDoc.data()
-        const tc = bizData.emissionConfig?.taxConfig
-        if (tc?.taxType !== 'reduced' && tc?.igvRate !== 10.5) continue
 
-        // Buscar productos con igvRate = 10 en este negocio
+        // Buscar productos con igvRate = 10 en TODOS los negocios
         const productsQuery = query(colRef(db, 'businesses', bizDoc.id, 'products'), where('igvRate', '==', 10))
         const productsSnap = await getDocsSnap(productsQuery)
         if (productsSnap.empty) continue
 
+        const tc = bizData.emissionConfig?.taxConfig
         results.push({
           businessId: bizDoc.id,
           businessName: bizData.razonSocial || bizData.businessName || bizDoc.id,
+          configIgv: tc?.igvRate ?? 18,
+          taxType: tc?.taxType || 'standard',
           products: productsSnap.docs.map(p => ({ id: p.id, name: p.data().name }))
         })
       }
@@ -921,11 +922,14 @@ function SystemSection({ settings, onChange }) {
                     {scanResult.map(biz => (
                       <div key={biz.businessId} className="mb-3 pb-3 border-b last:border-0">
                         <div className="flex items-center justify-between">
-                          <p className="font-medium text-gray-800">{biz.businessName} ({biz.products.length})</p>
+                          <div>
+                            <p className="font-medium text-gray-800">{biz.businessName}</p>
+                            <p className="text-xs text-gray-500">Config actual: IGV {biz.configIgv}% ({biz.taxType}) — {biz.products.length} productos con 10%</p>
+                          </div>
                           <button
                             onClick={() => fixProducts(biz.businessId, biz.products.map(p => p.id))}
                             disabled={migrating}
-                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 disabled:opacity-50"
+                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 disabled:opacity-50 shrink-0"
                           >
                             Corregir
                           </button>
