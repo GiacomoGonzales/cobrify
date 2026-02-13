@@ -1113,14 +1113,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
 
     // Observaciones generales (si existen)
     if (invoice.notes && invoice.notes.trim()) {
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
       printer = printer
-        .align('left')
-        .text(divider80)
         .bold()
         .text('OBSERVACIONES:\n')
         .clearFormatting()
-        .text(convertSpanishText(invoice.notes + '\n'))
-        .text(divider80);
+        .text(convertSpanishText(invoice.notes + '\n'));
+      printer = addSeparator(printer, format.separator, paperWidth, 'left');
     }
 
     // Mensaje de agradecimiento
