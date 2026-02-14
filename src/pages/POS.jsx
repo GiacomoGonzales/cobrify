@@ -242,6 +242,14 @@ const getProductExpirationStatus = (product) => {
   return { status: 'ok', days: diffDays, message: null, canSell: true }
 }
 
+// Inferir tipo de documento del largo del número cuando falta el tipo
+const inferDocumentType = (docType, docNumber) => {
+  if (docType && docType !== '') return docType
+  if (docNumber && docNumber.length === 11) return ID_TYPES.RUC
+  if (docNumber && docNumber.length === 8) return ID_TYPES.DNI
+  return ID_TYPES.DNI
+}
+
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
   const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId } = useAuth()
@@ -679,7 +687,7 @@ export default function POS() {
             id: customer.id || null,
             name: customer.name || '',
             businessName: customer.businessName || '',
-            documentType: customer.documentType || 'DNI',
+            documentType: inferDocumentType(customer.documentType, customer.documentNumber),
             documentNumber: customer.documentNumber || '',
             email: customer.email || '',
             phone: customer.phone || '',
@@ -741,7 +749,7 @@ export default function POS() {
         }
         // Siempre llenar los campos del formulario
         setCustomerData({
-          documentType: customer.documentType || 'DNI',
+          documentType: inferDocumentType(customer.documentType, customer.documentNumber),
           documentNumber: customer.documentNumber || '',
           name: customer.name || '',
           businessName: customer.businessName || '',
@@ -860,7 +868,7 @@ export default function POS() {
 
       // Cargar cliente
       setCustomerData({
-        documentType: invoice.customer?.documentType || '',
+        documentType: inferDocumentType(invoice.customer?.documentType, invoice.customer?.documentNumber),
         documentNumber: invoice.customer?.documentNumber || '',
         businessName: invoice.customer?.businessName || '',
         name: invoice.customer?.name || '',
@@ -976,7 +984,7 @@ export default function POS() {
 
       // Cargar cliente
       setCustomerData({
-        documentType: invoice.customer?.documentType || '',
+        documentType: inferDocumentType(invoice.customer?.documentType, invoice.customer?.documentNumber),
         documentNumber: invoice.customer?.documentNumber || '',
         businessName: invoice.customer?.businessName || '',
         name: invoice.customer?.name || '',

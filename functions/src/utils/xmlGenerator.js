@@ -463,7 +463,7 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // Identificación del cliente
   const customerPartyId = customerParty.ele('cac:PartyIdentification')
-  const customerDocType = getCustomerDocTypeCode(invoiceData.customer.documentType)
+  const customerDocType = getCustomerDocTypeCode(invoiceData.customer.documentType, invoiceData.customer.documentNumber)
 
   customerPartyId.ele('cbc:ID', {
     'schemeID': customerDocType,
@@ -1164,7 +1164,7 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
 
   // Identificación del cliente
   const customerPartyId = customerParty.ele('cac:PartyIdentification')
-  const customerDocType = getCustomerDocTypeCode(creditNoteData.customer.documentType)
+  const customerDocType = getCustomerDocTypeCode(creditNoteData.customer.documentType, creditNoteData.customer.documentNumber)
 
   customerPartyId.ele('cbc:ID', {
     'schemeID': customerDocType,
@@ -1634,7 +1634,7 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 
   // Identificación del cliente
   const customerPartyId = customerParty.ele('cac:PartyIdentification')
-  const customerDocType = getCustomerDocTypeCode(debitNoteData.customer.documentType)
+  const customerDocType = getCustomerDocTypeCode(debitNoteData.customer.documentType, debitNoteData.customer.documentNumber)
 
   customerPartyId.ele('cbc:ID', {
     'schemeID': customerDocType,
@@ -1971,14 +1971,18 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
 /**
  * Convierte tipo de documento del cliente al código SUNAT
  */
-function getCustomerDocTypeCode(documentType) {
+function getCustomerDocTypeCode(documentType, documentNumber) {
   const docTypeMap = {
     'DNI': '1',
     'RUC': '6',
     'CE': '4',
     'PASSPORT': '7'
   }
-  return docTypeMap[documentType] || '1'
+  if (docTypeMap[documentType]) return docTypeMap[documentType]
+  // Inferir del largo del número si falta el tipo
+  if (documentNumber && documentNumber.length === 11) return '6' // RUC
+  if (documentNumber && documentNumber.length === 8) return '1' // DNI
+  return '1'
 }
 
 /**

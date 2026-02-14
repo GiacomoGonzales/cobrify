@@ -203,8 +203,17 @@ function getClienteData(customer) {
     'PASAPORTE': '7'
   }
 
+  // Inferir tipo de documento del largo del número si no viene el tipo
+  let tipoDoc = tipoDocMapping[customer.documentType]
+  if (!tipoDoc) {
+    const docNum = customer.documentNumber || ''
+    if (docNum.length === 11) tipoDoc = '6' // RUC
+    else if (docNum.length === 8) tipoDoc = '1' // DNI
+    else tipoDoc = '1'
+  }
+
   return {
-    tipo_documento: tipoDocMapping[customer.documentType] || '1',
+    tipo_documento: tipoDoc,
     numero_documento: customer.documentNumber || '00000000',
     denominacion: customer.businessName || customer.name || 'CLIENTE',
     direccion: customer.address || '-'
