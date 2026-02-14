@@ -730,27 +730,18 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     }
   }
 
-  // ========== CALCULAR POSICIONES FIJAS ==========
-
-  const FOOTER_TEXT_HEIGHT = 25
-  const QR_BOX_HEIGHT = 0 // No hay QR en cotizaciones
-  const BANK_ROWS = Math.max(bankAccountsArray.length, 2)
-  const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0
-  const TOTALS_SECTION_HEIGHT = 55
-  const SON_SECTION_HEIGHT = 22
-  const TERMS_HEIGHT = quotation.terms ? 60 : 0
-  const NOTES_HEIGHT = quotation.notes ? 40 : 0
-
-  const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_TEXT_HEIGHT - Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) - 10 - TOTALS_SECTION_HEIGHT - SON_SECTION_HEIGHT - TERMS_HEIGHT - NOTES_HEIGHT - 15
-
   // ========== 3. TABLA DE PRODUCTOS ==========
 
   const tableY = currentY
   const headerRowHeight = 18
   const productRowHeight = 15
+  const PAGE_BOTTOM = PAGE_HEIGHT - MARGIN_BOTTOM - 20
 
   // Detectar modo farmacia para mostrar columna LABORATORIO
   const isPharmacy = companySettings?.businessMode === 'pharmacy'
+
+  // Flag para mostrar códigos de producto (configurable por empresa, por defecto NO se muestran)
+  const showProductCode = companySettings?.showProductCodeInQuotation === true
 
   const colWidths = {
     cant: CONTENT_WIDTH * 0.08,
@@ -771,7 +762,6 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     total: colX += colWidths.pu
   }
 
-  const availableHeight = FOOTER_AREA_START - tableY - headerRowHeight
   const items = quotation.items || []
 
   // Calcular altura dinámica para cada item basado en la descripción
@@ -781,7 +771,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     // Solo mostrar código si es un código "real" (no vacío, no CUSTOM)
     const rawCode = item.code || item.productCode || ''
     const isValidCode = rawCode && rawCode.trim() !== '' && rawCode.toUpperCase() !== 'CUSTOM'
-    const itemDesc = isValidCode ? `${rawCode} - ${itemName}` : itemName
+    const itemDesc = (showProductCode && isValidCode) ? `${rawCode} - ${itemName}` : itemName
     // La descripción adicional del producto
     const productDescription = item.description || ''
 
@@ -807,44 +797,46 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // Calcular alturas de todos los items
   const itemHeights = items.map(item => calculateItemHeight(item))
-  const totalItemsHeight = itemHeights.reduce((sum, ih) => sum + ih.height, 0)
 
-  // Sin filas vacías - solo mostrar productos reales
-  const tableHeight = headerRowHeight + totalItemsHeight
-
-  // Encabezado de tabla con color de acento
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(MARGIN_LEFT, tableY, CONTENT_WIDTH, headerRowHeight, 'F')
-
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-
-  const headerTextY = tableY + 12
-  doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
-  doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
-  doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
-  if (isPharmacy) {
-    doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, headerTextY, { align: 'center' })
+  // Helper para dibujar encabezado de tabla (se repite en cada página)
+  const drawTableHeader = (y) => {
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, headerRowHeight, 'F')
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    const hTextY = y + 12
+    doc.text('CANT.', cols.cant + colWidths.cant / 2, hTextY, { align: 'center' })
+    doc.text('U.M.', cols.um + colWidths.um / 2, hTextY, { align: 'center' })
+    doc.text('DESCRIPCIÓN', cols.desc + 5, hTextY)
+    if (isPharmacy) {
+      doc.text('LABORATORIO', cols.lab + colWidths.lab / 2, hTextY, { align: 'center' })
+    }
+    doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, hTextY, { align: 'center' })
+    doc.text('IMPORTE', cols.total + colWidths.total / 2, hTextY, { align: 'center' })
+    doc.setTextColor(...BLACK)
   }
-  doc.text('P. UNIT.', cols.pu + colWidths.pu / 2, headerTextY, { align: 'center' })
-  doc.text('IMPORTE', cols.total + colWidths.total / 2, headerTextY, { align: 'center' })
-
-  // Filas de productos
-  let dataRowY = tableY + headerRowHeight
-  doc.setTextColor(...BLACK)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7)
 
   const unitLabels = {
     'UNIDAD': 'UND', 'CAJA': 'CAJA', 'KG': 'KG', 'LITRO': 'LT',
     'METRO': 'MT', 'HORA': 'HR', 'SERVICIO': 'SERV'
   }
 
-  // Renderizar items con alturas dinámicas
+  // Dibujar primer encabezado de tabla
+  drawTableHeader(tableY)
+  let dataRowY = tableY + headerRowHeight
+
+  // Renderizar items con paginación automática
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
     const { height: rowHeight, nameLines, descLines } = itemHeights[i]
+
+    // Verificar si el item cabe en la página actual
+    if (dataRowY + rowHeight > PAGE_BOTTOM) {
+      doc.addPage()
+      drawTableHeader(MARGIN_TOP)
+      dataRowY = MARGIN_TOP + headerRowHeight
+    }
 
     // Filas alternadas (gris primero, luego blanco)
     if (i % 2 === 0) {
@@ -870,12 +862,12 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
     let currentDescY = textY
-    nameLines.forEach((line, idx) => {
+    nameLines.forEach((line) => {
       doc.text(line, cols.desc + 4, currentDescY)
       currentDescY += 9
     })
 
-    // Descripción del producto (debajo del nombre, en gris, mismo tamaño pero normal)
+    // Descripción del producto (debajo del nombre, en gris)
     if (descLines.length > 0) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
@@ -887,7 +879,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setTextColor(...BLACK)
     }
 
-    // Laboratorio (solo modo farmacia) - centrado verticalmente
+    // Laboratorio (solo modo farmacia)
     if (isPharmacy) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
@@ -908,7 +900,22 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // ========== 4. PIE DE PÁGINA ==========
 
-  let footerY = tableY + tableHeight + 8
+  // Estimar altura del footer para verificar si cabe en la página actual
+  const SON_SECTION_HEIGHT = 22
+  const bankEstRows = Math.max(bankAccountsArray.length, 2)
+  const bankEstHeight = bankAccountsArray.length > 0 ? (14 + bankEstRows * 13) : 0
+  const totalsEstHeight = 60
+  const termsEstHeight = quotation.terms ? 65 : 0
+  const notesEstHeight = quotation.notes ? 45 : 0
+  const footerEstimatedHeight = SON_SECTION_HEIGHT + 15 + Math.max(bankEstHeight, totalsEstHeight) + termsEstHeight + notesEstHeight + 50
+
+  // Si el footer no cabe en la página actual, agregar nueva página
+  if (dataRowY + footerEstimatedHeight > PAGE_HEIGHT - MARGIN_BOTTOM) {
+    doc.addPage()
+    dataRowY = MARGIN_TOP
+  }
+
+  let footerY = dataRowY + 8
 
   // ========== SON: (MONTO EN LETRAS) ==========
   const montoEnLetras = numeroALetras(quotation.total || 0) + ' SOLES'
@@ -1154,6 +1161,18 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setTextColor(...MEDIUM_GRAY)
   const footerCompanyName = branding?.companyName || 'Cobrify'
   doc.text(`Documento generado en ${footerCompanyName} - Sistema de Facturación Electrónica`, MARGIN_LEFT + CONTENT_WIDTH / 2, PAGE_HEIGHT - MARGIN_BOTTOM - 3, { align: 'center' })
+
+  // ========== NÚMEROS DE PÁGINA ==========
+  const totalPdfPages = doc.internal.getNumberOfPages()
+  if (totalPdfPages > 1) {
+    for (let p = 1; p <= totalPdfPages; p++) {
+      doc.setPage(p)
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...MEDIUM_GRAY)
+      doc.text(`Página ${p} de ${totalPdfPages}`, PAGE_WIDTH - MARGIN_RIGHT, PAGE_HEIGHT - 5, { align: 'right' })
+    }
+  }
 
   // ========== GENERAR PDF ==========
 

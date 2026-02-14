@@ -131,6 +131,9 @@ export default function Settings() {
   // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
   const [companySlogan, setCompanySlogan] = useState('')
 
+  // Estado para mostrar códigos de producto en cotizaciones PDF
+  const [showProductCodeInQuotation, setShowProductCodeInQuotation] = useState(false)
+
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
@@ -666,6 +669,11 @@ export default function Settings() {
           setCompanySlogan(businessData.companySlogan)
         }
 
+        // Cargar flag de códigos de producto en cotizaciones
+        if (businessData.showProductCodeInQuotation !== undefined) {
+          setShowProductCodeInQuotation(businessData.showProductCodeInQuotation)
+        }
+
         // Cargar cuentas bancarias estructuradas
         if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
           setBankAccounts(businessData.bankAccountsList)
@@ -1127,6 +1135,7 @@ export default function Settings() {
         logoUrl: uploadedLogoUrl || null,
         pdfAccentColor: pdfAccentColor,
         companySlogan: companySlogan || '',
+        showProductCodeInQuotation: showProductCodeInQuotation,
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
@@ -2420,6 +2429,29 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Códigos de producto en cotizaciones */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showProductCodeInQuotation}
+                  onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Mostrar códigos de producto en cotizaciones
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {showProductCodeInQuotation
+                      ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Imágenes de productos */}
               <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                 <input
@@ -2847,6 +2879,7 @@ export default function Settings() {
                       hiddenMenuItems: hiddenMenuItems,
                       termsTemplates: termsTemplates,
                       pdfAccentColor: pdfAccentColor,
+                      showProductCodeInQuotation: showProductCodeInQuotation,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     if (refreshBusinessSettings) await refreshBusinessSettings()
