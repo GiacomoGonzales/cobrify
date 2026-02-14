@@ -1055,17 +1055,6 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => 
       }
     }
 
-    // ========== Observaciones (ticket-section) ==========
-    if (invoice.notes) {
-      printer = addSeparator(printer, format.separator, paperWidth, 'center');
-
-      printer = printer
-        .bold()
-        .text('OBSERVACIONES\n')
-        .clearFormatting()
-        .text(convertSpanishText(invoice.notes + '\n'));
-    }
-
     // ========== FOOTER (ticket-footer) ==========
     printer = addSeparator(printer, format.separator, paperWidth, 'center');
 
