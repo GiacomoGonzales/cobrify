@@ -3,7 +3,7 @@ import { ShoppingCart, Plus, Minus, Search, Loader2, X } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { getProducts, getProductCategories } from '@/services/firestoreService'
+import { getProducts, getProductCategories, getCompanySettings } from '@/services/firestoreService'
 import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -42,12 +42,30 @@ export default function OrderItemsModal({
   const [isModifierModalOpen, setIsModifierModalOpen] = useState(false)
   const [productForModifiers, setProductForModifiers] = useState(null)
 
-  // Cargar productos
+  // Price selection state (multiple prices)
+  const [businessSettings, setBusinessSettings] = useState(null)
+  const [showPriceModal, setShowPriceModal] = useState(false)
+  const [productForPriceSelection, setProductForPriceSelection] = useState(null)
+
+  // Cargar productos y configuración
   useEffect(() => {
     if (isOpen) {
       loadProducts()
+      loadBusinessSettings()
     }
   }, [isOpen])
+
+  const loadBusinessSettings = async () => {
+    if (isDemoMode || demoContext) return
+    try {
+      const result = await getCompanySettings(getBusinessId())
+      if (result.success) {
+        setBusinessSettings(result.data)
+      }
+    } catch (error) {
+      console.error('Error al cargar configuración:', error)
+    }
+  }
 
   // Helper para obtener el nombre de la categoría
   const getCategoryName = (categoryId) => {
@@ -169,7 +187,7 @@ export default function OrderItemsModal({
     }
   }
 
-  const addToCart = (product) => {
+  const addToCart = (product, selectedPrice = null) => {
     // Si el producto tiene modificadores, abrir modal de selección
     if (product.modifiers && product.modifiers.length > 0) {
       setProductForModifiers(product)
@@ -177,14 +195,24 @@ export default function OrderItemsModal({
       return
     }
 
+    // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
+    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4)
+    if (hasMultiplePrices && selectedPrice === null) {
+      setProductForPriceSelection(product)
+      setShowPriceModal(true)
+      return
+    }
+
+    const price = selectedPrice ?? product.price ?? 0
+
     // Si no tiene modificadores, agregar directamente al carrito
-    const existingItem = cart.find((item) => item.productId === product.id && !item.modifiers)
+    const existingItem = cart.find((item) => item.productId === product.id && !item.modifiers && item.price === price)
 
     if (existingItem) {
       // Incrementar cantidad
       setCart(
         cart.map((item) =>
-          item.productId === product.id && !item.modifiers
+          item.productId === product.id && !item.modifiers && item.price === price
             ? { ...item, quantity: item.quantity + 1, total: (item.quantity + 1) * item.price }
             : item
         )
@@ -197,14 +225,34 @@ export default function OrderItemsModal({
           productId: product.id,
           name: product.name,
           code: product.code,
-          price: product.price || 0,
+          price: price,
           quantity: 1,
-          total: product.price || 0,
-          notes: '', // Inicializar campo de notas vacío
-          category: getCategoryName(product.category), // Categoría para filtrado por estación
+          total: price,
+          notes: '',
+          category: getCategoryName(product.category),
         },
       ])
     }
+  }
+
+  // Manejar selección de precio desde el modal
+  const handlePriceSelection = (priceLevel) => {
+    if (!productForPriceSelection) return
+
+    const product = productForPriceSelection
+    let selected = product.price
+
+    if (priceLevel === 'price2' && product.price2) {
+      selected = product.price2
+    } else if (priceLevel === 'price3' && product.price3) {
+      selected = product.price3
+    } else if (priceLevel === 'price4' && product.price4) {
+      selected = product.price4
+    }
+
+    addToCart(product, selected)
+    setShowPriceModal(false)
+    setProductForPriceSelection(null)
   }
 
   // Agregar al carrito con modificadores seleccionados
@@ -433,6 +481,11 @@ export default function OrderItemsModal({
                           <span className="font-semibold text-primary-600">
                             S/ {(product.price || 0).toFixed(2)}
                           </span>
+                          {businessSettings?.multiplePricesEnabled && product.price2 && (
+                            <span className="ml-2 font-semibold text-green-600">
+                              / S/ {product.price2.toFixed(2)}
+                            </span>
+                          )}
                         </div>
                         {product.stock !== undefined && (
                           <div className="text-xs text-gray-500">Stock: {product.stock}</div>
@@ -592,6 +645,101 @@ export default function OrderItemsModal({
         product={productForModifiers}
         onConfirm={addToCartWithModifiers}
       />
+
+      {/* Modal de selección de precio */}
+      <Modal
+        isOpen={showPriceModal}
+        onClose={() => {
+          setShowPriceModal(false)
+          setProductForPriceSelection(null)
+        }}
+        title={`Seleccionar precio - ${productForPriceSelection?.name || ''}`}
+        size="sm"
+      >
+        {productForPriceSelection && (
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+            <p className="text-sm text-gray-600">
+              Este producto tiene múltiples precios. Selecciona el precio a aplicar:
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => handlePriceSelection('price1')}
+                className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {businessSettings?.priceLabels?.price1 || 'Precio 1'}
+                    </p>
+                    <p className="text-xs text-gray-500">Precio principal</p>
+                  </div>
+                  <p className="text-xl font-bold text-primary-600">
+                    S/ {(productForPriceSelection.price || 0).toFixed(2)}
+                  </p>
+                </div>
+              </button>
+
+              {productForPriceSelection.price2 && (
+                <button
+                  onClick={() => handlePriceSelection('price2')}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {businessSettings?.priceLabels?.price2 || 'Precio 2'}
+                      </p>
+                      <p className="text-xs text-gray-500">Precio alternativo</p>
+                    </div>
+                    <p className="text-xl font-bold text-green-600">
+                      S/ {productForPriceSelection.price2.toFixed(2)}
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {productForPriceSelection.price3 && (
+                <button
+                  onClick={() => handlePriceSelection('price3')}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {businessSettings?.priceLabels?.price3 || 'Precio 3'}
+                      </p>
+                      <p className="text-xs text-gray-500">Precio especial</p>
+                    </div>
+                    <p className="text-xl font-bold text-amber-600">
+                      S/ {productForPriceSelection.price3.toFixed(2)}
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {productForPriceSelection.price4 && (
+                <button
+                  onClick={() => handlePriceSelection('price4')}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg text-left hover:border-primary-500 hover:bg-primary-50 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {businessSettings?.priceLabels?.price4 || 'Precio 4'}
+                      </p>
+                      <p className="text-xs text-gray-500">Precio personalizado</p>
+                    </div>
+                    <p className="text-xl font-bold text-purple-600">
+                      S/ {productForPriceSelection.price4.toFixed(2)}
+                    </p>
+                  </div>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </Modal>
   )
 }
