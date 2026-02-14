@@ -504,15 +504,30 @@ export default function Tables() {
     console.log('Split data:', splitDataResult)
 
     if (splitDataResult.method === 'items') {
-      // Para división por items, guardar datos y mostrar opciones de impresión
+      // División por items: ya viene con persons y sus items asignados
       setSplitData(splitDataResult)
-      setIsSplitBillModalOpen(false)
-      setIsPrintSplitModalOpen(true)
-      toast.success(`Cuenta dividida entre ${splitDataResult.numberOfPeople} personas. Selecciona qué precuenta imprimir.`)
-    } else {
-      // Para otros métodos, solo mostrar mensaje
-      toast.success(`Cuenta dividida entre ${splitDataResult.numberOfPeople} personas`)
+    } else if (splitDataResult.method === 'equal') {
+      // División igual: cada persona ve todos los items pero paga su parte
+      const amountPerPerson = splitDataResult.total / splitDataResult.numberOfPeople
+      const persons = Array.from({ length: splitDataResult.numberOfPeople }, (_, i) => ({
+        personNumber: i + 1,
+        items: selectedOrder?.items || [],
+        total: amountPerPerson
+      }))
+      setSplitData({ ...splitDataResult, persons })
+    } else if (splitDataResult.method === 'custom') {
+      // División personalizada: cada persona ve todos los items pero paga su monto
+      const persons = splitDataResult.amounts.map((amount, i) => ({
+        personNumber: i + 1,
+        items: selectedOrder?.items || [],
+        total: amount
+      }))
+      setSplitData({ ...splitDataResult, persons })
     }
+
+    setIsSplitBillModalOpen(false)
+    setIsPrintSplitModalOpen(true)
+    toast.success(`Cuenta dividida entre ${splitDataResult.numberOfPeople} personas. Selecciona qué precuenta imprimir.`)
   }
 
   const handleTransferTable = async (tableId, transferData) => {
@@ -563,7 +578,7 @@ export default function Tables() {
     }
   }
 
-  const handlePrintPreBill = async (itemFilter = null, personLabel = null) => {
+  const handlePrintPreBill = async (itemFilter = null, personLabel = null, overrideTotal = null) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
       return
@@ -625,8 +640,8 @@ export default function Tables() {
       const isNative = Capacitor.isNativePlatform()
 
       // Si es móvil, intentar imprimir en impresora térmica
-      // Nota: La impresión térmica parcial no está implementada aún
-      if (isNative && !itemFilter) {
+      // No usar térmica para precuentas divididas (itemFilter o overrideTotal)
+      if (isNative && !itemFilter && !overrideTotal) {
         try {
           // Obtener configuración de impresora
           const printerConfigResult = await getPrinterConfig(businessId)
@@ -660,7 +675,7 @@ export default function Tables() {
       console.log('🖨️ Tables - webPrintLegible:', webPrintLegible)
       const paperWidth = printerConfigResult.config?.paperWidth || 80
       const compactPrintValue = printerConfigResult.config?.compactPrint || false
-      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue)
+      printPreBill(selectedTable, selectedOrder, businessInfo, taxConfig, paperWidth, webPrintLegible, itemFilter, personLabel, recargoConsumoConfig, compactPrintValue, overrideTotal)
       toast.success('Imprimiendo precuenta...')
     } catch (error) {
       console.error('Error al imprimir precuenta:', error)
@@ -668,10 +683,16 @@ export default function Tables() {
     }
   }
 
-  // Imprimir precuenta de una persona específica (división por items)
+  // Imprimir precuenta de una persona específica (división por items, igual o custom)
   const handlePrintPersonPreBill = async (personData, totalPersons) => {
     const personLabel = `Persona ${personData.personNumber} de ${totalPersons}`
-    await handlePrintPreBill(personData.items, personLabel)
+    if (splitData?.method === 'items') {
+      // División por items: filtrar solo los items de esta persona
+      await handlePrintPreBill(personData.items, personLabel)
+    } else {
+      // División igual/custom: mostrar todos los items pero con el monto de esta persona
+      await handlePrintPreBill(null, personLabel, personData.total)
+    }
   }
 
   const handlePrintKitchenTicket = async () => {

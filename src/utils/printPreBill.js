@@ -10,8 +10,8 @@
  * @param {Array} itemFilter - Items a mostrar (opcional, si es null muestra todos)
  * @param {string} personLabel - Etiqueta de persona (ej: "Persona 1 de 3")
  */
-export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false) => {
-  console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel })
+export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false, overrideTotal = null) => {
+  console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel, overrideTotal })
   // Crear una ventana temporal para imprimir
   const printWindow = window.open('', '_blank', 'width=300,height=600')
 
@@ -47,12 +47,17 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
   console.log('🔍 printPreBill - igvRate:', taxConfig.igvRate)
 
   let subtotal, tax, total
+  const orderTotal = order.total || 0
 
-  // Si hay filtro de items, calcular el total solo de esos items
-  if (itemFilter) {
+  // Determinar el total a mostrar
+  if (overrideTotal !== null) {
+    // División igual/custom: usar monto asignado a esta persona
+    total = overrideTotal
+  } else if (itemFilter) {
+    // División por items: calcular total de los items filtrados
     total = itemFilter.reduce((sum, item) => sum + (item.total || 0), 0)
   } else {
-    total = order.total || 0
+    total = orderTotal
   }
 
   let recargoConsumo = 0
@@ -467,6 +472,12 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           <span>S/ ${total.toFixed(2)}</span>
         </div>
       </div>
+
+      ${overrideTotal !== null ? `
+      <div style="text-align: center; margin-top: ${is58mm ? '2mm' : '3mm'}; padding: ${is58mm ? '1.5mm' : '2mm'}; border: 1px dashed #000; font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '7pt' : '8pt')};">
+        <strong>TOTAL CUENTA: S/ ${orderTotal.toFixed(2)}</strong>
+      </div>
+      ` : ''}
 
       <div class="footer">
         <div class="precuenta">*** PRECUENTA ***</div>
