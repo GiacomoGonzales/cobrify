@@ -1126,7 +1126,7 @@ export default function POS() {
         console.log('💰 taxConfig desde emissionConfig:', tc)
         if (tc) {
           const newTaxConfig = {
-            igvRate: tc.igvRate ?? 18,
+            igvRate: tc.igvRate === 10 ? 10.5 : (tc.igvRate ?? 18),
             igvExempt: tc.igvExempt ?? false,
             exemptionReason: tc.exemptionReason ?? '',
             exemptionCode: tc.exemptionCode ?? '10',
@@ -1493,10 +1493,12 @@ export default function POS() {
     // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma boleta/factura
     // Validar que el producto tenga la misma tasa que los items gravados ya en el carrito
     if (taxConfig.taxType === 'standard' && (product.taxAffectation || '10') === '10') {
-      const productRate = product.igvRate || taxConfig.igvRate || 18
+      const rawProductRate = product.igvRate || taxConfig.igvRate || 18
+      const productRate = rawProductRate === 10 ? 10.5 : rawProductRate
       const existingGravado = cart.find(item => (item.taxAffectation || '10') === '10')
       if (existingGravado) {
-        const cartRate = existingGravado.igvRate || taxConfig.igvRate || 18
+        const rawCartRate = existingGravado.igvRate || taxConfig.igvRate || 18
+        const cartRate = rawCartRate === 10 ? 10.5 : rawCartRate
         if (productRate !== cartRate) {
           toast.error(`No se puede mezclar productos con IGV ${cartRate}% e IGV ${productRate}% en la misma venta. SUNAT requiere una sola tasa por comprobante.`)
           return

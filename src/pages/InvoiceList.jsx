@@ -2368,11 +2368,12 @@ Gracias por tu preferencia.`
                   viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate).length > 1 ? (
                     Object.entries(viewingInvoice.igvByRate)
                       .sort(([a], [b]) => Number(b) - Number(a))
-                      .map(([rate, data]) => (
-                        <div key={rate} className="flex justify-between"><span className="text-gray-600">IGV ({rate}%)</span><span>{formatCurrency(data.igv || 0)}</span></div>
-                      ))
+                      .map(([rate, data]) => {
+                        const displayRate = rate === '10' ? '10.5' : rate
+                        return <div key={rate} className="flex justify-between"><span className="text-gray-600">IGV ({displayRate}%)</span><span>{formatCurrency(data.igv || 0)}</span></div>
+                      })
                   ) : (
-                    <div className="flex justify-between"><span className="text-gray-600">IGV ({(viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate)[0]) || viewingInvoice.taxConfig?.igvRate || 18}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-600">IGV ({(() => { const r = (viewingInvoice.igvByRate && Object.keys(viewingInvoice.igvByRate)[0]) || viewingInvoice.taxConfig?.igvRate || 18; return r === '10' || r === 10 ? '10.5' : r })()}%)</span><span>{formatCurrency(viewingInvoice.igv)}</span></div>
                   )
                 )}
                 {viewingInvoice.recargoConsumo > 0 && (

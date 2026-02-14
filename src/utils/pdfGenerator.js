@@ -1322,11 +1322,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const bankSectionWidth = totalsX - MARGIN_LEFT - 10
 
   const igvExempt = companySettings?.emissionConfig?.taxConfig?.igvExempt || companySettings?.taxConfig?.igvExempt || false
-  const igvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
+  const rawIgvRate = companySettings?.emissionConfig?.taxConfig?.igvRate ?? companySettings?.taxConfig?.igvRate ?? 18
+  const igvRate = rawIgvRate === 10 ? 10.5 : rawIgvRate
   const labelGravada = igvExempt ? 'OP. EXONERADA' : 'OP. GRAVADA'
 
   // Determinar si hay tasas mixtas de IGV
-  const igvByRate = invoice.igvByRate || {}
+  // Migrar claves "10" → "10.5" (IGV 10% ya no existe)
+  const rawIgvByRate = invoice.igvByRate || {}
+  const igvByRate = {}
+  for (const key in rawIgvByRate) {
+    const newKey = key === '10' ? '10.5' : key
+    igvByRate[newKey] = rawIgvByRate[key]
+  }
   const igvRateKeys = Object.keys(igvByRate).sort((a, b) => Number(b) - Number(a))
   const hasMultipleIgvRates = igvRateKeys.length > 1
   const extraIgvRows = hasMultipleIgvRates ? igvRateKeys.length - 1 : 0

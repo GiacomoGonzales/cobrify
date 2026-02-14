@@ -143,7 +143,9 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
     switch (taxAffectation) {
       case '10': { // Gravado
         // Usar igvRate del item si existe, sino el global como fallback
-        const itemRate = item.igvRate ?? igvRate
+        // NOTA: IGV 10% ya no existe, migrar a 10.5%
+        const rawItemRate = item.igvRate ?? igvRate
+        const itemRate = rawItemRate === 10 ? 10.5 : rawItemRate
         const itemMultiplier = itemRate / 100
         const lineSubtotal = lineTotal / (1 + itemMultiplier)
         const lineIgv = lineTotal - lineSubtotal

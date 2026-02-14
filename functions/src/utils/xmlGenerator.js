@@ -253,7 +253,9 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   // Configuración de impuestos (IGV) - soporta IGV 0% para empresas exoneradas
   // Buscar taxConfig en: 1) invoiceData.taxConfig, 2) businessData.emissionConfig.taxConfig, 3) default 18
-  const igvRate = invoiceData.taxConfig?.igvRate ?? businessData?.emissionConfig?.taxConfig?.igvRate ?? 18
+  // NOTA: IGV 10% ya no existe (Ley 31556 actualizada), se migra automáticamente a 10.5%
+  const rawIgvRate = invoiceData.taxConfig?.igvRate ?? businessData?.emissionConfig?.taxConfig?.igvRate ?? 18
+  const igvRate = rawIgvRate === 10 ? 10.5 : rawIgvRate
   const igvExempt = invoiceData.taxConfig?.igvExempt ?? businessData?.emissionConfig?.taxConfig?.igvExempt ?? false
   const exemptionReason = invoiceData.taxConfig?.exemptionReason ?? businessData?.emissionConfig?.taxConfig?.exemptionReason ?? ''
   const igvMultiplier = igvRate / 100

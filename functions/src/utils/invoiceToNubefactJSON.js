@@ -26,7 +26,9 @@ export function convertInvoiceToNubefactJSON(invoiceData, businessData) {
   const cliente = getClienteData(invoiceData.customer)
 
   // Configuración de impuestos - soporta exoneración de IGV (Ley de la Selva, etc.)
-  const igvRate = invoiceData.taxConfig?.igvRate ?? invoiceData.igvRate ?? 18
+  // NOTA: IGV 10% ya no existe, se migra automáticamente a 10.5%
+  const rawIgvRate = invoiceData.taxConfig?.igvRate ?? invoiceData.igvRate ?? 18
+  const igvRate = rawIgvRate === 10 ? 10.5 : rawIgvRate
   const igvExempt = invoiceData.taxConfig?.igvExempt ?? false
 
   // Calcular totales considerando si es exonerado o no
