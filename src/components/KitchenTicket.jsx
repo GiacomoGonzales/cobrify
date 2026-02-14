@@ -439,6 +439,13 @@ const KitchenTicket = forwardRef(({ order, companySettings, webPrintLegible = fa
           </div>
         )}
 
+        {order.brandName && (
+          <div className="info-row">
+            <span className="info-label">MARCA:</span>
+            <span>{order.brandName}</span>
+          </div>
+        )}
+
         {order.waiterName && (
           <div className="info-row">
             <span className="info-label">MOZO:</span>

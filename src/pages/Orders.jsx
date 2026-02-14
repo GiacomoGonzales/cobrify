@@ -50,6 +50,9 @@ export default function Orders() {
   const [webPrintLegible, setWebPrintLegible] = useState(false)
   const [compactPrint, setCompactPrint] = useState(false)
 
+  // Filtro por marca
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState('all')
+
   // Estado para modal de cierre de orden
   const [showCloseOrderModal, setShowCloseOrderModal] = useState(false)
   const [orderToClose, setOrderToClose] = useState(null)
@@ -745,6 +748,53 @@ export default function Orders() {
         </Card>
       </div>
 
+      {/* Filtro por marca */}
+      {brands.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedBrandFilter('all')}
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              selectedBrandFilter === 'all'
+                ? 'bg-gray-800 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Todas ({orders.length})
+          </button>
+          {brands.map((brand) => {
+            const count = orders.filter(o => o.brandId === brand.id).length
+            return (
+              <button
+                key={brand.id}
+                onClick={() => setSelectedBrandFilter(brand.id)}
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${
+                  selectedBrandFilter === brand.id
+                    ? 'text-white shadow-md'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+                style={selectedBrandFilter === brand.id ? { backgroundColor: brand.color || '#8B5CF6' } : {}}
+              >
+                <span
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: brand.color || '#8B5CF6' }}
+                />
+                {brand.name} ({count})
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setSelectedBrandFilter('none')}
+            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              selectedBrandFilter === 'none'
+                ? 'bg-gray-600 text-white shadow-md'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Sin marca ({orders.filter(o => !o.brandId).length})
+          </button>
+        </div>
+      )}
+
       {/* Lista de Órdenes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         {orders.length === 0 ? (
@@ -760,7 +810,13 @@ export default function Orders() {
             </Card>
           </div>
         ) : (
-          orders.map((order) => {
+          orders
+          .filter(order => {
+            if (selectedBrandFilter === 'all') return true
+            if (selectedBrandFilter === 'none') return !order.brandId
+            return order.brandId === selectedBrandFilter
+          })
+          .map((order) => {
             const statusConfig = getStatusConfig(order.status)
             const StatusIcon = statusConfig.icon
             const elapsed = calculateElapsedTime(order.createdAt)

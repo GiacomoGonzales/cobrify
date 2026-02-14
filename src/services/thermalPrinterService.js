@@ -1240,13 +1240,28 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
     }
 
     printer = printer
-      .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`)
-      .clearFormatting();
+      .text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}\n`);
+
+    if (order.brandName) {
+      printer = printer.text(`Marca: ${convertSpanishText(order.brandName)}\n`);
+    }
+
+    if (order.priority === 'urgent') {
+      printer = printer
+        .clearFormatting()
+        .align('center')
+        .doubleHeight()
+        .bold()
+        .text('!!! URGENTE !!!\n')
+        .clearFormatting()
+        .align('left');
+    }
+
+    printer = printer.clearFormatting();
 
     printer = addSeparator(printer, format.separator, paperWidth, 'left');
 
     printer = printer
-      // Items (aquí se resetea formato antes de cada item usando clearFormatting + bold + doubleWidth)
       .text(itemsText);
 
     printer = addSeparator(printer, format.separator, paperWidth, 'left');
@@ -2181,8 +2196,25 @@ const printWifiKitchenOrder = async (order, table = null, paperWidth = 58, stati
     }
 
     builder.text(`Orden: #${order.orderNumber || order.id?.slice(-6) || 'N/A'}`)
-      .newLine()
-      .bold(false)
+      .newLine();
+
+    if (order.brandName) {
+      builder.text(`Marca: ${order.brandName}`)
+        .newLine();
+    }
+
+    if (order.priority === 'urgent') {
+      builder.bold(false)
+        .alignCenter()
+        .doubleHeight(true)
+        .bold(true)
+        .text('!!! URGENTE !!!')
+        .newLine()
+        .doubleHeight(false)
+        .alignLeft();
+    }
+
+    builder.bold(false)
       .text(format.separator)
       .newLine();
 

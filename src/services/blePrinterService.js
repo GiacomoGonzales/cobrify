@@ -1129,6 +1129,19 @@ export const printBLEKitchenOrder = async (order, table = null, paperWidth = 58)
 
     const orderNum = order.orderNumber || order.id?.slice(-6) || 'N/A';
     commands.push(ESCPOSCommands.text('Orden: #' + orderNum + '\n'));
+
+    if (order.brandName) {
+      commands.push(ESCPOSCommands.text('Marca: ' + convertSpanishText(order.brandName) + '\n'));
+    }
+
+    if (order.priority === 'urgent') {
+      commands.push(ESCPOSCommands.doubleHeight(true));
+      commands.push(ESCPOSCommands.align(1));
+      commands.push(ESCPOSCommands.text('!!! URGENTE !!!\n'));
+      commands.push(ESCPOSCommands.doubleHeight(false));
+      commands.push(ESCPOSCommands.align(0));
+    }
+
     commands.push(ESCPOSCommands.bold(false));
     commands.push(ESCPOSCommands.text(separator + '\n'));
 
