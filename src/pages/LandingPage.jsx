@@ -452,9 +452,72 @@ export default function LandingPage() {
             Todos los planes incluyen las mismas funcionalidades completas
           </p>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {/* Plan Básico Mensual */}
+            <div className="relative bg-white px-10 py-8 rounded-2xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-xl group">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Básico Mensual</h3>
+                <div className="flex items-baseline justify-center mb-2">
+                  <span className="text-4xl font-bold text-gray-900">S/19.90</span>
+                  <span className="text-gray-600 ml-2">/mes</span>
+                </div>
+                <p className="text-sm text-gray-500">Pago mes a mes</p>
+              </div>
+              <ul className="space-y-1.5 mb-8 text-left">
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>100 comprobantes mensuales</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Control de stock completo</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>1 sub-usuario</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>1 sucursal</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Soporte prioritario</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Software a medida</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>100% Web (sin instalación)</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Reportes avanzados exportables</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>App para iPhone y Android</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Notas de venta ilimitadas</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Catálogo digital</span>
+                </li>
+              </ul>
+              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Básico%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50 font-semibold">
+                  Contratar Plan
+                </Button>
+              </a>
+            </div>
+
             {/* Plan Mensual */}
-            <div className="relative bg-white p-8 rounded-2xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-xl group">
+            <div className="relative bg-white px-10 py-8 rounded-2xl border-2 border-gray-200 hover:border-primary-300 transition-all hover:shadow-xl group">
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Mensual</h3>
                 <div className="flex items-baseline justify-center mb-2">
@@ -463,10 +526,10 @@ export default function LandingPage() {
                 </div>
                 <p className="text-sm text-gray-500">Pago mes a mes</p>
               </div>
-              <ul className="space-y-3 mb-8 text-left">
+              <ul className="space-y-1.5 mb-8 text-left">
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
-                  <span>Facturación ilimitada SUNAT</span>
+                  <span>Facturación ilimitada SUNAT*</span>
                 </li>
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
@@ -496,6 +559,18 @@ export default function LandingPage() {
                   <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
                   <span>Adaptado a cualquier negocio</span>
                 </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>App para iPhone y Android</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Notas de venta ilimitadas</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Catálogo digital</span>
+                </li>
               </ul>
               <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50 font-semibold">
@@ -505,7 +580,7 @@ export default function LandingPage() {
             </div>
 
             {/* Plan Semestral - Destacado */}
-            <div className="relative bg-gradient-to-br from-primary-600 to-primary-700 p-8 rounded-2xl shadow-2xl transform md:scale-105 border-4 border-primary-400">
+            <div className="relative bg-gradient-to-br from-primary-600 to-primary-700 px-10 py-8 rounded-2xl shadow-2xl transform md:scale-105 border-4 border-primary-400">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-6 py-1.5 rounded-full text-sm font-bold shadow-lg">
                 Más Popular
               </div>
@@ -517,10 +592,10 @@ export default function LandingPage() {
                 </div>
                 <p className="text-sm text-primary-100">Ahorra S/29.50 (16%)</p>
               </div>
-              <ul className="space-y-3 mb-8 text-left">
+              <ul className="space-y-1.5 mb-8 text-left">
                 <li className="flex items-start text-white">
                   <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
-                  <span>Facturación ilimitada SUNAT</span>
+                  <span>Facturación ilimitada SUNAT*</span>
                 </li>
                 <li className="flex items-start text-white">
                   <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
@@ -550,6 +625,18 @@ export default function LandingPage() {
                   <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
                   <span>Adaptado a cualquier negocio</span>
                 </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>App para iPhone y Android</span>
+                </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Notas de venta ilimitadas</span>
+                </li>
+                <li className="flex items-start text-white">
+                  <Check className="w-5 h-5 text-yellow-400 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Catálogo digital</span>
+                </li>
               </ul>
               <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Semestral%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-white text-primary-700 hover:bg-primary-50 font-semibold shadow-lg">
@@ -559,7 +646,7 @@ export default function LandingPage() {
             </div>
 
             {/* Plan Anual */}
-            <div className="relative bg-white p-8 rounded-2xl border-2 border-primary-300 hover:border-primary-400 transition-all hover:shadow-xl group">
+            <div className="relative bg-white px-10 py-8 rounded-2xl border-2 border-primary-300 hover:border-primary-400 transition-all hover:shadow-xl group">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-1 rounded-full text-sm font-bold">
                 Mejor Ahorro
               </div>
@@ -571,10 +658,10 @@ export default function LandingPage() {
                 </div>
                 <p className="text-sm text-green-600 font-semibold">Ahorra S/158.90 (44%)</p>
               </div>
-              <ul className="space-y-3 mb-8 text-left">
+              <ul className="space-y-1.5 mb-8 text-left">
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
-                  <span>Facturación ilimitada SUNAT</span>
+                  <span>Facturación ilimitada SUNAT*</span>
                 </li>
                 <li className="flex items-start text-gray-700">
                   <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
@@ -604,6 +691,18 @@ export default function LandingPage() {
                   <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
                   <span>Adaptado a cualquier negocio</span>
                 </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>App para iPhone y Android</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Notas de venta ilimitadas</span>
+                </li>
+                <li className="flex items-start text-gray-700">
+                  <Check className="w-5 h-5 text-green-500 mr-3 flex-shrink-0 mt-0.5" />
+                  <span>Catálogo digital</span>
+                </li>
               </ul>
               <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Anual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 font-semibold shadow-lg">
@@ -613,7 +712,10 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <p className="text-sm text-gray-500 mt-6">* Los precios no incluyen IGV</p>
+          <div className="text-sm text-gray-500 mt-6 space-y-1">
+            <p>* Los precios no incluyen IGV</p>
+            <p>* Facturación ilimitada con certificado digital propio. Sin certificado, el límite es de 500 comprobantes mensuales.</p>
+          </div>
 
           {/* Demos Section */}
           <div className="mt-20 pt-12 border-t border-gray-200">
