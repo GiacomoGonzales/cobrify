@@ -87,6 +87,7 @@ export const exportGeneralReport = async (data) => {
     ['Total Comprobantes', stats.totalInvoices],
     ['Facturas', stats.facturas],
     ['Boletas', stats.boletas],
+    ['Notas de Venta', stats.notasVenta || 0],
     ['Ticket Promedio', formatCurrency(stats.avgTicket)],
     ['Crecimiento vs Período Anterior', `${stats.revenueGrowth.toFixed(2)}%`],
   ]
@@ -116,17 +117,17 @@ export const exportGeneralReport = async (data) => {
 
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
 
-  // Hoja 2: Ventas por Mes
-  const salesHeader = [['Mes', 'Cantidad de Ventas', 'Ingresos']]
+  // Hoja 2: Ventas por Período
+  const salesHeader = [['Período', 'Cantidad de Ventas', 'Ingresos']]
   const salesData = salesByMonth.map(item => [
-    item.month,
+    item.period,
     item.count,
     Number((item.revenue || 0).toFixed(2))
   ])
 
   const ws2 = XLSX.utils.aoa_to_sheet([...salesHeader, ...salesData])
   ws2['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }]
-  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas por Mes')
+  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas por Período')
 
   // Hoja 3: Top Productos
   if (topProducts && topProducts.length > 0) {
@@ -162,8 +163,17 @@ export const exportGeneralReport = async (data) => {
 
   // Hoja 5: Detalle de Ventas
   if (filteredInvoices && filteredInvoices.length > 0) {
-    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Método Pago', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV']]
-    const invoicesData = filteredInvoices.slice(0, 1000).map(invoice => {
+    const invoicesHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Documento', 'Estado', 'Estado SUNAT', 'Método Pago', 'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %']]
+    const sunatStatusNames = {
+      'accepted': 'Aceptado', 'pending': 'Pendiente', 'sending': 'Enviando',
+      'rejected': 'Rechazado', 'voided': 'Anulado', 'voiding': 'Anulando',
+      'SIGNED': 'Firmado', 'signed': 'Firmado', 'not_applicable': 'N/A'
+    }
+    const invoicesData = [...filteredInvoices].sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+      return dateB - dateA
+    }).slice(0, 1000).map(invoice => {
       // Obtener método(s) de pago
       let paymentMethods = 'Efectivo'
       if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
@@ -176,20 +186,40 @@ export const exportGeneralReport = async (data) => {
         paymentMethods = invoice.paymentMethod
       }
 
+      // Calcular montos por tipo de afectación
+      let opGravada = 0, opExonerada = 0, opInafecta = 0
+      if (invoice.items && Array.isArray(invoice.items)) {
+        invoice.items.forEach(item => {
+          const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+          if (item.taxAffectation === '20') opExonerada += itemTotal
+          else if (item.taxAffectation === '30') opInafecta += itemTotal
+          else opGravada += itemTotal
+        })
+      }
+
+      const sunatStatus = invoice.documentType === 'nota_venta'
+        ? 'N/A'
+        : sunatStatusNames[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente'
+
       return [
         invoice.number,
         invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
-        invoice.documentType === 'factura' ? 'Factura' : 'Boleta',
+        invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta',
         invoice.customer?.name || 'Cliente General',
         invoice.customer?.documentNumber || '-',
         invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
+        sunatStatus,
         paymentMethods,
+        Number((invoice.discount || 0).toFixed(2)),
+        Number(opGravada.toFixed(2)),
+        Number(opExonerada.toFixed(2)),
+        Number(opInafecta.toFixed(2)),
+        Number((invoice.subtotal || 0).toFixed(2)),
+        Number((invoice.igv || 0).toFixed(2)),
         Number((invoice.total || 0).toFixed(2)),
         Number((invoice.totalCost || 0).toFixed(2)),
         Number((invoice.profit || 0).toFixed(2)),
-        Number((invoice.profitMargin || 0).toFixed(2)),
-        Number((invoice.subtotal || 0).toFixed(2)),
-        Number((invoice.igv || 0).toFixed(2))
+        Number((invoice.profitMargin || 0).toFixed(2))
       ]
     })
 
@@ -197,17 +227,22 @@ export const exportGeneralReport = async (data) => {
     ws5['!cols'] = [
       { wch: 15 },  // Número
       { wch: 12 },  // Fecha
-      { wch: 10 },  // Tipo
+      { wch: 14 },  // Tipo
       { wch: 30 },  // Cliente
       { wch: 15 },  // Documento
       { wch: 12 },  // Estado
+      { wch: 15 },  // Estado SUNAT
       { wch: 25 },  // Método Pago
-      { wch: 15 },  // Precio Venta
-      { wch: 15 },  // Costo
-      { wch: 15 },  // Utilidad
-      { wch: 12 },  // Margen %
-      { wch: 15 },  // Subtotal
-      { wch: 15 }   // IGV
+      { wch: 12 },  // Descuento
+      { wch: 14 },  // Op. Gravada
+      { wch: 14 },  // Op. Exonerada
+      { wch: 14 },  // Op. Inafecta
+      { wch: 12 },  // Subtotal
+      { wch: 10 },  // IGV
+      { wch: 12 },  // Total
+      { wch: 12 },  // Costo
+      { wch: 12 },  // Utilidad
+      { wch: 10 }   // Margen %
     ]
     XLSX.utils.book_append_sheet(wb, ws5, 'Detalle de Ventas')
   }
@@ -272,21 +307,31 @@ export const exportSalesReport = async (data) => {
   ws1['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 15 }, { wch: 12 }]
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
 
-  // Hoja 2: Ventas Mensuales
-  const salesHeader = [['Mes', 'Cantidad', 'Ingresos']]
+  // Hoja 2: Ventas por Período
+  const salesHeader = [['Período', 'Cantidad', 'Ingresos']]
   const salesData = salesByMonth.map(item => [
-    item.month,
+    item.period,
     item.count,
     Number((item.revenue || 0).toFixed(2))
   ])
 
   const ws2 = XLSX.utils.aoa_to_sheet([...salesHeader, ...salesData])
   ws2['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 20 }]
-  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas Mensuales')
+  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas por Período')
 
   // Hoja 3: Detalle Completo
-  const detailHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente', 'Estado', 'Método Pago', 'Precio Venta', 'Costo', 'Utilidad', 'Margen %', 'Subtotal', 'IGV', 'Notas']]
-  const detailData = filteredInvoices.map(invoice => {
+  const detailHeader = [['Número', 'Fecha', 'Tipo', 'Cliente', 'Doc Cliente', 'Estado', 'Estado SUNAT', 'Método Pago', 'Descuento', 'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'IGV', 'Total', 'Costo', 'Utilidad', 'Margen %', 'Notas']]
+  const sunatLabels = {
+    'accepted': 'Aceptado', 'pending': 'Pendiente', 'sending': 'Enviando',
+    'rejected': 'Rechazado', 'voided': 'Anulado', 'voiding': 'Anulando',
+    'SIGNED': 'Firmado', 'signed': 'Firmado', 'not_applicable': 'N/A'
+  }
+  const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+    return dateB - dateA
+  })
+  const detailData = sortedInvoices.map(invoice => {
     // Obtener método(s) de pago
     let paymentMethods = 'Efectivo'
     if (invoice.payments && Array.isArray(invoice.payments) && invoice.payments.length > 0) {
@@ -299,20 +344,40 @@ export const exportSalesReport = async (data) => {
       paymentMethods = invoice.paymentMethod
     }
 
+    // Calcular montos por tipo de afectación
+    let opGravada = 0, opExonerada = 0, opInafecta = 0
+    if (invoice.items && Array.isArray(invoice.items)) {
+      invoice.items.forEach(item => {
+        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
+        if (item.taxAffectation === '20') opExonerada += itemTotal
+        else if (item.taxAffectation === '30') opInafecta += itemTotal
+        else opGravada += itemTotal
+      })
+    }
+
+    const sunatStatus = invoice.documentType === 'nota_venta'
+      ? 'N/A'
+      : sunatLabels[invoice.sunatStatus] || invoice.sunatStatus || 'Pendiente'
+
     return [
       invoice.number,
       invoice.createdAt ? formatDate(invoice.createdAt.toDate ? invoice.createdAt.toDate() : invoice.createdAt) : '-',
-      invoice.documentType === 'factura' ? 'Factura' : 'Boleta',
+      invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'Nota de Venta' : 'Boleta',
       invoice.customer?.name || 'Cliente General',
       `${invoice.customer?.documentType || ''} ${invoice.customer?.documentNumber || ''}`,
       invoice.status === 'paid' ? 'Pagada' : 'Pendiente',
+      sunatStatus,
       paymentMethods,
+      Number((invoice.discount || 0).toFixed(2)),
+      Number(opGravada.toFixed(2)),
+      Number(opExonerada.toFixed(2)),
+      Number(opInafecta.toFixed(2)),
+      Number((invoice.subtotal || 0).toFixed(2)),
+      Number((invoice.igv || 0).toFixed(2)),
       Number((invoice.total || 0).toFixed(2)),
       Number((invoice.totalCost || 0).toFixed(2)),
       Number((invoice.profit || 0).toFixed(2)),
       Number((invoice.profitMargin || 0).toFixed(2)),
-      Number((invoice.subtotal || 0).toFixed(2)),
-      Number((invoice.igv || 0).toFixed(2)),
       invoice.notes || ''
     ]
   })
@@ -321,17 +386,22 @@ export const exportSalesReport = async (data) => {
   ws3['!cols'] = [
     { wch: 15 },  // Número
     { wch: 12 },  // Fecha
-    { wch: 10 },  // Tipo
+    { wch: 14 },  // Tipo
     { wch: 30 },  // Cliente
     { wch: 18 },  // Doc Cliente
     { wch: 12 },  // Estado
-    { wch: 25 },  // Método Pago (ampliado para múltiples métodos)
-    { wch: 15 },  // Precio Venta
-    { wch: 15 },  // Costo
-    { wch: 15 },  // Utilidad
-    { wch: 12 },  // Margen %
-    { wch: 15 },  // Subtotal
-    { wch: 15 },  // IGV
+    { wch: 15 },  // Estado SUNAT
+    { wch: 25 },  // Método Pago
+    { wch: 12 },  // Descuento
+    { wch: 14 },  // Op. Gravada
+    { wch: 14 },  // Op. Exonerada
+    { wch: 14 },  // Op. Inafecta
+    { wch: 12 },  // Subtotal
+    { wch: 10 },  // IGV
+    { wch: 12 },  // Total
+    { wch: 12 },  // Costo
+    { wch: 12 },  // Utilidad
+    { wch: 10 },  // Margen %
     { wch: 30 }   // Notas
   ]
   XLSX.utils.book_append_sheet(wb, ws3, 'Detalle Completo')

@@ -1,9 +1,10 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 export default function SalesChart({ data }) {
   // Formateador para el tooltip - redondea a 2 decimales
-  const formatTooltipValue = (value) => {
-    return `S/ ${Number(value).toFixed(2)}`
+  const formatTooltipValue = (value, name) => {
+    const label = name === 'ventas' ? 'Esta semana' : 'Semana anterior'
+    return [`S/ ${Number(value).toFixed(2)}`, label]
   }
 
   return (
@@ -21,6 +22,9 @@ export default function SalesChart({ data }) {
           formatter={formatTooltipValue}
           labelStyle={{ fontWeight: 'bold' }}
         />
+        <Legend
+          formatter={(value) => value === 'ventas' ? 'Esta semana' : 'Semana anterior'}
+        />
         <Line
           type="monotone"
           dataKey="ventas"
@@ -28,6 +32,15 @@ export default function SalesChart({ data }) {
           strokeWidth={2}
           dot={{ fill: '#3b82f6', r: 4 }}
           activeDot={{ r: 6 }}
+        />
+        <Line
+          type="monotone"
+          dataKey="ventasAnterior"
+          stroke="#9ca3af"
+          strokeWidth={2}
+          strokeDasharray="5 5"
+          dot={{ fill: '#9ca3af', r: 3 }}
+          activeDot={{ r: 5 }}
         />
       </LineChart>
     </ResponsiveContainer>

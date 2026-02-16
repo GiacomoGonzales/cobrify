@@ -212,7 +212,7 @@ export default function Dashboard() {
   // Productos con stock bajo (< 4)
   const lowStockProducts = products.filter(p => p.stock !== null && p.stock < 4)
 
-  // Datos de ventas de los últimos 7 días
+  // Datos de ventas de los últimos 7 días con comparativa de semana anterior
   const salesData = []
   const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
@@ -220,6 +220,11 @@ export default function Dashboard() {
     const dayStart = getDaysAgo(i)
     const dayEnd = new Date(dayStart)
     dayEnd.setHours(23, 59, 59, 999)
+
+    // Semana anterior (mismo día, 7 días antes)
+    const prevDayStart = getDaysAgo(i + 7)
+    const prevDayEnd = new Date(prevDayStart)
+    prevDayEnd.setHours(23, 59, 59, 999)
 
     const daySales = validInvoicesForSales
       .filter(inv => {
@@ -229,9 +234,18 @@ export default function Dashboard() {
       })
       .reduce((sum, inv) => sum + (inv.total || 0), 0)
 
+    const prevDaySales = validInvoicesForSales
+      .filter(inv => {
+        const invDate = getInvoiceDate(inv)
+        if (!invDate) return false
+        return invDate >= prevDayStart && invDate <= prevDayEnd
+      })
+      .reduce((sum, inv) => sum + (inv.total || 0), 0)
+
     salesData.push({
       name: dayNames[dayStart.getDay()],
       ventas: daySales,
+      ventasAnterior: prevDaySales,
     })
   }
 

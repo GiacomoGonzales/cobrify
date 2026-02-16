@@ -82,6 +82,7 @@ export default function Recipes() {
   // Ingredient form
   const [ingredientForm, setIngredientForm] = useState({
     ingredientId: '',
+    ingredientType: 'ingredient', // 'ingredient' | 'product'
     quantity: '',
     unit: 'g'
   })
@@ -219,8 +220,11 @@ export default function Recipes() {
       return
     }
 
-    const ingredient = ingredients.find(i => i.id === ingredientForm.ingredientId)
-    if (!ingredient) return
+    const isProduct = ingredientForm.ingredientType === 'product'
+    const source = isProduct
+      ? products.find(p => p.id === ingredientForm.ingredientId)
+      : ingredients.find(i => i.id === ingredientForm.ingredientId)
+    if (!source) return
 
     // Verificar si ya existe
     if (formData.ingredients.some(i => i.ingredientId === ingredientForm.ingredientId)) {
@@ -229,8 +233,9 @@ export default function Recipes() {
     }
 
     const newIngredient = {
-      ingredientId: ingredient.id,
-      ingredientName: ingredient.name,
+      ingredientId: source.id,
+      ingredientName: source.name,
+      ingredientType: isProduct ? 'product' : 'ingredient',
       quantity: parseFloat(ingredientForm.quantity),
       unit: ingredientForm.unit,
       cost: 0 // Se calculará en el backend
@@ -244,6 +249,7 @@ export default function Recipes() {
     // Reset form
     setIngredientForm({
       ingredientId: '',
+      ingredientType: 'ingredient',
       quantity: '',
       unit: 'g'
     })
@@ -259,6 +265,13 @@ export default function Recipes() {
   // Obtener unidades compatibles basadas en el ingrediente seleccionado
   const getCompatibleUnits = () => {
     if (!ingredientForm.ingredientId) return []
+
+    // Si es un producto terminado, solo permite unidades
+    if (ingredientForm.ingredientType === 'product') {
+      const product = products.find(p => p.id === ingredientForm.ingredientId)
+      const unit = product?.unit || 'unidades'
+      return [{ value: unit, label: unit }]
+    }
 
     const ingredient = ingredients.find(i => i.id === ingredientForm.ingredientId)
     if (!ingredient) return []
@@ -723,35 +736,53 @@ export default function Recipes() {
               <Select
                 value={ingredientForm.ingredientId}
                 onChange={e => {
-                  const ingredientId = e.target.value
-                  const ingredient = ingredients.find(i => i.id === ingredientId)
+                  const selectedId = e.target.value
+                  // Detectar si es ingrediente o producto
+                  const ingredient = ingredients.find(i => i.id === selectedId)
+                  const product = !ingredient ? products.find(p => p.id === selectedId) : null
+                  const isProduct = !!product
 
-                  // Establecer la unidad por defecto basada en el tipo de ingrediente
                   let defaultUnit = 'g'
-                  if (ingredient) {
+                  if (isProduct) {
+                    defaultUnit = product.unit || 'unidades'
+                  } else if (ingredient) {
                     const purchaseUnit = ingredient.purchaseUnit?.toLowerCase()
                     if (purchaseUnit === 'kg' || purchaseUnit === 'g') {
-                      defaultUnit = 'g' // Unidad más pequeña para peso
+                      defaultUnit = 'g'
                     } else if (purchaseUnit === 'l' || purchaseUnit === 'ml') {
-                      defaultUnit = 'ml' // Unidad más pequeña para volumen
+                      defaultUnit = 'ml'
                     } else {
-                      defaultUnit = ingredient.purchaseUnit // Misma unidad
+                      defaultUnit = ingredient.purchaseUnit
                     }
                   }
 
                   setIngredientForm({
                     ...ingredientForm,
-                    ingredientId,
+                    ingredientId: selectedId,
+                    ingredientType: isProduct ? 'product' : 'ingredient',
                     unit: defaultUnit
                   })
                 }}
               >
                 <option value="">{texts.ingredientSelect}</option>
-                {ingredients.map(ing => (
-                  <option key={ing.id} value={ing.id}>
-                    {ing.name}
-                  </option>
-                ))}
+                {ingredients.length > 0 && (
+                  <optgroup label={isRestaurantMode ? 'Ingredientes' : 'Insumos'}>
+                    {ingredients.map(ing => (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {products.length > 0 && (
+                  <optgroup label="Productos terminados">
+                    {products.map(prod => (
+                      <option key={prod.id} value={prod.id}>
+                        {prod.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </Select>
 
               <div className="grid grid-cols-2 gap-3">
@@ -801,7 +832,12 @@ export default function Recipes() {
                 {formData.ingredients.map((ing, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-white border rounded-lg">
                     <div>
-                      <p className="font-medium text-sm">{ing.ingredientName}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{ing.ingredientName}</p>
+                        {ing.ingredientType === 'product' && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">Producto</span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500">
                         {ing.quantity} {ing.unit}
                       </p>

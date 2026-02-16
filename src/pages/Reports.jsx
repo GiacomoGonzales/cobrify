@@ -430,6 +430,7 @@ export default function Reports() {
     const totalInvoices = filteredInvoices.length
     const facturas = filteredInvoices.filter(inv => inv.documentType === 'factura').length
     const boletas = filteredInvoices.filter(inv => inv.documentType === 'boleta').length
+    const notasVenta = filteredInvoices.filter(inv => inv.documentType === 'nota_venta').length
 
     const avgTicket = totalInvoices > 0 ? totalRevenue / totalInvoices : 0
 
@@ -471,6 +472,7 @@ export default function Reports() {
       totalInvoices,
       facturas,
       boletas,
+      notasVenta,
       avgTicket,
       revenueGrowth,
       totalCost,
@@ -665,6 +667,7 @@ export default function Reports() {
           totalRevenue: 0,
           facturas: 0,
           boletas: 0,
+          notasVenta: 0,
           notasCredito: 0,
           notasDebito: 0,
         }
@@ -675,6 +678,7 @@ export default function Reports() {
 
       if (invoice.documentType === 'factura') sellers[sellerId].facturas += 1
       else if (invoice.documentType === 'boleta') sellers[sellerId].boletas += 1
+      else if (invoice.documentType === 'nota_venta') sellers[sellerId].notasVenta += 1
       else if (invoice.documentType === 'nota_credito') sellers[sellerId].notasCredito += 1
       else if (invoice.documentType === 'nota_debito') sellers[sellerId].notasDebito += 1
     })
@@ -893,6 +897,7 @@ export default function Reports() {
     return [
       { name: 'Facturas', value: stats.facturas, color: COLORS[0] },
       { name: 'Boletas', value: stats.boletas, color: COLORS[1] },
+      { name: 'Notas de Venta', value: stats.notasVenta, color: COLORS[2] },
     ].filter(item => item.value > 0)
   }, [stats])
 
@@ -1811,6 +1816,7 @@ export default function Reports() {
                     <div className="flex gap-2 mt-2">
                       <Badge variant="primary">{stats.facturas} F</Badge>
                       <Badge>{stats.boletas} B</Badge>
+                      {stats.notasVenta > 0 && <Badge variant="warning">{stats.notasVenta} NV</Badge>}
                     </div>
                   </div>
                   <div className="p-3 bg-blue-100 rounded-lg">
@@ -2162,7 +2168,11 @@ export default function Reports() {
             <CardContent>
               {/* Mobile Cards */}
               <div className="lg:hidden space-y-3">
-                {filteredInvoices.slice(0, 20).map(invoice => {
+                {[...filteredInvoices].sort((a, b) => {
+                    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
+                    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+                    return dateB - dateA
+                  }).slice(0, 20).map(invoice => {
                   let paymentMethods = 'Efectivo'
                   if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
                     paymentMethods = invoice.paymentHistory.length === 1 ? (invoice.paymentHistory[0].method || 'Efectivo') : 'Múltiples'
@@ -2181,8 +2191,8 @@ export default function Reports() {
                         <p className="font-bold text-gray-900">{formatCurrency(invoice.total)}</p>
                       </div>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <Badge variant={invoice.documentType === 'factura' ? 'primary' : 'default'}>
-                          {invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                        <Badge variant={invoice.documentType === 'factura' ? 'primary' : invoice.documentType === 'nota_venta' ? 'warning' : 'default'}>
+                          {invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'N. Venta' : 'Boleta'}
                         </Badge>
                         <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'pending' ? 'warning' : 'default'}>
                           {invoice.status === 'paid' ? 'Pagada' : 'Pendiente'}
@@ -2223,7 +2233,11 @@ export default function Reports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvoices.slice(0, 20).map(invoice => {
+                    {[...filteredInvoices].sort((a, b) => {
+                      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0)
+                      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0)
+                      return dateB - dateA
+                    }).slice(0, 20).map(invoice => {
                       // Obtener métodos de pago - priorizar paymentHistory
                       let paymentMethods = 'Efectivo'
                       if (invoice.paymentHistory && Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
@@ -2256,8 +2270,8 @@ export default function Reports() {
                               : '-'}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={invoice.documentType === 'factura' ? 'primary' : 'default'}>
-                              {invoice.documentType === 'factura' ? 'Factura' : 'Boleta'}
+                            <Badge variant={invoice.documentType === 'factura' ? 'primary' : invoice.documentType === 'nota_venta' ? 'warning' : 'default'}>
+                              {invoice.documentType === 'factura' ? 'Factura' : invoice.documentType === 'nota_venta' ? 'N. Venta' : 'Boleta'}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -2813,6 +2827,7 @@ export default function Reports() {
                         </div>
                         <Badge variant="primary">{seller.facturas} F</Badge>
                         <Badge variant="default">{seller.boletas} B</Badge>
+                        {seller.notasVenta > 0 && <Badge variant="warning">{seller.notasVenta} NV</Badge>}
                         {seller.notasCredito > 0 && <Badge variant="warning">{seller.notasCredito} NC</Badge>}
                         {seller.notasDebito > 0 && <Badge variant="danger">{seller.notasDebito} ND</Badge>}
                       </div>
@@ -2831,6 +2846,7 @@ export default function Reports() {
                       <TableHead className="text-right">Total Ventas</TableHead>
                       <TableHead className="text-right">Facturas</TableHead>
                       <TableHead className="text-right">Boletas</TableHead>
+                      <TableHead className="text-right">N. Venta</TableHead>
                       <TableHead className="text-right">N. Crédito</TableHead>
                       <TableHead className="text-right">N. Débito</TableHead>
                       <TableHead className="text-right">Ingresos Totales</TableHead>
@@ -2879,6 +2895,9 @@ export default function Reports() {
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge variant="default">{seller.boletas}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="warning">{seller.notasVenta}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge variant="warning">{seller.notasCredito}</Badge>

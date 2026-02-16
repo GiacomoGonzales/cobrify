@@ -21,24 +21,36 @@ export const calculateRecipeCost = async (businessId, ingredients) => {
   let totalCost = 0
 
   for (const ingredient of ingredients) {
-    const result = await getIngredient(businessId, ingredient.ingredientId)
+    if (ingredient.ingredientType === 'product') {
+      // Producto terminado: usar costo o precio del producto
+      const productRef = doc(db, 'businesses', businessId, 'products', ingredient.ingredientId)
+      const productSnap = await getDoc(productRef)
 
-    if (result.success) {
-      const ingredientData = result.data
-      const averageCost = ingredientData.averageCost || 0
+      if (productSnap.exists()) {
+        const productData = productSnap.data()
+        const unitCost = productData.cost || productData.price || 0
+        const ingredientCost = ingredient.quantity * unitCost
+        totalCost += ingredientCost
+        ingredient.cost = ingredientCost
+      }
+    } else {
+      // Ingrediente crudo: usar averageCost con conversión de unidad
+      const result = await getIngredient(businessId, ingredient.ingredientId)
 
-      // Convertir cantidad de la receta a la unidad de compra para calcular costo
-      const quantityInPurchaseUnit = convertUnit(
-        ingredient.quantity,
-        ingredient.unit,
-        ingredientData.purchaseUnit
-      )
+      if (result.success) {
+        const ingredientData = result.data
+        const averageCost = ingredientData.averageCost || 0
 
-      const ingredientCost = quantityInPurchaseUnit * averageCost
-      totalCost += ingredientCost
+        const quantityInPurchaseUnit = convertUnit(
+          ingredient.quantity,
+          ingredient.unit,
+          ingredientData.purchaseUnit
+        )
 
-      // Actualizar el costo en el ingrediente de la receta
-      ingredient.cost = ingredientCost
+        const ingredientCost = quantityInPurchaseUnit * averageCost
+        totalCost += ingredientCost
+        ingredient.cost = ingredientCost
+      }
     }
   }
 
@@ -190,26 +202,47 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
     const missingIngredients = []
 
     for (const ingredient of recipe.ingredients) {
-      const ingredientResult = await getIngredient(businessId, ingredient.ingredientId)
+      if (ingredient.ingredientType === 'product') {
+        // Producto terminado: verificar stock del producto
+        const productRef = doc(db, 'businesses', businessId, 'products', ingredient.ingredientId)
+        const productSnap = await getDoc(productRef)
 
-      if (ingredientResult.success) {
-        const ingredientData = ingredientResult.data
-        const currentStock = ingredientData.currentStock || 0
+        if (productSnap.exists()) {
+          const productData = productSnap.data()
+          const currentStock = productData.stock ?? productData.currentStock ?? 0
+          const quantityNeeded = ingredient.quantity * quantity
 
-        // Convertir cantidad necesaria a unidad de compra
-        const quantityNeeded = convertUnit(
-          ingredient.quantity * quantity,
-          ingredient.unit,
-          ingredientData.purchaseUnit
-        )
+          if (currentStock < quantityNeeded) {
+            missingIngredients.push({
+              name: ingredient.ingredientName,
+              available: currentStock,
+              needed: quantityNeeded,
+              unit: productData.unit || 'unidades'
+            })
+          }
+        }
+      } else {
+        // Ingrediente crudo
+        const ingredientResult = await getIngredient(businessId, ingredient.ingredientId)
 
-        if (currentStock < quantityNeeded) {
-          missingIngredients.push({
-            name: ingredient.ingredientName,
-            available: currentStock,
-            needed: quantityNeeded,
-            unit: ingredientData.purchaseUnit
-          })
+        if (ingredientResult.success) {
+          const ingredientData = ingredientResult.data
+          const currentStock = ingredientData.currentStock || 0
+
+          const quantityNeeded = convertUnit(
+            ingredient.quantity * quantity,
+            ingredient.unit,
+            ingredientData.purchaseUnit
+          )
+
+          if (currentStock < quantityNeeded) {
+            missingIngredients.push({
+              name: ingredient.ingredientName,
+              available: currentStock,
+              needed: quantityNeeded,
+              unit: ingredientData.purchaseUnit
+            })
+          }
         }
       }
     }

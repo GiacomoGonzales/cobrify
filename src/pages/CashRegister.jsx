@@ -78,6 +78,11 @@ export default function CashRegister() {
     cash: '',
     card: '',
     transfer: '',
+    yape: '',
+    plin: '',
+    rappi: '',
+    pedidosYa: '',
+    diDiFood: '',
   })
   const [movementData, setMovementData] = useState({
     type: 'income',
@@ -510,6 +515,11 @@ export default function CashRegister() {
     const cash = parseFloat(closingCounts.cash) || 0
     const card = parseFloat(closingCounts.card) || 0
     const transfer = parseFloat(closingCounts.transfer) || 0
+    const yape = parseFloat(closingCounts.yape) || 0
+    const plin = parseFloat(closingCounts.plin) || 0
+    const rappi = parseFloat(closingCounts.rappi) || 0
+    const pedidosYa = parseFloat(closingCounts.pedidosYa) || 0
+    const diDiFood = parseFloat(closingCounts.diDiFood) || 0
 
     setIsClosing(true)
     try {
@@ -524,7 +534,12 @@ export default function CashRegister() {
         closingCash: cash,
         closingCard: card,
         closingTransfer: transfer,
-        closingAmount: cash + card + transfer,
+        closingYape: yape,
+        closingPlin: plin,
+        closingRappi: rappi,
+        closingPedidosYa: pedidosYa,
+        closingDiDiFood: diDiFood,
+        closingAmount: cash + card + transfer + yape + plin + rappi + pedidosYa + diDiFood,
         closedAt: new Date(), // Hora de cierre
         totalSales: totals.sales,
         salesCash: totals.salesCash,
@@ -557,6 +572,11 @@ export default function CashRegister() {
         cash,
         card,
         transfer,
+        yape,
+        plin,
+        rappi,
+        pedidosYa,
+        diDiFood,
         totalSales: totals.sales,
         salesCash: totals.salesCash,
         salesCard: totals.salesCard,
@@ -1845,6 +1865,36 @@ export default function CashRegister() {
                     <span className="font-semibold">{formatCurrency(selectedHistorySession.closingTransfer || 0)}</span>
                   )}
                 </div>
+                {(selectedHistorySession.closingYape > 0 || selectedHistorySession.salesYape > 0) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Yape:</span>
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingYape || 0)}</span>
+                  </div>
+                )}
+                {(selectedHistorySession.closingPlin > 0 || selectedHistorySession.salesPlin > 0) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Plin:</span>
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingPlin || 0)}</span>
+                  </div>
+                )}
+                {(selectedHistorySession.closingRappi > 0 || selectedHistorySession.salesRappi > 0) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Rappi:</span>
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingRappi || 0)}</span>
+                  </div>
+                )}
+                {(selectedHistorySession.closingPedidosYa > 0 || selectedHistorySession.salesPedidosYa > 0) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">PedidosYa:</span>
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingPedidosYa || 0)}</span>
+                  </div>
+                )}
+                {(selectedHistorySession.closingDiDiFood > 0 || selectedHistorySession.salesDiDiFood > 0) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">DiDiFood:</span>
+                    <span className="font-semibold">{formatCurrency(selectedHistorySession.closingDiDiFood || 0)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
                   <span className="text-gray-600">Efectivo Esperado:</span>
                   <span className="font-semibold">{formatCurrency(selectedHistorySession.expectedAmount || 0)}</span>
@@ -2206,6 +2256,66 @@ export default function CashRegister() {
             onChange={(e) => setClosingCounts({ ...closingCounts, transfer: e.target.value })}
             helperText="Suma de transferencias recibidas"
           />
+
+          {totals.salesYape > 0 && (
+            <Input
+              label="Total en Yape"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={closingCounts.yape}
+              onChange={(e) => setClosingCounts({ ...closingCounts, yape: e.target.value })}
+              helperText="Suma de pagos recibidos por Yape"
+            />
+          )}
+
+          {totals.salesPlin > 0 && (
+            <Input
+              label="Total en Plin"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={closingCounts.plin}
+              onChange={(e) => setClosingCounts({ ...closingCounts, plin: e.target.value })}
+              helperText="Suma de pagos recibidos por Plin"
+            />
+          )}
+
+          {totals.salesRappi > 0 && (
+            <Input
+              label="Total en Rappi"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={closingCounts.rappi}
+              onChange={(e) => setClosingCounts({ ...closingCounts, rappi: e.target.value })}
+              helperText="Monto total de ventas por Rappi"
+            />
+          )}
+
+          {totals.salesPedidosYa > 0 && (
+            <Input
+              label="Total en PedidosYa"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={closingCounts.pedidosYa}
+              onChange={(e) => setClosingCounts({ ...closingCounts, pedidosYa: e.target.value })}
+              helperText="Monto total de ventas por PedidosYa"
+            />
+          )}
+
+          {totals.salesDiDiFood > 0 && (
+            <Input
+              label="Total en DiDiFood"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={closingCounts.diDiFood}
+              onChange={(e) => setClosingCounts({ ...closingCounts, diDiFood: e.target.value })}
+              helperText="Monto total de ventas por DiDiFood"
+            />
+          )}
 
           {closingCounts.cash && (
             <div className="bg-gray-50 p-4 rounded-lg">

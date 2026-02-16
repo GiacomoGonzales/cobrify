@@ -93,6 +93,11 @@ const CashClosureTicket = forwardRef(({
   const closingCash = sessionData?.closingCash || 0
   const closingCard = sessionData?.closingCard || 0
   const closingTransfer = sessionData?.closingTransfer || 0
+  const closingYape = sessionData?.closingYape || 0
+  const closingPlin = sessionData?.closingPlin || 0
+  const closingRappi = sessionData?.closingRappi || 0
+  const closingPedidosYa = sessionData?.closingPedidosYa || 0
+  const closingDiDiFood = sessionData?.closingDiDiFood || 0
   const closingAmount = sessionData?.closingAmount || 0
   const difference = sessionData?.difference || (closingAmount - expectedAmount)
 
@@ -508,14 +513,48 @@ const CashClosureTicket = forwardRef(({
           <span className="info-label">Efectivo:</span>
           <span>{formatCurrency(closingCash)}</span>
         </div>
-        <div className="info-row">
-          <span className="info-label">Tarjeta:</span>
-          <span>{formatCurrency(closingCard)}</span>
-        </div>
-        <div className="info-row">
-          <span className="info-label">Transferencia:</span>
-          <span>{formatCurrency(closingTransfer)}</span>
-        </div>
+        {closingCard > 0 && (
+          <div className="info-row">
+            <span className="info-label">Tarjeta:</span>
+            <span>{formatCurrency(closingCard)}</span>
+          </div>
+        )}
+        {closingTransfer > 0 && (
+          <div className="info-row">
+            <span className="info-label">Transferencia:</span>
+            <span>{formatCurrency(closingTransfer)}</span>
+          </div>
+        )}
+        {closingYape > 0 && (
+          <div className="info-row">
+            <span className="info-label">Yape:</span>
+            <span>{formatCurrency(closingYape)}</span>
+          </div>
+        )}
+        {closingPlin > 0 && (
+          <div className="info-row">
+            <span className="info-label">Plin:</span>
+            <span>{formatCurrency(closingPlin)}</span>
+          </div>
+        )}
+        {closingRappi > 0 && (
+          <div className="info-row">
+            <span className="info-label">Rappi:</span>
+            <span>{formatCurrency(closingRappi)}</span>
+          </div>
+        )}
+        {closingPedidosYa > 0 && (
+          <div className="info-row">
+            <span className="info-label">PedidosYa:</span>
+            <span>{formatCurrency(closingPedidosYa)}</span>
+          </div>
+        )}
+        {closingDiDiFood > 0 && (
+          <div className="info-row">
+            <span className="info-label">DiDiFood:</span>
+            <span>{formatCurrency(closingDiDiFood)}</span>
+          </div>
+        )}
 
         <div className="separator" />
         <div className="total-row highlight">

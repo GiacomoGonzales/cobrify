@@ -98,6 +98,7 @@ export default function InvoiceList() {
   const [filterType, setFilterType] = useState('all')
   const [filterSeller, setFilterSeller] = useState('all')
   const [filterBranch, setFilterBranch] = useState('all') // 'all', 'main', o branchId
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('all')
   const [branches, setBranches] = useState([])
   const [dateFilter, setDateFilter] = useState('all') // 'all', 'today', '3days', '7days', '30days', 'custom'
   const [filterStartDate, setFilterStartDate] = useState('')
@@ -961,6 +962,27 @@ Gracias por tu preferencia.`
     }
   }
 
+  const handleUpdatePaymentMethod = async (invoiceId, newMethod) => {
+    if (!user?.uid) return
+
+    const businessId = getBusinessId()
+    try {
+      const result = await updateInvoice(businessId, invoiceId, { paymentMethod: newMethod })
+
+      if (result.success) {
+        toast.success('Método de pago actualizado')
+        // Actualizar el estado local del invoice que se está viendo
+        setViewingInvoice(prev => prev ? { ...prev, paymentMethod: newMethod } : prev)
+        loadInvoices()
+      } else {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Error al actualizar método de pago:', error)
+      toast.error('Error al actualizar el método de pago.')
+    }
+  }
+
   const handleSendToSunat = async (invoiceId) => {
     if (!user?.uid) return
 
@@ -1121,7 +1143,20 @@ Gracias por tu preferencia.`
         }
       }
 
-      return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesBranch
+      // Filtrar por método de pago
+      let matchesPayment = true
+      if (filterPaymentMethod !== 'all') {
+        const invoiceMethod = (invoice.paymentMethod || 'Efectivo').toLowerCase()
+        const filterMethod = filterPaymentMethod.toLowerCase()
+        if (invoice.payments && invoice.payments.length > 1) {
+          // Pago múltiple: buscar si alguno coincide
+          matchesPayment = invoice.payments.some(p => (p.method || '').toLowerCase() === filterMethod)
+        } else {
+          matchesPayment = invoiceMethod === filterMethod
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesType && matchesSeller && matchesBranch && matchesPayment
     })
 
   // Apply pagination
@@ -1135,7 +1170,7 @@ Gracias por tu preferencia.`
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleInvoicesCount(20)
-  }, [searchTerm, filterStatus, filterType, filterSeller, dateFilter, filterStartDate, filterEndDate])
+  }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, dateFilter, filterStartDate, filterEndDate])
 
   const getStatusBadge = (status, documentType) => {
     // Para Notas de Crédito y Notas de Débito, usar estados específicos
@@ -1479,10 +1514,26 @@ Gracias por tu preferencia.`
                 ))}
               </select>
             )}
+            {/* Filtro de método de pago */}
+            <select
+              value={filterPaymentMethod}
+              onChange={e => setFilterPaymentMethod(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+            >
+              <option value="all">Todos los pagos</option>
+              <option value="Efectivo">Efectivo</option>
+              <option value="Tarjeta">Tarjeta</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Yape">Yape</option>
+              <option value="Plin">Plin</option>
+              <option value="Rappi">Rappi</option>
+              <option value="PedidosYa">PedidosYa</option>
+              <option value="DiDiFood">DiDiFood</option>
+            </select>
           </div>
 
           {/* Botón limpiar filtros */}
-          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || dateFilter !== 'all') && (
+          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || filterPaymentMethod !== 'all' || dateFilter !== 'all') && (
             <div className="flex justify-end">
               <button
                 onClick={() => {
@@ -1493,6 +1544,7 @@ Gracias por tu preferencia.`
                   setFilterStatus('all')
                   setFilterSeller('all')
                   setFilterBranch('all')
+                  setFilterPaymentMethod('all')
                 }}
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
@@ -1502,6 +1554,27 @@ Gracias por tu preferencia.`
           )}
         </CardContent>
       </Card>
+
+      {/* Totals Summary */}
+      {filteredInvoices.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex flex-wrap items-center gap-4 text-sm">
+          <span className="text-gray-600">
+            <span className="font-semibold text-gray-900">{filteredInvoices.length}</span> comprobante{filteredInvoices.length !== 1 ? 's' : ''}
+          </span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-600">
+            Total: <span className="font-semibold text-gray-900">{formatCurrency(filteredInvoices.reduce((sum, inv) => sum + (inv.status !== 'cancelled' ? (inv.total || 0) : 0), 0))}</span>
+          </span>
+          {filterPaymentMethod !== 'all' && (
+            <>
+              <span className="text-gray-300">|</span>
+              <span className="text-gray-600">
+                Filtrado por: <span className="font-semibold text-primary-600">{filterPaymentMethod}</span>
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Invoice Table */}
       <Card>
@@ -1582,6 +1655,15 @@ Gracias por tu preferencia.`
                     </div>
                   </div>
 
+                  {/* Método de pago */}
+                  <div className="mt-1">
+                    <span className="text-xs text-gray-500">
+                      {invoice.payments && invoice.payments.length > 1
+                        ? invoice.payments.map(p => p.method).join(' + ')
+                        : invoice.paymentMethod || 'Efectivo'}
+                    </span>
+                  </div>
+
                   {/* Fila extra: pago parcial/crédito + indicadores conversión */}
                   {(
                     (invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending')) ||
@@ -1626,6 +1708,7 @@ Gracias por tu preferencia.`
                   <TableHead className="py-2.5 px-3">Cliente</TableHead>
                   <TableHead className="py-2.5 px-3">Fecha Emisión</TableHead>
                   <TableHead className="py-2.5 px-3">Total</TableHead>
+                  <TableHead className="py-2.5 px-3">Pago</TableHead>
                   <TableHead className="py-2.5 px-2">Estado</TableHead>
                   <TableHead className="py-2.5 px-1 w-20">SUNAT</TableHead>
                   <TableHead className="py-2.5 px-1 text-right w-12"></TableHead>
@@ -1688,6 +1771,13 @@ Gracias por tu preferencia.`
                           </div>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="py-2.5 px-3">
+                      <span className="text-xs text-gray-600 whitespace-nowrap">
+                        {invoice.payments && invoice.payments.length > 1
+                          ? invoice.payments.map(p => p.method).join(' + ')
+                          : invoice.paymentMethod || 'Efectivo'}
+                      </span>
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
                       <div className="flex flex-col gap-1">
@@ -2261,7 +2351,20 @@ Gracias por tu preferencia.`
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 uppercase">Método</p>
-                <p className="font-medium text-gray-900 mt-1">{viewingInvoice.paymentMethod || 'Efectivo'}</p>
+                <Select
+                  value={viewingInvoice.paymentMethod || 'Efectivo'}
+                  onChange={e => handleUpdatePaymentMethod(viewingInvoice.id, e.target.value)}
+                  className="mt-1 text-sm"
+                >
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Yape">Yape</option>
+                  <option value="Plin">Plin</option>
+                  <option value="Rappi">Rappi</option>
+                  <option value="PedidosYa">PedidosYa</option>
+                  <option value="DiDiFood">DiDiFood</option>
+                </Select>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 uppercase">Estado Pago</p>
@@ -2408,11 +2511,31 @@ Gracias por tu preferencia.`
             {viewingInvoice.payments?.length > 1 && (
               <div className="border border-gray-200 rounded-xl p-4">
                 <h4 className="font-semibold text-gray-700 mb-3">Métodos de Pago Usados</h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                   {viewingInvoice.payments.map((pago, i) => (
-                    <div key={i} className="bg-gray-50 rounded-lg p-2 flex justify-between text-sm">
-                      <span className="text-gray-600">{pago.method}</span>
-                      <span className="font-medium">{formatCurrency(pago.amount)}</span>
+                    <div key={i} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 text-sm">
+                      <Select
+                        value={pago.method}
+                        onChange={e => {
+                          const updatedPayments = [...viewingInvoice.payments]
+                          updatedPayments[i] = { ...updatedPayments[i], method: e.target.value }
+                          const newPrimaryMethod = updatedPayments[0].method
+                          handleUpdatePaymentMethod(viewingInvoice.id, newPrimaryMethod)
+                          updateInvoice(getBusinessId(), viewingInvoice.id, { payments: updatedPayments })
+                          setViewingInvoice(prev => prev ? { ...prev, payments: updatedPayments } : prev)
+                        }}
+                        className="text-sm flex-1"
+                      >
+                        <option value="Efectivo">Efectivo</option>
+                        <option value="Tarjeta">Tarjeta</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="Yape">Yape</option>
+                        <option value="Plin">Plin</option>
+                        <option value="Rappi">Rappi</option>
+                        <option value="PedidosYa">PedidosYa</option>
+                        <option value="DiDiFood">DiDiFood</option>
+                      </Select>
+                      <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount)}</span>
                     </div>
                   ))}
                 </div>

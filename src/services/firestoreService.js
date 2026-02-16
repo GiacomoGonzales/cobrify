@@ -1464,14 +1464,19 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, totalIncome, totalExpense, expectedAmount, difference, invoiceCount } = closingData
-    const closingAmount = cash + card + transfer
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount } = closingData
+    const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
     await updateDoc(sessionRef, {
       closingAmount,
       closingCash: cash,
       closingCard: card,
       closingTransfer: transfer,
+      closingYape: yape || 0,
+      closingPlin: plin || 0,
+      closingRappi: rappi || 0,
+      closingPedidosYa: pedidosYa || 0,
+      closingDiDiFood: diDiFood || 0,
       status: 'closed',
       closedAt: serverTimestamp(),
       closedBy: userId,
@@ -1482,6 +1487,9 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
       salesTransfer: salesTransfer || 0,
       salesYape: salesYape || 0,
       salesPlin: salesPlin || 0,
+      salesRappi: salesRappi || 0,
+      salesPedidosYa: salesPedidosYa || 0,
+      salesDiDiFood: salesDiDiFood || 0,
       totalIncome: totalIncome || 0,
       totalExpense: totalExpense || 0,
       expectedAmount: expectedAmount || 0,

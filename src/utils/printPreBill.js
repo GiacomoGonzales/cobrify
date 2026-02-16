@@ -474,8 +474,13 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
       </div>
 
       ${overrideTotal !== null ? `
-      <div style="text-align: center; margin-top: ${is58mm ? '2mm' : '3mm'}; padding: ${is58mm ? '1.5mm' : '2mm'}; border: 1px dashed #000; font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '7pt' : '8pt')};">
-        <strong>TOTAL CUENTA: S/ ${orderTotal.toFixed(2)}</strong>
+      <div style="text-align: center; margin-top: ${is58mm ? '2mm' : '3mm'}; padding: ${is58mm ? '2mm 1.5mm' : '3mm 2mm'}; border: 2px solid #000;">
+        <div style="font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '7pt' : '8pt')}; margin-bottom: ${is58mm ? '1mm' : '1.5mm'};">
+          TOTAL CUENTA: S/ ${orderTotal.toFixed(2)}
+        </div>
+        <div style="font-size: ${webPrintLegible ? (is58mm ? '12pt' : '14pt') : (is58mm ? '10pt' : '11pt')}; font-weight: bold; border-top: 1px dashed #000; padding-top: ${is58mm ? '1mm' : '1.5mm'};">
+          MONTO A PAGAR: S/ ${overrideTotal.toFixed(2)}
+        </div>
       </div>
       ` : ''}
 
@@ -494,6 +499,184 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           setTimeout(function() {
             window.close();
           }, 100);
+        };
+      </script>
+    </body>
+    </html>
+  `
+
+  printWindow.document.write(html)
+  printWindow.document.close()
+}
+
+/**
+ * Imprimir todas las precuentas divididas en un solo documento
+ */
+export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false) => {
+  const printWindow = window.open('', '_blank', 'width=300,height=600')
+
+  if (!printWindow) {
+    alert('Por favor permite las ventanas emergentes para imprimir')
+    return
+  }
+
+  const currentDate = new Date()
+  const dateStr = currentDate.toLocaleDateString('es-PE', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  const timeStr = currentDate.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+
+  const is58mm = paperWidth === 58
+  const orderTotal = order.total || 0
+  const isItemsSplit = splitData.method === 'items'
+
+  const generatePersonSection = (person, index) => {
+    const itemsToShow = isItemsSplit ? person.items : (order.items || [])
+    const personTotal = person.total
+
+    let subtotal, tax, total = personTotal
+    let recargoConsumo = 0
+
+    if (taxConfig.igvExempt) {
+      subtotal = total
+      tax = 0
+    } else {
+      const igvRate = taxConfig.igvRate || 18
+      const igvMultiplier = 1 + (igvRate / 100)
+      subtotal = total / igvMultiplier
+      tax = total - subtotal
+    }
+
+    if (recargoConsumoConfig.enabled && recargoConsumoConfig.rate > 0) {
+      recargoConsumo = subtotal * (recargoConsumoConfig.rate / 100)
+      total = total + recargoConsumo
+    }
+
+    return `
+      ${index > 0 ? `<div style="border-top: 2px dashed #000; margin: ${is58mm ? '4mm' : '6mm'} 0;"></div>` : ''}
+      <div style="text-align: center; font-weight: bold; font-size: ${webPrintLegible ? (is58mm ? '12pt' : '14pt') : (is58mm ? '9pt' : '10pt')}; background: #f3f4f6; padding: ${is58mm ? '1.5mm' : '2mm'}; margin-bottom: ${is58mm ? '2mm' : '3mm'};">
+        PERSONA ${person.personNumber} DE ${splitData.numberOfPeople}
+      </div>
+
+      <div class="items-header">
+        <div class="qty">CANT</div>
+        <div class="desc">DESCRIPCION</div>
+        <div class="price">IMPORTE</div>
+      </div>
+
+      ${itemsToShow.map(item => `
+        <div class="item-row">
+          <div class="qty">${item.quantity}</div>
+          <div class="desc">${(item.name || '').toUpperCase()}</div>
+          <div class="price">S/ ${item.total.toFixed(2)}</div>
+        </div>
+        ${item.notes ? `<div class="item-notes">⚠ ${item.notes}</div>` : ''}
+      `).join('')}
+
+      <div class="totals">
+        ${!taxConfig.igvExempt ? `
+        <div class="row">
+          <span>SUBTOTAL:</span>
+          <span>S/ ${subtotal.toFixed(2)}</span>
+        </div>
+        <div class="row">
+          <span>IGV (${taxConfig.igvRate}%):</span>
+          <span>S/ ${tax.toFixed(2)}</span>
+        </div>
+        ` : ''}
+        ${recargoConsumo > 0 ? `
+        <div class="row" style="color: #059669;">
+          <span>RECARGO CONSUMO (${recargoConsumoConfig.rate}%):</span>
+          <span>S/ ${recargoConsumo.toFixed(2)}</span>
+        </div>
+        ` : ''}
+        <div class="row total">
+          <span>TOTAL PERSONA ${person.personNumber}:</span>
+          <span>S/ ${total.toFixed(2)}</span>
+        </div>
+      </div>
+    `
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Precuenta Dividida - Mesa ${table.number}</title>
+      <style>
+        @page { size: ${paperWidth}mm auto; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: Arial, sans-serif;
+          font-size: ${webPrintLegible ? (is58mm ? '11pt' : '12pt') : (is58mm ? '8pt' : '9pt')};
+          font-weight: ${webPrintLegible ? '600' : 'normal'};
+          line-height: ${webPrintLegible ? '1.4' : '1.2'};
+          padding: ${is58mm ? '1.5mm 5mm' : '2mm 6mm'};
+          width: ${paperWidth}mm;
+          background: white; color: #000;
+          text-transform: uppercase; margin: 0 auto;
+        }
+        @media print {
+          body { width: ${paperWidth}mm !important; max-width: ${paperWidth}mm !important; margin: 0 auto !important; }
+        }
+        .header { text-align: center; margin-bottom: ${is58mm ? '2mm' : '3mm'}; }
+        .header .logo { max-width: ${is58mm ? '140px' : '200px'}; max-height: ${is58mm ? '140px' : '200px'}; width: auto; height: auto; margin: 0 auto ${is58mm ? '1mm' : '1.5mm'}; object-fit: contain; display: block; }
+        .header .logo.square-logo { max-width: ${is58mm ? '70px' : '100px'}; max-height: ${is58mm ? '70px' : '100px'}; }
+        .header h1 { font-size: ${webPrintLegible ? (is58mm ? '14pt' : '16pt') : (is58mm ? '11pt' : '12pt')}; font-weight: bold; margin: ${is58mm ? '1mm' : '1.5mm'} 0; }
+        .separator { border-top: 1px dashed #000; margin: ${is58mm ? '2mm' : '3mm'} 0; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: ${is58mm ? '0.5mm' : '1mm'}; font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')}; }
+        .items-header { border-top: 1px dashed #000; border-bottom: 1px solid #000; padding: ${is58mm ? '1mm' : '1.5mm'} 0; font-weight: bold; font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')}; margin: ${is58mm ? '2mm' : '3mm'} 0 ${is58mm ? '1mm' : '1.5mm'} 0; display: flex; justify-content: space-between; }
+        .items-header .qty { width: ${is58mm ? '25px' : '35px'}; text-align: center; }
+        .items-header .desc { flex: 1; text-align: left; }
+        .items-header .price { width: ${is58mm ? '50px' : '60px'}; text-align: right; }
+        .item-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: ${is58mm ? '1mm' : '1.5mm'}; font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')}; padding-bottom: ${is58mm ? '0.5mm' : '1mm'}; border-bottom: 1px dotted #ccc; }
+        .item-row .qty { width: ${is58mm ? '25px' : '35px'}; text-align: center; font-weight: bold; }
+        .item-row .desc { flex: 1; text-align: left; padding: 0 ${is58mm ? '1mm' : '2mm'}; }
+        .item-row .price { width: ${is58mm ? '50px' : '60px'}; text-align: right; font-weight: bold; }
+        .item-notes { font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')}; font-style: italic; margin-left: ${is58mm ? '25px' : '35px'}; color: #666; }
+        .totals { margin-top: ${is58mm ? '2mm' : '3mm'}; border-top: 1px dashed #000; padding-top: ${is58mm ? '2mm' : '3mm'}; }
+        .totals .row { display: flex; justify-content: space-between; margin-bottom: ${is58mm ? '0.5mm' : '1mm'}; font-size: ${webPrintLegible ? (is58mm ? '11pt' : '12pt') : (is58mm ? '8pt' : '9pt')}; }
+        .totals .total { font-size: ${webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '10pt' : '11pt')}; font-weight: bold; border-top: 1px solid #000; padding-top: ${is58mm ? '1.5mm' : '2mm'}; margin-top: ${is58mm ? '1mm' : '1.5mm'}; }
+        .footer { text-align: center; margin-top: ${is58mm ? '3mm' : '4mm'}; padding-top: ${is58mm ? '2mm' : '3mm'}; border-top: 1px dashed #000; font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')}; }
+        .footer .precuenta { font-size: ${webPrintLegible ? (is58mm ? '14pt' : '16pt') : (is58mm ? '11pt' : '12pt')}; font-weight: bold; margin-bottom: ${is58mm ? '2mm' : '3mm'}; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        ${businessInfo.logoUrl ? `<img src="${businessInfo.logoUrl}" alt="Logo" class="logo" />` : ''}
+        <div style="font-size: ${webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '10pt' : '11pt')}; font-weight: bold;">${(businessInfo.tradeName || 'RESTAURANTE').toUpperCase()}</div>
+        ${businessInfo.address ? `<div class="info" style="font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};">${businessInfo.address.toUpperCase()}</div>` : ''}
+        ${businessInfo.phone ? `<div class="info" style="font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};">${businessInfo.phone}</div>` : ''}
+        <h1>PRECUENTA DIVIDIDA</h1>
+      </div>
+
+      <div class="separator"></div>
+
+      <div style="margin-bottom: ${is58mm ? '2mm' : '3mm'};">
+        <div class="info-row"><span>FECHA:</span><span>${dateStr}</span></div>
+        <div class="info-row"><span>HORA:</span><span>${timeStr}</span></div>
+        <div class="info-row"><span>MESA:</span><span><strong>${table.number}</strong></span></div>
+        <div class="info-row"><span>MOZO:</span><span>${(table.waiter || 'N/A').toUpperCase()}</span></div>
+        <div class="info-row"><span>ORDEN:</span><span>${order.orderNumber || '#' + order.id.slice(-6)}</span></div>
+        <div class="info-row"><span>PERSONAS:</span><span><strong>${splitData.numberOfPeople}</strong></span></div>
+      </div>
+
+      ${splitData.persons.map((person, i) => generatePersonSection(person, i)).join('')}
+
+      <div style="text-align: center; margin-top: ${is58mm ? '4mm' : '6mm'}; padding: ${is58mm ? '2mm' : '3mm'}; border: 2px solid #000; font-weight: bold; font-size: ${webPrintLegible ? (is58mm ? '12pt' : '14pt') : (is58mm ? '10pt' : '11pt')};">
+        TOTAL CUENTA: S/ ${orderTotal.toFixed(2)}
+      </div>
+
+      <div class="footer">
+        <div class="precuenta">*** PRECUENTA ***</div>
+        <p>ESTE DOCUMENTO NO TIENE VALOR TRIBUTARIO</p>
+        <p>SOLICITE SU COMPROBANTE DE PAGO</p>
+        <p style="margin-top: ${is58mm ? '1.5mm' : '2mm'};">¡GRACIAS POR SU PREFERENCIA!</p>
+      </div>
+
+      <script>
+        window.onload = function() {
+          window.print();
+          setTimeout(function() { window.close(); }, 100);
         };
       </script>
     </body>

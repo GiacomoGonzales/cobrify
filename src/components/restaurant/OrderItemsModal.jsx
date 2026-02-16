@@ -3,7 +3,7 @@ import { ShoppingCart, Plus, Minus, Search, Loader2, X } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { getProducts, getProductCategories, getCompanySettings } from '@/services/firestoreService'
+import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -20,7 +20,7 @@ export default function OrderItemsModal({
   newOrderData = null,
   onSaveNewOrder = null
 }) {
-  const { getBusinessId } = useAppContext()
+  const { getBusinessId, businessSettings } = useAppContext()
   const demoContext = useDemoRestaurant()
   const toast = useToast()
 
@@ -43,29 +43,15 @@ export default function OrderItemsModal({
   const [productForModifiers, setProductForModifiers] = useState(null)
 
   // Price selection state (multiple prices)
-  const [businessSettings, setBusinessSettings] = useState(null)
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [productForPriceSelection, setProductForPriceSelection] = useState(null)
 
-  // Cargar productos y configuración
+  // Cargar productos
   useEffect(() => {
     if (isOpen) {
       loadProducts()
-      loadBusinessSettings()
     }
   }, [isOpen])
-
-  const loadBusinessSettings = async () => {
-    if (isDemoMode || demoContext) return
-    try {
-      const result = await getCompanySettings(getBusinessId())
-      if (result.success) {
-        setBusinessSettings(result.data)
-      }
-    } catch (error) {
-      console.error('Error al cargar configuración:', error)
-    }
-  }
 
   // Helper para obtener el nombre de la categoría
   const getCategoryName = (categoryId) => {

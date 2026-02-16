@@ -13,7 +13,7 @@ import {
   increment,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { createOrder, completeOrder } from './orderService'
+import { createOrder, completeOrder, addOrderItems } from './orderService'
 
 /**
  * Servicio para gestión de mesas de restaurante
@@ -394,6 +394,156 @@ export const moveOrderToTable = async (businessId, sourceTableId, destinationTab
     return { success: true }
   } catch (error) {
     console.error('Error al mover orden a otra mesa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Dividir mesa: mover items seleccionados de una mesa a otra
+ * Si la mesa destino está disponible, la ocupa con una nueva orden
+ * Si la mesa destino ya está ocupada, agrega los items a la orden existente
+ */
+export const splitTableItems = async (businessId, sourceTableId, destTableId, selectedItemIndices, sourceWaiter) => {
+  try {
+    // Obtener datos de la mesa origen
+    const sourceTableRef = doc(db, 'businesses', businessId, 'tables', sourceTableId)
+    const sourceTableSnap = await getDoc(sourceTableRef)
+
+    if (!sourceTableSnap.exists()) {
+      return { success: false, error: 'Mesa origen no encontrada' }
+    }
+
+    const sourceTableData = sourceTableSnap.data()
+
+    if (sourceTableData.status !== 'occupied' || !sourceTableData.currentOrder) {
+      return { success: false, error: 'La mesa origen no tiene una orden activa' }
+    }
+
+    // Obtener datos de la mesa destino
+    const destTableRef = doc(db, 'businesses', businessId, 'tables', destTableId)
+    const destTableSnap = await getDoc(destTableRef)
+
+    if (!destTableSnap.exists()) {
+      return { success: false, error: 'Mesa destino no encontrada' }
+    }
+
+    const destTableData = destTableSnap.data()
+
+    if (destTableData.status !== 'available' && destTableData.status !== 'occupied') {
+      return { success: false, error: 'La mesa destino no está disponible ni ocupada' }
+    }
+
+    // Obtener la orden origen
+    const sourceOrderRef = doc(db, 'businesses', businessId, 'orders', sourceTableData.currentOrder)
+    const sourceOrderSnap = await getDoc(sourceOrderRef)
+
+    if (!sourceOrderSnap.exists()) {
+      return { success: false, error: 'Orden origen no encontrada' }
+    }
+
+    const sourceOrderData = sourceOrderSnap.data()
+    const allItems = sourceOrderData.items || []
+
+    // Separar items: los que se mueven y los que se quedan
+    const itemsToMove = selectedItemIndices.map(i => allItems[i]).filter(Boolean)
+    const itemsToKeep = allItems.filter((_, i) => !selectedItemIndices.includes(i))
+
+    if (itemsToMove.length === 0) {
+      return { success: false, error: 'No se seleccionaron items para mover' }
+    }
+
+    if (itemsToKeep.length === 0) {
+      return { success: false, error: 'No puedes mover todos los items. Usa "Cambiar Mesa" en su lugar.' }
+    }
+
+    // Obtener configuración fiscal del negocio
+    const businessRef = doc(db, 'businesses', businessId)
+    const businessSnap = await getDoc(businessRef)
+    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
+      ? businessSnap.data().taxConfig
+      : { igvRate: 18, igvExempt: false }
+    const igvRate = taxConfig.igvRate || 18
+    const igvMultiplier = 1 + (igvRate / 100)
+
+    // Recalcular totales de la orden origen (items que quedan)
+    const sourceTotal = itemsToKeep.reduce((sum, item) => sum + (item.total || item.price * item.quantity), 0)
+    const sourceSubtotal = taxConfig.igvExempt ? sourceTotal : sourceTotal / igvMultiplier
+    const sourceTax = taxConfig.igvExempt ? 0 : sourceTotal - sourceSubtotal
+
+    // Actualizar la orden origen con los items restantes
+    await updateDoc(sourceOrderRef, {
+      items: itemsToKeep,
+      subtotal: sourceSubtotal,
+      tax: sourceTax,
+      total: sourceTotal,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Actualizar monto en la mesa origen
+    await updateDoc(sourceTableRef, {
+      amount: sourceTotal,
+      updatedAt: serverTimestamp(),
+    })
+
+    // Manejar mesa destino
+    if (destTableData.status === 'occupied' && destTableData.currentOrder) {
+      // Mesa destino ya ocupada: agregar items a la orden existente
+      const result = await addOrderItems(businessId, destTableData.currentOrder, itemsToMove.map(item => ({
+        ...item,
+        printedToKitchen: item.printedToKitchen || false,
+      })))
+
+      if (!result.success) {
+        return { success: false, error: 'Error al agregar items a la mesa destino: ' + result.error }
+      }
+    } else {
+      // Mesa destino disponible: crear nueva orden y ocupar
+      const destTotal = itemsToMove.reduce((sum, item) => sum + (item.total || item.price * item.quantity), 0)
+      const destSubtotal = taxConfig.igvExempt ? destTotal : destTotal / igvMultiplier
+      const destTax = taxConfig.igvExempt ? 0 : destTotal - destSubtotal
+
+      const orderResult = await createOrder(businessId, {
+        tableId: destTableId,
+        tableNumber: destTableData.number,
+        waiterId: sourceWaiter?.waiterId || sourceTableData.waiterId,
+        waiterName: sourceWaiter?.waiterName || sourceTableData.waiter,
+        items: itemsToMove,
+        subtotal: destSubtotal,
+        tax: destTax,
+        total: destTotal,
+      })
+
+      if (!orderResult.success) {
+        return { success: false, error: 'Error al crear orden en mesa destino: ' + orderResult.error }
+      }
+
+      // Ocupar la mesa destino
+      await updateDoc(destTableRef, {
+        status: 'occupied',
+        currentOrder: orderResult.id,
+        waiter: sourceWaiter?.waiterName || sourceTableData.waiter,
+        waiterId: sourceWaiter?.waiterId || sourceTableData.waiterId,
+        startTime: serverTimestamp(),
+        amount: destTotal,
+        updatedAt: serverTimestamp(),
+      })
+
+      // Actualizar métricas del mozo
+      const waiterId = sourceWaiter?.waiterId || sourceTableData.waiterId
+      if (waiterId) {
+        const waiterRef = doc(db, 'businesses', businessId, 'waiters', waiterId)
+        await updateDoc(waiterRef, {
+          activeTables: increment(1),
+          updatedAt: serverTimestamp(),
+        }).catch(err => {
+          console.warn('No se pudo actualizar métricas del mozo:', err)
+        })
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al dividir mesa:', error)
     return { success: false, error: error.message }
   }
 }

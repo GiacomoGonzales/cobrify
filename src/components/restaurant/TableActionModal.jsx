@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText } from 'lucide-react'
+import { Users, Clock, CheckCircle, XCircle, Loader2, UserPlus, ShoppingCart, Edit, Receipt, UserCheck, Printer, ArrowRightLeft, FileText, Split } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -19,6 +19,7 @@ export default function TableActionModal({
   onSplitBill,
   onTransferTable,
   onMoveTable,
+  onSplitTable,
   onPrintPreBill,
   onPrintKitchenTicket,
   waiters = [],
@@ -80,7 +81,10 @@ export default function TableActionModal({
         waiterId: waiter.id,
         waiterName: waiter.name,
       })
-      handleClose()
+      // No llamar handleClose() aquí - el padre (Tables.jsx) controla
+      // si cierra este modal y abre el de agregar items
+      setAction(null)
+      setSelectedWaiter('')
     } catch (error) {
       console.error('Error al ocupar mesa:', error)
     } finally {
@@ -287,16 +291,41 @@ export default function TableActionModal({
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    onClick={() => {
-                      if (onPrintKitchenTicket) onPrintKitchenTicket()
-                    }}
-                    variant="outline"
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <FileText className="w-5 h-5" />
-                    Imprimir Comanda
-                  </Button>
+                  {/* Botón de comanda: si hay items no impresos, mostrar opción de solo nuevos */}
+                  {(() => {
+                    const unprintedCount = (table?.order?.items || []).filter(item => !item.printedToKitchen).length
+                    const hasUnprinted = unprintedCount > 0 && unprintedCount < (table?.order?.items || []).length
+                    return hasUnprinted ? (
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          onClick={() => { if (onPrintKitchenTicket) onPrintKitchenTicket(false) }}
+                          variant="outline"
+                          className="flex items-center justify-center gap-2 text-xs"
+                          size="sm"
+                        >
+                          <FileText className="w-4 h-4" />
+                          Comanda Nuevos ({unprintedCount})
+                        </Button>
+                        <Button
+                          onClick={() => { if (onPrintKitchenTicket) onPrintKitchenTicket(true) }}
+                          variant="ghost"
+                          className="flex items-center justify-center gap-1 text-xs text-gray-500"
+                          size="sm"
+                        >
+                          Reimprimir Todo
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => { if (onPrintKitchenTicket) onPrintKitchenTicket() }}
+                        variant="outline"
+                        className="flex items-center justify-center gap-2"
+                      >
+                        <FileText className="w-5 h-5" />
+                        Imprimir Comanda
+                      </Button>
+                    )
+                  })()}
                   <Button
                     onClick={() => {
                       if (onPrintPreBill) onPrintPreBill()
@@ -330,14 +359,26 @@ export default function TableActionModal({
                   </Button>
                 </div>
 
-                <Button
-                  onClick={() => setAction('move')}
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2"
-                >
-                  <ArrowRightLeft className="w-5 h-5" />
-                  Cambiar Mesa
-                </Button>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    onClick={() => setAction('move')}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <ArrowRightLeft className="w-5 h-5" />
+                    Cambiar Mesa
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (onSplitTable) onSplitTable()
+                    }}
+                    variant="outline"
+                    className="flex items-center justify-center gap-2"
+                  >
+                    <Split className="w-5 h-5" />
+                    Dividir Mesa
+                  </Button>
+                </div>
 
                 <Button
                   onClick={() => setAction('release')}

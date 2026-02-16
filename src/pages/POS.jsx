@@ -5405,7 +5405,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   ) : (
                     <>
                       <p className="text-sm font-medium text-gray-700">Métodos de Pago:</p>
-                  {payments.map((payment, index) => (
+                  {payments.map((payment, index) => {
+                    // Métodos ya seleccionados en otras filas (no la actual)
+                    const usedMethods = payments
+                      .filter((_, i) => i !== index)
+                      .map(p => p.method)
+                      .filter(Boolean)
+                    const isAvailable = (val) => !usedMethods.includes(val)
+
+                    return (
                     <div key={index} className="flex items-center gap-2">
                       {/* Método de pago */}
                       <Select
@@ -5415,28 +5423,28 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         disabled={lastInvoiceData !== null}
                       >
                         <option value="">Seleccionar</option>
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('cash')) && (
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('cash')) && (payment.method === 'CASH' || isAvailable('CASH')) && (
                           <option value="CASH">Efectivo</option>
                         )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('card')) && (
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('card')) && (payment.method === 'CARD' || isAvailable('CARD')) && (
                           <option value="CARD">Tarjeta</option>
                         )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('transfer')) && (
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('transfer')) && (payment.method === 'TRANSFER' || isAvailable('TRANSFER')) && (
                           <option value="TRANSFER">Transferencia</option>
                         )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('yape')) && (
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('yape')) && (payment.method === 'YAPE' || isAvailable('YAPE')) && (
                           <option value="YAPE">Yape</option>
                         )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('plin')) && (
+                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('plin')) && (payment.method === 'PLIN' || isAvailable('PLIN')) && (
                           <option value="PLIN">Plin</option>
                         )}
-                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('rappiPay')) && (
+                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('rappiPay')) && (payment.method === 'RAPPI' || isAvailable('RAPPI')) && (
                           <option value="RAPPI">Rappi</option>
                         )}
-                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('pedidosYa')) && (
+                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('pedidosYa')) && (payment.method === 'PEDIDOSYA' || isAvailable('PEDIDOSYA')) && (
                           <option value="PEDIDOSYA">PedidosYa</option>
                         )}
-                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('didifood')) && (
+                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('didifood')) && (payment.method === 'DIDIFOOD' || isAvailable('DIDIFOOD')) && (
                           <option value="DIDIFOOD">DiDiFood</option>
                         )}
                       </Select>
@@ -5464,7 +5472,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                         </button>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
 
                   {/* Botón agregar método */}
                   <button

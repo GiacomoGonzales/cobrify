@@ -12,10 +12,11 @@ import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
+import SplitTableModal from '@/components/restaurant/SplitTableModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
-import { printPreBill } from '@/utils/printPreBill'
+import { printPreBill, printAllSplitPreBills } from '@/utils/printPreBill'
 import { Capacitor } from '@capacitor/core'
 import { printPreBill as printPreBillThermal, connectPrinter, getPrinterConfig, printKitchenOrder, printToAllStations } from '@/services/thermalPrinterService'
 import {
@@ -30,9 +31,10 @@ import {
   cancelReservation,
   transferTable,
   moveOrderToTable,
+  splitTableItems,
 } from '@/services/tableService'
 import { getWaiters } from '@/services/waiterService'
-import { getOrder } from '@/services/orderService'
+import { getOrder, updateOrder } from '@/services/orderService'
 import { getCompanySettings, getProductCategories } from '@/services/firestoreService'
 import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -63,6 +65,7 @@ export default function Tables() {
   const [isEditOrderModalOpen, setIsEditOrderModalOpen] = useState(false)
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false)
   const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
+  const [isSplitTableModalOpen, setIsSplitTableModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Estado para división de cuenta por items
@@ -578,6 +581,34 @@ export default function Tables() {
     }
   }
 
+  const handleSplitTable = () => {
+    setIsActionModalOpen(false)
+    setIsSplitTableModalOpen(true)
+  }
+
+  const handleConfirmSplitTable = async (sourceTableId, destTableId, selectedItemIndices, destTable) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      return
+    }
+
+    try {
+      const result = await splitTableItems(getBusinessId(), sourceTableId, destTableId, selectedItemIndices)
+      if (result.success) {
+        const destStatus = destTable?.status === 'occupied' ? 'agregados a' : 'movidos a'
+        toast.success(`Items ${destStatus} Mesa ${destTable?.number}`)
+        setIsSplitTableModalOpen(false)
+        setSelectedTable(null)
+        setSelectedOrder(null)
+      } else {
+        toast.error('Error al dividir mesa: ' + result.error)
+      }
+    } catch (error) {
+      console.error('Error al dividir mesa:', error)
+      toast.error('Error al dividir mesa')
+    }
+  }
+
   const handlePrintPreBill = async (itemFilter = null, personLabel = null, overrideTotal = null) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
@@ -695,7 +726,58 @@ export default function Tables() {
     }
   }
 
-  const handlePrintKitchenTicket = async () => {
+  // Imprimir todas las precuentas divididas en un solo documento
+  const handlePrintAllSplitPreBills = async () => {
+    if (!selectedTable || !selectedOrder || !splitData) return
+    try {
+      const businessId = getBusinessId()
+      const businessResult = await getCompanySettings(businessId)
+      const businessInfo = businessResult.success ? {
+        name: businessResult.data?.name || '',
+        tradeName: businessResult.data?.tradeName || businessResult.data?.name || '',
+        ruc: businessResult.data?.ruc || '',
+        address: businessResult.data?.address || '',
+        phone: businessResult.data?.phone || '',
+        logoUrl: businessResult.data?.logoUrl || '',
+      } : {}
+      const taxConfig = {
+        igvRate: businessResult.data?.igvRate ?? 18,
+        igvExempt: businessResult.data?.igvExempt ?? false,
+      }
+      const recargoConsumoConfig = {
+        enabled: businessResult.data?.recargoConsumoEnabled ?? false,
+        rate: businessResult.data?.recargoConsumoRate ?? 10,
+      }
+      const printerConfigResult = await getPrinterConfig(businessId)
+      const webPrintLegible = printerConfigResult.config?.webPrintLegible || false
+      const paperWidth = printerConfigResult.config?.paperWidth || 80
+      const compactPrintValue = printerConfigResult.config?.compactPrint || false
+
+      printAllSplitPreBills(selectedTable, selectedOrder, splitData, businessInfo, taxConfig, paperWidth, webPrintLegible, recargoConsumoConfig, compactPrintValue)
+      toast.success('Imprimiendo precuentas divididas...')
+    } catch (error) {
+      console.error('Error al imprimir precuentas divididas:', error)
+      toast.error('Error al imprimir precuentas divididas')
+    }
+  }
+
+  // Marcar items como impresos en Firestore
+  const markItemsAsPrinted = async (order) => {
+    try {
+      const businessId = getBusinessId()
+      const updatedItems = order.items.map(item => ({
+        ...item,
+        printedToKitchen: true,
+      }))
+      await updateOrder(businessId, order.id, { items: updatedItems })
+      // Actualizar estado local
+      setSelectedOrder(prev => prev ? { ...prev, items: updatedItems } : prev)
+    } catch (error) {
+      console.error('Error al marcar items como impresos:', error)
+    }
+  }
+
+  const handlePrintKitchenTicket = async (printAll = false) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
       return
@@ -705,6 +787,13 @@ export default function Tables() {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
+
+    // Filtrar items no impresos (solo si no se fuerza reimprimir todo)
+    const unprintedItems = (selectedOrder.items || []).filter(item => !item.printedToKitchen)
+    const hasUnprintedItems = unprintedItems.length > 0
+    const itemsToPrint = (!printAll && hasUnprintedItems) ? unprintedItems : (selectedOrder.items || [])
+    const orderToPrintData = { ...selectedOrder, items: itemsToPrint }
+    const isPartialPrint = !printAll && hasUnprintedItems
 
     const isNative = Capacitor.isNativePlatform()
 
@@ -719,10 +808,11 @@ export default function Tables() {
           // Si hay estaciones con impresoras, imprimir separado por estación
           const stationsWithPrinter = enableKitchenStations && kitchenStations.filter(s => s.printerIp)
           if (stationsWithPrinter && stationsWithPrinter.length > 0) {
-            const results = await printToAllStations(selectedOrder, kitchenStations, printerConfigResult.config.paperWidth || 58)
+            const results = await printToAllStations(orderToPrintData, kitchenStations, printerConfigResult.config.paperWidth || 58)
             const allOk = results.every(r => r.success)
             if (allOk) {
-              toast.success('Comandas impresas por estación')
+              await markItemsAsPrinted(selectedOrder)
+              toast.success(isPartialPrint ? 'Nuevos items impresos por estación' : 'Comandas impresas por estación')
             } else {
               const failed = results.filter(r => !r.success).map(r => r.station).join(', ')
               toast.error('Error en estaciones: ' + failed)
@@ -756,9 +846,9 @@ export default function Tables() {
               for (const station of kitchenStations) {
                 let stationItems
                 if (station.isPase) {
-                  stationItems = selectedOrder.items || []
+                  stationItems = orderToPrintData.items || []
                 } else if (station.categories?.length > 0) {
-                  stationItems = (selectedOrder.items || []).filter(item =>
+                  stationItems = (orderToPrintData.items || []).filter(item =>
                     itemMatchesStation(item.category || item.categoryId || '', station.categories)
                   )
                 } else {
@@ -771,20 +861,22 @@ export default function Tables() {
                 }
               }
               if (anyPrinted) {
-                toast.success('Comandas impresas por estación')
+                await markItemsAsPrinted(selectedOrder)
+                toast.success(isPartialPrint ? 'Nuevos items impresos por estación' : 'Comandas impresas por estación')
                 return
               }
             }
 
             // Sin estaciones: imprimir todo junto
             const result = await printKitchenOrder(
-              selectedOrder,
+              orderToPrintData,
               selectedTable,
               pw
             )
 
             if (result.success) {
-              toast.success('Comanda impresa en ticketera')
+              await markItemsAsPrinted(selectedOrder)
+              toast.success(isPartialPrint ? 'Comanda de nuevos items impresa' : 'Comanda impresa en ticketera')
               return
             } else {
               toast.error('Error al imprimir en ticketera: ' + result.error)
@@ -799,7 +891,9 @@ export default function Tables() {
     }
 
     // Fallback: impresión estándar (web o si falla la térmica)
-    setOrderToPrint(selectedOrder)
+    setOrderToPrint(orderToPrintData)
+    // Marcar items como impresos
+    await markItemsAsPrinted(selectedOrder)
     // Esperar a que se renderice el ticket antes de imprimir
     setTimeout(() => {
       handlePrintWeb()
@@ -816,7 +910,20 @@ export default function Tables() {
       const result = await occupyTable(getBusinessId(), tableId, occupyData)
       if (result.success) {
         toast.success('Mesa ocupada exitosamente')
-        loadTables()
+
+        // Actualizar selectedTable con el nuevo estado y abrir modal de agregar items
+        const updatedTable = {
+          ...selectedTable,
+          status: 'occupied',
+          currentOrder: result.orderId,
+          waiter: occupyData.waiterName,
+          waiterId: occupyData.waiterId,
+          amount: 0,
+        }
+        setSelectedTable(updatedTable)
+        setSelectedOrder({ id: result.orderId, items: [] })
+        setIsActionModalOpen(false)
+        setIsOrderItemsModalOpen(true)
       } else {
         toast.error(result.error || 'Error al ocupar mesa')
       }
@@ -1278,6 +1385,7 @@ export default function Tables() {
         onSplitBill={handleSplitBill}
         onTransferTable={handleTransferTable}
         onMoveTable={handleMoveTable}
+        onSplitTable={handleSplitTable}
         onPrintPreBill={handlePrintPreBill}
         onPrintKitchenTicket={handlePrintKitchenTicket}
       />
@@ -1319,6 +1427,19 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         onConfirm={handleConfirmSplit}
+      />
+
+      {/* Modal para dividir mesa (mover items a otra mesa) */}
+      <SplitTableModal
+        isOpen={isSplitTableModalOpen}
+        onClose={() => {
+          setIsSplitTableModalOpen(false)
+          setIsActionModalOpen(true)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        tables={tables}
+        onConfirm={handleConfirmSplitTable}
       />
 
       {/* Modal para cerrar mesa y generar comprobante */}
@@ -1383,7 +1504,15 @@ export default function Tables() {
             </button>
           ))}
 
-          <div className="border-t pt-4 mt-4">
+          <div className="border-t pt-4 mt-4 space-y-3">
+            <button
+              onClick={handlePrintAllSplitPreBills}
+              className="w-full p-3 border-2 border-primary-500 bg-primary-50 rounded-lg hover:border-primary-600 hover:bg-primary-100 transition-colors text-center"
+            >
+              <span className="text-primary-700 font-medium">
+                Imprimir Todas las Precuentas Divididas
+              </span>
+            </button>
             <button
               onClick={() => handlePrintPreBill()}
               className="w-full p-3 border-2 border-gray-300 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors text-center"

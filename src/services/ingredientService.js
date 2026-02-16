@@ -390,6 +390,49 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
     const batch = writeBatch(db)
 
     for (const ingredient of ingredients) {
+      // Si es un producto terminado, descontar del stock del producto
+      if (ingredient.ingredientType === 'product') {
+        const productRef = doc(db, 'businesses', businessId, 'products', ingredient.ingredientId)
+        const productDoc = await getDoc(productRef)
+
+        if (!productDoc.exists()) {
+          console.warn(`Producto ${ingredient.ingredientName} no encontrado`)
+          continue
+        }
+
+        const productData = productDoc.data()
+        const currentStock = productData.stock ?? productData.currentStock ?? 0
+        const quantityToDeduct = ingredient.quantity
+        const newStock = Math.max(0, currentStock - quantityToDeduct)
+
+        batch.update(productRef, {
+          stock: newStock,
+          updatedAt: Timestamp.now()
+        })
+
+        // Crear movimiento de stock para el producto
+        const movementsRef = collection(db, 'businesses', businessId, 'stockMovements')
+        const movementRef = doc(movementsRef)
+
+        batch.set(movementRef, {
+          productId: ingredient.ingredientId,
+          productName: ingredient.ingredientName,
+          ingredientType: 'product',
+          type: movementType,
+          quantity: quantityToDeduct,
+          unit: productData.unit || 'unidades',
+          warehouseId: null,
+          reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
+          relatedSaleId: relatedSaleId,
+          beforeStock: currentStock,
+          afterStock: newStock,
+          createdAt: Timestamp.now()
+        })
+
+        continue
+      }
+
+      // Ingrediente crudo: flujo existente
       const ingredientRef = doc(db, 'businesses', businessId, 'ingredients', ingredient.ingredientId)
       const ingredientDoc = await getDoc(ingredientRef)
 

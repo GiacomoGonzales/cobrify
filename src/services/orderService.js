@@ -166,6 +166,7 @@ export const createOrder = async (businessId, orderData) => {
         ...item,
         itemId: item.itemId || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         status: item.status || 'pending', // Estado individual: pending, preparing, ready, delivered
+        printedToKitchen: false, // Se marca true al imprimir comanda
         firedAt: new Date(), // Timestamp cuando se envió a cocina
         readyAt: null,
         deliveredAt: null,
@@ -294,6 +295,7 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
       ...item,
       itemId: item.itemId || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       status: item.status || 'pending', // Nuevos items empiezan como pending
+      printedToKitchen: false, // Se marca true al imprimir comanda
       firedAt: new Date(), // No usar serverTimestamp() en arrays
       readyAt: null,
       deliveredAt: null,
