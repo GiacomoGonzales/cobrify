@@ -3802,7 +3802,7 @@ export const retryPendingInvoices = onSchedule(
 
     const MAX_RETRIES = 50 // 50 reintentos x 2 horas = 100 horas de cobertura
     const MIN_AGE_MINUTES = 5 // No procesar documentos muy recientes
-    const BATCH_SIZE = 20 // Procesar máximo 20 por ejecución
+    const BATCH_SIZE = 100 // Procesar máximo 100 por ejecución
 
     try {
       // Verificar flag global de pausa para restaurantes
@@ -4034,7 +4034,7 @@ export const testRetryPendingInvoices = onRequest(
 
     const MAX_RETRIES = 50
     const MIN_AGE_MINUTES = 5
-    const BATCH_SIZE = 20
+    const BATCH_SIZE = 100
 
     // Permitir filtrar por businessId específico
     const filterBusinessId = req.body?.businessId || req.query?.businessId
