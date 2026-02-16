@@ -289,6 +289,23 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     doc.text(contactLine, infoCenterX, infoY, { align: 'center' })
   }
 
+  // Eslogan debajo del logo
+  if (companySettings?.companySlogan) {
+    const slogan = companySettings.companySlogan.toUpperCase()
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    const sloganMaxWidth = actualLogoWidth + infoColumnWidth - 10
+    const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
+    const linesToShow = sloganLines.slice(0, 2)
+    const sloganCenterX = logoX + (sloganMaxWidth / 2)
+    const sloganY = currentY + headerHeight - 18
+    linesToShow.forEach((line, index) => {
+      doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
+    })
+    doc.setTextColor(...BLACK)
+  }
+
   // Recuadro del documento
   const docBoxY = currentY
   const rucSectionHeight = 26
@@ -349,7 +366,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
     }
   }
 
-  const supplierDoc = order.supplier?.documentNumber || '-'
+  const supplierDoc = order.supplier?.ruc || order.supplier?.documentNumber || '-'
   const supplierAddress = order.supplier?.address || '-'
   const startY = currentY
   let leftY = startY
@@ -357,7 +374,7 @@ export const generatePurchaseOrderPDF = async (order, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text('PROVEEDOR:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
-  const supplierName = order.supplier?.name || 'PROVEEDOR'
+  const supplierName = order.supplier?.businessName || order.supplier?.name || 'PROVEEDOR'
   doc.text(supplierName.substring(0, 50), colLeftX + 65, leftY)
   leftY += dataLineHeight
 
