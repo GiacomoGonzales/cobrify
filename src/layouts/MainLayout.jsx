@@ -244,7 +244,7 @@ export default function MainLayout() {
 
       {/* Banner de período de gracia */}
       {isInGracePeriod && (
-        <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-2 flex-shrink-0 text-sm">
+        <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-center gap-2 flex-shrink-0 text-sm md:pl-64">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             <span className="font-medium">Tu suscripción venció. Tienes hasta mañana para renovar.</span>
