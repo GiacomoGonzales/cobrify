@@ -947,10 +947,10 @@ function SystemSection({ settings, onChange }) {
             <div className="flex items-center gap-3">
               <Shield className="w-5 h-5 text-amber-600" />
               <div>
-                <p className="font-medium text-gray-900">Pausar SUNAT para restaurantes (IGV 10.5%)</p>
-                <p className="text-sm text-gray-500">Suspende el envio automatico a SUNAT para negocios con IGV reducido (Ley 31556). Las facturas se generan normalmente pero quedan pendientes de envio.</p>
+                <p className="font-medium text-gray-900">Pausar envío de facturas a SUNAT (IGV 10.5%)</p>
+                <p className="text-sm text-gray-500">Suspende el envío automático de facturas a SUNAT para negocios con IGV reducido (Ley 31556). Las boletas se envían normalmente. Las facturas se generan pero quedan pendientes de envío.</p>
                 {settings.pauseSunatRestaurants && (
-                  <p className="text-xs text-amber-700 font-medium mt-1">ACTIVO: Los restaurantes con IGV 10.5% NO envian automaticamente a SUNAT</p>
+                  <p className="text-xs text-amber-700 font-medium mt-1">ACTIVO: Las facturas de negocios con IGV 10.5% NO se envían automáticamente a SUNAT. Las boletas SÍ se envían.</p>
                 )}
               </div>
             </div>

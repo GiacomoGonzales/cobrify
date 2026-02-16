@@ -379,26 +379,30 @@ export const sendInvoiceToSunat = onRequest(
 
       console.log(`📤 Iniciando envío a SUNAT - Usuario: ${userId}, Factura: ${invoiceId}`)
 
-      // Verificar flag global de pausa para restaurantes con IGV reducido
+      // Verificar flag global de pausa para restaurantes con IGV reducido (solo facturas, boletas se envían normalmente)
       try {
-        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
-        if (adminSettingsDoc.exists) {
-          const adminData = adminSettingsDoc.data()
-          const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
-          const exceptions = adminData?.system?.pauseSunatExceptions || []
-          if (pauseSunat && !exceptions.includes(userId)) {
-            const businessDoc = await db.collection('businesses').doc(userId).get()
-            if (businessDoc.exists) {
-              const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
-              const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
-              if (isReducedIgv) {
-                console.log(`⏸️ Envío pausado por admin para negocio ${userId} (IGV reducido)`)
-                res.status(200).json({
-                  success: false,
-                  paused: true,
-                  message: 'Envío a SUNAT pausado temporalmente por el administrador para negocios con IGV reducido. El comprobante queda pendiente.'
-                })
-                return
+        const invoiceSnap = await db.collection('businesses').doc(userId).collection('invoices').doc(invoiceId).get()
+        const docType = invoiceSnap.exists ? invoiceSnap.data()?.documentType : null
+        if (docType === 'factura') {
+          const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+          if (adminSettingsDoc.exists) {
+            const adminData = adminSettingsDoc.data()
+            const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
+            const exceptions = adminData?.system?.pauseSunatExceptions || []
+            if (pauseSunat && !exceptions.includes(userId)) {
+              const businessDoc = await db.collection('businesses').doc(userId).get()
+              if (businessDoc.exists) {
+                const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+                const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+                if (isReducedIgv) {
+                  console.log(`⏸️ Envío de factura pausado por admin para negocio ${userId} (IGV reducido)`)
+                  res.status(200).json({
+                    success: false,
+                    paused: true,
+                    message: 'Envío de facturas a SUNAT pausado temporalmente por el administrador para negocios con IGV reducido. El comprobante queda pendiente.'
+                  })
+                  return
+                }
               }
             }
           }
@@ -1193,22 +1197,26 @@ export const sendCreditNoteToSunat = onRequest(
 
       console.log(`📤 Iniciando envío de NOTA DE CRÉDITO a SUNAT - Usuario: ${userId}, NC: ${creditNoteId}`)
 
-      // Verificar flag global de pausa para restaurantes con IGV reducido
+      // Verificar flag global de pausa para restaurantes con IGV reducido (solo NC de facturas, NC de boletas se envían normalmente)
       try {
-        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
-        if (adminSettingsDoc.exists) {
-          const adminData = adminSettingsDoc.data()
-          const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
-          const exceptions = adminData?.system?.pauseSunatExceptions || []
-          if (pauseSunat && !exceptions.includes(userId)) {
-            const businessDoc = await db.collection('businesses').doc(userId).get()
-            if (businessDoc.exists) {
-              const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
-              const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
-              if (isReducedIgv) {
-                console.log(`⏸️ Envío NC pausado por admin para negocio ${userId} (IGV reducido)`)
-                res.status(200).json({ success: false, paused: true, message: 'Envío a SUNAT pausado temporalmente por el administrador.' })
-                return
+        const ncSnap = await db.collection('businesses').doc(userId).collection('invoices').doc(creditNoteId).get()
+        const refDocType = ncSnap.exists ? ncSnap.data()?.referencedDocumentType : null
+        if (refDocType === '01') { // 01=Factura
+          const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+          if (adminSettingsDoc.exists) {
+            const adminData = adminSettingsDoc.data()
+            const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
+            const exceptions = adminData?.system?.pauseSunatExceptions || []
+            if (pauseSunat && !exceptions.includes(userId)) {
+              const businessDoc = await db.collection('businesses').doc(userId).get()
+              if (businessDoc.exists) {
+                const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+                const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+                if (isReducedIgv) {
+                  console.log(`⏸️ Envío NC de factura pausado por admin para negocio ${userId} (IGV reducido)`)
+                  res.status(200).json({ success: false, paused: true, message: 'Envío de notas de crédito de facturas a SUNAT pausado temporalmente por el administrador.' })
+                  return
+                }
               }
             }
           }
@@ -1865,22 +1873,26 @@ export const sendDebitNoteToSunat = onRequest(
 
       console.log(`📤 Iniciando envío de NOTA DE DÉBITO a SUNAT - Usuario: ${userId}, ND: ${debitNoteId}`)
 
-      // Verificar flag global de pausa para restaurantes con IGV reducido
+      // Verificar flag global de pausa para restaurantes con IGV reducido (solo ND de facturas, ND de boletas se envían normalmente)
       try {
-        const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
-        if (adminSettingsDoc.exists) {
-          const adminData = adminSettingsDoc.data()
-          const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
-          const exceptions = adminData?.system?.pauseSunatExceptions || []
-          if (pauseSunat && !exceptions.includes(userId)) {
-            const businessDoc = await db.collection('businesses').doc(userId).get()
-            if (businessDoc.exists) {
-              const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
-              const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
-              if (isReducedIgv) {
-                console.log(`⏸️ Envío ND pausado por admin para negocio ${userId} (IGV reducido)`)
-                res.status(200).json({ success: false, paused: true, message: 'Envío a SUNAT pausado temporalmente por el administrador.' })
-                return
+        const ndSnap = await db.collection('businesses').doc(userId).collection('invoices').doc(debitNoteId).get()
+        const refDocType = ndSnap.exists ? ndSnap.data()?.referencedDocumentType : null
+        if (refDocType === '01') { // 01=Factura
+          const adminSettingsDoc = await db.collection('config').doc('adminSettings').get()
+          if (adminSettingsDoc.exists) {
+            const adminData = adminSettingsDoc.data()
+            const pauseSunat = adminData?.system?.pauseSunatRestaurants === true
+            const exceptions = adminData?.system?.pauseSunatExceptions || []
+            if (pauseSunat && !exceptions.includes(userId)) {
+              const businessDoc = await db.collection('businesses').doc(userId).get()
+              if (businessDoc.exists) {
+                const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+                const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
+                if (isReducedIgv) {
+                  console.log(`⏸️ Envío ND de factura pausado por admin para negocio ${userId} (IGV reducido)`)
+                  res.status(200).json({ success: false, paused: true, message: 'Envío de notas de débito de facturas a SUNAT pausado temporalmente por el administrador.' })
+                  return
+                }
               }
             }
           }
@@ -3831,13 +3843,14 @@ export const retryPendingInvoices = onSchedule(
           continue // Saltar negocios sin configuración SUNAT
         }
 
-        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido (excepto excepciones)
+        // Determinar si este negocio con IGV reducido tiene pausa activa (solo aplica a facturas)
+        let skipFacturas = false
         if (pauseSunatRestaurants && !pauseSunatExceptions.includes(businessId)) {
           const taxConfig = businessData.emissionConfig?.taxConfig
           const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
           if (isReducedIgv) {
-            console.log(`⏸️ [RETRY] Negocio ${businessId}: Saltando (IGV reducido, pausa activa)`)
-            continue
+            skipFacturas = true
+            console.log(`⏸️ [RETRY] Negocio ${businessId}: Pausa activa para facturas (IGV reducido), boletas se procesan normalmente`)
           }
         }
 
@@ -3846,7 +3859,7 @@ export const retryPendingInvoices = onSchedule(
 
         const pendingInvoices = await invoicesRef
           .where('sunatStatus', '==', 'pending')
-          .where('documentType', 'in', ['factura', 'boleta'])
+          .where('documentType', 'in', skipFacturas ? ['boleta'] : ['factura', 'boleta'])
           .limit(BATCH_SIZE)
           .get()
 
@@ -3854,7 +3867,7 @@ export const retryPendingInvoices = onSchedule(
           continue
         }
 
-        console.log(`📋 [RETRY] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes`)
+        console.log(`📋 [RETRY] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes${skipFacturas ? ' (solo boletas)' : ''}`)
 
         // Mapear emissionConfig al formato esperado (igual que en sendInvoiceToSunat)
         const businessDataForEmission = { ...businessData }
@@ -4069,13 +4082,14 @@ export const testRetryPendingInvoices = onRequest(
           continue
         }
 
-        // Si la pausa para restaurantes está activa, saltar negocios con IGV reducido (excepto excepciones)
+        // Determinar si este negocio con IGV reducido tiene pausa activa (solo aplica a facturas)
+        let skipFacturas = false
         if (pauseSunatRestaurants && !pauseSunatExceptions.includes(businessId)) {
           const taxConfig = businessData.emissionConfig?.taxConfig
           const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
           if (isReducedIgv) {
-            console.log(`⏸️ [RETRY-TEST] Negocio ${businessId}: Saltando (IGV reducido, pausa activa)`)
-            continue
+            skipFacturas = true
+            console.log(`⏸️ [RETRY-TEST] Negocio ${businessId}: Pausa activa para facturas (IGV reducido), boletas se procesan normalmente`)
           }
         }
 
@@ -4083,7 +4097,7 @@ export const testRetryPendingInvoices = onRequest(
 
         const pendingInvoices = await invoicesRef
           .where('sunatStatus', '==', 'pending')
-          .where('documentType', 'in', ['factura', 'boleta'])
+          .where('documentType', 'in', skipFacturas ? ['boleta'] : ['factura', 'boleta'])
           .limit(BATCH_SIZE)
           .get()
 
