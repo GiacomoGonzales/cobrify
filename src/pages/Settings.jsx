@@ -145,6 +145,7 @@ export default function Settings() {
   const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
   const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
   const [autoResetPOS, setAutoResetPOS] = useState(false)
+  const [autoPrintTicket, setAutoPrintTicket] = useState(false)
 
   // Estados para configuración de notas de venta
   const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
@@ -693,6 +694,7 @@ export default function Settings() {
         setAdminToolsEnabled(businessData.adminTools?.enabled || false)
         setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
         setAutoResetPOS(businessData.autoResetPOS || false)
+        setAutoPrintTicket(businessData.autoPrintTicket || false)
 
         // Cargar configuración de notas de venta
         setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
@@ -3606,6 +3608,26 @@ export default function Settings() {
                     </div>
                   </label>
 
+                  {/* Auto-imprimir ticket al completar venta */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={autoPrintTicket}
+                      onChange={(e) => setAutoPrintTicket(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                        Imprimir ticket automáticamente al completar venta
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        {autoPrintTicket
+                          ? '✓ Habilitado: Al completar una venta, el ticket se imprimirá automáticamente sin necesidad de presionar el botón.'
+                          : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Imprimir Ticket" manualmente.'}
+                      </p>
+                    </div>
+                  </label>
+
                   {/* Tipo de documento por defecto en POS */}
                   <div className="p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                     <div className="flex-1">
@@ -3895,6 +3917,7 @@ export default function Settings() {
                       allowNameEdit: allowNameEdit,
                       autoSku: autoSku,
                       autoResetPOS: autoResetPOS,
+                      autoPrintTicket: autoPrintTicket,
                       defaultDocumentType: defaultDocumentType,
                       hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
                       hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,

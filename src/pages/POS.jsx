@@ -3263,6 +3263,11 @@ export default function POS() {
 
       // 8. Limpiar borrador del localStorage (venta exitosa)
       clearDraft()
+
+      // 9. Auto-imprimir ticket si está habilitado
+      if (companySettings?.autoPrintTicket) {
+        setTimeout(() => handlePrintTicket(), 500)
+      }
     } catch (error) {
       console.error('Error al procesar venta:', error)
       toast.error(error.message || 'Error al procesar la venta. Inténtalo nuevamente.')
