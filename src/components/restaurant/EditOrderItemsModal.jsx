@@ -29,7 +29,9 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
           rate: business.restaurantConfig.recargoConsumoRate ?? 10
         })
       }
-      if (business?.taxConfig) {
+      if (business?.emissionConfig?.taxConfig) {
+        setTaxConfig(business.emissionConfig.taxConfig)
+      } else if (business?.taxConfig) {
         setTaxConfig(business.taxConfig)
       }
 
@@ -48,7 +50,9 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
                   rate: data.restaurantConfig.recargoConsumoRate ?? 10
                 })
               }
-              if (data.taxConfig) {
+              if (data.emissionConfig?.taxConfig) {
+                setTaxConfig(data.emissionConfig.taxConfig)
+              } else if (data.taxConfig) {
                 setTaxConfig(data.taxConfig)
               }
             }

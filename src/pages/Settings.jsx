@@ -26,7 +26,9 @@ import {
   getPrinterConfig,
   testPrinter,
   getConnectionType,
-  isIminDevice
+  isIminDevice,
+  saveDocumentPrinterConfig,
+  getDocumentPrinterConfig
 } from '@/services/thermalPrinterService'
 import { getWarehouses } from '@/services/warehouseService'
 import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories } from '@/services/firestoreService'
@@ -287,6 +289,15 @@ export default function Settings() {
   const [wifiPort, setWifiPort] = useState('9100')
   const [wifiName, setWifiName] = useState('')
   const [isImin, setIsImin] = useState(false) // Dispositivo iMin con impresora interna
+
+  // Estados para impresora de documentos (precuentas y boletas)
+  const [documentPrinterConfig, setDocumentPrinterConfig] = useState({ enabled: false, ip: '', port: 9100, name: '', paperWidth: 58 })
+  const [docPrinterIp, setDocPrinterIp] = useState('')
+  const [docPrinterPort, setDocPrinterPort] = useState('9100')
+  const [docPrinterName, setDocPrinterName] = useState('')
+  const [showDocPrinterForm, setShowDocPrinterForm] = useState(false)
+  const [isConnectingDocPrinter, setIsConnectingDocPrinter] = useState(false)
+  const [isTestingDocPrinter, setIsTestingDocPrinter] = useState(false)
 
   // Estado para búsqueda de RUC
   const [isLookingUpRuc, setIsLookingUpRuc] = useState(false)
@@ -779,6 +790,12 @@ export default function Settings() {
             ...prev,
             ...localPrinterConfig.config
           }))
+        }
+
+        // Cargar configuración de impresora de documentos
+        const savedDocPrinter = getDocumentPrinterConfig()
+        if (savedDocPrinter) {
+          setDocumentPrinterConfig(savedDocPrinter)
         }
 
         // Detectar si es dispositivo iMin
@@ -1650,6 +1667,169 @@ export default function Settings() {
     } finally {
       setIsConnecting(false)
     }
+  }
+
+  // Conectar impresora de documentos (precuentas y boletas)
+  const handleDocPrinterConnect = async () => {
+    if (!docPrinterIp.trim()) {
+      toast.error('Ingresa la dirección IP de la impresora de documentos')
+      return
+    }
+
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+    if (!ipRegex.test(docPrinterIp.trim())) {
+      toast.error('Formato de IP inválido. Usa el formato XXX.XXX.XXX.XXX')
+      return
+    }
+
+    const port = parseInt(docPrinterPort, 10)
+    if (isNaN(port) || port < 1 || port > 65535) {
+      toast.error('Puerto inválido. Debe ser un número entre 1 y 65535')
+      return
+    }
+
+    setIsConnectingDocPrinter(true)
+    try {
+      // Probar conexión temporal
+      const { registerPlugin } = await import('@capacitor/core')
+      const TcpPrinter = registerPlugin('TcpPrinter')
+
+      const connectResult = await TcpPrinter.connect({ ip: docPrinterIp.trim(), port })
+      if (!connectResult?.success) {
+        toast.error('No se pudo conectar a la impresora de documentos')
+        return
+      }
+
+      // Desconectar después de probar
+      try { await TcpPrinter.disconnect() } catch (e) { /* ignore */ }
+
+      // Reconectar impresora principal si estaba conectada
+      if (printerConfig.enabled && printerConfig.address && printerConfig.type === 'wifi') {
+        try {
+          await connectPrinter(printerConfig.address)
+        } catch (e) {
+          console.warn('Error al reconectar impresora principal:', e)
+        }
+      }
+
+      // Guardar configuración
+      const newConfig = {
+        enabled: true,
+        ip: docPrinterIp.trim(),
+        port,
+        name: docPrinterName.trim() || 'Impresora de Documentos',
+        paperWidth: documentPrinterConfig.paperWidth || 58
+      }
+      setDocumentPrinterConfig(newConfig)
+      saveDocumentPrinterConfig(newConfig)
+
+      toast.success('Impresora de documentos configurada exitosamente')
+      setShowDocPrinterForm(false)
+      setDocPrinterIp('')
+      setDocPrinterPort('9100')
+      setDocPrinterName('')
+    } catch (error) {
+      console.error('Error connecting document printer:', error)
+      toast.error('Error al conectar impresora de documentos: ' + (error.message || ''))
+    } finally {
+      setIsConnectingDocPrinter(false)
+    }
+  }
+
+  // Probar impresora de documentos
+  const handleTestDocPrinter = async () => {
+    if (!documentPrinterConfig.enabled || !documentPrinterConfig.ip) {
+      toast.error('No hay impresora de documentos configurada')
+      return
+    }
+
+    setIsTestingDocPrinter(true)
+    try {
+      const { registerPlugin } = await import('@capacitor/core')
+      const TcpPrinter = registerPlugin('TcpPrinter')
+
+      const ip = documentPrinterConfig.ip
+      const port = documentPrinterConfig.port || 9100
+
+      const connectResult = await TcpPrinter.connect({ ip, port })
+      if (!connectResult?.success) {
+        toast.error('No se pudo conectar a la impresora de documentos')
+        return
+      }
+
+      // Construir ticket de prueba con ESC/POS
+      // Usar un array de bytes simple para la prueba
+      const ESC = 0x1B
+      const GS = 0x1D
+      const bytes = [
+        ESC, 0x40, // Init
+        ESC, 0x61, 0x01, // Center
+        ESC, 0x45, 0x01, // Bold ON
+      ]
+      const title = 'PRUEBA IMPRESORA DOCUMENTOS'
+      for (let i = 0; i < title.length; i++) bytes.push(title.charCodeAt(i))
+      bytes.push(0x0A) // newline
+      bytes.push(ESC, 0x45, 0x00) // Bold OFF
+      const line = '------------------------'
+      for (let i = 0; i < line.length; i++) bytes.push(line.charCodeAt(i))
+      bytes.push(0x0A)
+      const msg = 'Impresora de documentos'
+      for (let i = 0; i < msg.length; i++) bytes.push(msg.charCodeAt(i))
+      bytes.push(0x0A)
+      const msg2 = 'configurada correctamente'
+      for (let i = 0; i < msg2.length; i++) bytes.push(msg2.charCodeAt(i))
+      bytes.push(0x0A)
+      const msg3 = `IP: ${ip}:${port}`
+      for (let i = 0; i < msg3.length; i++) bytes.push(msg3.charCodeAt(i))
+      bytes.push(0x0A)
+      for (let i = 0; i < line.length; i++) bytes.push(line.charCodeAt(i))
+      bytes.push(0x0A)
+      bytes.push(ESC, 0x64, 0x03) // Feed 3
+      bytes.push(GS, 0x56, 0x00) // Cut
+
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      const base64Data = btoa(binary)
+
+      await TcpPrinter.print({ data: base64Data })
+
+      try { await TcpPrinter.disconnect() } catch (e) { /* ignore */ }
+
+      // Reconectar impresora principal si estaba conectada
+      if (printerConfig.enabled && printerConfig.address && printerConfig.type === 'wifi') {
+        try {
+          await connectPrinter(printerConfig.address)
+        } catch (e) {
+          console.warn('Error al reconectar impresora principal:', e)
+        }
+      }
+
+      toast.success('Prueba enviada a impresora de documentos')
+    } catch (error) {
+      console.error('Error testing document printer:', error)
+      toast.error('Error al probar impresora de documentos: ' + (error.message || ''))
+    } finally {
+      setIsTestingDocPrinter(false)
+    }
+  }
+
+  // Deshabilitar impresora de documentos
+  const handleDisableDocPrinter = () => {
+    const newConfig = { enabled: false, ip: '', port: 9100, name: '', paperWidth: 58 }
+    setDocumentPrinterConfig(newConfig)
+    saveDocumentPrinterConfig(newConfig)
+    setShowDocPrinterForm(false)
+    toast.success('Impresora de documentos deshabilitada')
+  }
+
+  // Cambiar ancho de papel de impresora de documentos
+  const handleDocPaperWidth = (newWidth) => {
+    const newConfig = { ...documentPrinterConfig, paperWidth: parseInt(newWidth) }
+    setDocumentPrinterConfig(newConfig)
+    saveDocumentPrinterConfig(newConfig)
+    toast.success(`Ancho de papel de impresora de documentos actualizado a ${newWidth}mm`)
   }
 
   // Conectar impresora interna iMin
@@ -5947,6 +6127,207 @@ export default function Settings() {
                     </p>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Impresora de Documentos */}
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-orange-600" />
+                <CardTitle>Impresora de Documentos (Precuentas y Boletas)</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Info */}
+                <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded">
+                  <div className="flex items-start">
+                    <Info className="w-5 h-5 text-orange-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm text-orange-800">
+                      <p className="font-semibold mb-1">Impresora separada para documentos de venta</p>
+                      <p>
+                        Configura una segunda impresora WiFi/LAN dedicada para imprimir precuentas y boletas/facturas.
+                        La impresora principal seguirá usándose para comandas de cocina.
+                      </p>
+                      <p className="mt-1">
+                        <strong>Si no configuras esta impresora</strong>, las precuentas y boletas se imprimirán en la impresora principal como siempre.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Impresora de documentos configurada */}
+                {documentPrinterConfig.enabled && documentPrinterConfig.ip && (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex flex-col space-y-3">
+                        <div className="flex items-start space-x-3">
+                          <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900">{documentPrinterConfig.name || 'Impresora de Documentos'}</p>
+                            <p className="text-sm text-gray-600 break-all">IP: {documentPrinterConfig.ip}:{documentPrinterConfig.port || 9100}</p>
+                            <p className="text-sm text-gray-600">Uso: Precuentas y Boletas/Facturas</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTestDocPrinter}
+                            disabled={isTestingDocPrinter}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            {isTestingDocPrinter ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Imprimiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Printer className="w-4 h-4 mr-2" />
+                                Probar
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDisableDocPrinter}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Deshabilitar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ancho de papel */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Ancho de Papel (Impresora de Documentos)
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleDocPaperWidth(58)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            documentPrinterConfig.paperWidth === 58
+                              ? 'border-orange-600 bg-orange-50 text-orange-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="font-semibold">58mm</div>
+                          <div className="text-xs mt-1">Impresoras pequeñas</div>
+                        </button>
+                        <button
+                          onClick={() => handleDocPaperWidth(80)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            documentPrinterConfig.paperWidth === 80
+                              ? 'border-orange-600 bg-orange-50 text-orange-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="font-semibold">80mm</div>
+                          <div className="text-xs mt-1">Impresoras estándar</div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulario para configurar */}
+                {(!documentPrinterConfig.enabled || !documentPrinterConfig.ip) && (
+                  <div className="space-y-4">
+                    {!showDocPrinterForm ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowDocPrinterForm(true)}
+                        className="w-full border-orange-300 text-orange-700 hover:bg-orange-100"
+                      >
+                        <Wifi className="w-4 h-4 mr-2" />
+                        Configurar Impresora de Documentos
+                      </Button>
+                    ) : (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-4">
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="bg-orange-100 p-2 rounded-full flex-shrink-0">
+                            <Info className="w-4 h-4 text-orange-600" />
+                          </div>
+                          <div className="text-sm text-orange-800">
+                            <p className="font-semibold mb-1">Impresora de Documentos (WiFi/LAN)</p>
+                            <p>Esta impresora se usará para precuentas y boletas/facturas. Debe estar en la misma red que tu celular.</p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Dirección IP *
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="192.168.1.101"
+                            value={docPrinterIp}
+                            onChange={(e) => setDocPrinterIp(e.target.value)}
+                            className="font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Puerto (por defecto: 9100)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="9100"
+                            value={docPrinterPort}
+                            onChange={(e) => setDocPrinterPort(e.target.value.replace(/\D/g, ''))}
+                            className="font-mono w-32"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre (opcional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Impresora Caja"
+                            value={docPrinterName}
+                            onChange={(e) => setDocPrinterName(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleDocPrinterConnect}
+                            disabled={isConnectingDocPrinter || !docPrinterIp.trim()}
+                            className="flex-1 bg-orange-600 hover:bg-orange-700"
+                          >
+                            {isConnectingDocPrinter ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Conectando...
+                              </>
+                            ) : (
+                              'Configurar Impresora'
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setShowDocPrinterForm(false)
+                              setDocPrinterIp('')
+                              setDocPrinterPort('9100')
+                              setDocPrinterName('')
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

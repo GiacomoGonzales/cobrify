@@ -741,12 +741,12 @@ export default function Tables() {
         logoUrl: businessResult.data?.logoUrl || '',
       } : {}
       const taxConfig = {
-        igvRate: businessResult.data?.igvRate ?? 18,
-        igvExempt: businessResult.data?.igvExempt ?? false,
+        igvRate: businessResult.data?.emissionConfig?.taxConfig?.igvRate ?? 18,
+        igvExempt: businessResult.data?.emissionConfig?.taxConfig?.igvExempt ?? false,
       }
       const recargoConsumoConfig = {
-        enabled: businessResult.data?.recargoConsumoEnabled ?? false,
-        rate: businessResult.data?.recargoConsumoRate ?? 10,
+        enabled: businessResult.data?.restaurantConfig?.recargoConsumoEnabled ?? false,
+        rate: businessResult.data?.restaurantConfig?.recargoConsumoRate ?? 10,
       }
       const printerConfigResult = await getPrinterConfig(businessId)
       const webPrintLegible = printerConfigResult.config?.webPrintLegible || false

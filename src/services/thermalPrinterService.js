@@ -465,6 +465,63 @@ export const getPrinterConfig = async (userId) => {
 };
 
 /**
+ * Guardar configuración de impresora de documentos en localStorage
+ * @param {Object} config - { enabled, ip, port, name, paperWidth }
+ */
+export const saveDocumentPrinterConfig = (config) => {
+  localStorage.setItem('factuya_documentPrinterConfig', JSON.stringify(config));
+};
+
+/**
+ * Obtener configuración de impresora de documentos desde localStorage
+ * @returns {Object|null}
+ */
+export const getDocumentPrinterConfig = () => {
+  try {
+    return JSON.parse(localStorage.getItem('factuya_documentPrinterConfig') || 'null');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Enviar datos ESC/POS a una IP específica via conexión TCP temporal
+ * Patrón: connect → print → disconnect (igual que printStationTicket)
+ * @param {string} ip - Dirección IP de la impresora
+ * @param {number} port - Puerto (por defecto 9100)
+ * @param {string} base64Data - Datos ESC/POS en base64
+ */
+const sendToIp = async (ip, port, base64Data) => {
+  const connectResult = await TcpPrinter.connect({ ip, port });
+  if (!connectResult?.success) {
+    return { success: false, error: `No se pudo conectar a ${ip}:${port}` };
+  }
+
+  const printResult = await TcpPrinter.print({ data: base64Data });
+
+  try {
+    await TcpPrinter.disconnect();
+  } catch (e) {
+    console.warn('Error al desconectar de impresora de documentos:', e);
+  }
+
+  // Reconectar a impresora principal si estaba conectada
+  if (isPrinterConnected && connectedPrinterAddress && connectionType === 'wifi') {
+    try {
+      const { ip: mainIp, port: mainPort } = parseAddress(connectedPrinterAddress);
+      await TcpPrinter.connect({ ip: mainIp, port: mainPort });
+    } catch (e) {
+      console.warn('Error al reconectar impresora principal:', e);
+    }
+  }
+
+  if (printResult?.success) {
+    return { success: true };
+  }
+  return { success: false, error: 'Error al imprimir en impresora de documentos' };
+};
+
+/**
  * Convertir texto con tildes a formato ASCII simple (sin acentos)
  * Ya que el plugin no soporta setCodePage en Android
  * @param {string} text - Texto a convertir
@@ -509,6 +566,22 @@ const addSeparator = (printer, separator, paperWidth, currentAlign = 'left') => 
  */
 export const printInvoiceTicket = async (invoice, business, paperWidth = 58) => {
   const isNative = Capacitor.isNativePlatform();
+
+  // Verificar si hay impresora de documentos configurada (prioridad sobre impresora principal)
+  if (isNative) {
+    const docPrinter = getDocumentPrinterConfig();
+    if (docPrinter?.enabled && docPrinter?.ip) {
+      try {
+        console.log(`📄 Usando impresora de documentos (${docPrinter.ip}) para ticket...`);
+        const docPaperWidth = docPrinter.paperWidth || paperWidth;
+        const base64Data = buildTicketEscPos(invoice, business, docPaperWidth);
+        return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+      } catch (error) {
+        console.error('Error printing to document printer:', error);
+        return { success: false, error: error.message };
+      }
+    }
+  }
 
   if (!isNative || !isPrinterConnected) {
     return { success: false, error: 'Printer not connected' };
@@ -1295,6 +1368,22 @@ export const printKitchenOrder = async (order, table = null, paperWidth = 58, st
 export const printPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
   const isNative = Capacitor.isNativePlatform();
 
+  // Verificar si hay impresora de documentos configurada (prioridad sobre impresora principal)
+  if (isNative) {
+    const docPrinter = getDocumentPrinterConfig();
+    if (docPrinter?.enabled && docPrinter?.ip) {
+      try {
+        console.log(`📄 Usando impresora de documentos (${docPrinter.ip}) para precuenta...`);
+        const docPaperWidth = docPrinter.paperWidth || paperWidth;
+        const base64Data = buildPreBillEscPos(order, table, business, taxConfig, docPaperWidth, recargoConsumoConfig);
+        return await sendToIp(docPrinter.ip, docPrinter.port || 9100, base64Data);
+      } catch (error) {
+        console.error('Error printing pre-bill to document printer:', error);
+        return { success: false, error: error.message };
+      }
+    }
+  }
+
   if (!isNative || !isPrinterConnected) {
     return { success: false, error: 'Printer not connected' };
   }
@@ -1907,14 +1996,13 @@ class EscPosBuilder {
 }
 
 /**
- * Imprimir ticket vía WiFi usando comandos ESC/POS
+ * Construir datos ESC/POS para ticket de comprobante (Factura/Boleta)
+ * @param {Object} invoice - Datos del comprobante
+ * @param {Object} business - Datos del negocio
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ * @returns {string} Datos en base64
  */
-export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
-  if ((connectionType !== 'wifi' && connectionType !== 'internal') || !isPrinterConnected) {
-    return { success: false, error: 'No hay conexión WiFi/interna activa' };
-  }
-
-  try {
+const buildTicketEscPos = (invoice, business, paperWidth = 58) => {
     const format = getFormat(paperWidth);
     const builder = new EscPosBuilder();
 
@@ -2142,8 +2230,19 @@ export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
       .feed(3)
       .cut();
 
-    // Enviar a impresora
-    const base64Data = builder.toBase64();
+    return builder.toBase64();
+};
+
+/**
+ * Imprimir ticket vía WiFi usando comandos ESC/POS
+ */
+export const printWifiTicket = async (invoice, business, paperWidth = 58) => {
+  if ((connectionType !== 'wifi' && connectionType !== 'internal') || !isPrinterConnected) {
+    return { success: false, error: 'No hay conexión WiFi/interna activa' };
+  }
+
+  try {
+    const base64Data = buildTicketEscPos(invoice, business, paperWidth);
     const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {
@@ -2425,10 +2524,16 @@ export const printToAllStations = async (order, kitchenStations, paperWidth = 58
 };
 
 /**
- * Imprimir precuenta vía WiFi
+ * Construir datos ESC/POS para precuenta
+ * @param {Object} order - Datos de la orden
+ * @param {Object} table - Datos de la mesa
+ * @param {Object} business - Datos del negocio
+ * @param {Object} taxConfig - Configuración de impuestos
+ * @param {number} paperWidth - Ancho de papel (58 o 80mm)
+ * @param {Object} recargoConsumoConfig - Configuración de recargo al consumo
+ * @returns {string} Datos en base64
  */
-const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
-  try {
+const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
     const format = getFormat(paperWidth);
     const builder = new EscPosBuilder();
 
@@ -2557,7 +2662,15 @@ const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 1
       .feed(2)
       .cut();
 
-    const base64Data = builder.toBase64();
+    return builder.toBase64();
+};
+
+/**
+ * Imprimir precuenta vía WiFi
+ */
+const printWifiPreBill = async (order, table, business, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 58, recargoConsumoConfig = { enabled: false, rate: 10 }) => {
+  try {
+    const base64Data = buildPreBillEscPos(order, table, business, taxConfig, paperWidth, recargoConsumoConfig);
     const result = await sendEscPosData(base64Data);
 
     if (result && result.success) {
