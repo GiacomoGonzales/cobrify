@@ -127,6 +127,7 @@ function Sidebar() {
       label: 'GRE Transportista',
       pageId: 'carrier-dispatch-guides',
       menuId: 'carrier-dispatch-guides',
+      hideInDemo: true,
     },
     {
       path: '/clientes',
@@ -142,6 +143,7 @@ function Sidebar() {
       pageId: 'customers',
       menuId: 'student-payments',
       requiresStudentField: true,
+      hideInDemo: true,
     },
     {
       path: '/vendedores',
@@ -205,6 +207,7 @@ function Sidebar() {
       label: 'Préstamos',
       pageId: 'loans',
       menuId: 'loans',
+      hideInDemo: true,
     },
     {
       path: '/certificados',
@@ -213,6 +216,7 @@ function Sidebar() {
       pageId: 'certificates',
       menuId: 'certificates',
       requiresFeature: 'certificates',
+      hideInDemo: true,
     },
     {
       path: '/ingredientes',
@@ -562,6 +566,7 @@ function Sidebar() {
       label: 'Préstamos',
       pageId: 'loans',
       menuId: 'loans',
+      hideInDemo: true,
     },
     {
       path: '/reportes',
@@ -736,6 +741,9 @@ function Sidebar() {
 
     // Si es solo para business owner y el usuario no lo es, no mostrar
     if (item.businessOwnerOnly && !isBusinessOwner) return false
+
+    // Si está marcado para ocultar en demo, no mostrar
+    if (item.hideInDemo && isDemoMode) return false
 
     // Si estamos en modo demo, mostrar todo
     if (isDemoMode) return true

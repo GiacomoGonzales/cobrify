@@ -173,9 +173,7 @@ function App() {
               <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
               <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
               <Route path="guias-remision" element={<DispatchGuides />} />
-              <Route path="guias-transportista" element={<CarrierDispatchGuides />} />
               <Route path="clientes" element={<Customers />} />
-              <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
               <Route path="vendedores" element={<Sellers />} />
               <Route path="productos" element={<Products />} />
               <Route path="inventario" element={<Inventory />} />
@@ -190,8 +188,6 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
-              <Route path="prestamos" element={<Loans />} />
-              <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="configuracion" element={<Settings />} />
@@ -265,7 +261,6 @@ function App() {
               <Route path="caja" element={<CashRegister />} />
               <Route path="reportes" element={<Reports />} />
               <Route path="gastos" element={<Expenses />} />
-              <Route path="prestamos" element={<Loans />} />
               <Route path="flujo-caja" element={<CashFlow />} />
               <Route path="reclamos" element={<ComplaintsList />} />
               <Route path="configuracion" element={<Settings />} />
