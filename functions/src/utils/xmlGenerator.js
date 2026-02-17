@@ -2315,13 +2315,17 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'schemeName': 'Ubigeos'
   }).txt(guideData.destination?.ubigeo || '150101')
   // Código de establecimiento anexo del punto de llegada (SUNAT validaciones GRE)
-  const destEstablishmentCode = guideData.destination?.establishmentCode || '0000'
-  const destRuc = guideData.destination?.ruc || businessData.ruc
-  deliveryAddress.ele('cbc:AddressTypeCode', {
-    'listID': destRuc,
-    'listAgencyName': 'PE:SUNAT',
-    'listName': 'Establecimientos anexos'
-  }).txt(destEstablishmentCode)
+  // Solo incluir AddressTypeCode para motivo '04' (traslado entre establecimientos de la misma empresa)
+  // Para otros motivos, SUNAT error 3411: el RUC no debe ser igual al del remitente
+  const transferReason = guideData.transferReason || '01'
+  if (transferReason === '04') {
+    const destEstablishmentCode = guideData.destination?.establishmentCode || '0000'
+    deliveryAddress.ele('cbc:AddressTypeCode', {
+      'listID': businessData.ruc,
+      'listAgencyName': 'PE:SUNAT',
+      'listName': 'Establecimientos anexos'
+    }).txt(destEstablishmentCode)
+  }
   const deliveryAddressLine = deliveryAddress.ele('cac:AddressLine')
   deliveryAddressLine.ele('cbc:Line').txt(guideData.destination?.address || '')
 
@@ -2333,13 +2337,15 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'schemeName': 'Ubigeos'
   }).txt(guideData.origin?.ubigeo || '150101')
   // Código de establecimiento anexo del punto de partida (SUNAT validaciones GRE)
-  const originEstablishmentCode = guideData.origin?.establishmentCode || '0000'
-  const originRuc = guideData.origin?.ruc || businessData.ruc
-  despatchAddress.ele('cbc:AddressTypeCode', {
-    'listID': originRuc,
-    'listAgencyName': 'PE:SUNAT',
-    'listName': 'Establecimientos anexos'
-  }).txt(originEstablishmentCode)
+  // Solo incluir AddressTypeCode para motivo '04' (traslado entre establecimientos de la misma empresa)
+  if (transferReason === '04') {
+    const originEstablishmentCode = guideData.origin?.establishmentCode || '0000'
+    despatchAddress.ele('cbc:AddressTypeCode', {
+      'listID': businessData.ruc,
+      'listAgencyName': 'PE:SUNAT',
+      'listName': 'Establecimientos anexos'
+    }).txt(originEstablishmentCode)
+  }
   const despatchAddressLine = despatchAddress.ele('cac:AddressLine')
   despatchAddressLine.ele('cbc:Line').txt(guideData.origin?.address || '')
 

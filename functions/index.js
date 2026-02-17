@@ -3791,11 +3791,11 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
  */
 export const retryPendingInvoices = onSchedule(
   {
-    schedule: 'every 2 hours',
+    schedule: 'every 30 minutes',
     timeZone: 'America/Lima',
     region: 'us-central1',
     memory: '512MiB',
-    timeoutSeconds: 540, // 9 minutos máximo
+    timeoutSeconds: 1800, // 30 minutos máximo para scheduled functions
   },
   async (event) => {
     console.log('🔄 [RETRY] Iniciando reenvío automático de documentos pendientes...')
@@ -3995,7 +3995,7 @@ export const retryPendingInvoices = onSchedule(
           }
 
           // Pequeña pausa entre documentos para no sobrecargar SUNAT
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
       }
 
@@ -4025,7 +4025,7 @@ export const retryPendingInvoices = onSchedule(
 export const testRetryPendingInvoices = onRequest(
   {
     region: 'us-central1',
-    timeoutSeconds: 540,
+    timeoutSeconds: 3600,
     memory: '512MiB',
     cors: true,
   },
@@ -4220,7 +4220,7 @@ export const testRetryPendingInvoices = onRequest(
             totalFailed++
           }
 
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise(resolve => setTimeout(resolve, 500))
         }
       }
 

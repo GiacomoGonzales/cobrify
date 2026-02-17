@@ -609,8 +609,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     expiryDateStr = `${quotation.validityDays} días desde emisión`
   }
 
-  const docType = quotation.customer?.documentType === 'RUC' ? 'RUC' :
-                  quotation.customer?.documentType === 'DNI' ? 'DNI' : 'DOC'
+  const rawDocType = quotation.customer?.documentType
+  const docType = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC' :
+                  (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI' : 'DOC'
   const docNumber = quotation.customer?.documentNumber && quotation.customer.documentNumber !== '00000000'
                     ? quotation.customer.documentNumber : '-'
   const customerAddress = quotation.customer?.address || '-'

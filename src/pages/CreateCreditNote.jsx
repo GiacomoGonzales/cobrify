@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -9,6 +9,7 @@ import Select from '@/components/ui/Select'
 import Alert from '@/components/ui/Alert'
 import { getInvoices, createInvoice, updateInvoice, getDocumentSeries, updateDocumentSeries } from '@/services/firestoreService'
 import { formatCurrency } from '@/lib/utils'
+import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 // Modos de creación de nota de crédito
 const CREDIT_NOTE_MODES = {
@@ -65,10 +66,56 @@ export default function CreateCreditNote() {
     customerDocType: '6', // 6 = RUC, 1 = DNI
     customerDocNumber: '',
     customerName: '',
+    customerAddress: '',
     items: [{ description: '', quantity: 1, unitPrice: 0, subtotal: 0 }],
     discrepancyCode: '01',
     discrepancyReason: 'Anulación de la operación',
   })
+
+  const [isLookingUpDoc, setIsLookingUpDoc] = useState(false)
+
+  const handleLookupDocument = async () => {
+    const docNumber = externalData.customerDocNumber.trim()
+    if (!docNumber) return
+
+    setIsLookingUpDoc(true)
+    try {
+      let result
+      if (docNumber.length === 8) {
+        result = await consultarDNI(docNumber)
+      } else if (docNumber.length === 11) {
+        result = await consultarRUC(docNumber)
+      } else {
+        setMessage({ type: 'error', text: 'El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)' })
+        return
+      }
+
+      if (result.success) {
+        if (docNumber.length === 8) {
+          setExternalData(prev => ({
+            ...prev,
+            customerDocType: '1',
+            customerName: result.data.nombreCompleto || '',
+            customerAddress: result.data.direccion || prev.customerAddress,
+          }))
+        } else {
+          setExternalData(prev => ({
+            ...prev,
+            customerDocType: '6',
+            customerName: result.data.razonSocial || '',
+            customerAddress: result.data.direccion || '',
+          }))
+        }
+      } else {
+        setMessage({ type: 'error', text: result.error || 'No se encontraron datos para este documento' })
+      }
+    } catch (error) {
+      console.error('Error al buscar documento:', error)
+      setMessage({ type: 'error', text: 'Error al consultar el documento' })
+    } finally {
+      setIsLookingUpDoc(false)
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -291,6 +338,7 @@ export default function CreateCreditNote() {
           documentType: externalData.customerDocType,
           documentNumber: externalData.customerDocNumber,
           name: externalData.customerName,
+          address: externalData.customerAddress || '',
         },
 
         // Items
@@ -899,12 +947,28 @@ export default function CreateCreditNote() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Número de Documento
                   </label>
-                  <Input
-                    value={externalData.customerDocNumber}
-                    onChange={e => setExternalData(prev => ({ ...prev, customerDocNumber: e.target.value }))}
-                    placeholder={externalData.customerDocType === '6' ? '20123456789' : '12345678'}
-                    required
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      value={externalData.customerDocNumber}
+                      onChange={e => setExternalData(prev => ({ ...prev, customerDocNumber: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && (externalData.customerDocNumber.length === 8 || externalData.customerDocNumber.length === 11) && handleLookupDocument()}
+                      placeholder={externalData.customerDocType === '6' ? '20123456789' : '12345678'}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLookupDocument}
+                      disabled={isLookingUpDoc}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                      title="Buscar datos del documento"
+                    >
+                      {isLookingUpDoc ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="sm:col-span-1">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -915,6 +979,16 @@ export default function CreateCreditNote() {
                     onChange={e => setExternalData(prev => ({ ...prev, customerName: e.target.value }))}
                     placeholder="Nombre o Razón Social"
                     required
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Dirección
+                  </label>
+                  <Input
+                    value={externalData.customerAddress}
+                    onChange={e => setExternalData(prev => ({ ...prev, customerAddress: e.target.value }))}
+                    placeholder="Dirección del cliente"
                   />
                 </div>
               </div>

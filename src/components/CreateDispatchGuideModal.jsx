@@ -9,7 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { createDispatchGuide, getCompanySettings, sendDispatchGuideToSunat, getProducts } from '@/services/firestoreService'
 import { getBranch, getActiveBranches } from '@/services/branchService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
-import { consultarRUC } from '@/services/documentLookupService'
+import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -151,6 +151,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
   const [carrierRuc, setCarrierRuc] = useState('')
   const [carrierName, setCarrierName] = useState('')
   const [isSearchingCarrier, setIsSearchingCarrier] = useState(false)
+  const [isSearchingRecipient, setIsSearchingRecipient] = useState(false)
 
   // Items (productos)
   const [items, setItems] = useState([])
@@ -532,6 +533,47 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }
 
+  // Buscar datos del destinatario por RUC o DNI
+  const handleSearchRecipientDoc = async () => {
+    const docNumber = recipientDocNumber.trim()
+    if (!docNumber) return
+
+    setIsSearchingRecipient(true)
+    try {
+      let result
+      if (docNumber.length === 8) {
+        result = await consultarDNI(docNumber)
+      } else if (docNumber.length === 11) {
+        result = await consultarRUC(docNumber)
+      } else {
+        toast.error('El documento debe tener 8 dígitos (DNI) o 11 dígitos (RUC)')
+        return
+      }
+
+      if (result.success) {
+        if (docNumber.length === 8) {
+          setRecipientDocType('1')
+          setRecipientName(result.data.nombreCompleto || '')
+          toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
+        } else {
+          setRecipientDocType('6')
+          setRecipientName(result.data.razonSocial || '')
+          if (result.data.direccion) {
+            setRecipientAddress(result.data.direccion)
+          }
+          toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+        }
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este documento')
+      }
+    } catch (error) {
+      console.error('Error al buscar documento:', error)
+      toast.error('Error al consultar el documento')
+    } finally {
+      setIsSearchingRecipient(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -567,11 +609,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
           return
         }
       }
-      // Validar formato de placa si se ingresó
+      // Validar formato de placa si se ingresó (6 caracteres alfanuméricos sin guiones)
       if (vehiclePlate) {
-        const plateRegex = /^[A-Z0-9]{3}-?[A-Z0-9]{3}$/i
+        const plateRegex = /^[A-Z0-9]{6}$/
         if (!plateRegex.test(vehiclePlate.trim())) {
-          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use formato ABC123 o ABC-123`)
+          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use 6 caracteres sin guiones, ej: ABC123`)
           return
         }
       }
@@ -836,14 +878,32 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 ))}
               </Select>
 
-              <Input
-                label="Nro. de Documento"
-                placeholder={recipientDocType === '6' ? '20123456789' : '12345678'}
-                required
-                value={recipientDocNumber}
-                onChange={(e) => setRecipientDocNumber(e.target.value)}
-                maxLength={recipientDocType === '6' ? 11 : 15}
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nro. de Documento <span className="text-red-500">*</span></label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={recipientDocType === '6' ? '20123456789' : '12345678'}
+                    required
+                    value={recipientDocNumber}
+                    onChange={(e) => setRecipientDocNumber(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (recipientDocNumber.length === 8 || recipientDocNumber.length === 11) && handleSearchRecipientDoc()}
+                    maxLength={recipientDocType === '6' ? 11 : 15}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSearchRecipientDoc}
+                    disabled={isSearchingRecipient}
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    title="Buscar datos del documento"
+                  >
+                    {isSearchingRecipient ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
 
               <Input
                 label="Razón Social"
@@ -1095,10 +1155,11 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input
                   label={isM1LVehicle ? "Placa Principal (opcional)" : "Placa Principal"}
-                  placeholder={isM1LVehicle ? "Ej: ABC-123 o dejar vacío" : "ABC-123"}
+                  placeholder={isM1LVehicle ? "Ej: ABC123 o dejar vacío" : "ABC123"}
                   required={!isM1LVehicle}
                   value={vehiclePlate}
-                  onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  onChange={(e) => setVehiclePlate(e.target.value.replace(/[-\s]/g, '').toUpperCase())}
                 />
 
                 <Select
@@ -1159,7 +1220,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                   placeholder="Q12345678"
                   required={!isM1LVehicle}
                   value={driverLicense}
-                  onChange={(e) => setDriverLicense(e.target.value)}
+                  onChange={(e) => setDriverLicense(e.target.value.toUpperCase())}
                 />
               </div>
 

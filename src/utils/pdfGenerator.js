@@ -342,8 +342,9 @@ const generateSunatQR = async (invoice, companySettings) => {
   try {
     const docTypeCode = invoice.documentType === 'factura' ? '01' : '03'
     const [serie = '', numero = ''] = (invoice.number || '').split('-')
-    const clientDocType = invoice.customer?.documentType === 'RUC' ? '6' :
-                         invoice.customer?.documentType === 'DNI' ? '1' : '0'
+    const rawClientDocType = invoice.customer?.documentType
+    const clientDocType = (rawClientDocType === 'RUC' || rawClientDocType === '6') ? '6' :
+                         (rawClientDocType === 'DNI' || rawClientDocType === '1') ? '1' : '0'
     const clientDocNumber = invoice.customer?.documentNumber || '-'
 
     const dateSource = invoice.emissionDate || invoice.issueDate || invoice.createdAt
@@ -829,8 +830,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     paymentForm = totalPaid === 0 ? 'CRÉDITO' : 'CONTADO'
   }
 
-  const docType = invoice.customer?.documentType === 'RUC' ? 'RUC' :
-                  invoice.customer?.documentType === 'DNI' ? 'DNI' : 'DOC'
+  const rawDocType = invoice.customer?.documentType
+  const docType = (rawDocType === 'RUC' || rawDocType === '6') ? 'RUC' :
+                  (rawDocType === 'DNI' || rawDocType === '1') ? 'DNI' : 'DOC'
   const docNumber = invoice.customer?.documentNumber && invoice.customer.documentNumber !== '00000000'
                     ? invoice.customer.documentNumber : '-'
   const customerAddress = invoice.customer?.address || '-'

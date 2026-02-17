@@ -280,11 +280,11 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
     setDriverDocNumber(driver.documentNumber || '')
     setDriverName(driver.name || driver.names || '')
     setDriverLastName(driver.lastName || driver.lastNames || '')
-    setDriverLicense(driver.license || '')
+    setDriverLicense((driver.license || '').toUpperCase())
 
     // Vehículo
     const vehicle = guide.transport?.vehicle || guide.vehicle || {}
-    setVehiclePlate(vehicle.plate || '')
+    setVehiclePlate((vehicle.plate || '').replace(/[-\s]/g, '').toUpperCase())
     setVehicleAuthEntity(vehicle.authorizationEntity || '')
     setVehicleAuthNumber(vehicle.authorizationNumber || '')
 
@@ -438,10 +438,11 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
           return
         }
       }
+      // Validar formato de placa (6 caracteres alfanuméricos sin guiones)
       if (vehiclePlate) {
-        const plateRegex = /^[A-Z0-9]{3}-?[A-Z0-9]{3}$/i
+        const plateRegex = /^[A-Z0-9]{6}$/
         if (!plateRegex.test(vehiclePlate.trim())) {
-          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use formato ABC123 o ABC-123`)
+          toast.error(`Formato de placa inválido: ${vehiclePlate}. Use 6 caracteres sin guiones, ej: ABC123`)
           return
         }
       }
@@ -933,10 +934,11 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input
                   label={isM1LVehicle ? "Placa Principal (opcional)" : "Placa Principal"}
-                  placeholder={isM1LVehicle ? "Ej: ABC-123 o dejar vacío" : "ABC-123"}
+                  placeholder={isM1LVehicle ? "Ej: ABC123 o dejar vacío" : "ABC123"}
                   required={!isM1LVehicle}
+                  maxLength={6}
                   value={vehiclePlate}
-                  onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
+                  onChange={(e) => setVehiclePlate(e.target.value.replace(/[-\s]/g, '').toUpperCase())}
                 />
 
                 <Select
@@ -997,7 +999,7 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                   placeholder="Q12345678"
                   required={!isM1LVehicle}
                   value={driverLicense}
-                  onChange={(e) => setDriverLicense(e.target.value)}
+                  onChange={(e) => setDriverLicense(e.target.value.toUpperCase())}
                 />
               </div>
 
