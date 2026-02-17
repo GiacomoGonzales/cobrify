@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Outlet, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { Outlet, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
@@ -9,8 +9,6 @@ import {
   CreditCard,
   BarChart3,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   Shield,
   Menu,
@@ -74,9 +72,9 @@ const navItems = [
 
 export default function AdminLayout() {
   const { isAdmin, isLoading, user, logout } = useAuth()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
 
   // Cambiar color del StatusBar para admin (tema oscuro/púrpura)
   useEffect(() => {
@@ -154,8 +152,9 @@ export default function AdminLayout() {
         <NavLink
           to="/app/dashboard"
           className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+          title="Ir al Dashboard"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <LayoutDashboard className="w-5 h-5" />
         </NavLink>
       </div>
 
@@ -229,9 +228,7 @@ export default function AdminLayout() {
       <div className="w-full">
         {/* Sidebar - Desktop (fixed) */}
         <aside
-          className={`hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white h-screen fixed top-0 left-0 z-30 transition-all duration-300 ${
-            sidebarCollapsed ? 'w-20' : 'w-72'
-          }`}
+          className="hidden lg:flex flex-col bg-gradient-to-b from-slate-900 via-purple-900 to-slate-900 text-white h-screen fixed top-0 left-0 z-30 w-72"
         >
           {/* Decorative blur */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl"></div>
@@ -243,12 +240,10 @@ export default function AdminLayout() {
               <div className="p-2.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg shadow-purple-500/30 flex-shrink-0">
                 <Shield className="w-6 h-6" />
               </div>
-              {!sidebarCollapsed && (
-                <div>
-                  <span className="font-bold text-lg">Admin Panel</span>
-                  <p className="text-xs text-white/50 mt-0.5">Cobrify Pro</p>
-                </div>
-              )}
+              <div>
+                <span className="font-bold text-lg">Admin Panel</span>
+                <p className="text-xs text-white/50 mt-0.5">Cobrify Pro</p>
+              </div>
             </div>
           </div>
 
@@ -260,7 +255,6 @@ export default function AdminLayout() {
                 <NavLink
                   key={item.path}
                   to={item.path}
-                  title={sidebarCollapsed ? item.label : ''}
                   className={`group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${
                     isActive
                       ? 'bg-white/15 shadow-lg backdrop-blur-sm'
@@ -270,56 +264,46 @@ export default function AdminLayout() {
                   <div className={`p-2 rounded-lg bg-gradient-to-br ${item.color} shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all flex-shrink-0`}>
                     <item.icon className="w-4 h-4 text-white" />
                   </div>
-                  {!sidebarCollapsed && (
-                    <div className="min-w-0">
-                      <span className={`font-medium block ${isActive ? 'text-white' : 'text-white/80 group-hover:text-white'}`}>
-                        {item.label}
-                      </span>
-                      <p className="text-xs text-white/40 truncate">{item.description}</p>
-                    </div>
-                  )}
+                  <div className="min-w-0">
+                    <span className={`font-medium block ${isActive ? 'text-white' : 'text-white/80 group-hover:text-white'}`}>
+                      {item.label}
+                    </span>
+                    <p className="text-xs text-white/40 truncate">{item.description}</p>
+                  </div>
                 </NavLink>
               )
             })}
           </nav>
 
-          {/* User Info & Collapse Button */}
+          {/* User Info */}
           <div className="relative z-10 p-4 border-t border-white/10">
-            {!sidebarCollapsed && (
-              <div className="mb-4 p-3 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                <p className="text-sm font-medium truncate">{user?.email}</p>
-                <p className="text-xs text-white/50 mt-0.5">Super Administrador</p>
-              </div>
-            )}
+            <div className="mb-4 p-3 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
+              <p className="text-sm font-medium truncate">{user?.email}</p>
+              <p className="text-xs text-white/50 mt-0.5">Super Administrador</p>
+            </div>
 
             <div className="flex items-center justify-between gap-2">
               <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                onClick={() => navigate('/app')}
                 className="p-2.5 hover:bg-white/10 rounded-xl transition-all hover:scale-105"
-                title={sidebarCollapsed ? 'Expandir' : 'Colapsar'}
+                title="Ir al Dashboard"
               >
-                {sidebarCollapsed ? (
-                  <ChevronRight className="w-5 h-5" />
-                ) : (
-                  <ChevronLeft className="w-5 h-5" />
-                )}
+                <LayoutDashboard className="w-5 h-5" />
               </button>
 
-              {!sidebarCollapsed && (
-                <button
-                  onClick={logout}
-                  className="flex items-center gap-2 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Salir
-                </button>
-              )}
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Salir
+              </button>
             </div>
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className={`min-h-screen min-w-0 overflow-x-hidden transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'}`}>
+        <main className="min-h-screen min-w-0 overflow-x-hidden lg:ml-72">
           {/* Top Bar */}
           <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-gray-200/50 px-4 lg:px-6 py-4">
             <div className="flex items-center justify-between">
