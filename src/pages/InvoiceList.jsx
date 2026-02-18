@@ -1281,6 +1281,7 @@ Gracias por tu preferencia.`
     if (documentType === 'nota_credito' || documentType === 'nota_debito') {
       switch (status) {
         case 'applied':
+        case 'paid':
           return <Badge variant="success">Aplicada</Badge>
         case 'pending':
           return <Badge variant="warning">Pendiente</Badge>

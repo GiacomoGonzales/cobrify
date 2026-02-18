@@ -977,13 +977,18 @@ export default function CashRegister() {
     let salesDiDiFood = 0
 
     // Filtrar facturas:
-    // - Excluir notas de crédito y débito (no son ventas, son ajustes)
+    // - Excluir notas de crédito (son devoluciones/anulaciones)
+    // - Incluir notas de débito pagadas (son cobros adicionales)
     // - Excluir notas de venta ya convertidas a boleta/factura (para no duplicar)
     // - Excluir documentos anulados (notas de venta, boletas, facturas)
     const validInvoices = todayInvoices.filter(invoice => {
-      // Excluir notas de crédito y débito (no son ventas)
-      if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') {
+      // Excluir notas de crédito (no son ventas, son devoluciones)
+      if (invoice.documentType === 'nota_credito') {
         return false
+      }
+      // Notas de débito: solo incluir si están pagadas/aplicadas
+      if (invoice.documentType === 'nota_debito') {
+        return invoice.status === 'paid' || invoice.status === 'applied'
       }
       // Si es una nota de venta que ya fue convertida a boleta/factura, no contar
       // (se cuenta la boleta/factura resultante en su lugar)
@@ -1150,8 +1155,10 @@ export default function CashRegister() {
     let pendingTotal = 0
     let pendingCount = 0
     todayInvoices.forEach(invoice => {
-      // Excluir notas de crédito, débito, notas convertidas y anuladas
-      if (invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') return
+      // Excluir notas de crédito y notas convertidas y anuladas
+      if (invoice.documentType === 'nota_credito') return
+      // Notas de débito pagadas ya se contaron arriba, excluir pendientes
+      if (invoice.documentType === 'nota_debito') return
       if (invoice.documentType === 'nota_venta' && invoice.convertedTo) return
       if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
           invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending') return

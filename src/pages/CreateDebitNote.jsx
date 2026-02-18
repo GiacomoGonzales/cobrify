@@ -156,10 +156,11 @@ export default function CreateDebitNote() {
       const debitNoteNumber = `${debitNoteSeries}-${String(nextNumber).padStart(8, '0')}`
 
       // Crear item con el cargo adicional
+      // unitPrice debe ser el precio CON IGV (el XML generator espera priceWithIGV)
       const additionalItem = {
         name: formData.additionalDescription,
         quantity: 1,
-        unitPrice: subtotal,
+        unitPrice: total,
         subtotal: subtotal,
         taxAffectation: '10' // Gravado con IGV
       }
@@ -246,6 +247,12 @@ export default function CreateDebitNote() {
           text: `Nota de Débito ${debitNoteNumber} aceptada por SUNAT`
         })
         setTimeout(() => navigate('/app/facturas'), 2000)
+      } else if (sunatResponse.ok && sunatResult.status === 'signed') {
+        setMessage({
+          type: 'warning',
+          text: `Nota de Débito ${debitNoteNumber} firmada pero pendiente de envío a SUNAT. ${sunatResult.message || ''}`
+        })
+        setTimeout(() => navigate('/app/facturas'), 3000)
       } else {
         // El documento fue creado pero rechazado por SUNAT
         setMessage({

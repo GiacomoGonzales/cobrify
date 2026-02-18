@@ -1050,8 +1050,8 @@ export const sendInvoiceToSunat = onRequest(
       }
 
       res.status(200).json({
-        success: true,
-        status: emissionResult.accepted ? 'accepted' : 'rejected',
+        success: emissionResult.accepted === true || isPendingManual,
+        status: finalStatus,
         message: emissionResult.description,
         method: emissionResult.method,
         ...(emissionResult.method === 'nubefact' && {
@@ -1735,8 +1735,8 @@ export const sendCreditNoteToSunat = onRequest(
       }
 
       res.status(200).json({
-        success: true,
-        status: emissionResult.accepted ? 'accepted' : 'rejected',
+        success: emissionResult.accepted === true || isPendingManual,
+        status: finalStatus,
         message: emissionResult.description,
         method: emissionResult.method,
         ...(emissionResult.method === 'qpse' && {
@@ -2392,8 +2392,8 @@ export const sendDebitNoteToSunat = onRequest(
       }
 
       res.status(200).json({
-        success: true,
-        status: emissionResult.accepted ? 'accepted' : 'rejected',
+        success: emissionResult.accepted === true || isPendingManual,
+        status: finalStatus,
         message: emissionResult.description,
         method: emissionResult.method,
         ...(emissionResult.method === 'qpse' && {
@@ -4009,6 +4009,175 @@ export const retryPendingInvoices = onSchedule(
 
     } catch (error) {
       console.error('❌ [RETRY] Error en cron job:', error)
+    }
+  }
+)
+
+/**
+ * Función simple para reenviar TODAS las boletas pendientes a SUNAT
+ *
+ * Busca boletas con sunatStatus = 'pending' o 'sending' (atascadas)
+ * Sin límite de reintentos - diseñada para resolver boletas acumuladas
+ * Solo procesa boletas (facturas siguen pausadas si aplica)
+ *
+ * Uso: POST /resendPendingBoletas
+ * Body opcional: { "businessId": "xxx" } para procesar solo un negocio
+ */
+export const resendPendingBoletas = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 3600,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    console.log('🔄 [RESEND-BOLETAS] Iniciando reenvío de boletas pendientes...')
+
+    const filterBusinessId = req.body?.businessId || req.query?.businessId
+    const BATCH_SIZE = 200
+
+    try {
+      const businessesSnapshot = filterBusinessId
+        ? await db.collection('businesses').doc(filterBusinessId).get()
+        : await db.collection('businesses').get()
+
+      const businessDocs = filterBusinessId
+        ? (businessesSnapshot.exists ? [businessesSnapshot] : [])
+        : businessesSnapshot.docs
+
+      let totalFound = 0
+      let totalSuccess = 0
+      let totalFailed = 0
+      const details = []
+
+      for (const businessDoc of businessDocs) {
+        const businessId = businessDoc.id
+        const businessData = businessDoc.data()
+
+        // Verificar que tenga configuración de emisión
+        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+          continue
+        }
+
+        const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
+
+        // Buscar boletas pendientes (pending o sending atascadas)
+        const pendingBoletas = await invoicesRef
+          .where('sunatStatus', 'in', ['pending', 'sending'])
+          .where('documentType', '==', 'boleta')
+          .limit(BATCH_SIZE)
+          .get()
+
+        if (pendingBoletas.empty) {
+          continue
+        }
+
+        console.log(`📋 [RESEND-BOLETAS] Negocio ${businessId}: ${pendingBoletas.size} boletas pendientes`)
+        details.push({ businessId, boletasCount: pendingBoletas.size })
+        totalFound += pendingBoletas.size
+
+        // Mapear emissionConfig al formato esperado
+        const businessDataForEmission = { ...businessData }
+        if (businessData.emissionConfig) {
+          const config = businessData.emissionConfig
+          if (config.method === 'qpse') {
+            businessDataForEmission.qpse = {
+              enabled: config.qpse.enabled !== false,
+              usuario: config.qpse.usuario,
+              password: config.qpse.password,
+              environment: config.qpse.environment || 'demo',
+            }
+            businessDataForEmission.sunat = { enabled: false }
+          } else if (config.method === 'sunat_direct') {
+            businessDataForEmission.sunat = {
+              enabled: config.sunat.enabled !== false,
+              environment: config.sunat.environment || 'beta',
+              solUser: config.sunat.solUser,
+              solPassword: config.sunat.solPassword,
+              certificateName: config.sunat.certificateName,
+              certificatePassword: config.sunat.certificatePassword,
+              certificateData: config.sunat.certificateData,
+            }
+            businessDataForEmission.qpse = { enabled: false }
+          }
+        }
+
+        for (const invoiceDoc of pendingBoletas.docs) {
+          const invoiceData = invoiceDoc.data()
+          const invoiceId = invoiceDoc.id
+
+          // Si está en 'sending', verificar que lleve más de 2 minutos atascada
+          if (invoiceData.sunatStatus === 'sending') {
+            const sendingStartedAt = invoiceData.sunatSendingStartedAt?.toDate?.() || invoiceData.sunatSendingStartedAt
+            const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000)
+            if (sendingStartedAt && sendingStartedAt > twoMinutesAgo) {
+              console.log(`⏳ [RESEND-BOLETAS] ${invoiceData.series}-${invoiceData.correlativeNumber}: En proceso de envío reciente, saltando`)
+              continue
+            }
+          }
+
+          try {
+            console.log(`🚀 [RESEND-BOLETAS] Enviando ${invoiceData.series}-${invoiceData.correlativeNumber} (status: ${invoiceData.sunatStatus}, retryCount: ${invoiceData.retryCount || 0})...`)
+
+            const invoiceForEmission = {
+              ...invoiceData,
+              correlativeNumber: invoiceData.correlativeNumber,
+            }
+
+            const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+
+            const isTransient = isTransientSunatError(result.responseCode, result.description)
+
+            let finalStatus
+            if (result.accepted) {
+              finalStatus = 'accepted'
+              totalSuccess++
+            } else if (isTransient) {
+              finalStatus = 'pending'
+            } else {
+              finalStatus = 'rejected'
+              totalFailed++
+            }
+
+            await invoicesRef.doc(invoiceId).update({
+              sunatStatus: finalStatus,
+              sunatResponse: sanitizeForFirestore({
+                code: result.responseCode || '',
+                description: result.description || '',
+                method: result.method,
+                autoRetry: true,
+                resendBoletas: true
+              }),
+              retryCount: FieldValue.increment(1),
+              updatedAt: FieldValue.serverTimestamp()
+            })
+
+            console.log(`${result.accepted ? '✅' : '❌'} [RESEND-BOLETAS] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
+
+          } catch (invoiceError) {
+            console.error(`❌ [RESEND-BOLETAS] Error ${invoiceData.series}-${invoiceData.correlativeNumber}:`, invoiceError.message)
+            totalFailed++
+          }
+
+          // Pausa entre documentos
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      }
+
+      const summary = { totalFound, totalSuccess, totalFailed }
+      console.log('📊 [RESEND-BOLETAS] Resumen:', JSON.stringify(summary))
+
+      res.status(200).json({
+        success: true,
+        message: 'Reenvío de boletas completado',
+        summary,
+        details,
+        timestamp: new Date().toISOString()
+      })
+
+    } catch (error) {
+      console.error('❌ [RESEND-BOLETAS] Error:', error)
+      res.status(500).json({ success: false, error: error.message })
     }
   }
 )
