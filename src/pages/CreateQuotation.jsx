@@ -480,12 +480,14 @@ export default function CreateQuotation() {
   const getFilteredProducts = (searchTerm) => {
     if (!searchTerm) return products.slice(0, 5) // Mostrar primeros 5 si no hay búsqueda
 
-    const term = searchTerm.toLowerCase()
+    // Dividir búsqueda en palabras individuales para búsqueda flexible
+    const searchWords = searchTerm.toLowerCase().split(/\s+/).filter(word => word.length > 0)
     return products
-      .filter(p =>
-        p.name.toLowerCase().includes(term) ||
-        p.code?.toLowerCase().includes(term)
-      )
+      .filter(p => {
+        const searchableText = [p.name || '', p.code || '', p.sku || ''].join(' ').toLowerCase()
+        // Verificar que TODAS las palabras estén presentes (en cualquier orden)
+        return searchWords.every(word => searchableText.includes(word))
+      })
       .slice(0, 10) // Máximo 10 resultados
   }
 

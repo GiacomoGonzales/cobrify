@@ -484,13 +484,23 @@ export default function AdminUsers() {
   const filteredUsers = useMemo(() => {
     let result = [...users]
 
-    // Filtro de búsqueda
+    // Filtro de búsqueda (por nombre, email, RUC, razón social, teléfono, dirección, departamento, etc.)
     if (searchTerm) {
       const search = searchTerm.toLowerCase()
       result = result.filter(u =>
         u.email?.toLowerCase().includes(search) ||
         u.businessName?.toLowerCase().includes(search) ||
-        u.ruc?.includes(search)
+        u.ruc?.includes(search) ||
+        u.contactName?.toLowerCase().includes(search) ||
+        u.phone?.toLowerCase().includes(search) ||
+        u.address?.toLowerCase().includes(search) ||
+        u.department?.toLowerCase().includes(search) ||
+        u.province?.toLowerCase().includes(search) ||
+        u.district?.toLowerCase().includes(search) ||
+        u.planName?.toLowerCase().includes(search) ||
+        u.plan?.toLowerCase().includes(search) ||
+        u.id?.toLowerCase().includes(search) ||
+        String(u.userNumber || '').includes(search)
       )
     }
 
@@ -1871,7 +1881,7 @@ export default function AdminUsers() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar..."
+              placeholder="Buscar por nombre, email, RUC, teléfono, dirección..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
