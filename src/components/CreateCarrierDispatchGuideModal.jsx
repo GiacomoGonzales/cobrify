@@ -6,7 +6,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { useAppContext } from '@/hooks/useAppContext'
-import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
+import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrierDispatchGuide, updateCarrierDispatchGuide, getCompanySettings, sendCarrierDispatchGuideToSunat } from '@/services/firestoreService'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo } from '@/data/peruUbigeos'
 
@@ -65,7 +65,7 @@ const getTomorrowDateString = () => {
   return getLocalDateString(1)
 }
 
-export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draftGuide = null }) {
+export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draftGuide = null, editGuide = null }) {
   const toast = useToast()
   const { getBusinessId } = useAppContext()
 
@@ -164,7 +164,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         if (result.success && result.data) {
           setCarrierRuc(result.data.ruc || '')
           setCarrierName(result.data.businessName || result.data.name || '')
-          if (!draftGuide) {
+          if (!draftGuide && !editGuide) {
             setMtcRegistration(result.data.mtcRegistration || '')
           }
           // Cargar configuración de envío automático a SUNAT
@@ -177,61 +177,62 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
     if (isOpen) {
       loadCarrierData()
 
-      if (draftGuide) {
-        // Precargar datos del borrador
-        setMtcRegistration(draftGuide.mtcRegistration || '')
-        setShipperRuc(draftGuide.shipper?.ruc || '')
-        setShipperName(draftGuide.shipper?.businessName || '')
-        setShipperAddress(draftGuide.shipper?.address || '')
-        setShipperCity(draftGuide.shipper?.city || '')
-        setRecipientDocType(draftGuide.recipient?.documentType || '6')
-        setRecipientDocNumber(draftGuide.recipient?.documentNumber || '')
-        setRecipientName(draftGuide.recipient?.name || '')
-        setRecipientAddress(draftGuide.recipient?.address || '')
-        setRecipientCity(draftGuide.recipient?.city || '')
-        setFreightPayer(draftGuide.freightPayer || 'remitente')
-        if (draftGuide.thirdPartyPayer) {
-          setThirdPartyPayer(draftGuide.thirdPartyPayer)
+      const prefillGuide = draftGuide || editGuide
+      if (prefillGuide) {
+        // Precargar datos del borrador o guía a editar
+        setMtcRegistration(prefillGuide.mtcRegistration || '')
+        setShipperRuc(prefillGuide.shipper?.ruc || '')
+        setShipperName(prefillGuide.shipper?.businessName || '')
+        setShipperAddress(prefillGuide.shipper?.address || '')
+        setShipperCity(prefillGuide.shipper?.city || '')
+        setRecipientDocType(prefillGuide.recipient?.documentType || '6')
+        setRecipientDocNumber(prefillGuide.recipient?.documentNumber || '')
+        setRecipientName(prefillGuide.recipient?.name || '')
+        setRecipientAddress(prefillGuide.recipient?.address || '')
+        setRecipientCity(prefillGuide.recipient?.city || '')
+        setFreightPayer(prefillGuide.freightPayer || 'remitente')
+        if (prefillGuide.thirdPartyPayer) {
+          setThirdPartyPayer(prefillGuide.thirdPartyPayer)
         }
-        setTransportType(draftGuide.transportType || '02')
-        setIsM1OrLVehicle(draftGuide.isM1OrLVehicle || false)
-        setTransferReason(draftGuide.transferReason || '01')
-        setIssueDate(draftGuide.issueDate || getLocalDateString())
-        setTransferDate(draftGuide.transferDate || getLocalDateString())
-        setTotalWeight(draftGuide.totalWeight ? String(draftGuide.totalWeight) : '')
-        setTransferDescription(draftGuide.transferDescription || '')
-        setObservations(draftGuide.observations || '')
+        setTransportType(prefillGuide.transportType || '02')
+        setIsM1OrLVehicle(prefillGuide.isM1OrLVehicle || false)
+        setTransferReason(prefillGuide.transferReason || '01')
+        setIssueDate(prefillGuide.issueDate || getLocalDateString())
+        setTransferDate(prefillGuide.transferDate || getLocalDateString())
+        setTotalWeight(prefillGuide.totalWeight ? String(prefillGuide.totalWeight) : '')
+        setTransferDescription(prefillGuide.transferDescription || '')
+        setObservations(prefillGuide.observations || '')
 
         // Origen - ubigeo
-        setOriginAddress(draftGuide.origin?.address || '')
-        if (draftGuide.origin?.departamento) {
-          setOriginDepartamento(draftGuide.origin.departamento)
-          setOriginProvincia(draftGuide.origin.provincia || '')
-          setOriginDistrito(draftGuide.origin.distrito || '')
-        } else if (draftGuide.origin?.ubigeo && draftGuide.origin.ubigeo.length === 6) {
+        setOriginAddress(prefillGuide.origin?.address || '')
+        if (prefillGuide.origin?.departamento) {
+          setOriginDepartamento(prefillGuide.origin.departamento)
+          setOriginProvincia(prefillGuide.origin.provincia || '')
+          setOriginDistrito(prefillGuide.origin.distrito || '')
+        } else if (prefillGuide.origin?.ubigeo && prefillGuide.origin.ubigeo.length === 6) {
           // Parsear ubigeo de 6 dígitos
-          const ubigeo = draftGuide.origin.ubigeo
+          const ubigeo = prefillGuide.origin.ubigeo
           setOriginDepartamento(ubigeo.substring(0, 2))
           setOriginProvincia(ubigeo.substring(0, 4))
           setOriginDistrito(ubigeo)
         }
 
         // Destino - ubigeo
-        setDestinationAddress(draftGuide.destination?.address || '')
-        if (draftGuide.destination?.departamento) {
-          setDestinationDepartamento(draftGuide.destination.departamento)
-          setDestinationProvincia(draftGuide.destination.provincia || '')
-          setDestinationDistrito(draftGuide.destination.distrito || '')
-        } else if (draftGuide.destination?.ubigeo && draftGuide.destination.ubigeo.length === 6) {
-          const ubigeo = draftGuide.destination.ubigeo
+        setDestinationAddress(prefillGuide.destination?.address || '')
+        if (prefillGuide.destination?.departamento) {
+          setDestinationDepartamento(prefillGuide.destination.departamento)
+          setDestinationProvincia(prefillGuide.destination.provincia || '')
+          setDestinationDistrito(prefillGuide.destination.distrito || '')
+        } else if (prefillGuide.destination?.ubigeo && prefillGuide.destination.ubigeo.length === 6) {
+          const ubigeo = prefillGuide.destination.ubigeo
           setDestinationDepartamento(ubigeo.substring(0, 2))
           setDestinationProvincia(ubigeo.substring(0, 4))
           setDestinationDistrito(ubigeo)
         }
 
         // Vehículos
-        if (draftGuide.vehicles && draftGuide.vehicles.length > 0) {
-          setVehicles(draftGuide.vehicles.map(v => ({
+        if (prefillGuide.vehicles && prefillGuide.vehicles.length > 0) {
+          setVehicles(prefillGuide.vehicles.map(v => ({
             plate: v.plate || '',
             mtcAuthorization: v.mtcAuthorization || '',
             mtcEntity: v.mtcEntity || '',
@@ -240,8 +241,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         }
 
         // Conductores
-        if (draftGuide.drivers && draftGuide.drivers.length > 0) {
-          setDrivers(draftGuide.drivers.map(d => ({
+        if (prefillGuide.drivers && prefillGuide.drivers.length > 0) {
+          setDrivers(prefillGuide.drivers.map(d => ({
             documentType: d.documentType || '1',
             documentNumber: d.documentNumber || '',
             name: d.name || '',
@@ -251,8 +252,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         }
 
         // Items
-        if (draftGuide.items && draftGuide.items.length > 0) {
-          setItems(draftGuide.items.map(item => ({
+        if (prefillGuide.items && prefillGuide.items.length > 0) {
+          setItems(prefillGuide.items.map(item => ({
             description: item.description || '',
             quantity: item.quantity || 1,
             unit: item.unit || 'NIU',
@@ -263,8 +264,8 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         }
 
         // Guías relacionadas
-        if (draftGuide.relatedGuides && draftGuide.relatedGuides.length > 0) {
-          setRelatedGuides(draftGuide.relatedGuides.map(g => ({
+        if (prefillGuide.relatedGuides && prefillGuide.relatedGuides.length > 0) {
+          setRelatedGuides(prefillGuide.relatedGuides.map(g => ({
             number: g.number || '',
             ruc: g.ruc || '',
             error: '',
@@ -276,7 +277,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         setTransferDate(getLocalDateString())
       }
     }
-  }, [isOpen, getBusinessId, draftGuide])
+  }, [isOpen, getBusinessId, draftGuide, editGuide])
 
   // Buscar datos del remitente por RUC
   const handleLookupShipper = async () => {
@@ -623,46 +624,66 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
         })),
       }
 
-      console.log('🚚 Creando guía de remisión transportista:', carrierDispatchGuide)
+      if (editGuide) {
+        // Modo edición: actualizar guía existente
+        console.log('🚚 Actualizando guía de remisión transportista:', editGuide.id)
 
-      const result = await createCarrierDispatchGuide(businessId, carrierDispatchGuide)
+        const result = await updateCarrierDispatchGuide(businessId, editGuide.id, {
+          ...carrierDispatchGuide,
+          sunatStatus: 'pending',
+          sunatResponseCode: null,
+          sunatDescription: null,
+        })
 
-      if (result.success) {
-        // Si venía de un borrador, eliminar el borrador
-        if (draftGuide?.id) {
-          try {
-            await deleteCarrierDispatchGuide(businessId, draftGuide.id)
-          } catch (err) {
-            console.error('Error al eliminar borrador después de emitir:', err)
-          }
+        if (result.success) {
+          toast.success(`GRE Transportista ${editGuide.number} actualizada exitosamente`)
+          onClose()
+        } else {
+          throw new Error(result.error || 'Error al actualizar la guía')
         }
-        toast.success(`GRE Transportista ${result.number} creada exitosamente`)
-
-        // Envío automático a SUNAT si está configurado (fire & forget)
-        if (autoSendToSunat && result.id) {
-          console.log('🚀 Enviando GRE Transportista automáticamente a SUNAT...')
-          toast.info('Enviando a SUNAT en segundo plano...', 3000)
-
-          // Fire & forget - no esperamos el resultado
-          sendCarrierDispatchGuideToSunat(businessId, result.id)
-            .then((sunatResult) => {
-              if (sunatResult.success && sunatResult.accepted) {
-                toast.success(`GRE ${result.number} aceptada por SUNAT`)
-              } else if (sunatResult.success && !sunatResult.accepted) {
-                toast.warning(`GRE ${result.number}: ${sunatResult.message || 'Pendiente de validación SUNAT'}`)
-              } else {
-                toast.error(`Error al enviar GRE a SUNAT: ${sunatResult.error || 'Error desconocido'}`)
-              }
-            })
-            .catch((err) => {
-              console.error('Error en envío automático a SUNAT:', err)
-              toast.error(`Error al enviar GRE a SUNAT: ${err.message}`)
-            })
-        }
-
-        onClose()
       } else {
-        throw new Error(result.error || 'Error al crear la guía')
+        // Modo creación normal
+        console.log('🚚 Creando guía de remisión transportista:', carrierDispatchGuide)
+
+        const result = await createCarrierDispatchGuide(businessId, carrierDispatchGuide)
+
+        if (result.success) {
+          // Si venía de un borrador, eliminar el borrador
+          if (draftGuide?.id) {
+            try {
+              await deleteCarrierDispatchGuide(businessId, draftGuide.id)
+            } catch (err) {
+              console.error('Error al eliminar borrador después de emitir:', err)
+            }
+          }
+          toast.success(`GRE Transportista ${result.number} creada exitosamente`)
+
+          // Envío automático a SUNAT si está configurado (fire & forget)
+          if (autoSendToSunat && result.id) {
+            console.log('🚀 Enviando GRE Transportista automáticamente a SUNAT...')
+            toast.info('Enviando a SUNAT en segundo plano...', 3000)
+
+            // Fire & forget - no esperamos el resultado
+            sendCarrierDispatchGuideToSunat(businessId, result.id)
+              .then((sunatResult) => {
+                if (sunatResult.success && sunatResult.accepted) {
+                  toast.success(`GRE ${result.number} aceptada por SUNAT`)
+                } else if (sunatResult.success && !sunatResult.accepted) {
+                  toast.warning(`GRE ${result.number}: ${sunatResult.message || 'Pendiente de validación SUNAT'}`)
+                } else {
+                  toast.error(`Error al enviar GRE a SUNAT: ${sunatResult.error || 'Error desconocido'}`)
+                }
+              })
+              .catch((err) => {
+                console.error('Error en envío automático a SUNAT:', err)
+                toast.error(`Error al enviar GRE a SUNAT: ${err.message}`)
+              })
+          }
+
+          onClose()
+        } else {
+          throw new Error(result.error || 'Error al crear la guía')
+        }
       }
 
     } catch (error) {
@@ -782,7 +803,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {draftGuide ? 'Editar GRE Transportista' : 'Nueva GRE Transportista'}
+              {editGuide ? 'Editar GRE Transportista' : draftGuide ? 'Continuar GRE Transportista' : 'Nueva GRE Transportista'}
             </h2>
             <p className="text-sm text-gray-600">
               Serie V001 - Guía de Remisión Electrónica del Transportista
@@ -1681,25 +1702,27 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 Cancelar
               </Button>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSaveDraft}
-                  disabled={isSaving || isSavingDraft}
-                  className="w-full sm:w-auto"
-                >
-                  {isSavingDraft ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Guardar
-                    </>
-                  )}
-                </Button>
+                {!editGuide && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSaveDraft}
+                    disabled={isSaving || isSavingDraft}
+                    className="w-full sm:w-auto"
+                  >
+                    {isSavingDraft ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Guardar
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   disabled={isSaving || isSavingDraft}
@@ -1709,12 +1732,12 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                   {isSaving ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Generando GRE...
+                      {editGuide ? 'Guardando...' : 'Generando GRE...'}
                     </>
                   ) : (
                     <>
                       <Truck className="w-5 h-5 mr-2" />
-                      Emitir Guía
+                      {editGuide ? 'Guardar Cambios' : 'Emitir Guía'}
                     </>
                   )}
                 </Button>

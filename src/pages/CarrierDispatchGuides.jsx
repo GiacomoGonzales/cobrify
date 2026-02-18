@@ -51,6 +51,9 @@ export default function CarrierDispatchGuides() {
   // Estado para borrador que se está editando
   const [editingDraftGuide, setEditingDraftGuide] = useState(null)
 
+  // Estado para editar guía rechazada (abrir modal completo)
+  const [editingGuideForUpdate, setEditingGuideForUpdate] = useState(null)
+
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true })
@@ -119,6 +122,7 @@ export default function CarrierDispatchGuides() {
   const handleCloseModal = () => {
     setShowCreateModal(false)
     setEditingDraftGuide(null)
+    setEditingGuideForUpdate(null)
     loadGuides()
   }
 
@@ -816,6 +820,21 @@ export default function CarrierDispatchGuides() {
                     </button>
                   )}
 
+                  {/* Editar guía - Solo si no aceptada y no borrador */}
+                  {guide.sunatStatus !== 'accepted' && guide.status !== 'draft' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        setEditingGuideForUpdate(guide)
+                        setShowCreateModal(true)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3 text-blue-600"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      <span>Editar guía</span>
+                    </button>
+                  )}
+
                   {/* Cambiar número - Solo si rechazada o error */}
                   {(guide.sunatStatus === 'rejected' || guide.sunatStatus === 'error') && guide.number && (
                     <>
@@ -912,6 +931,7 @@ export default function CarrierDispatchGuides() {
         isOpen={showCreateModal}
         onClose={handleCloseModal}
         draftGuide={editingDraftGuide}
+        editGuide={editingGuideForUpdate}
       />
 
       {/* Edit Number Modal */}
