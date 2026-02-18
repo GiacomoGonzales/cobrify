@@ -2972,6 +2972,7 @@ export default function Settings() {
                         { id: 'purchases', label: 'Compras', description: 'Registro de compras a proveedores' },
                         { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
                         { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
                         { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
                         { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
                         { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
