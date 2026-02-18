@@ -33,6 +33,8 @@ import {
   User,
   ShoppingCart,
   Copy,
+  Check,
+  Minus,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -140,6 +142,11 @@ export default function InvoiceList() {
   const [showDispatchGuideModal, setShowDispatchGuideModal] = useState(false)
   const [selectedInvoiceForGuide, setSelectedInvoiceForGuide] = useState(null)
 
+  // Estados para selección masiva e impresión bulk
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set())
+  const [isBulkPrinting, setIsBulkPrinting] = useState(false)
+  const [bulkPrintProgress, setBulkPrintProgress] = useState({ current: 0, total: 0 })
+
   // Estados para anulación de notas de venta
   const [voidingInvoice, setVoidingInvoice] = useState(null)
   const [isVoiding, setIsVoiding] = useState(false)
@@ -216,6 +223,90 @@ export default function InvoiceList() {
 
     // Fallback: impresión estándar (web o si falla la térmica)
     window.print()
+  }
+
+  // === Helpers de selección masiva ===
+  const toggleSelectInvoice = (id) => {
+    setSelectedInvoiceIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedInvoiceIds(new Set())
+
+  // === Impresión masiva de tickets ===
+  const handleBulkPrintTickets = async () => {
+    if (selectedInvoiceIds.size === 0 || !companySettings) return
+
+    const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
+    const isNative = Capacitor.isNativePlatform()
+
+    if (isNative) {
+      // Impresión térmica nativa: conectar una vez, luego loop secuencial
+      setIsBulkPrinting(true)
+      setBulkPrintProgress({ current: 0, total: selectedInvoices.length })
+
+      try {
+        const printerConfigResult = await getPrinterConfig(getBusinessId())
+
+        if (!printerConfigResult.success || !printerConfigResult.config?.enabled || !printerConfigResult.config?.address) {
+          toast.error('No hay impresora configurada')
+          setIsBulkPrinting(false)
+          return
+        }
+
+        const connectResult = await connectPrinter(printerConfigResult.config.address)
+        if (!connectResult.success) {
+          toast.error('No se pudo conectar a la impresora: ' + connectResult.error)
+          setIsBulkPrinting(false)
+          return
+        }
+
+        let printed = 0
+        let errors = 0
+
+        for (let i = 0; i < selectedInvoices.length; i++) {
+          setBulkPrintProgress({ current: i + 1, total: selectedInvoices.length })
+
+          const result = await printInvoiceTicket(
+            selectedInvoices[i],
+            companySettings,
+            printerConfigResult.config.paperWidth || 80
+          )
+
+          if (result.success) {
+            printed++
+          } else {
+            errors++
+          }
+
+          // Delay entre tickets para que la impresora procese
+          if (i < selectedInvoices.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500))
+          }
+        }
+
+        if (errors === 0) {
+          toast.success(`${printed} ticket(s) impresos correctamente`)
+        } else {
+          toast.error(`${printed} impresos, ${errors} con error`)
+        }
+
+        clearSelection()
+      } catch (error) {
+        console.error('Error en impresión masiva:', error)
+        toast.error('Error al imprimir: ' + error.message)
+      } finally {
+        setIsBulkPrinting(false)
+        setBulkPrintProgress({ current: 0, total: 0 })
+      }
+    } else {
+      // Impresión web: window.print() renderiza el contenedor bulk
+      window.print()
+    }
   }
 
   const handleSendWhatsApp = async (invoice) => {
@@ -1163,13 +1254,26 @@ Gracias por tu preferencia.`
   const displayedInvoices = filteredInvoices.slice(0, visibleInvoicesCount)
   const hasMoreInvoices = filteredInvoices.length > visibleInvoicesCount
 
+  // Computed booleans for selection (must be after displayedInvoices)
+  const isAllDisplayedSelected = displayedInvoices.length > 0 && displayedInvoices.every(inv => selectedInvoiceIds.has(inv.id))
+  const isSomeDisplayedSelected = displayedInvoices.some(inv => selectedInvoiceIds.has(inv.id)) && !isAllDisplayedSelected
+
+  const toggleSelectAll = () => {
+    if (isAllDisplayedSelected) {
+      setSelectedInvoiceIds(new Set())
+    } else {
+      setSelectedInvoiceIds(new Set(displayedInvoices.map(inv => inv.id)))
+    }
+  }
+
   const loadMoreInvoices = () => {
     setVisibleInvoicesCount(prev => prev + INVOICES_PER_PAGE)
   }
 
-  // Reset pagination when filters change
+  // Reset pagination and selection when filters change
   useEffect(() => {
     setVisibleInvoicesCount(20)
+    setSelectedInvoiceIds(new Set())
   }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, dateFilter, filterStartDate, filterEndDate])
 
   const getStatusBadge = (status, documentType) => {
@@ -1604,11 +1708,38 @@ Gracias por tu preferencia.`
           <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
+              {/* Fila seleccionar todos - móvil */}
+              <div className="px-4 py-2 bg-gray-50 flex items-center gap-3">
+                <button
+                  onClick={toggleSelectAll}
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                    isAllDisplayedSelected
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : isSomeDisplayedSelected
+                        ? 'bg-primary-100 border-primary-600 text-primary-600'
+                        : 'border-gray-300 hover:border-primary-400'
+                  }`}
+                >
+                  {isAllDisplayedSelected && <Check className="w-3.5 h-3.5" />}
+                  {isSomeDisplayedSelected && <Minus className="w-3.5 h-3.5" />}
+                </button>
+                <span className="text-sm text-gray-600">Seleccionar todos</span>
+              </div>
               {displayedInvoices.map(invoice => (
-                <div key={invoice.id} className="px-4 py-3 hover:bg-gray-50 transition-colors">
-                  {/* Fila superior: Número + tipo + acciones */}
+                <div key={invoice.id} className={`px-4 py-3 hover:bg-gray-50 transition-colors ${selectedInvoiceIds.has(invoice.id) ? 'bg-primary-50' : ''}`}>
+                  {/* Fila superior: Checkbox + Número + tipo + acciones */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSelectInvoice(invoice.id) }}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                          selectedInvoiceIds.has(invoice.id)
+                            ? 'bg-primary-600 border-primary-600 text-white'
+                            : 'border-gray-300 hover:border-primary-400'
+                        }`}
+                      >
+                        {selectedInvoiceIds.has(invoice.id) && <Check className="w-3.5 h-3.5" />}
+                      </button>
                       <span className="font-medium text-primary-600 text-sm">{invoice.number}</span>
                       <span className="text-xs text-gray-500">{getDocumentTypeName(invoice.documentType)}</span>
                     </div>
@@ -1703,6 +1834,21 @@ Gracias por tu preferencia.`
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="py-2.5 px-2 w-10">
+                    <button
+                      onClick={toggleSelectAll}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        isAllDisplayedSelected
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : isSomeDisplayedSelected
+                            ? 'bg-primary-100 border-primary-600 text-primary-600'
+                            : 'border-gray-300 hover:border-primary-400'
+                      }`}
+                    >
+                      {isAllDisplayedSelected && <Check className="w-3.5 h-3.5" />}
+                      {isSomeDisplayedSelected && <Minus className="w-3.5 h-3.5" />}
+                    </button>
+                  </TableHead>
                   <TableHead className="py-2.5 px-3">Número</TableHead>
                   <TableHead className="py-2.5 px-3">Tipo</TableHead>
                   <TableHead className="py-2.5 px-3">Cliente</TableHead>
@@ -1716,7 +1862,19 @@ Gracias por tu preferencia.`
               </TableHeader>
               <TableBody>
                 {displayedInvoices.map(invoice => (
-                  <TableRow key={invoice.id}>
+                  <TableRow key={invoice.id} className={selectedInvoiceIds.has(invoice.id) ? 'bg-primary-50' : ''}>
+                    <TableCell className="py-2.5 px-2 w-10">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSelectInvoice(invoice.id) }}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          selectedInvoiceIds.has(invoice.id)
+                            ? 'bg-primary-600 border-primary-600 text-white'
+                            : 'border-gray-300 hover:border-primary-400'
+                        }`}
+                      >
+                        {selectedInvoiceIds.has(invoice.id) && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    </TableCell>
                     <TableCell className="py-2.5 px-3">
                       <span className="font-medium text-primary-600 text-sm whitespace-nowrap">
                         {invoice.number}
@@ -1837,6 +1995,41 @@ Gracias por tu preferencia.`
             className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
           >
             Ver más comprobantes ({filteredInvoices.length - visibleInvoicesCount} restantes)
+          </button>
+        </div>
+      )}
+
+      {/* Barra flotante de acciones masivas */}
+      {selectedInvoiceIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 bg-gray-900 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-4 print:hidden">
+          <span className="text-sm font-medium whitespace-nowrap">
+            {selectedInvoiceIds.size} seleccionado{selectedInvoiceIds.size !== 1 ? 's' : ''}
+          </span>
+          <div className="w-px h-6 bg-gray-600" />
+          <Button
+            onClick={handleBulkPrintTickets}
+            disabled={isBulkPrinting}
+            className="bg-white text-gray-900 hover:bg-gray-100 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+          >
+            {isBulkPrinting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Imprimiendo {bulkPrintProgress.current} de {bulkPrintProgress.total}...
+              </>
+            ) : (
+              <>
+                <Printer className="w-4 h-4" />
+                Imprimir tickets
+              </>
+            )}
+          </Button>
+          <button
+            onClick={clearSelection}
+            disabled={isBulkPrinting}
+            className="text-gray-400 hover:text-white transition-colors p-1"
+            title="Cancelar selección"
+          >
+            <XCircle className="w-5 h-5" />
           </button>
         </div>
       )}
@@ -3364,11 +3557,30 @@ Gracias por tu preferencia.`
         </div>
       </Modal>
 
-      {/* Hidden Ticket Component for Printing */}
-      {/* Ticket Oculto para Impresión */}
+      {/* Hidden Ticket Component for Printing - Individual */}
       {viewingInvoice && (
         <div className="hidden print:block">
           <InvoiceTicket ref={ticketRef} invoice={viewingInvoice} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} />
+        </div>
+      )}
+
+      {/* Hidden Ticket Container for Bulk Printing */}
+      {!viewingInvoice && selectedInvoiceIds.size > 0 && (
+        <div className="hidden print:block bulk-print-container">
+          <style>{`
+            @media print {
+              .bulk-print-container .ticket-container {
+                position: relative !important;
+                page-break-after: always;
+              }
+              .bulk-print-container .ticket-container:last-child {
+                page-break-after: auto;
+              }
+            }
+          `}</style>
+          {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
+            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={80} webPrintLegible={webPrintLegible} compactPrint={compactPrint} />
+          ))}
         </div>
       )}
 

@@ -2033,6 +2033,9 @@ export default function POS() {
     setIsLookingUp(true)
 
     try {
+      // Buscar si el cliente ya existe en la lista de clientes registrados
+      const existingCustomer = customers.find(c => c.documentNumber === docNumber)
+
       let result
 
       // Determinar si es DNI o RUC según la longitud
@@ -2046,12 +2049,21 @@ export default function POS() {
       }
 
       if (result.success) {
-        // Autocompletar datos
+        // Autocompletar datos de SUNAT + datos locales del cliente registrado
         if (docNumber.length === 8) {
           // Datos de DNI
           setCustomerData(prev => ({
             ...prev,
             name: result.data.nombreCompleto || '',
+            // Completar con datos del cliente registrado (si existe)
+            ...(existingCustomer && {
+              phone: existingCustomer.phone || prev.phone || '',
+              email: existingCustomer.email || prev.email || '',
+              address: existingCustomer.address || prev.address || '',
+              studentName: existingCustomer.studentName || prev.studentName || '',
+              studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
+              vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
+            }),
           }))
           toast.success(`Datos encontrados: ${result.data.nombreCompleto}`)
         } else {
@@ -2061,11 +2073,42 @@ export default function POS() {
             businessName: result.data.razonSocial || '',
             name: result.data.nombreComercial || '',
             address: result.data.direccion || '',
+            // Completar con datos del cliente registrado (si existe)
+            ...(existingCustomer && {
+              phone: existingCustomer.phone || prev.phone || '',
+              email: existingCustomer.email || prev.email || '',
+              studentName: existingCustomer.studentName || prev.studentName || '',
+              studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
+              vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
+            }),
           }))
           toast.success(`Datos encontrados: ${result.data.razonSocial}`)
         }
+
+        // Si el cliente existe localmente, marcarlo como seleccionado
+        if (existingCustomer) {
+          setSelectedCustomer(existingCustomer)
+        }
       } else {
-        toast.error(result.error || 'No se encontraron datos para este documento', 5000)
+        // SUNAT no encontró datos, pero si existe localmente, usar esos datos
+        if (existingCustomer) {
+          setSelectedCustomer(existingCustomer)
+          setCustomerData(prev => ({
+            ...prev,
+            documentType: existingCustomer.documentType || prev.documentType,
+            name: existingCustomer.name || prev.name || '',
+            businessName: existingCustomer.businessName || prev.businessName || '',
+            address: existingCustomer.address || prev.address || '',
+            email: existingCustomer.email || prev.email || '',
+            phone: existingCustomer.phone || prev.phone || '',
+            studentName: existingCustomer.studentName || prev.studentName || '',
+            studentSchedule: existingCustomer.studentSchedule || prev.studentSchedule || '',
+            vehiclePlate: existingCustomer.vehiclePlate || prev.vehiclePlate || '',
+          }))
+          toast.success(`Cliente registrado encontrado: ${existingCustomer.name || existingCustomer.businessName}`)
+        } else {
+          toast.error(result.error || 'No se encontraron datos para este documento', 5000)
+        }
       }
     } catch (error) {
       console.error('Error al buscar documento:', error)
