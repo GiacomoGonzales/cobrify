@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AlertTriangle, MessageCircle, Copy, Check, Smartphone, Building2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import { getVendedor } from '@/services/vendedorService'
 
-const WHATSAPP_NUMBER = '51900434988'
+const DEFAULT_WHATSAPP = '51900434988'
 
-const PAYMENT_INFO = {
+const DEFAULT_PAYMENT_INFO = {
   yape: { number: '926 258 059', name: 'Quantio Solutions EIRL' },
   bcp: { account: '1937311451039', cci: '00219300731145103916' },
   titular: 'Quantio Solutions EIRL',
@@ -45,12 +46,32 @@ function CopyButton({ text }) {
 
 export default function SubscriptionBlockedModal({ isOpen, subscription, businessName }) {
   const email = subscription?.email || ''
+  const [vendedor, setVendedor] = useState(null)
+
+  useEffect(() => {
+    if (subscription?.vendedorId) {
+      getVendedor(subscription.vendedorId).then(result => {
+        if (result.success) setVendedor(result.data)
+      })
+    }
+  }, [subscription?.vendedorId])
+
+  const paymentInfo = vendedor
+    ? {
+        yape: { number: vendedor.yapeNumber, name: vendedor.yapeName },
+        bcp: { account: vendedor.bcpAccount, cci: vendedor.bcpCci },
+        titular: vendedor.titular,
+      }
+    : DEFAULT_PAYMENT_INFO
+
+  const whatsappNumber = vendedor?.phone || DEFAULT_WHATSAPP
+  const yapeRaw = vendedor ? vendedor.yapeNumber.replace(/\s/g, '') : '926258059'
 
   const handleContactWhatsApp = () => {
     const message = encodeURIComponent(
       `Hola, quiero renovar mi suscripción de Cobrify. Mi email es ${email}. Mi negocio es ${businessName || ''}.`
     )
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank')
+    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank')
   }
 
   return (
@@ -75,42 +96,48 @@ export default function SubscriptionBlockedModal({ isOpen, subscription, busines
         {/* Datos de pago */}
         <div className="mb-5 space-y-3">
           {/* Yape */}
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-purple-600" />
-                <span className="text-sm font-semibold text-purple-800">Yape</span>
+          {paymentInfo.yape.number && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm font-semibold text-purple-800">Yape</span>
+                </div>
+                <CopyButton text={yapeRaw} />
               </div>
-              <CopyButton text="926258059" />
+              <p className="text-purple-900 font-mono font-medium mt-1">{paymentInfo.yape.number}</p>
+              <p className="text-xs text-purple-600">{paymentInfo.yape.name}</p>
             </div>
-            <p className="text-purple-900 font-mono font-medium mt-1">{PAYMENT_INFO.yape.number}</p>
-            <p className="text-xs text-purple-600">{PAYMENT_INFO.yape.name}</p>
-          </div>
+          )}
 
           {/* Cuenta BCP */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Building2 className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-semibold text-blue-800">Cuenta BCP Soles</span>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-blue-500 uppercase">N. Cuenta</p>
-                  <p className="text-sm font-mono font-medium text-blue-900">{PAYMENT_INFO.bcp.account}</p>
-                </div>
-                <CopyButton text={PAYMENT_INFO.bcp.account} />
+          {paymentInfo.bcp.account && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-semibold text-blue-800">Cuenta BCP Soles</span>
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-blue-500 uppercase">CCI</p>
-                  <p className="text-sm font-mono font-medium text-blue-900">{PAYMENT_INFO.bcp.cci}</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-blue-500 uppercase">N. Cuenta</p>
+                    <p className="text-sm font-mono font-medium text-blue-900">{paymentInfo.bcp.account}</p>
+                  </div>
+                  <CopyButton text={paymentInfo.bcp.account} />
                 </div>
-                <CopyButton text={PAYMENT_INFO.bcp.cci} />
+                {paymentInfo.bcp.cci && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] text-blue-500 uppercase">CCI</p>
+                      <p className="text-sm font-mono font-medium text-blue-900">{paymentInfo.bcp.cci}</p>
+                    </div>
+                    <CopyButton text={paymentInfo.bcp.cci} />
+                  </div>
+                )}
+                <p className="text-xs text-blue-600">Titular: {paymentInfo.titular}</p>
               </div>
-              <p className="text-xs text-blue-600">Titular: {PAYMENT_INFO.titular}</p>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Botón de WhatsApp */}

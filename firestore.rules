@@ -96,6 +96,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Vendedores collection (agentes de venta)
+    match /vendedores/{vendedorId} {
+      // Solo admins pueden crear/editar/eliminar vendedores
+      allow read, write: if isAdmin();
+      // Usuarios autenticados pueden leer (para mostrar datos de pago en suspensión)
+      allow read: if isAuthenticated();
+    }
+
     // Resellers collection
     match /resellers/{resellerId} {
       // Admins pueden leer/escribir cualquier reseller

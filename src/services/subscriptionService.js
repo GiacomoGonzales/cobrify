@@ -580,8 +580,9 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
         updatedAt: serverTimestamp()
       });
 
-      // Enviar notificación
-      await notifyPaymentReceived(userId, amount, planConfig.name, null);
+      // Enviar notificación (ocultar monto si tiene vendedor asignado)
+      const hasVendedor = !!subscription.vendedorId;
+      await notifyPaymentReceived(userId, amount, planConfig.name, null, hasVendedor);
       return;
     }
 
@@ -634,8 +635,9 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
       updatedAt: serverTimestamp()
     });
 
-    // Enviar notificación al usuario
-    await notifyPaymentReceived(userId, amount, planConfig?.name || selectedPlan, newPeriodEnd);
+    // Enviar notificación al usuario (ocultar monto si tiene vendedor asignado)
+    const hasVendedor = !!subscription.vendedorId;
+    await notifyPaymentReceived(userId, amount, planConfig?.name || selectedPlan, newPeriodEnd, hasVendedor);
   } catch (error) {
     console.error('Error al registrar pago:', error);
     throw error;

@@ -4,6 +4,7 @@ import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUn
 import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
+import { getVendedores, createVendedor, updateVendedor, deleteVendedor } from '@/services/vendedorService'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -50,7 +51,8 @@ import {
   PlusCircle,
   TrendingUp,
   TrendingDown,
-  ChevronRight
+  ChevronRight,
+  UserCheck
 } from 'lucide-react'
 import {
   getBranches,
@@ -195,12 +197,27 @@ export default function AdminUsers() {
 
   const [showRenewalDetails, setShowRenewalDetails] = useState(false)
 
+  // Estados para vendedores (agentes de venta)
+  const [vendedores, setVendedores] = useState([])
+  const [vendedorFilter, setVendedorFilter] = useState('all') // 'all' | 'none' | vendedorId
+  const [showVendedorModal, setShowVendedorModal] = useState(false) // CRUD modal
+  const [editingVendedor, setEditingVendedor] = useState(null) // null = crear, obj = editar
+  const [savingVendedor, setSavingVendedor] = useState(false)
+  const [vendedorForm, setVendedorForm] = useState({
+    name: '', phone: '', yapeNumber: '', yapeName: '', bcpAccount: '', bcpCci: '', titular: ''
+  })
+  const [showAssignVendedorModal, setShowAssignVendedorModal] = useState(false)
+  const [userToAssignVendedor, setUserToAssignVendedor] = useState(null)
+  const [selectedVendedorId, setSelectedVendedorId] = useState('')
+  const [savingAssignment, setSavingAssignment] = useState(false)
+
   // Planes personalizados
   const [customPlans, setCustomPlans] = useState({})
 
   useEffect(() => {
     loadUsers()
     loadCustomPlansData()
+    loadVendedores()
   }, [])
 
   async function loadCustomPlansData() {
@@ -209,6 +226,15 @@ export default function AdminUsers() {
       setCustomPlans(plans)
     } catch (e) {
       console.error('Error loading custom plans:', e)
+    }
+  }
+
+  async function loadVendedores() {
+    try {
+      const result = await getVendedores()
+      if (result.success) setVendedores(result.data)
+    } catch (e) {
+      console.error('Error loading vendedores:', e)
     }
   }
 
@@ -364,7 +390,9 @@ export default function AdminUsers() {
           // Origen del cliente (Cobrify directo o Reseller)
           createdByReseller: data.createdByReseller || false,
           resellerId: data.resellerId || null,
-          resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null
+          resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null,
+          // Vendedor (agente de venta) asignado
+          vendedorId: data.vendedorId || null
         })
       })
 
@@ -496,6 +524,13 @@ export default function AdminUsers() {
       }
     }
 
+    // Filtro de vendedor (agente de venta)
+    if (vendedorFilter === 'none') {
+      result = result.filter(u => !u.vendedorId)
+    } else if (vendedorFilter !== 'all') {
+      result = result.filter(u => u.vendedorId === vendedorFilter)
+    }
+
     // Filtro de origen (Cobrify vs Reseller vs Reseller específico)
     if (sourceFilter === 'cobrify') {
       result = result.filter(u => !u.createdByReseller)
@@ -521,7 +556,7 @@ export default function AdminUsers() {
     })
 
     return result
-  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, sortField, sortDirection])
+  }, [users, searchTerm, statusFilter, planFilter, sourceFilter, modeFilter, igvFilter, vendedorFilter, sortField, sortDirection])
 
   // Estadísticas rápidas
   const stats = useMemo(() => {
@@ -693,6 +728,88 @@ export default function AdminUsers() {
       toast.error('Error al eliminar usuario')
     } finally {
       setDeletingUser(false)
+    }
+  }
+
+  // === VENDEDORES (Agentes de venta) ===
+
+  function openVendedorForm(vendedor = null) {
+    if (vendedor) {
+      setEditingVendedor(vendedor)
+      setVendedorForm({
+        name: vendedor.name || '',
+        phone: vendedor.phone || '',
+        yapeNumber: vendedor.yapeNumber || '',
+        yapeName: vendedor.yapeName || '',
+        bcpAccount: vendedor.bcpAccount || '',
+        bcpCci: vendedor.bcpCci || '',
+        titular: vendedor.titular || ''
+      })
+    } else {
+      setEditingVendedor(null)
+      setVendedorForm({ name: '', phone: '', yapeNumber: '', yapeName: '', bcpAccount: '', bcpCci: '', titular: '' })
+    }
+    setShowVendedorModal(true)
+  }
+
+  async function handleSaveVendedor() {
+    if (!vendedorForm.name.trim()) {
+      toast.error('El nombre es obligatorio')
+      return
+    }
+    setSavingVendedor(true)
+    try {
+      if (editingVendedor) {
+        const result = await updateVendedor(editingVendedor.id, vendedorForm)
+        if (result.success) toast.success('Vendedor actualizado')
+        else toast.error(result.error)
+      } else {
+        const result = await createVendedor(vendedorForm)
+        if (result.success) toast.success('Vendedor creado')
+        else toast.error(result.error)
+      }
+      setShowVendedorModal(false)
+      loadVendedores()
+    } catch (error) {
+      toast.error('Error al guardar vendedor')
+    } finally {
+      setSavingVendedor(false)
+    }
+  }
+
+  async function handleDeleteVendedor(vendedorId) {
+    if (!confirm('¿Eliminar este vendedor?')) return
+    try {
+      const result = await deleteVendedor(vendedorId)
+      if (result.success) {
+        toast.success('Vendedor eliminado')
+        loadVendedores()
+      } else {
+        toast.error(result.error)
+      }
+    } catch (error) {
+      toast.error('Error al eliminar vendedor')
+    }
+  }
+
+  async function handleAssignVendedor() {
+    if (!userToAssignVendedor) return
+    setSavingAssignment(true)
+    try {
+      const subscriptionRef = doc(db, 'subscriptions', userToAssignVendedor.id)
+      await updateDoc(subscriptionRef, {
+        vendedorId: selectedVendedorId || null
+      })
+      toast.success(selectedVendedorId ? 'Vendedor asignado' : 'Vendedor removido')
+      setShowAssignVendedorModal(false)
+      setUserToAssignVendedor(null)
+      setSelectedVendedorId('')
+      loadUsers()
+    } catch (error) {
+      console.error('Error asignando vendedor:', error)
+      toast.error('Error al asignar vendedor')
+    } finally {
+      setSavingAssignment(false)
     }
   }
 
@@ -1515,9 +1632,10 @@ export default function AdminUsers() {
         updatedAt: Timestamp.now()
       })
 
-      // Enviar notificación al usuario
+      // Enviar notificación al usuario (ocultar monto si tiene vendedor asignado)
       try {
-        await notifyPaymentReceived(userId, parseFloat(amount), plan.name, newEndDate)
+        const hideAmount = !!currentData.vendedorId
+        await notifyPaymentReceived(userId, parseFloat(amount), plan.name, newEndDate, hideAmount)
         console.log('✅ Notificación de pago enviada al usuario')
       } catch (notifError) {
         console.error('Error al enviar notificación:', notifError)
@@ -1808,6 +1926,23 @@ export default function AdminUsers() {
             </select>
 
             <select
+              value={vendedorFilter}
+              onChange={e => setVendedorFilter(e.target.value)}
+              className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">Vendedor</option>
+              <option value="none">Sin vendedor</option>
+              {vendedores.map(v => {
+                const count = users.filter(u => u.vendedorId === v.id).length
+                return (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({count})
+                  </option>
+                )
+              })}
+            </select>
+
+            <select
               value={modeFilter}
               onChange={e => setModeFilter(e.target.value)}
               className="flex-1 sm:flex-none px-2 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -1838,6 +1973,15 @@ export default function AdminUsers() {
               title="Recargar"
             >
               <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              onClick={() => openVendedorForm()}
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-xs sm:text-sm"
+              title="Gestionar vendedores"
+            >
+              <UserCheck className="w-4 h-4" />
+              <span className="hidden sm:inline">Vendedores</span>
             </button>
 
             <button
@@ -1901,6 +2045,11 @@ export default function AdminUsers() {
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
                       {user.createdByReseller && (
                         <p className="text-[10px] text-purple-600 truncate">↳ {user.resellerName}</p>
+                      )}
+                      {user.vendedorId && (
+                        <p className="text-[10px] text-orange-600 font-medium truncate">
+                          V: {vendedores.find(v => v.id === user.vendedorId)?.name || 'Vendedor'}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -2148,6 +2297,11 @@ export default function AdminUsers() {
                               ↳ {user.resellerName}
                             </p>
                           )}
+                          {user.vendedorId && (
+                            <p className="text-[9px] text-orange-600 font-medium truncate max-w-[150px]">
+                              V: {vendedores.find(v => v.id === user.vendedorId)?.name || 'Vendedor'}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -2342,6 +2496,18 @@ export default function AdminUsers() {
                                 <CheckCircle className="w-3.5 h-3.5" /> Reactivar
                               </button>
                             )}
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                setUserToAssignVendedor(user)
+                                setSelectedVendedorId(user.vendedorId || '')
+                                setShowAssignVendedorModal(true)
+                                setActionMenuUser(null)
+                              }}
+                              className="w-full px-3 py-1.5 text-left text-xs text-orange-600 hover:bg-orange-50 flex items-center gap-2"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" /> Asignar vendedor
+                            </button>
                             <div className="border-t border-gray-100 my-0.5" />
                             <button
                               onClick={e => {
@@ -3911,6 +4077,220 @@ export default function AdminUsers() {
                     <Check className="w-4 h-4" />
                     Guardar
                   </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Crear/Editar Vendedor */}
+      {showVendedorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editingVendedor ? 'Editar Vendedor' : 'Nuevo Vendedor'}
+                </h2>
+                <p className="text-sm text-gray-500">Agente de venta</p>
+              </div>
+              <button onClick={() => setShowVendedorModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <input
+                  type="text"
+                  value={vendedorForm.name}
+                  onChange={e => setVendedorForm({ ...vendedorForm, name: e.target.value })}
+                  placeholder="Ej: Luis Huaman"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp (con código país)</label>
+                <input
+                  type="text"
+                  value={vendedorForm.phone}
+                  onChange={e => setVendedorForm({ ...vendedorForm, phone: e.target.value })}
+                  placeholder="51987654321"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">N° Yape</label>
+                  <input
+                    type="text"
+                    value={vendedorForm.yapeNumber}
+                    onChange={e => setVendedorForm({ ...vendedorForm, yapeNumber: e.target.value })}
+                    placeholder="987 654 321"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Yape</label>
+                  <input
+                    type="text"
+                    value={vendedorForm.yapeName}
+                    onChange={e => setVendedorForm({ ...vendedorForm, yapeName: e.target.value })}
+                    placeholder="Luis Huaman"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cuenta BCP</label>
+                  <input
+                    type="text"
+                    value={vendedorForm.bcpAccount}
+                    onChange={e => setVendedorForm({ ...vendedorForm, bcpAccount: e.target.value })}
+                    placeholder="1234567890123"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">CCI</label>
+                  <input
+                    type="text"
+                    value={vendedorForm.bcpCci}
+                    onChange={e => setVendedorForm({ ...vendedorForm, bcpCci: e.target.value })}
+                    placeholder="00212345678901234567"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Titular de cuenta</label>
+                <input
+                  type="text"
+                  value={vendedorForm.titular}
+                  onChange={e => setVendedorForm({ ...vendedorForm, titular: e.target.value })}
+                  placeholder="Luis Huaman"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              {/* Lista de vendedores existentes */}
+              {vendedores.length > 0 && (
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Vendedores existentes</h3>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {vendedores.map(v => (
+                      <div key={v.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{v.name}</p>
+                          <p className="text-xs text-gray-500">{v.phone} | Yape: {v.yapeNumber}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openVendedorForm(v)}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteVendedor(v.id)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowVendedorModal(false)}
+                disabled={savingVendedor}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveVendedor}
+                disabled={savingVendedor || !vendedorForm.name.trim()}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingVendedor ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
+                ) : (
+                  <><Save className="w-4 h-4" /> {editingVendedor ? 'Actualizar' : 'Crear'}</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Asignar Vendedor a Usuario */}
+      {showAssignVendedorModal && userToAssignVendedor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                  <UserCheck className="w-6 h-6 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Asignar Vendedor</h2>
+                  <p className="text-sm text-gray-500">{userToAssignVendedor.businessName}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
+                <select
+                  value={selectedVendedorId}
+                  onChange={e => setSelectedVendedorId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Sin vendedor (Quantio)</option>
+                  {vendedores.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="bg-orange-50 rounded-lg p-3">
+                <p className="text-xs text-orange-700">
+                  Si se asigna un vendedor, al suspenderse este cliente verá los datos de pago del vendedor y las notificaciones de pago no mostrarán montos.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowAssignVendedorModal(false)
+                  setUserToAssignVendedor(null)
+                  setSelectedVendedorId('')
+                }}
+                disabled={savingAssignment}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAssignVendedor}
+                disabled={savingAssignment}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingAssignment ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
+                ) : (
+                  <><Check className="w-4 h-4" /> Guardar</>
                 )}
               </button>
             </div>

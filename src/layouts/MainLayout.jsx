@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 import { useAuth } from '@/contexts/AuthContext'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { getVendedor } from '@/services/vendedorService'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import OfflineIndicator from '@/components/OfflineIndicator'
@@ -57,10 +58,24 @@ export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, hasPageAccess, allowedPages, getBusinessId, isInGracePeriod } = useAuth()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
+  const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
 
   // Iniciar listener de Yape automáticamente (solo en APK Android)
   useYapeListener()
+
+  // Cargar WhatsApp del vendedor si tiene uno asignado
+  useEffect(() => {
+    if (subscription?.vendedorId && isInGracePeriod) {
+      getVendedor(subscription.vendedorId).then(result => {
+        if (result.success && result.data?.phone) {
+          setVendedorWhatsApp(result.data.phone)
+        }
+      })
+    } else {
+      setVendedorWhatsApp(null)
+    }
+  }, [subscription?.vendedorId, isInGracePeriod])
 
   // Forzar reflow cuando el layout se monta para evitar conflictos de estilos después de Login
   useEffect(() => {
@@ -250,7 +265,7 @@ export default function MainLayout() {
             <span className="font-medium">Tu suscripción venció. Tienes hasta mañana para renovar.</span>
           </div>
           <a
-            href={`https://wa.me/51900434988?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de Cobrify. Mi email es ${user?.email || ''}.`)}`}
+            href={`https://wa.me/${vendedorWhatsApp || '51900434988'}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de Cobrify. Mi email es ${user?.email || ''}.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors"
