@@ -2347,6 +2347,18 @@ export default function POS() {
     }
   }
 
+  // Mantener el monto del pago sincronizado con el total cuando hay un solo método
+  // Esto cubre: recargo al consumo que carga después, cambios de cantidad, descuentos, etc.
+  useEffect(() => {
+    if (saleCompleted) return
+    setPayments(prev => {
+      if (prev.length !== 1 || !prev[0].method) return prev
+      const newAmount = amounts.total > 0 ? amounts.total.toString() : ''
+      if (prev[0].amount === newAmount) return prev
+      return [{ ...prev[0], amount: newAmount }]
+    })
+  }, [amounts.total, saleCompleted])
+
   // Eliminar un método de pago
   const handleRemovePaymentMethod = (index) => {
     if (payments.length > 1) {

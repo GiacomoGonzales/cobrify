@@ -50,12 +50,17 @@ import {
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
+import { useTheme } from '@/contexts/ThemeContext'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen } = useStore()
   const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
   const { branding } = useBranding()
+  const { theme } = useTheme()
   const location = useLocation()
+
+  // Determinar si el sidebar es oscuro (para logo/textos blancos)
+  const isSidebarDark = theme.isDark || !!theme.sidebarGradient
 
   // Si estamos en modo demo, añadir prefijo /demo, /demorestaurant o /demopharmacy a las rutas
   // Si no, añadir prefijo /app para rutas protegidas
@@ -340,6 +345,13 @@ function Sidebar() {
       icon: Users,
       label: 'Clientes',
       pageId: 'customers',
+    },
+    {
+      path: '/vendedores',
+      icon: UserCog,
+      label: 'Vendedores',
+      pageId: 'sellers',
+      menuId: 'sellers',
     },
     // --- Menú y cocina ---
     {
@@ -803,12 +815,16 @@ function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-screen h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 sidebar-ios flex flex-col overflow-hidden
+        className={`fixed left-0 top-0 h-screen h-[100dvh] border-r transition-all duration-300 z-50 w-64 sidebar-ios flex flex-col overflow-hidden
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
+        style={{
+          background: theme.sidebarGradient || theme.sidebarBg,
+          borderColor: theme.sidebarBorder,
+        }}
       >
       {/* Logo - Dinámico según branding del reseller */}
-      <div className="h-16 flex-shrink-0 flex items-center justify-center px-4 border-b border-gray-200">
+      <div className="h-16 flex-shrink-0 flex items-center justify-center px-4 border-b" style={{ borderColor: theme.sidebarBorder }}>
         <div className="flex items-center space-x-3">
           {branding.logoUrl ? (
             <img
@@ -831,7 +847,7 @@ function Sidebar() {
           )}
           <span
             className="text-xl font-bold"
-            style={{ color: branding.primaryColor || '#111827' }}
+            style={{ color: isSidebarDark ? '#ffffff' : (branding.primaryColor || '#111827') }}
           >
             {branding.companyName}
           </span>
@@ -845,45 +861,53 @@ function Sidebar() {
           <div className="space-y-2 animate-pulse">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="flex items-center space-x-3 px-3 py-2">
-                <div className="w-5 h-5 bg-gray-200 rounded" />
-                <div className="h-4 bg-gray-200 rounded w-24" />
+                <div className="w-5 h-5 rounded" style={{ backgroundColor: isSidebarDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb' }} />
+                <div className="h-4 rounded w-24" style={{ backgroundColor: isSidebarDark ? 'rgba(255,255,255,0.1)' : '#e5e7eb' }} />
               </div>
             ))}
           </div>
         )}
-        {filteredMenuItems.map(item => (
-          <NavLink
-            key={item.path}
-            to={getPath(item.path)}
-            onClick={() => setMobileMenuOpen(false)}
-            className={({ isActive }) =>
-              `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
-                isActive
-                  ? ''
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`
-            }
-            style={({ isActive }) => isActive ? {
-              backgroundColor: `${branding.primaryColor}15`,
-              color: branding.primaryColor
-            } : {}}
-          >
-            {({ isActive }) => (
-              <>
-                <item.icon
-                  className="w-5 h-5 flex-shrink-0"
-                  style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
-                />
-                <span className="font-medium text-sm">{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+        {filteredMenuItems.map(item => {
+          const activeColor = theme.sidebarTextActive || branding.primaryColor
+          const activeBg = theme.sidebarActiveBg || `${branding.primaryColor}15`
+          return (
+            <NavLink
+              key={item.path}
+              to={getPath(item.path)}
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
+                  isActive ? '' : 'sidebar-nav-link'
+                }`
+              }
+              style={({ isActive }) => isActive ? {
+                backgroundColor: activeBg,
+                color: activeColor,
+                borderLeft: theme.sidebarActiveLeftBar ? `3px solid ${theme.sidebarActiveLeftBar}` : undefined,
+                paddingLeft: theme.sidebarActiveLeftBar ? '9px' : undefined,
+              } : {
+                color: theme.sidebarText,
+              }}
+            >
+              {({ isActive }) => (
+                <>
+                  <item.icon
+                    className="w-5 h-5 flex-shrink-0"
+                    style={isActive ? { color: activeColor } : { color: theme.sidebarIconColor }}
+                  />
+                  <span className="font-medium text-sm">{item.label}</span>
+                </>
+              )}
+            </NavLink>
+          )
+        })}
 
         {/* Separador */}
-        <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
+        <div className="pt-2 border-t mt-2 space-y-1" style={{ borderColor: theme.sidebarBorder }}>
           {filteredAdditionalItems.map(item => {
             const itemPath = item.isExternalPath ? item.path : getPath(item.path)
+            const activeColor = theme.sidebarTextActive || branding.primaryColor
+            const activeBg = theme.sidebarActiveBg || `${branding.primaryColor}15`
             return (
               <NavLink
                 key={item.path}
@@ -891,21 +915,23 @@ function Sidebar() {
                 onClick={() => setMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${
-                    isActive
-                      ? ''
-                      : 'text-gray-700 hover:bg-gray-100'
+                    isActive ? '' : 'sidebar-nav-link'
                   }`
                 }
                 style={({ isActive }) => isActive ? {
-                  backgroundColor: `${branding.primaryColor}15`,
-                  color: branding.primaryColor
-                } : {}}
+                  backgroundColor: activeBg,
+                  color: activeColor,
+                  borderLeft: theme.sidebarActiveLeftBar ? `3px solid ${theme.sidebarActiveLeftBar}` : undefined,
+                  paddingLeft: theme.sidebarActiveLeftBar ? '9px' : undefined,
+                } : {
+                  color: theme.sidebarText,
+                }}
               >
                 {({ isActive }) => (
                   <>
                     <item.icon
                       className="w-5 h-5 flex-shrink-0"
-                      style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
+                      style={isActive ? { color: activeColor } : { color: theme.sidebarIconColor }}
                     />
                     <span className="font-medium text-sm">{item.label}</span>
                     {item.adminOnly && (

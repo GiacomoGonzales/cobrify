@@ -78,6 +78,8 @@ export const RESTAURANT_PAGES = [
   { id: 'recipes', name: 'Recetas', path: '/recetas', category: 'produccion' },
   { id: 'production', name: 'Producción', path: '/produccion', category: 'produccion' },
   { id: 'purchase-history', name: 'Historial de Compras', path: '/ingredientes/historial', category: 'produccion' },
+  // Ventas
+  { id: 'sellers', name: 'Vendedores', path: '/vendedores', category: 'ventas' },
   // Compras
   { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
   { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
