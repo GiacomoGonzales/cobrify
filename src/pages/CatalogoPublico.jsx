@@ -44,13 +44,59 @@ function ProductSkeleton() {
   )
 }
 
+// Helper: determinar si un producto está agotado
+const isProductOutOfStock = (product) => {
+  if (!product) return false
+  // Productos sin control de stock siempre disponibles
+  if (product.trackStock === false || product.stock === null || product.stock === undefined) return false
+  // Producto con variantes: agotado solo si TODAS las variantes están agotadas
+  if (product.hasVariants && product.variants?.length > 0) {
+    return product.variants.every(v => v.stock !== null && v.stock !== undefined && v.stock <= 0)
+  }
+  return product.stock <= 0
+}
+
+// Helper: obtener precios disponibles de un producto (mayorista, VIP, etc.)
+const getProductPrices = (product, business) => {
+  if (!business?.multiplePricesEnabled) return []
+  const keys = [
+    { priceField: 'price', labelKey: 'price1' },
+    { priceField: 'price2', labelKey: 'price2' },
+    { priceField: 'price3', labelKey: 'price3' },
+    { priceField: 'price4', labelKey: 'price4' },
+  ]
+  const defaultLabels = { price1: 'Público', price2: 'Mayorista', price3: 'VIP', price4: 'Especial' }
+  const prices = []
+  keys.forEach(({ priceField, labelKey }) => {
+    const value = product[priceField]
+    if (value && value > 0) {
+      prices.push({
+        key: labelKey,
+        value,
+        label: business.priceLabels?.[labelKey] || defaultLabels[labelKey]
+      })
+    }
+  })
+  return prices
+}
+
+// Helper: obtener rango de precios min~max (solo para productos sin variantes con múltiples precios)
+const getProductPriceRange = (product, business) => {
+  if (product.hasVariants && product.variants?.length > 0) return null
+  const prices = getProductPrices(product, business)
+  if (prices.length <= 1) return null
+  const values = prices.map(p => p.value)
+  return { min: Math.min(...values), max: Math.max(...values) }
+}
+
 // Modal de producto con soporte para modificadores
-function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true }) {
+function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true, business }) {
   const [quantity, setQuantity] = useState(1)
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [modifierErrors, setModifierErrors] = useState({})
   const [selectedVariant, setSelectedVariant] = useState(null)
   const [variantError, setVariantError] = useState(false)
+  const [selectedPriceLevel, setSelectedPriceLevel] = useState('price1')
 
   // Inicializar modificadores cuando se abre el modal
   useEffect(() => {
@@ -58,6 +104,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
       setQuantity(1)
       setSelectedVariant(null)
       setVariantError(false)
+      setSelectedPriceLevel('price1')
       document.body.style.overflow = 'hidden'
       // Inicializar estado de modificadores
       if (product?.modifiers?.length > 0) {
@@ -80,6 +127,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
   if (!isOpen || !product) return null
 
+  const outOfStock = isProductOutOfStock(product)
   const hasModifiers = product.modifiers?.length > 0
 
   // Manejar selección de opción de modificador
@@ -119,9 +167,21 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
   const hasVariants = product.hasVariants && product.variants?.length > 0
 
+  // Precios disponibles (mayorista, VIP, etc.)
+  const availablePrices = getProductPrices(product, business)
+  const hasMultiplePrices = availablePrices.length > 1 && !hasVariants
+
   // Calcular precio total con modificadores y variante
   const calculateTotalPrice = () => {
-    let total = hasVariants ? (selectedVariant?.price || product.basePrice || 0) : (product.price || 0)
+    let total
+    if (hasVariants) {
+      total = selectedVariant?.price || product.basePrice || 0
+    } else if (hasMultiplePrices && selectedPriceLevel) {
+      const selected = availablePrices.find(p => p.key === selectedPriceLevel)
+      total = selected?.value || product.price || 0
+    } else {
+      total = product.price || 0
+    }
     if (hasModifiers) {
       Object.keys(selectedModifiers).forEach(modifierId => {
         const modifier = product.modifiers.find(m => m.id === modifierId)
@@ -187,6 +247,9 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
     }
 
     const totalPrice = calculateTotalPrice()
+    const priceLevelLabel = hasMultiplePrices
+      ? availablePrices.find(p => p.key === selectedPriceLevel)?.label || null
+      : null
     // Si tiene variante, pasar producto con datos de variante
     if (hasVariants && selectedVariant) {
       const variantProduct = {
@@ -195,9 +258,9 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
         variantAttributes: selectedVariant.attributes,
         isVariant: true,
       }
-      onAddToCart(variantProduct, quantity, modifiersData, totalPrice)
+      onAddToCart(variantProduct, quantity, modifiersData, totalPrice, priceLevelLabel)
     } else {
-      onAddToCart(product, quantity, modifiersData, totalPrice)
+      onAddToCart(product, quantity, modifiersData, totalPrice, priceLevelLabel)
     }
     onClose()
   }
@@ -227,11 +290,18 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             <img
               src={product.imageUrl}
               alt={product.name}
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover ${outOfStock ? 'opacity-50 grayscale' : ''}`}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
               <Package className="w-24 h-24 text-gray-300" />
+            </div>
+          )}
+          {outOfStock && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg tracking-wide">
+                AGOTADO
+              </span>
             </div>
           )}
         </div>
@@ -256,12 +326,58 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             ) : (
               <div className="text-lg text-gray-500">Consultar precio</div>
             )}
-            {!hasVariants && product.stock !== undefined && product.stock > 0 && (
-              <span className="text-sm text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
-                {product.stock} disponibles
-              </span>
+            {!hasVariants && product.stock !== undefined && product.stock !== null && product.trackStock !== false && (
+              product.stock > 0 ? (
+                <span className="text-sm text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+                  {product.stock} disponibles
+                </span>
+              ) : (
+                <span className="text-sm text-red-600 bg-red-50 px-3 py-1 rounded-full font-medium">
+                  Agotado
+                </span>
+              )
             )}
           </div>
+
+          {/* Tabla de precios por mayor */}
+          {hasMultiplePrices && showPrices && (
+            <div className="mb-6">
+              <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
+                {availablePrices.map((priceItem) => {
+                  const isSelected = selectedPriceLevel === priceItem.key
+                  return (
+                    <button
+                      key={priceItem.key}
+                      onClick={() => setSelectedPriceLevel(priceItem.key)}
+                      className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
+                        isSelected
+                          ? 'bg-emerald-50'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-gray-300'
+                        }`}>
+                          {isSelected && (
+                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className={`font-medium ${isSelected ? 'text-emerald-700' : 'text-gray-700'}`}>
+                          {priceItem.label}
+                        </span>
+                      </div>
+                      <span className={`font-bold ${isSelected ? 'text-emerald-700' : 'text-gray-900'}`}>
+                        S/ {priceItem.value.toFixed(2)}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Variantes */}
           {hasVariants && (
@@ -405,10 +521,24 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
           {/* Botón agregar */}
           <button
             onClick={handleAddToCart}
-            className="w-full py-4 bg-gray-900 text-white rounded-2xl font-semibold text-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+            disabled={outOfStock}
+            className={`w-full py-4 rounded-2xl font-semibold text-lg flex items-center justify-center gap-2 transition-colors ${
+              outOfStock
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-900 text-white hover:bg-gray-800'
+            }`}
           >
-            <ShoppingBag className="w-5 h-5" />
-            {showPrices ? `Agregar al carrito - S/ ${(unitPrice * quantity).toFixed(2)}` : 'Agregar al carrito'}
+            {outOfStock ? (
+              <>
+                <AlertCircle className="w-5 h-5" />
+                Producto agotado
+              </>
+            ) : (
+              <>
+                <ShoppingBag className="w-5 h-5" />
+                {showPrices ? `Agregar al carrito - S/ ${(unitPrice * quantity).toFixed(2)}` : 'Agregar al carrito'}
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -726,7 +856,12 @@ function CartDrawer({
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{item.name}</h3>
+                      <h3 className="font-semibold text-gray-900 truncate">
+                        {item.name}
+                        {item.priceLevelLabel && (
+                          <span className="text-xs font-normal text-gray-500 ml-1">({item.priceLevelLabel})</span>
+                        )}
+                      </h3>
                       {/* Mostrar variante seleccionada */}
                       {item.isVariant && item.variantAttributes && (
                         <p className="text-xs text-gray-500 mt-0.5">
@@ -1179,14 +1314,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const showPrices = business?.catalogShowPrices !== false
 
   // Funciones del carrito
-  const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null) => {
+  const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
+    // No permitir agregar productos agotados
+    if (isProductOutOfStock(product)) return
     setCart(prev => {
-      // Generar un ID único para el item del carrito basado en producto + variante + modificadores
+      // Generar un ID único para el item del carrito basado en producto + variante + modificadores + nivel de precio
       const variantKey = product.isVariant ? product.variantSku : ''
       const modifiersKey = selectedModifiers.length > 0
         ? JSON.stringify(selectedModifiers.map(m => ({ id: m.modifierId, opts: m.options.map(o => o.optionId).sort() })))
         : ''
-      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}`
+      const priceLevelKey = priceLevelLabel || ''
+      const cartItemId = `${product.id}-${variantKey}-${modifiersKey}-${priceLevelKey}`
 
       const existing = prev.find(item => item.cartItemId === cartItemId)
       if (existing) {
@@ -1201,7 +1339,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         cartItemId,
         quantity,
         selectedModifiers,
-        unitPrice: unitPrice || product.price
+        unitPrice: unitPrice || product.price,
+        priceLevelLabel
       }]
     })
   }
@@ -1236,6 +1375,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     const items = cart.map(item => {
       const price = item.unitPrice || item.price
       let itemText = `• ${item.quantity}x ${item.name}`
+      // Agregar nivel de precio si no es el default
+      if (item.priceLevelLabel) {
+        itemText += ` (${item.priceLevelLabel})`
+      }
       // Agregar variante si existe
       if (item.isVariant && item.variantAttributes) {
         const attrs = Object.entries(item.variantAttributes).map(([k, v]) => `${k}: ${v}`).join(', ')
@@ -1513,10 +1656,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {filteredProducts.map(product => {
               const cartQty = getCartQuantity(product.id)
+              const outOfStock = isProductOutOfStock(product)
+              const priceRange = getProductPriceRange(product, business)
               return (
                 <div
                   key={product.id}
-                  className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
+                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="relative aspect-square bg-gray-100 overflow-hidden">
@@ -1524,14 +1669,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <img
                         src={product.imageUrl}
                         alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
+                      <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
                         <Package className="w-12 h-12 text-gray-300" />
                       </div>
                     )}
-                    {cartQty > 0 && (
+                    {outOfStock && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="bg-red-600 text-white px-3 py-1 rounded-md text-xs font-bold shadow-lg tracking-wide">
+                          AGOTADO
+                        </span>
+                      </div>
+                    )}
+                    {cartQty > 0 && !outOfStock && (
                       <div className="absolute top-3 right-3 w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-lg">
                         {cartQty}
                       </div>
@@ -1544,29 +1696,34 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     )}
                     <div className="flex items-center justify-between">
                       {showPrices ? (
-                        <span className="text-lg font-bold text-gray-900">
+                        <span className={`text-lg font-bold ${outOfStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                           {product.hasVariants && product.variants?.length > 0
                             ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                            : `S/ ${product.price?.toFixed(2)}`
+                            : priceRange
+                              ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
+                              : `S/ ${product.price?.toFixed(2)}`
                           }
                         </span>
                       ) : (
                         <span className="text-sm text-gray-500">Consultar</span>
                       )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          // Si tiene variantes o modificadores, abrir modal; si no, agregar directo
-                          if (product.hasVariants || product.modifiers?.length > 0) {
-                            setSelectedProduct(product)
-                          } else {
-                            addToCart(product)
-                          }
-                        }}
-                        className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
+                      {outOfStock ? (
+                        <span className="text-xs font-semibold text-red-500">Sin stock</span>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+                              setSelectedProduct(product)
+                            } else {
+                              addToCart(product)
+                            }
+                          }}
+                          className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-gray-800 transition-colors"
+                        >
+                          <Plus className="w-5 h-5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1578,10 +1735,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="space-y-4">
             {filteredProducts.map(product => {
               const cartQty = getCartQuantity(product.id)
+              const outOfStock = isProductOutOfStock(product)
+              const priceRange = getProductPriceRange(product, business)
               return (
                 <div
                   key={product.id}
-                  className="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex"
+                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex ${outOfStock ? 'opacity-75' : ''}`}
                   onClick={() => setSelectedProduct(product)}
                 >
                   <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 bg-gray-100 relative">
@@ -1589,14 +1748,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                       <img
                         src={product.imageUrl}
                         alt={product.name}
-                        className="w-full h-full object-cover"
+                        className={`w-full h-full object-cover ${outOfStock ? 'grayscale opacity-60' : ''}`}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
+                      <div className={`w-full h-full flex items-center justify-center ${outOfStock ? 'opacity-50' : ''}`}>
                         <Package className="w-10 h-10 text-gray-300" />
                       </div>
                     )}
-                    {cartQty > 0 && (
+                    {outOfStock && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="bg-red-600 text-white px-2 py-1 rounded-md text-xs font-bold shadow-lg tracking-wide">
+                          AGOTADO
+                        </span>
+                      </div>
+                    )}
+                    {cartQty > 0 && !outOfStock && (
                       <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
                         {cartQty}
                       </div>
@@ -1611,30 +1777,37 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       {showPrices ? (
-                        <span className="text-xl font-bold text-gray-900">
+                        <span className={`text-xl font-bold ${outOfStock ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                           {product.hasVariants && product.variants?.length > 0
                             ? `Desde S/ ${Math.min(...product.variants.map(v => v.price)).toFixed(2)}`
-                            : `S/ ${product.price?.toFixed(2)}`
+                            : priceRange
+                              ? `S/ ${priceRange.min.toFixed(2)} ~ S/ ${priceRange.max.toFixed(2)}`
+                              : `S/ ${product.price?.toFixed(2)}`
                           }
                         </span>
                       ) : (
                         <span className="text-sm text-gray-500">Consultar precio</span>
                       )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          // Si tiene variantes o modificadores, abrir modal; si no, agregar directo
-                          if (product.hasVariants || product.modifiers?.length > 0) {
-                            setSelectedProduct(product)
-                          } else {
-                            addToCart(product)
-                          }
-                        }}
-                        className="px-4 py-2 rounded-full bg-gray-900 text-white flex items-center gap-2 hover:bg-gray-800 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span className="hidden md:inline">Agregar</span>
-                      </button>
+                      {outOfStock ? (
+                        <span className="px-4 py-2 rounded-full bg-red-50 text-red-500 text-sm font-semibold">
+                          Agotado
+                        </span>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (product.hasVariants || product.modifiers?.length > 0 || priceRange) {
+                              setSelectedProduct(product)
+                            } else {
+                              addToCart(product)
+                            }
+                          }}
+                          className="px-4 py-2 rounded-full bg-gray-900 text-white flex items-center gap-2 hover:bg-gray-800 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="hidden md:inline">Agregar</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1734,6 +1907,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         onAddToCart={addToCart}
         cartQuantity={selectedProduct ? getCartQuantity(selectedProduct.id) : 0}
         showPrices={showPrices}
+        business={business}
       />
 
       {/* Cart Drawer */}
