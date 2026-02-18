@@ -574,7 +574,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
     }
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, { skipSunat = false } = {}) => {
     e.preventDefault()
 
     // Validaciones
@@ -725,10 +725,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
       const result = await createDispatchGuide(businessId, dispatchGuide)
 
       if (result.success) {
-        toast.success(`Guía de remisión ${result.number} creada exitosamente`)
+        toast.success(`Guía de remisión ${result.number} ${skipSunat ? 'guardada' : 'creada'} exitosamente`)
 
-        // Envío automático a SUNAT si está configurado (fire & forget)
-        if (autoSendToSunat && result.id) {
+        // Envío automático a SUNAT si está configurado y no se omitió (fire & forget)
+        if (!skipSunat && autoSendToSunat && result.id) {
           console.log('🚀 Enviando guía de remisión automáticamente a SUNAT...')
           toast.info('Enviando a SUNAT en segundo plano...', 3000)
 
@@ -1652,10 +1652,7 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, referenceInv
                 type="button"
                 variant="primary"
                 disabled={isSaving}
-                onClick={() => {
-                  // Guardar como borrador (sin enviar a SUNAT)
-                  toast.info('Función de guardar borrador próximamente')
-                }}
+                onClick={(e) => handleSubmit(e, { skipSunat: true })}
               >
                 Guardar
               </Button>
