@@ -36,6 +36,8 @@ import { getActiveBranches } from '@/services/branchService'
 import { getYapeConfig, saveYapeConfig } from '@/services/yapeService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { THEMES, THEME_ORDER, THEME_PREVIEWS } from '@/config/themes'
+import { useTheme } from '@/contexts/ThemeContext'
 
 // URL base de producción para el catálogo público
 const PRODUCTION_URL = 'https://cobrifyperu.com'
@@ -43,6 +45,7 @@ const PRODUCTION_URL = 'https://cobrifyperu.com'
 export default function Settings() {
   const { user, isDemoMode, getBusinessId, refreshBusinessSettings } = useAppContext()
   const toast = useToast()
+  const { setThemeId } = useTheme()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('informacion')
@@ -129,6 +132,9 @@ export default function Settings() {
 
   // Estado para color de PDF
   const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
+
+  // Estado para tema visual
+  const [uiTheme, setUiTheme] = useState('default')
 
   // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
   const [companySlogan, setCompanySlogan] = useState('')
@@ -674,6 +680,11 @@ export default function Settings() {
         // Cargar color de PDF
         if (businessData.pdfAccentColor) {
           setPdfAccentColor(businessData.pdfAccentColor)
+        }
+
+        // Cargar tema visual
+        if (businessData.uiTheme) {
+          setUiTheme(businessData.uiTheme)
         }
 
         // Cargar eslogan de empresa
@@ -2555,6 +2566,72 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Tema Visual */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tema Visual
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Cambia la apariencia del sistema. El tema se aplica al sidebar, navbar, cards y fondos.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {THEME_ORDER.map((id) => {
+                    const t = THEMES[id]
+                    const preview = THEME_PREVIEWS[id]
+                    const isSelected = uiTheme === id
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setUiTheme(id)
+                          setThemeId(id) // Preview instantáneo
+                        }}
+                        className={`relative flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-all ${
+                          isSelected
+                            ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {/* Mini preview */}
+                        <div className="w-full aspect-[3/2] rounded-md overflow-hidden border border-gray-200 flex">
+                          {/* Sidebar mockup */}
+                          <div
+                            className="w-1/3 h-full flex flex-col items-center pt-2 gap-1"
+                            style={{ background: preview.sidebar }}
+                          >
+                            <div className="w-3/5 h-1 rounded-full" style={{ backgroundColor: preview.accent, opacity: 0.8 }} />
+                            <div className="w-3/5 h-1 rounded-full" style={{ backgroundColor: t.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }} />
+                            <div className="w-3/5 h-1 rounded-full" style={{ backgroundColor: t.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }} />
+                            <div className="w-3/5 h-1 rounded-full" style={{ backgroundColor: t.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }} />
+                          </div>
+                          {/* Content area mockup */}
+                          <div
+                            className="flex-1 h-full p-1.5 flex flex-col gap-1"
+                            style={{ backgroundColor: preview.content }}
+                          >
+                            <div className="w-full h-1.5 rounded" style={{ backgroundColor: t.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }} />
+                            <div
+                              className="flex-1 rounded"
+                              style={{ backgroundColor: t.isDark ? 'rgba(255,255,255,0.05)' : '#ffffff', border: `1px solid ${t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-xs font-medium text-gray-700">{t.name}</span>
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 w-4 h-4 bg-primary-500 rounded-full flex items-center justify-center">
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Color de Acento del PDF */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3062,6 +3139,7 @@ export default function Settings() {
                       termsTemplates: termsTemplates,
                       pdfAccentColor: pdfAccentColor,
                       showProductCodeInQuotation: showProductCodeInQuotation,
+                      uiTheme: uiTheme,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     if (refreshBusinessSettings) await refreshBusinessSettings()

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 import MainLayout from './layouts/MainLayout'
 import LandingPage from './pages/LandingPage'
 import LandingRouter from './components/LandingRouter'
@@ -129,6 +130,7 @@ function App() {
       <AuthProvider>
         <BrandingProvider>
           <ToastProvider>
+          <ThemeProvider>
             <Routes>
             {/* Landing Page - En móvil redirige a dashboard, en web usa LandingRouter */}
             <Route path="/" element={isNative ? <Navigate to="/app/dashboard" replace /> : <LandingRouter />} />
@@ -360,6 +362,7 @@ function App() {
             {/* Ruta 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </ThemeProvider>
           </ToastProvider>
         </BrandingProvider>
       </AuthProvider>
