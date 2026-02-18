@@ -72,6 +72,22 @@ export const PLANS = {
       multiUser: true // Todos los planes son multiusuario
     }
   },
+  qpse_1_month_2025: {
+    name: "Plan QPse - 1 Mes (2025)",
+    category: "qpse",
+    months: 1,
+    pricePerMonth: 29.90,
+    totalPrice: 29.90,
+    emissionMethod: "qpse",
+    limits: {
+      maxInvoicesPerMonth: 500,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxBranches: 1,
+      sunatIntegration: true,
+      multiUser: true
+    }
+  },
   qpse_1_month_2_branches: {
     name: "Plan QPse - 1 Mes (2 Sucursales)",
     category: "qpse",
