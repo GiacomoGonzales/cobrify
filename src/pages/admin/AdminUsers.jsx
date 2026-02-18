@@ -77,6 +77,17 @@ const STATUS_LABELS = {
   expired: 'Vencido'
 }
 
+// Helper para mostrar nombre del plan con precio
+const getPlanDisplay = (user) => {
+  const plan = PLANS[user.plan]
+  const name = user.planName || plan?.name || user.plan
+  const price = plan?.totalPrice
+  if (price && price > 0) {
+    return `${name} - S/${price.toFixed(2)}`
+  }
+  return name
+}
+
 export default function AdminUsers() {
   const toast = useToast()
   const { user: currentUser } = useAuth()
@@ -947,7 +958,7 @@ export default function AdminUsers() {
       u.email,
       u.businessName,
       u.ruc,
-      u.planName || PLANS[u.plan]?.name || u.plan,
+      getPlanDisplay(u),
       STATUS_LABELS[u.status],
       u.createdAt?.toLocaleDateString() || 'N/A',
       u.usage?.invoicesThisMonth || 0,
@@ -2072,7 +2083,7 @@ export default function AdminUsers() {
                 <div className="flex items-center justify-between text-xs mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                      {user.planName || PLANS[user.plan]?.name || user.plan}
+                      {getPlanDisplay(user)}
                     </span>
                     {user.emissionMethod && user.emissionMethod !== 'none' && (
                       <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -2331,7 +2342,7 @@ export default function AdminUsers() {
                     {/* Plan */}
                     <td className="px-2 py-2">
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {user.planName || PLANS[user.plan]?.name || user.plan}
+                        {getPlanDisplay(user)}
                       </span>
                     </td>
                     {/* Estado */}
@@ -2570,7 +2581,7 @@ export default function AdminUsers() {
                       {STATUS_LABELS[selectedUser.status]}
                     </span>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                      {selectedUser.planName || PLANS[selectedUser.plan]?.name || selectedUser.plan}
+                      {getPlanDisplay(selectedUser)}
                     </span>
                   </div>
                 </div>

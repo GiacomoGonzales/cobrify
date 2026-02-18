@@ -34,21 +34,21 @@ export const PLANS = {
   },
 
   // ============================================
-  // PLAN SIN CONEXIÓN (Sin QPSE ni SUNAT)
+  // PLAN BÁSICO QPSE (100 comprobantes/mes)
   // ============================================
-  offline_1_month: {
-    name: "Plan Sin Conexión - 1 Mes",
-    category: "offline",
+  qpse_basico_1_month: {
+    name: "Plan Básico QPse - 1 Mes",
+    category: "qpse",
     months: 1,
-    pricePerMonth: 14.90,
-    totalPrice: 14.90,
-    emissionMethod: "offline", // Sin conexión a SUNAT
+    pricePerMonth: 19.90,
+    totalPrice: 19.90,
+    emissionMethod: "qpse",
     limits: {
-      maxInvoicesPerMonth: -1, // Ilimitado (no reporta a SUNAT)
+      maxInvoicesPerMonth: 100,
       maxCustomers: -1,
       maxProducts: -1,
       maxBranches: 1,
-      sunatIntegration: false, // Sin integración SUNAT
+      sunatIntegration: true,
       multiUser: true
     }
   },
