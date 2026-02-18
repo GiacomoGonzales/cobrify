@@ -5,7 +5,7 @@ import { AlertTriangle, Copy, Check, Smartphone, Building2, MessageCircle } from
 const WHATSAPP_NUMBER = '51900434988';
 
 const PAYMENT_INFO = {
-  yape: { number: '926 258 059', name: 'Giacomo G.' },
+  yape: { number: '926 258 059', name: 'Quantio Solutions EIRL' },
   bcp: { account: '1937311451039', cci: '00219300731145103916' },
   titular: 'Quantio Solutions EIRL',
 };
