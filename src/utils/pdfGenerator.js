@@ -551,15 +551,15 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...BLACK)
 
-    // El eslogan ocupa el ancho del logo + área de información (centrado)
-    const sloganMaxWidth = actualLogoWidth + infoColumnWidth - 10
+    // El eslogan se centra con los datos de la empresa (columna 2)
+    const sloganMaxWidth = infoColumnWidth - 10
     const sloganLines = doc.splitTextToSize(slogan, sloganMaxWidth)
 
     // Limitar a máximo 2 líneas
     const linesToShow = sloganLines.slice(0, 2)
 
-    // Posición: en la parte inferior del header, más arriba que antes
-    const sloganCenterX = logoX + (sloganMaxWidth / 2)
+    // Posición: centrado con la columna de datos de empresa
+    const sloganCenterX = infoCenterX
     const sloganY = currentY + headerHeight - 18
     linesToShow.forEach((line, index) => {
       doc.text(line, sloganCenterX, sloganY + (index * 10), { align: 'center' })
