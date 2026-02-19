@@ -329,6 +329,69 @@ public class TcpPrinterPlugin extends Plugin {
     }
 
     /**
+     * Impresión directa: connect → print → disconnect en una sola operación atómica.
+     * Libera el socket inmediatamente, permitiendo que múltiples dispositivos compartan
+     * la misma impresora WiFi.
+     * @param call - Parámetros: ip (String), port (int, opcional), data (String base64)
+     */
+    @PluginMethod
+    public void printDirect(PluginCall call) {
+        String ip = call.getString("ip");
+        int port = call.getInt("port", DEFAULT_PORT);
+        String base64Data = call.getString("data");
+
+        if (ip == null || ip.isEmpty()) {
+            call.reject("IP address is required");
+            return;
+        }
+        if (base64Data == null || base64Data.isEmpty()) {
+            call.reject("Print data is required");
+            return;
+        }
+
+        executor.execute(() -> {
+            Socket tempSocket = null;
+            try {
+                // Cerrar conexión persistente si existe (la impresora solo acepta 1 conexión)
+                disconnect();
+
+                Log.d(TAG, "printDirect: connecting to " + ip + ":" + port);
+
+                tempSocket = new Socket();
+                tempSocket.connect(new InetSocketAddress(ip, port), CONNECTION_TIMEOUT);
+                tempSocket.setSoTimeout(SOCKET_TIMEOUT);
+
+                OutputStream tempOutput = tempSocket.getOutputStream();
+
+                byte[] data = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                tempOutput.write(data);
+                tempOutput.flush();
+
+                Log.d(TAG, "printDirect: sent " + data.length + " bytes, disconnecting");
+
+                // Cerrar inmediatamente para liberar el socket
+                tempOutput.close();
+                tempSocket.close();
+                tempSocket = null;
+
+                JSObject result = new JSObject();
+                result.put("success", true);
+                result.put("bytesWritten", data.length);
+                call.resolve(result);
+
+            } catch (IOException e) {
+                Log.e(TAG, "printDirect failed: " + e.getMessage());
+                call.reject("Failed to print: " + e.getMessage());
+            } finally {
+                // Asegurar que el socket temporal se cierre
+                if (tempSocket != null) {
+                    try { tempSocket.close(); } catch (IOException ignored) {}
+                }
+            }
+        });
+    }
+
+    /**
      * Obtener bytes de comando ESC/POS
      */
     private byte[] getEscPosCommand(String command) {

@@ -241,7 +241,10 @@ const sendEscPosData = async (base64Data) => {
   if (connectionType === 'internal') {
     return await IminPrinter.print({ data: base64Data });
   }
-  return await TcpPrinter.print({ data: base64Data });
+  // WiFi: usar printDirect (connect→print→disconnect atómico)
+  // Esto permite que múltiples dispositivos compartan la misma impresora
+  const { ip, port } = parseIpAddress(connectedPrinterAddress);
+  return await TcpPrinter.printDirect({ ip, port, data: base64Data });
 };
 
 /**
@@ -261,7 +264,9 @@ export const disconnectPrinter = async () => {
     if (connectionType === 'internal') {
       await IminPrinter.disconnect();
     } else if (connectionType === 'wifi') {
-      await TcpPrinter.disconnect();
+      // Con printDirect no mantenemos conexión persistente,
+      // pero intentamos desconectar por si acaso quedó una abierta
+      try { await TcpPrinter.disconnect(); } catch (e) { /* ignore */ }
     } else if (useAlternativeBLE) {
       await BLEPrinter.disconnectBLEPrinter();
     } else {
@@ -326,21 +331,28 @@ export const connectPrinter = async (address) => {
       }
     } else if (detectedType === 'wifi') {
       // Conexión WiFi/LAN via TCP
-      console.log('📶 Conectando via WiFi/LAN...');
+      // Usamos printDirect (atómico) para cada impresión, así múltiples
+      // dispositivos pueden compartir la misma impresora WiFi.
+      // Aquí solo validamos que la impresora responda y guardamos la dirección.
+      console.log('📶 Verificando impresora WiFi/LAN...');
       const { ip, port } = parseIpAddress(address);
       console.log(`📍 IP: ${ip}, Puerto: ${port}`);
 
+      // Verificar conectividad con connect/disconnect rápido
       const result = await TcpPrinter.connect({ ip, port });
-      console.log('📋 Resultado de conexión WiFi:', result);
+      console.log('📋 Resultado de verificación WiFi:', result);
 
       if (result && result.success) {
+        // Desconectar inmediatamente para liberar el socket
+        try { await TcpPrinter.disconnect(); } catch (e) { /* ignore */ }
+
         isPrinterConnected = true;
         connectedPrinterAddress = address;
         connectionType = 'wifi';
-        console.log('✅ Impresora WiFi conectada:', address);
+        console.log('✅ Impresora WiFi verificada y lista:', address);
         return { success: true, address, type: 'wifi' };
       } else {
-        console.error('❌ Conexión WiFi falló');
+        console.error('❌ Impresora WiFi no responde');
         return { success: false, error: 'No se pudo conectar a la impresora WiFi' };
       }
     } else {
@@ -492,33 +504,14 @@ export const getDocumentPrinterConfig = () => {
  * @param {string} base64Data - Datos ESC/POS en base64
  */
 const sendToIp = async (ip, port, base64Data) => {
-  const connectResult = await TcpPrinter.connect({ ip, port });
-  if (!connectResult?.success) {
-    return { success: false, error: `No se pudo conectar a ${ip}:${port}` };
-  }
-
-  const printResult = await TcpPrinter.print({ data: base64Data });
-
-  try {
-    await TcpPrinter.disconnect();
-  } catch (e) {
-    console.warn('Error al desconectar de impresora de documentos:', e);
-  }
-
-  // Reconectar a impresora principal si estaba conectada
-  if (isPrinterConnected && connectedPrinterAddress && connectionType === 'wifi') {
-    try {
-      const { ip: mainIp, port: mainPort } = parseAddress(connectedPrinterAddress);
-      await TcpPrinter.connect({ ip: mainIp, port: mainPort });
-    } catch (e) {
-      console.warn('Error al reconectar impresora principal:', e);
-    }
-  }
+  // Usar printDirect para impresión atómica (connect→print→disconnect)
+  // No necesita reconectar la impresora principal porque no toca su socket
+  const printResult = await TcpPrinter.printDirect({ ip, port, data: base64Data });
 
   if (printResult?.success) {
     return { success: true };
   }
-  return { success: false, error: 'Error al imprimir en impresora de documentos' };
+  return { success: false, error: `Error al imprimir en ${ip}:${port}` };
 };
 
 /**
@@ -1698,10 +1691,40 @@ export const testPrinter = async (paperWidth = 58) => {
       }
     }
 
-    // Si es WiFi, usar el plugin TCP
+    // Si es WiFi, usar printDirect con test page generada localmente
     if (connectionType === 'wifi') {
-      console.log('📶 Usando impresión WiFi...');
-      const result = await TcpPrinter.printTest({ paperWidth });
+      console.log('📶 Usando impresión WiFi (printDirect)...');
+      const { ip, port } = parseIpAddress(connectedPrinterAddress);
+
+      // Construir test page con EscPosBuilder
+      const builder = new EscPosBuilder();
+      builder.init()
+        .align('center')
+        .bold(true)
+        .text('PRUEBA WIFI/LAN')
+        .newLine()
+        .bold(false)
+        .text(format.separator)
+        .newLine()
+        .newLine()
+        .text(`Conectado a: ${ip}:${port}`)
+        .newLine()
+        .text(`Ancho papel: ${paperWidth}mm`)
+        .newLine()
+        .newLine()
+        .text(`Fecha: ${new Date().toLocaleString('es-PE')}`)
+        .newLine()
+        .text(format.separator)
+        .newLine()
+        .newLine()
+        .text('Impresora WiFi configurada')
+        .newLine()
+        .text('correctamente!')
+        .newLine()
+        .feed(2)
+        .cut();
+
+      const result = await TcpPrinter.printDirect({ ip, port, data: builder.toBase64() });
       console.log('📋 Resultado de impresión WiFi:', result);
 
       if (result && result.success) {
@@ -2455,20 +2478,8 @@ export const printStationTicket = async (printerIp, order, station, items, paper
     const port = 9100;
     console.log(`📤 Imprimiendo a estación ${station.name} (${printerIp}:${port})...`);
 
-    // Usar TcpPrinter para conectar e imprimir
-    const connectResult = await TcpPrinter.connect({ ip: printerIp, port });
-    if (!connectResult?.success) {
-      return { success: false, error: `No se pudo conectar a ${printerIp}` };
-    }
-
-    const printResult = await TcpPrinter.print({ data: base64Data });
-
-    // Desconectar después de imprimir
-    try {
-      await TcpPrinter.disconnect();
-    } catch (e) {
-      console.warn('Error al desconectar de impresora de estación:', e);
-    }
+    // Usar printDirect para impresión atómica (connect→print→disconnect)
+    const printResult = await TcpPrinter.printDirect({ ip: printerIp, port, data: base64Data });
 
     if (printResult?.success) {
       console.log(`✅ Ticket impreso en estación ${station.name}`);
