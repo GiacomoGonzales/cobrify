@@ -1285,6 +1285,9 @@ Gracias por tu preferencia.`
           return <Badge variant="success">Aplicada</Badge>
         case 'pending':
           return <Badge variant="warning">Pendiente</Badge>
+        case 'cancelled':
+        case 'voided':
+          return <Badge variant="danger">Anulada</Badge>
         default:
           return <Badge>{status}</Badge>
       }
