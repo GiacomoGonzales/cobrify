@@ -455,15 +455,28 @@ export default function AdminUsers() {
           const userId = userData.userId
           try {
             // Determinar inicio del período actual
-            const periodStart = userData.currentPeriodStart?.toDate?.()
-              || userData.currentPeriodStart
+            const rawPeriodStart = userData.currentPeriodStart
+            const periodStart = (rawPeriodStart?.toDate?.())
+              || (rawPeriodStart?._seconds ? new Date(rawPeriodStart._seconds * 1000) : null)
+              || (typeof rawPeriodStart === 'string' ? new Date(rawPeriodStart) : null)
+              || (rawPeriodStart instanceof Date ? rawPeriodStart : null)
               || new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
             const userStats = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
 
+            // Helper para convertir cualquier formato de fecha a Date
+            const toDate = (val) => {
+              if (!val) return null
+              if (val.toDate) return val.toDate() // Firestore Timestamp
+              if (val._seconds) return new Date(val._seconds * 1000)
+              if (typeof val === 'string') return new Date(val)
+              if (val instanceof Date) return val
+              return null
+            }
+
             // Helper para verificar si un doc está en el período actual
             const isInPeriod = (docData) => {
-              const issueDate = docData.issueDate?.toDate?.() || docData.createdAt?.toDate?.() || null
+              const issueDate = toDate(docData.issueDate) || toDate(docData.createdAt) || null
               return issueDate && issueDate >= periodStart
             }
 
@@ -510,8 +523,7 @@ export default function AdminUsers() {
   useEffect(() => {
     if (users.length > 0 && !loading) {
       // Pasar objetos de usuario completos (con currentPeriodStart) para filtrar por período
-      const usersToLoad = users.slice(0, 50)
-      loadSunatStats(usersToLoad)
+      loadSunatStats(users)
     }
   }, [users, loading])
 

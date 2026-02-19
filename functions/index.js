@@ -2658,9 +2658,18 @@ export const syncUsageCounters = onRequest(
         }
 
         try {
+          // Helper para convertir cualquier formato de fecha a Date
+          const toDate = (val) => {
+            if (!val) return null
+            if (val.toDate) return val.toDate() // Firestore Timestamp
+            if (val._seconds) return new Date(val._seconds * 1000)
+            if (typeof val === 'string') return new Date(val)
+            if (val instanceof Date) return val
+            return null
+          }
+
           // Obtener fecha de inicio del período actual
-          const periodStart = subscription.currentPeriodStart?.toDate?.() ||
-                             subscription.currentPeriodStart ||
+          const periodStart = toDate(subscription.currentPeriodStart) ||
                              new Date(new Date().setDate(1)) // Primer día del mes si no hay fecha
 
           // Contar facturas/boletas aceptadas en el período
@@ -2673,7 +2682,7 @@ export const syncUsageCounters = onRequest(
           let invoiceCount = 0
           for (const invDoc of invoicesQuery.docs) {
             const invData = invDoc.data()
-            const issueDate = invData.issueDate?.toDate?.() || invData.createdAt?.toDate?.() || null
+            const issueDate = toDate(invData.issueDate) || toDate(invData.createdAt) || null
 
             if (issueDate && issueDate >= periodStart) {
               // Contar facturas, boletas y notas de débito (no notas de venta)
@@ -2694,7 +2703,7 @@ export const syncUsageCounters = onRequest(
           let creditNoteCount = 0
           for (const cnDoc of creditNotesQuery.docs) {
             const cnData = cnDoc.data()
-            const issueDate = cnData.issueDate?.toDate?.() || cnData.createdAt?.toDate?.() || null
+            const issueDate = toDate(cnData.issueDate) || toDate(cnData.createdAt) || null
 
             if (issueDate && issueDate >= periodStart) {
               creditNoteCount++
