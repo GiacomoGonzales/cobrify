@@ -3936,16 +3936,84 @@ export const retryPendingInvoices = onSchedule(
           }
 
           try {
-            console.log(`🚀 [RETRY] Reenviando ${invoiceData.series}-${invoiceData.correlativeNumber} (intento ${retryCount + 1})...`)
+            const docNumber = `${invoiceData.series}-${invoiceData.correlativeNumber}`
+            console.log(`🚀 [RETRY] Procesando ${docNumber} (intento ${retryCount + 1})...`)
 
-            // Preparar datos para emisión
+            // ── PRE-VERIFICACIÓN: Consultar si SUNAT ya tiene el documento ──
+            // Solo para SUNAT directo + facturas (getStatusCdr no soporta boletas ni QPse)
+            const isSunatDirect = !!(businessDataForEmission.sunat?.enabled)
+            const isFactura = invoiceData.documentType?.toLowerCase() === 'factura'
+
+            if (isSunatDirect && isFactura) {
+              try {
+                console.log(`🔍 [RETRY] Verificando si SUNAT ya tiene ${docNumber}...`)
+                const statusCheck = await getStatusCdr({
+                  ruc: businessData.ruc,
+                  solUser: businessDataForEmission.sunat.solUser,
+                  solPassword: businessDataForEmission.sunat.solPassword,
+                  environment: businessDataForEmission.sunat.environment || 'beta',
+                  documentType: '01',
+                  series: invoiceData.series,
+                  number: String(invoiceData.correlativeNumber)
+                })
+
+                if (statusCheck.success && statusCheck.accepted) {
+                  console.log(`✅ [RETRY] SUNAT ya tiene ${docNumber} - marcando como aceptado SIN reenviar`)
+
+                  // Guardar CDR si está disponible
+                  let cdrStorageUrl = null
+                  if (statusCheck.cdrData) {
+                    try {
+                      cdrStorageUrl = await saveToStorage(businessId, invoiceId, `${docNumber}-CDR.xml`, statusCheck.cdrData)
+                    } catch (storageErr) {
+                      console.error('⚠️ Error guardando CDR:', storageErr.message)
+                    }
+                  }
+
+                  await invoicesRef.doc(invoiceId).update({
+                    sunatStatus: 'accepted',
+                    sunatResponse: sanitizeForFirestore({
+                      code: statusCheck.code || '0',
+                      description: 'Documento verificado en SUNAT via getStatusCdr - ya estaba aceptado',
+                      method: 'getStatusCdr_recovery',
+                      autoRetry: true,
+                      ...(cdrStorageUrl && { cdrUrl: cdrStorageUrl })
+                    }),
+                    sunatSendingStartedAt: null,
+                    updatedAt: FieldValue.serverTimestamp()
+                  })
+
+                  totalSuccess++
+                  totalProcessed++
+                  console.log(`✅ [RETRY] ${docNumber}: accepted (verificado sin reenvío)`)
+                  continue // No reenviar
+                }
+              } catch (checkErr) {
+                console.log(`⚠️ [RETRY] No se pudo verificar estado en SUNAT: ${checkErr.message} - procediendo con reenvío`)
+              }
+            }
+
+            // ── REENVÍO: Emitir comprobante ──
             const invoiceForEmission = {
               ...invoiceData,
               correlativeNumber: invoiceData.correlativeNumber,
             }
 
-            // Emitir comprobante
             const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+
+            // ── MANEJO DE 1033: Documento ya registrado en SUNAT ──
+            const resultCode = String(result.responseCode || '')
+            const resultDesc = (result.description || result.error || '').toLowerCase()
+            const is1033 = resultCode === '1033' || resultCode.includes('1033') ||
+              resultDesc.includes('registrado previamente') ||
+              resultDesc.includes('ha sido aceptada') ||
+              resultDesc.includes('ha sido aceptado') ||
+              resultDesc.includes('fue informado anteriormente')
+
+            if (is1033 && !result.accepted) {
+              console.log(`📋 [RETRY] ${docNumber}: SUNAT dice que ya existe (1033) - tratando como aceptado`)
+              result.accepted = true
+            }
 
             // Determinar estado final
             const isTransient = isTransientSunatError(result.responseCode, result.description)
@@ -3971,6 +4039,7 @@ export const retryPendingInvoices = onSchedule(
                 method: result.method,
                 autoRetry: true
               }),
+              sunatSendingStartedAt: null,
               updatedAt: FieldValue.serverTimestamp()
             }
 
@@ -3985,7 +4054,7 @@ export const retryPendingInvoices = onSchedule(
 
             await invoicesRef.doc(invoiceId).update(updateData)
 
-            console.log(`✅ [RETRY] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
+            console.log(`✅ [RETRY] ${docNumber}: ${finalStatus}`)
             totalProcessed++
 
           } catch (invoiceError) {
@@ -4135,6 +4204,19 @@ export const resendPendingBoletas = onRequest(
             }
 
             const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+
+            // Manejo de 1033: Documento ya registrado en SUNAT
+            const resCode = String(result.responseCode || '')
+            const resDesc = (result.description || result.error || '').toLowerCase()
+            const is1033 = resCode === '1033' || resCode.includes('1033') ||
+              resDesc.includes('registrado previamente') ||
+              resDesc.includes('ha sido aceptada') ||
+              resDesc.includes('fue informado anteriormente')
+
+            if (is1033 && !result.accepted) {
+              console.log(`📋 [RESEND-BOLETAS] ${invoiceData.series}-${invoiceData.correlativeNumber}: SUNAT ya lo tiene (1033) - aceptado`)
+              result.accepted = true
+            }
 
             const isTransient = isTransientSunatError(result.responseCode, result.description)
 
@@ -4347,6 +4429,20 @@ export const testRetryPendingInvoices = onRequest(
             }
 
             const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+
+            // Manejo de 1033: Documento ya registrado en SUNAT
+            const testResCode = String(result.responseCode || '')
+            const testResDesc = (result.description || result.error || '').toLowerCase()
+            const testIs1033 = testResCode === '1033' || testResCode.includes('1033') ||
+              testResDesc.includes('registrado previamente') ||
+              testResDesc.includes('ha sido aceptada') ||
+              testResDesc.includes('fue informado anteriormente')
+
+            if (testIs1033 && !result.accepted) {
+              console.log(`📋 [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: SUNAT ya lo tiene (1033) - aceptado`)
+              result.accepted = true
+            }
+
             const isTransient = isTransientSunatError(result.responseCode, result.description)
 
             let finalStatus
