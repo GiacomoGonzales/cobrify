@@ -440,39 +440,35 @@ export default function AdminUsers() {
   }
 
   // Cargar estadísticas de SUNAT para los usuarios mostrados (solo período actual)
+  // Helper para convertir cualquier formato de fecha a Date
+  const toDate = (val) => {
+    if (!val) return null
+    if (val.toDate) return val.toDate() // Firestore Timestamp
+    if (val._seconds) return new Date(val._seconds * 1000)
+    if (typeof val === 'string') return new Date(val)
+    if (val instanceof Date) return val
+    return null
+  }
+
   const loadSunatStats = async (usersToLoad) => {
     if (!usersToLoad || usersToLoad.length === 0) return
 
     setLoadingSunatStats(true)
-    const stats = {}
 
     try {
       const batchSize = 10
       for (let i = 0; i < usersToLoad.length; i += batchSize) {
         const batch = usersToLoad.slice(i, i + batchSize)
+        const batchStats = {}
 
         await Promise.all(batch.map(async (userData) => {
           const userId = userData.userId
           try {
             // Determinar inicio del período actual
-            const rawPeriodStart = userData.currentPeriodStart
-            const periodStart = (rawPeriodStart?.toDate?.())
-              || (rawPeriodStart?._seconds ? new Date(rawPeriodStart._seconds * 1000) : null)
-              || (typeof rawPeriodStart === 'string' ? new Date(rawPeriodStart) : null)
-              || (rawPeriodStart instanceof Date ? rawPeriodStart : null)
+            const periodStart = toDate(userData.currentPeriodStart)
               || new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
             const userStats = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
-
-            // Helper para convertir cualquier formato de fecha a Date
-            const toDate = (val) => {
-              if (!val) return null
-              if (val.toDate) return val.toDate() // Firestore Timestamp
-              if (val._seconds) return new Date(val._seconds * 1000)
-              if (typeof val === 'string') return new Date(val)
-              if (val instanceof Date) return val
-              return null
-            }
 
             // Helper para verificar si un doc está en el período actual
             const isInPeriod = (docData) => {
@@ -480,7 +476,7 @@ export default function AdminUsers() {
               return issueDate && issueDate >= periodStart
             }
 
-            // 1. Facturas y boletas
+            // 1. Facturas, boletas y notas de débito (todas en colección invoices)
             const invoicesRef = collection(db, 'businesses', userId, 'invoices')
             const invoicesSnap = await getDocs(invoicesRef)
             invoicesSnap.forEach((doc) => {
@@ -490,7 +486,7 @@ export default function AdminUsers() {
               }
             })
 
-            // 2. Notas de crédito
+            // 2. Notas de crédito (colección separada)
             const creditNotesRef = collection(db, 'businesses', userId, 'creditNotes')
             const creditNotesSnap = await getDocs(creditNotesRef)
             creditNotesSnap.forEach((doc) => {
@@ -500,18 +496,16 @@ export default function AdminUsers() {
               }
             })
 
-            // Nota: las notas de débito se guardan en 'invoices' con documentType 'nota_debito'
-            // ya están contadas arriba en el query de invoices
-
-            stats[userId] = userStats
+            batchStats[userId] = userStats
           } catch (err) {
             console.error(`Error loading stats for user ${userId}:`, err)
-            stats[userId] = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
+            batchStats[userId] = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
           }
         }))
-      }
 
-      setSunatStats(prev => ({ ...prev, ...stats }))
+        // Actualizar stats progresivamente después de cada lote
+        setSunatStats(prev => ({ ...prev, ...batchStats }))
+      }
     } catch (error) {
       console.error('Error loading SUNAT stats:', error)
     } finally {
