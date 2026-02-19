@@ -677,7 +677,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 <div className="mb-4">
                   <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
                     <Shield className="w-4 h-4 text-blue-600" />
-                    Planes con QPse (500 comprobantes/mes)
+                    Planes con QPse
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {Object.entries(PLANS).filter(([key, plan]) => plan.category === 'qpse').map(([key, plan]) => (
@@ -697,7 +697,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                               {plan.badge}
                             </span>
                           )}
-                          <p className="font-bold text-gray-900">{plan.months} {plan.months === 1 ? 'Mes' : 'Meses'}</p>
+                          <p className="font-bold text-gray-900 text-sm">{plan.name}</p>
                           <p className="text-2xl font-bold text-blue-600 my-2">
                             S/ {plan.totalPrice}
                           </p>
@@ -705,8 +705,11 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                             S/ {plan.pricePerMonth.toFixed(2)}/mes
                           </p>
                           <p className="text-xs text-blue-600 font-medium mt-1">
-                            500 compr./mes
+                            {plan.limits?.maxInvoicesPerMonth === -1 ? 'Ilimitados' : `${plan.limits?.maxInvoicesPerMonth} compr./mes`}
                           </p>
+                          {plan.limits?.maxBranches === 1 && (
+                            <p className="text-xs text-gray-500 mt-0.5">1 sucursal</p>
+                          )}
                         </div>
                       </button>
                     ))}
