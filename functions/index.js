@@ -611,10 +611,9 @@ export const sendInvoiceToSunat = onRequest(
         // Verificar si SUNAT dice que el documento ya fue registrado o aceptado (puede venir como SOAP Fault)
         // Esto pasa en reintentos cuando el primer envío sí llegó a SUNAT
         // El código puede venir como "1033" o "soap-env:Client.1033"
-        // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const errorMsgLower = (errorMessage || '').toLowerCase()
-        const hasConOtrosDatos = errorMsgLower.includes('con otros datos')
-        const isAlreadyRegisteredError = !hasConOtrosDatos && (
+        // "con otros datos" también indica que SUNAT ya tiene el documento (reintento con diferencias menores)
+        const isAlreadyRegisteredError = (
           errorCode === '1033' || errorCode.includes('1033') ||
           errorMsgLower.includes('registrado previamente') ||
           errorMsgLower.includes('ha sido aceptada') ||
@@ -746,10 +745,9 @@ export const sendInvoiceToSunat = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
       // Esto puede pasar en reintentos o cuando SUNAT tuvo problemas temporales
-      // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const descLower = (emissionResult.description || '').toLowerCase()
-      const descHasConOtrosDatos = descLower.includes('con otros datos')
-      const isAlreadyRegistered = !descHasConOtrosDatos && (
+      // "con otros datos" también indica que SUNAT ya tiene el documento
+      const isAlreadyRegistered = (
         emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         descLower.includes('registrado previamente') ||
@@ -1416,8 +1414,8 @@ export const sendCreditNoteToSunat = onRequest(
         // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
         // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const ncMsgLower = (ncErrorMessage || '').toLowerCase()
-        const ncHasConOtrosDatos = ncMsgLower.includes('con otros datos')
-        const ncAlreadyRegistered = !ncHasConOtrosDatos && (
+        // "con otros datos" también indica que SUNAT ya tiene el documento
+        const ncAlreadyRegistered = (
           ncErrorCode === '1033' || (ncErrorCode || '').includes('1033') ||
           ncMsgLower.includes('registrado previamente') ||
           ncMsgLower.includes('ha sido aceptada') ||
@@ -1504,8 +1502,8 @@ export const sendCreditNoteToSunat = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const ncDescLower = (emissionResult.description || '').toLowerCase()
-      const ncDescHasConOtrosDatos = ncDescLower.includes('con otros datos')
-      const isAlreadyRegistered = !ncDescHasConOtrosDatos && (
+      // "con otros datos" también indica que SUNAT ya tiene el documento
+      const isAlreadyRegistered = (
         emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         ncDescLower.includes('registrado previamente') ||
@@ -2092,8 +2090,8 @@ export const sendDebitNoteToSunat = onRequest(
         // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
         // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const ndMsgLower = (ndErrorMessage || '').toLowerCase()
-        const ndHasConOtrosDatos = ndMsgLower.includes('con otros datos')
-        const ndAlreadyRegistered = !ndHasConOtrosDatos && (
+        // "con otros datos" también indica que SUNAT ya tiene el documento
+        const ndAlreadyRegistered = (
           ndErrorCode === '1033' || (ndErrorCode || '').includes('1033') ||
           ndMsgLower.includes('registrado previamente') ||
           ndMsgLower.includes('ha sido aceptada') ||
@@ -2180,8 +2178,8 @@ export const sendDebitNoteToSunat = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const ndDescLower = (emissionResult.description || '').toLowerCase()
-      const ndDescHasConOtrosDatos = ndDescLower.includes('con otros datos')
-      const isAlreadyRegistered = !ndDescHasConOtrosDatos && (
+      // "con otros datos" también indica que SUNAT ya tiene el documento
+      const isAlreadyRegistered = (
         emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         ndDescLower.includes('registrado previamente') ||
@@ -3287,8 +3285,8 @@ export const sendDispatchGuideToSunatFn = onRequest(
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
       // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const greDescLower = (result.description || '').toLowerCase()
-      const greHasConOtrosDatos = greDescLower.includes('con otros datos')
-      const isAlreadyRegistered = !greHasConOtrosDatos && (
+      // "con otros datos" también indica que SUNAT ya tiene el documento
+      const isAlreadyRegistered = (
         result.responseCode === '1033' ||
         result.responseCode === '4000' ||
         (result.description && (
@@ -3638,8 +3636,8 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
       // Si SUNAT dice que el documento ya existe, significa que ya fue aceptado antes
       // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const greTDescLower = (result.description || '').toLowerCase()
-      const greTHasConOtrosDatos = greTDescLower.includes('con otros datos')
-      const isAlreadyRegistered = !greTHasConOtrosDatos && (
+      // "con otros datos" también indica que SUNAT ya tiene el documento
+      const isAlreadyRegistered = (
         result.responseCode === '1033' ||
         result.responseCode === '4000' ||
         (result.description && (
