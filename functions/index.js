@@ -2676,9 +2676,9 @@ export const syncUsageCounters = onRequest(
             const issueDate = invData.issueDate?.toDate?.() || invData.createdAt?.toDate?.() || null
 
             if (issueDate && issueDate >= periodStart) {
-              // Solo contar facturas y boletas (no notas de venta)
+              // Contar facturas, boletas y notas de débito (no notas de venta)
               const docType = invData.documentType?.toLowerCase() || ''
-              if (docType === 'factura' || docType === 'boleta' ||
+              if (docType === 'factura' || docType === 'boleta' || docType === 'nota_debito' ||
                   invData.series?.startsWith('F') || invData.series?.startsWith('B')) {
                 invoiceCount++
               }
@@ -2700,6 +2700,9 @@ export const syncUsageCounters = onRequest(
               creditNoteCount++
             }
           }
+
+          // Nota: las notas de débito se guardan en la colección 'invoices' con documentType 'nota_debito'
+          // ya están contadas arriba en invoiceCount
 
           const totalCount = invoiceCount + creditNoteCount
           const currentCount = subscription.usage?.invoicesThisMonth || 0
@@ -2725,7 +2728,7 @@ export const syncUsageCounters = onRequest(
             })
             updated++
 
-            console.log(`✅ ${subscription.email}: ${currentCount} → ${totalCount} (${invoiceCount} facturas/boletas + ${creditNoteCount} NC)`)
+            console.log(`✅ ${subscription.email}: ${currentCount} → ${totalCount} (${invoiceCount} fact/bol/ND + ${creditNoteCount} NC)`)
           } else {
             results.push({
               userId,
