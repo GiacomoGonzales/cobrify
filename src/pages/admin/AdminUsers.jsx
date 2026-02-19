@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, setDoc, Timestamp, arrayUnion, increment, serverTimestamp } from 'firebase/firestore'
 import { PLANS, updateUserFeatures, updateMaxBranches } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { notifyPaymentReceived } from '@/services/notificationService'
@@ -415,31 +415,6 @@ export default function AdminUsers() {
     }
   }
 
-  // Clasificar un documento por su estado SUNAT
-  const classifyDocStatus = (docData, userStats) => {
-    const docType = docData.documentType || docData.type || ''
-
-    // Notas de venta no van a SUNAT, se cuentan aparte
-    if (docType === 'nota_venta' || docType === 'sales_note') {
-      userStats.salesNotes++
-      return
-    }
-
-    const status = docData.sunatStatus || ''
-    const isVoided = docData.voided === true || docData.anulado === true
-
-    if (status === 'accepted' || status === 'voided' || status === 'anulado' || isVoided) {
-      userStats.accepted++
-    } else if (status === 'rejected') {
-      userStats.rejected++
-    } else if (!status || status === 'pending') {
-      userStats.pending++
-    } else {
-      userStats.accepted++
-    }
-  }
-
-  // Cargar estadísticas de SUNAT para los usuarios mostrados (solo período actual)
   // Helper para convertir cualquier formato de fecha a Date
   const toDate = (val) => {
     if (!val) return null
@@ -450,13 +425,16 @@ export default function AdminUsers() {
     return null
   }
 
+  // Cargar stats SUNAT de forma optimizada:
+  // - Aceptados: usar usage.invoicesThisMonth del subscription (ya cargado, 0 queries)
+  // - Rechazados/Pendientes: query con where server-side (muy pocos docs, rápido)
   const loadSunatStats = async (usersToLoad) => {
     if (!usersToLoad || usersToLoad.length === 0) return
 
     setLoadingSunatStats(true)
 
     try {
-      const batchSize = 10
+      const batchSize = 20
       for (let i = 0; i < usersToLoad.length; i += batchSize) {
         const batch = usersToLoad.slice(i, i + batchSize)
         const batchStats = {}
@@ -464,46 +442,46 @@ export default function AdminUsers() {
         await Promise.all(batch.map(async (userData) => {
           const userId = userData.userId
           try {
-            // Determinar inicio del período actual
             const periodStart = toDate(userData.currentPeriodStart)
               || new Date(new Date().getFullYear(), new Date().getMonth(), 1)
 
-            const userStats = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
+            // Aceptados = contador del subscription (ya cargado, sin query)
+            const accepted = userData.usage?.invoicesThisMonth || 0
 
-            // Helper para verificar si un doc está en el período actual
+            // Solo consultar rechazados y pendientes (muy pocos docs, rápido)
+            let rejected = 0
+            let pending = 0
+
+            // Helper para filtrar por período
             const isInPeriod = (docData) => {
               const issueDate = toDate(docData.issueDate) || toDate(docData.createdAt) || null
               return issueDate && issueDate >= periodStart
             }
 
-            // 1. Facturas, boletas y notas de débito (todas en colección invoices)
-            const invoicesRef = collection(db, 'businesses', userId, 'invoices')
-            const invoicesSnap = await getDocs(invoicesRef)
-            invoicesSnap.forEach((doc) => {
-              const data = doc.data()
-              if (isInPeriod(data)) {
-                classifyDocStatus(data, userStats)
-              }
-            })
+            // Rechazados en invoices + creditNotes
+            const rejInvQ = query(collection(db, 'businesses', userId, 'invoices'), where('sunatStatus', '==', 'rejected'))
+            const rejCnQ = query(collection(db, 'businesses', userId, 'creditNotes'), where('sunatStatus', '==', 'rejected'))
+            const [rejInvSnap, rejCnSnap] = await Promise.all([getDocs(rejInvQ), getDocs(rejCnQ)])
 
-            // 2. Notas de crédito (colección separada)
-            const creditNotesRef = collection(db, 'businesses', userId, 'creditNotes')
-            const creditNotesSnap = await getDocs(creditNotesRef)
-            creditNotesSnap.forEach((doc) => {
-              const data = doc.data()
-              if (isInPeriod(data)) {
-                classifyDocStatus(data, userStats)
-              }
-            })
+            rejInvSnap.forEach((doc) => { if (isInPeriod(doc.data())) rejected++ })
+            rejCnSnap.forEach((doc) => { if (isInPeriod(doc.data())) rejected++ })
 
-            batchStats[userId] = userStats
+            // Pendientes en invoices + creditNotes
+            const pendInvQ = query(collection(db, 'businesses', userId, 'invoices'), where('sunatStatus', '==', 'pending'))
+            const pendCnQ = query(collection(db, 'businesses', userId, 'creditNotes'), where('sunatStatus', '==', 'pending'))
+            const [pendInvSnap, pendCnSnap] = await Promise.all([getDocs(pendInvQ), getDocs(pendCnQ)])
+
+            pendInvSnap.forEach((doc) => { if (isInPeriod(doc.data())) pending++ })
+            pendCnSnap.forEach((doc) => { if (isInPeriod(doc.data())) pending++ })
+
+            batchStats[userId] = { accepted, rejected, pending }
           } catch (err) {
             console.error(`Error loading stats for user ${userId}:`, err)
-            batchStats[userId] = { accepted: 0, rejected: 0, pending: 0, salesNotes: 0 }
+            batchStats[userId] = { accepted: userData.usage?.invoicesThisMonth || 0, rejected: 0, pending: 0 }
           }
         }))
 
-        // Actualizar stats progresivamente después de cada lote
+        // Actualizar progresivamente después de cada lote
         setSunatStats(prev => ({ ...prev, ...batchStats }))
       }
     } catch (error) {
@@ -513,10 +491,9 @@ export default function AdminUsers() {
     }
   }
 
-  // Cargar stats de SUNAT cuando cambian los usuarios filtrados
+  // Cargar stats de SUNAT cuando cambian los usuarios
   useEffect(() => {
     if (users.length > 0 && !loading) {
-      // Pasar objetos de usuario completos (con currentPeriodStart) para filtrar por período
       loadSunatStats(users)
     }
   }, [users, loading])
@@ -2432,9 +2409,6 @@ export default function AdminUsers() {
                             )}
                             {sunatStats[user.userId].pending > 0 && (
                               <span className="text-yellow-600" title="Pendientes envío SUNAT">⏳{sunatStats[user.userId].pending}</span>
-                            )}
-                            {sunatStats[user.userId].salesNotes > 0 && (
-                              <span className="text-gray-500" title="Notas de Venta (no SUNAT)">📝{sunatStats[user.userId].salesNotes}</span>
                             )}
                           </div>
                         ) : loadingSunatStats ? (
