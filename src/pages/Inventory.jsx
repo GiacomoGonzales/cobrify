@@ -1240,6 +1240,11 @@ export default function Inventory() {
       const price = i.itemType === 'ingredient' ? (i.averageCost || 0) : (i.price || 0)
       return sum + (branchStock * price)
     }, 0)
+    const totalCostValue = itemsWithStock.reduce((sum, i) => {
+      const branchStock = getStockForBranch(i) || 0
+      const cost = i.itemType === 'ingredient' ? (i.averageCost || 0) : (parseFloat(i.cost) || 0)
+      return sum + (branchStock * cost)
+    }, 0)
     const totalUnits = itemsWithStock.reduce((sum, i) => sum + (getStockForBranch(i) || 0), 0)
 
     return {
@@ -1247,11 +1252,12 @@ export default function Inventory() {
       lowStockItems,
       outOfStockItems,
       totalValue,
+      totalCostValue,
       totalUnits
     }
   }, [filteredProducts, getStockForBranch])
 
-  const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalUnits } = statistics
+  const { productsWithStock, lowStockItems, outOfStockItems, totalValue, totalCostValue, totalUnits } = statistics
 
   // Calcular productos con stock huérfano (pasando almacenes activos para detectar almacenes eliminados)
   // IMPORTANTE: No calcular si los almacenes aún no se han cargado para evitar falsos positivos
@@ -1412,9 +1418,12 @@ export default function Inventory() {
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs sm:text-sm text-gray-600">Valor Total</p>
+                <p className="text-xs sm:text-sm text-gray-600">Valor Venta</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
                   {formatCurrency(totalValue)}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Costo: {formatCurrency(totalCostValue)}
                 </p>
               </div>
               <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
@@ -2534,9 +2543,15 @@ export default function Inventory() {
               <p className="text-2xl font-bold text-gray-900">{totalUnits}</p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-1">Valor Total Inventario</p>
+              <p className="text-gray-600 mb-1">Valor Venta Inventario</p>
               <p className="text-xl font-bold text-primary-600">
                 {formatCurrency(totalValue)}
+              </p>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-gray-600 mb-1">Valor Costo Inventario</p>
+              <p className="text-xl font-bold text-green-700">
+                {formatCurrency(totalCostValue)}
               </p>
             </div>
           </div>
