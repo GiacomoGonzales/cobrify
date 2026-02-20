@@ -326,16 +326,10 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
             ) : (
               <div className="text-lg text-gray-500">Consultar precio</div>
             )}
-            {!hasVariants && product.stock !== undefined && product.stock !== null && product.trackStock !== false && (
-              product.stock > 0 ? (
-                <span className="text-sm text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
-                  {product.stock} disponibles
-                </span>
-              ) : (
-                <span className="text-sm text-red-600 bg-red-50 px-3 py-1 rounded-full font-medium">
-                  Agotado
-                </span>
-              )
+            {!hasVariants && product.stock !== undefined && product.stock !== null && product.trackStock !== false && product.stock <= 0 && (
+              <span className="text-sm text-red-600 bg-red-50 px-3 py-1 rounded-full font-medium">
+                Agotado
+              </span>
             )}
           </div>
 
