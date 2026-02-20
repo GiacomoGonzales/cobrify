@@ -201,6 +201,7 @@ export default function Settings() {
   const [catalogWelcome, setCatalogWelcome] = useState('')
   const [catalogTagline, setCatalogTagline] = useState('')
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
+  const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
   const [catalogObservations, setCatalogObservations] = useState('')
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
@@ -754,6 +755,7 @@ export default function Settings() {
         setCatalogWelcome(businessData.catalogWelcome || '')
         setCatalogTagline(businessData.catalogTagline || '')
         setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
+        setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
         setCatalogWhatsapp(businessData.catalogWhatsapp || '')
         setCatalogObservations(businessData.catalogObservations || '')
 
@@ -4554,6 +4556,18 @@ export default function Settings() {
                         className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                       />
                     </label>
+                    <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 block">Ignorar stock en catálogo</span>
+                        <span className="text-xs text-gray-500">Los productos nunca se mostrarán como "Agotado". Ideal para negocios que trabajan bajo pedido</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={catalogIgnoreStock}
+                        onChange={(e) => setCatalogIgnoreStock(e.target.checked)}
+                        className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                    </label>
                   </div>
 
                   {/* WhatsApp del catálogo */}
@@ -4617,6 +4631,7 @@ export default function Settings() {
                       catalogWelcome,
                       catalogTagline,
                       catalogShowPrices,
+                      catalogIgnoreStock,
                       catalogWhatsapp: catalogWhatsapp.trim(),
                       catalogObservations: catalogObservations.trim(),
                       updatedAt: serverTimestamp(),

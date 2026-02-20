@@ -45,8 +45,9 @@ function ProductSkeleton() {
 }
 
 // Helper: determinar si un producto está agotado
-const isProductOutOfStock = (product) => {
+const isProductOutOfStock = (product, ignoreStock = false) => {
   if (!product) return false
+  if (ignoreStock) return false
   // Productos sin control de stock siempre disponibles
   if (product.trackStock === false || product.stock === null || product.stock === undefined) return false
   // Producto con variantes: agotado solo si TODAS las variantes están agotadas
@@ -90,7 +91,7 @@ const getProductPriceRange = (product, business) => {
 }
 
 // Modal de producto con soporte para modificadores
-function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true, business }) {
+function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices = true, business, ignoreStock = false }) {
   const [quantity, setQuantity] = useState(1)
   const [selectedModifiers, setSelectedModifiers] = useState({})
   const [modifierErrors, setModifierErrors] = useState({})
@@ -127,7 +128,7 @@ function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, sho
 
   if (!isOpen || !product) return null
 
-  const outOfStock = isProductOutOfStock(product)
+  const outOfStock = isProductOutOfStock(product, ignoreStock)
   const hasModifiers = product.modifiers?.length > 0
 
   // Manejar selección de opción de modificador
@@ -1306,11 +1307,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   // Configuración de visibilidad de precios
   const showPrices = business?.catalogShowPrices !== false
+  const ignoreStock = business?.catalogIgnoreStock === true
 
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
     // No permitir agregar productos agotados
-    if (isProductOutOfStock(product)) return
+    if (isProductOutOfStock(product, ignoreStock)) return
     setCart(prev => {
       // Generar un ID único para el item del carrito basado en producto + variante + modificadores + nivel de precio
       const variantKey = product.isVariant ? product.variantSku : ''
@@ -1650,7 +1652,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {filteredProducts.map(product => {
               const cartQty = getCartQuantity(product.id)
-              const outOfStock = isProductOutOfStock(product)
+              const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
               return (
                 <div
@@ -1729,7 +1731,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           <div className="space-y-4">
             {filteredProducts.map(product => {
               const cartQty = getCartQuantity(product.id)
-              const outOfStock = isProductOutOfStock(product)
+              const outOfStock = isProductOutOfStock(product, ignoreStock)
               const priceRange = getProductPriceRange(product, business)
               return (
                 <div
@@ -1902,6 +1904,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         cartQuantity={selectedProduct ? getCartQuantity(selectedProduct.id) : 0}
         showPrices={showPrices}
         business={business}
+        ignoreStock={ignoreStock}
       />
 
       {/* Cart Drawer */}
