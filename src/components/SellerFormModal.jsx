@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, User, Store } from 'lucide-react'
+import { Loader2, User, Store, Target } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -20,7 +20,9 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
     phone: '',
     email: '',
     dni: '',
-    branchId: '', // Sucursal asignada
+    branchId: '',
+    salesGoal: '',
+    goalPeriod: 'monthly',
   })
 
   const [errors, setErrors] = useState({})
@@ -50,6 +52,8 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         email: seller.email || '',
         dni: seller.dni || '',
         branchId: seller.branchId || '',
+        salesGoal: seller.salesGoal || seller.dailyGoal || '',
+        goalPeriod: seller.goalPeriod || (seller.dailyGoal ? 'daily' : 'monthly'),
       })
     } else {
       // Reset form for new seller
@@ -60,6 +64,8 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
         email: '',
         dni: '',
         branchId: '',
+        salesGoal: '',
+    goalPeriod: 'monthly',
       })
     }
     setErrors({})
@@ -97,9 +103,13 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
+      const dataToSave = {
+        ...formData,
+        salesGoal: formData.salesGoal ? parseFloat(formData.salesGoal) : 0,
+      }
       const result = seller
-        ? await updateSeller(businessId, seller.id, formData)
-        : await createSeller(businessId, formData)
+        ? await updateSeller(businessId, seller.id, dataToSave)
+        : await createSeller(businessId, dataToSave)
 
       if (result.success) {
         toast.success(seller ? 'Vendedor actualizado correctamente' : 'Vendedor creado correctamente')
@@ -205,6 +215,39 @@ export default function SellerFormModal({ isOpen, onClose, seller, onSuccess }) 
             </p>
           </div>
         )}
+
+        {/* Meta de Ventas */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Target className="w-4 h-4 inline mr-1" />
+            Meta de Ventas (S/)
+          </label>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              name="salesGoal"
+              value={formData.salesGoal}
+              onChange={handleChange}
+              placeholder="Ej: 5000"
+              min="0"
+              step="0.01"
+              className="flex-1"
+            />
+            <select
+              name="goalPeriod"
+              value={formData.goalPeriod}
+              onChange={handleChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+            >
+              <option value="daily">Diaria</option>
+              <option value="weekly">Semanal</option>
+              <option value="monthly">Mensual</option>
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Meta de ventas para este vendedor (dejar vacío si no aplica)
+          </p>
+        </div>
 
         {/* Teléfono */}
         <div>
