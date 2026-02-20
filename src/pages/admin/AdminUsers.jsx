@@ -458,23 +458,18 @@ export default function AdminUsers() {
               return issueDate && issueDate >= periodStart
             }
 
-            // Rechazados en invoices + creditNotes (incluir failed_permanent)
+            // Rechazados en invoices (NC y ND también están en invoices)
             const rejInvQ = query(collection(db, 'businesses', userId, 'invoices'), where('sunatStatus', 'in', ['rejected', 'failed_permanent']))
-            const rejCnQ = query(collection(db, 'businesses', userId, 'creditNotes'), where('sunatStatus', 'in', ['rejected', 'failed_permanent']))
 
-            // Pendientes en invoices + creditNotes (incluir sending, signed)
+            // Pendientes en invoices
             const pendInvQ = query(collection(db, 'businesses', userId, 'invoices'), where('sunatStatus', 'in', ['pending', 'sending', 'signed', 'SIGNED']))
-            const pendCnQ = query(collection(db, 'businesses', userId, 'creditNotes'), where('sunatStatus', 'in', ['pending', 'sending', 'signed', 'SIGNED']))
 
-            // Ejecutar las 4 queries en paralelo
-            const [rejInvSnap, rejCnSnap, pendInvSnap, pendCnSnap] = await Promise.all([
-              getDocs(rejInvQ), getDocs(rejCnQ), getDocs(pendInvQ), getDocs(pendCnQ)
+            const [rejInvSnap, pendInvSnap] = await Promise.all([
+              getDocs(rejInvQ), getDocs(pendInvQ)
             ])
 
             rejInvSnap.forEach((doc) => { if (isInPeriod(doc.data())) rejected++ })
-            rejCnSnap.forEach((doc) => { if (isInPeriod(doc.data())) rejected++ })
             pendInvSnap.forEach((doc) => { if (isInPeriod(doc.data())) pending++ })
-            pendCnSnap.forEach((doc) => { if (isInPeriod(doc.data())) pending++ })
 
             batchStats[userId] = { accepted, rejected, pending }
           } catch (err) {
@@ -4324,6 +4319,7 @@ export default function AdminUsers() {
           </div>
         </div>
       )}
+
     </div>
   )
 }
