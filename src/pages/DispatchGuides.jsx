@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, RotateCcw } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -10,8 +10,8 @@ import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
-import { voidDispatchGuide, canVoidDispatchGuide } from '@/services/sunatService'
-import { getAuth } from 'firebase/auth'
+import { canVoidDispatchGuide } from '@/services/sunatService'
+import { updateDispatchGuide } from '@/services/firestoreService'
 import { Capacitor } from '@capacitor/core'
 
 const TRANSFER_REASONS = {
@@ -344,19 +344,18 @@ export default function DispatchGuides() {
     }, 100)
   }
 
-  // Anular guía de remisión en SUNAT
+  // Marcar guía como anulada (la baja se hace manualmente en portal SUNAT)
   const handleVoidGuide = async () => {
     if (!voidingGuide || isVoidingGuide) return
 
     setIsVoidingGuide(true)
     try {
       if (isDemoMode) {
-        toast.info(`Anulando guía ${voidingGuide.number} en SUNAT...`)
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        await new Promise(resolve => setTimeout(resolve, 500))
         setGuides(prev => prev.map(g =>
           g.id === voidingGuide.id ? { ...g, sunatStatus: 'voided' } : g
         ))
-        toast.success(`Guía ${voidingGuide.number} anulada exitosamente (Demo)`)
+        toast.success(`Guía ${voidingGuide.number} marcada como anulada (Demo)`)
         setVoidingGuide(null)
         setVoidGuideReason('ANULACION DE GUIA DE REMISION')
         setIsVoidingGuide(false)
@@ -364,27 +363,21 @@ export default function DispatchGuides() {
       }
 
       const businessId = getBusinessId()
-      toast.info(`Anulando guía ${voidingGuide.number} en SUNAT...`)
-
-      const auth = getAuth()
-      const idToken = await auth.currentUser.getIdToken()
-
-      const result = await voidDispatchGuide(businessId, voidingGuide.id, voidGuideReason, idToken)
+      const result = await updateDispatchGuide(businessId, voidingGuide.id, {
+        sunatStatus: 'voided',
+        voidReason: voidGuideReason,
+        voidedAt: new Date()
+      })
 
       if (result.success) {
-        if (result.status === 'voided') {
-          toast.success(`Guía ${voidingGuide.number} anulada exitosamente en SUNAT`)
-        } else if (result.status === 'pending') {
-          toast.warning('La anulación está siendo procesada por SUNAT. Consulte el estado más tarde.')
-        }
+        toast.success(`Guía ${voidingGuide.number} marcada como anulada`)
+        await loadGuides()
       } else {
-        toast.error(`Error al anular: ${result.error || 'Error desconocido'}`)
+        toast.error(`Error: ${result.error || 'Error desconocido'}`)
       }
-
-      await loadGuides()
     } catch (error) {
-      console.error('Error al anular guía:', error)
-      toast.error(`Error al anular guía: ${error.message}`)
+      console.error('Error al marcar guía como anulada:', error)
+      toast.error(`Error: ${error.message}`)
     } finally {
       setVoidingGuide(null)
       setVoidGuideReason('ANULACION DE GUIA DE REMISION')
@@ -432,15 +425,6 @@ export default function DispatchGuides() {
         <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
           <Ban className="w-3 h-3" />
           Anulada
-        </span>
-      )
-    }
-
-    if (sunatStatus === 'voiding') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          Anulando
         </span>
       )
     }
@@ -960,7 +944,7 @@ export default function DispatchGuides() {
                   )}
 
                   {/* Editar - Solo si no está aceptada, anulada o anulando */}
-                  {guide.sunatStatus !== 'accepted' && guide.sunatStatus !== 'voided' && guide.sunatStatus !== 'voiding' && (
+                  {guide.sunatStatus !== 'accepted' && guide.sunatStatus !== 'voided' && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -974,7 +958,7 @@ export default function DispatchGuides() {
                   )}
 
                   {/* Enviar a SUNAT - Solo si no está aceptada y no está anulada */}
-                  {guide.sunatStatus !== 'accepted' && guide.sunatStatus !== 'voided' && guide.sunatStatus !== 'voiding' && (
+                  {guide.sunatStatus !== 'accepted' && guide.sunatStatus !== 'voided' && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -992,7 +976,7 @@ export default function DispatchGuides() {
                     </button>
                   )}
 
-                  {/* Anular en SUNAT - Solo si está aceptada y dentro del plazo */}
+                  {/* Marcar como anulada - Solo si está aceptada */}
                   {guide.sunatStatus === 'accepted' && (() => {
                     const validation = canVoidDispatchGuide(guide)
                     return validation.canVoid
@@ -1005,21 +989,7 @@ export default function DispatchGuides() {
                       className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
                     >
                       <Ban className="w-4 h-4" />
-                      <span>Anular en SUNAT</span>
-                    </button>
-                  )}
-
-                  {/* Reintentar anulación - Solo si está en estado voiding */}
-                  {guide.sunatStatus === 'voiding' && (
-                    <button
-                      onClick={() => {
-                        setOpenMenuId(null)
-                        setVoidingGuide(guide)
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3 text-amber-600"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Reintentar anulación</span>
+                      <span>Anular guía</span>
                     </button>
                   )}
                 </>
@@ -1109,12 +1079,30 @@ export default function DispatchGuides() {
 
             {/* Content */}
             <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold mb-1">Proceso de anulación</p>
+                    <p className="mb-2">SUNAT no permite anular guías de remisión por webservice. Debe hacerlo manualmente desde el portal SOL de SUNAT.</p>
+                    <a
+                      href="https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-blue-700 underline font-medium hover:text-blue-900"
+                    >
+                      Ir al portal SUNAT
+                      <Share2 className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-amber-800">
-                    <p className="font-semibold mb-1">Esta acción no se puede deshacer</p>
-                    <p>La comunicación de baja será enviada a SUNAT y la guía quedará anulada permanentemente.</p>
+                    <p>Una vez anulada en SUNAT, presione <strong>"Marcar como anulada"</strong> para actualizar el estado en el sistema.</p>
                   </div>
                 </div>
               </div>
@@ -1176,12 +1164,12 @@ export default function DispatchGuides() {
                 {isVoidingGuide ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Anulando...
+                    Guardando...
                   </>
                 ) : (
                   <>
                     <Ban className="w-4 h-4" />
-                    Confirmar Anulación
+                    Marcar como anulada
                   </>
                 )}
               </button>

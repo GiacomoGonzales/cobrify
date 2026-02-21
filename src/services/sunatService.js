@@ -734,61 +734,15 @@ export const canVoidDocument = (document) => {
 }
 
 /**
- * Anula una Guía de Remisión Electrónica mediante Comunicación de Baja a SUNAT
- *
- * @param {string} userId - ID del usuario/negocio
- * @param {string} guideId - ID de la guía a anular
- * @param {string} reason - Motivo de la anulación
- * @param {string} idToken - Token de autenticación
- * @returns {Promise<Object>} { success: boolean, status?: string, message?: string, error?: string }
- */
-export const voidDispatchGuide = async (userId, guideId, reason, idToken) => {
-  try {
-    const voidDispatchGuideUrl = import.meta.env.VITE_VOID_DISPATCH_GUIDE_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/voidDispatchGuide'
-
-    const response = await axios.post(
-      voidDispatchGuideUrl,
-      {
-        userId,
-        guideId,
-        reason: reason || 'ANULACION DE GUIA DE REMISION'
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        timeout: 120000
-      }
-    )
-
-    return response.data
-  } catch (error) {
-    console.error('Error al anular guía de remisión:', error)
-
-    if (error.response?.data) {
-      return {
-        success: false,
-        error: error.response.data.error || 'Error al anular la guía de remisión'
-      }
-    }
-
-    return {
-      success: false,
-      error: error.message || 'Error de conexión'
-    }
-  }
-}
-
-/**
- * Valida si una guía de remisión puede ser anulada
+ * Valida si una guía de remisión puede ser marcada como anulada.
+ * NOTA: SUNAT no soporta baja de GRE por webservice (ni SOAP ni REST).
+ * La baja solo se puede hacer manualmente desde el portal SOL de SUNAT.
  *
  * @param {Object} guide - Datos de la guía
  * @returns {Object} { canVoid: boolean, reason: string }
  */
 export const canVoidDispatchGuide = (guide) => {
-  // Debe tener estado aceptado o en proceso de anulación (para reintentos)
-  const validStatuses = ['ACEPTADO', 'accepted', 'voiding']
+  const validStatuses = ['ACEPTADO', 'accepted']
   if (!validStatuses.includes(guide.sunatStatus)) {
     return {
       canVoid: false,
@@ -796,7 +750,6 @@ export const canVoidDispatchGuide = (guide) => {
     }
   }
 
-  // Ya está anulada
   if (guide.sunatStatus === 'voided') {
     return {
       canVoid: false,
@@ -804,42 +757,9 @@ export const canVoidDispatchGuide = (guide) => {
     }
   }
 
-  // Debe estar dentro del plazo de 7 días
-  const dateSource = guide.transferDate || guide.issueDate || guide.createdAt
-  let issueDate
-  if (typeof dateSource === 'string') {
-    issueDate = new Date(dateSource + 'T12:00:00')
-  } else if (dateSource?.toDate) {
-    issueDate = dateSource.toDate()
-  } else {
-    issueDate = new Date(dateSource)
-  }
-
-  const today = new Date()
-  const diffTime = Math.abs(today - issueDate)
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-  if (diffDays > 7) {
-    return {
-      canVoid: false,
-      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días.`
-    }
-  }
-
-  // Si está en proceso de anulación, permitir reintentar
-  if (guide.sunatStatus === 'voiding') {
-    return {
-      canVoid: true,
-      reason: 'La guía está en proceso de anulación. Puede reintentar.',
-      isRetry: true,
-      daysRemaining: 7 - diffDays
-    }
-  }
-
   return {
     canVoid: true,
-    reason: 'La guía puede ser anulada',
-    daysRemaining: 7 - diffDays
+    reason: 'La guía puede ser marcada como anulada'
   }
 }
 
@@ -860,6 +780,5 @@ export default {
   canVoidInvoice,
   canVoidBoleta,
   canVoidDocument,
-  voidDispatchGuide,
   canVoidDispatchGuide,
 }
