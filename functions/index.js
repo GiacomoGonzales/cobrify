@@ -8432,10 +8432,10 @@ export const voidDispatchGuide = onRequest(
       })
       console.log('✅ [GRE-VOID] XML firmado')
 
-      // 8. Enviar a SUNAT via endpoint GRE
+      // 8. Enviar a SUNAT via endpoint de facturas (VoidedDocuments usa el endpoint estándar, no el de GRE)
       const environment = sunatCredentials.environment
 
-      const sendResult = await sendSummaryGRE(signedXml, {
+      const sendResult = await sendSummary(signedXml, {
         ruc: businessData.ruc,
         solUser: sunatCredentials.solUser,
         solPassword: sunatCredentials.solPassword,
@@ -8495,7 +8495,7 @@ export const voidDispatchGuide = onRequest(
         updatedAt: FieldValue.serverTimestamp()
       })
 
-      // 11. Polling getStatusGRE
+      // 11. Polling getStatus (endpoint estándar)
       const MAX_RETRIES = 6
       const RETRY_INTERVAL = 10000
       let statusResult = null
@@ -8508,7 +8508,7 @@ export const voidDispatchGuide = onRequest(
         console.log(`⏳ [GRE-VOID] Esperando ${waitTime / 1000}s (intento ${retryCount + 1}/${MAX_RETRIES})...`)
         await new Promise(resolve => setTimeout(resolve, waitTime))
 
-        statusResult = await getStatusGRE(sendResult.ticket, {
+        statusResult = await getStatus(sendResult.ticket, {
           ruc: businessData.ruc,
           solUser: sunatCredentials.solUser,
           solPassword: sunatCredentials.solPassword,
