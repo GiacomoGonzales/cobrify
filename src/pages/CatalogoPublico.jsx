@@ -1387,14 +1387,23 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           .join('\n')
         itemText += `\n${modsText}`
       }
-      itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
+      if (showPrices) {
+        itemText += ` - S/ ${(price * item.quantity).toFixed(2)}`
+      }
       return itemText
     }).join('\n')
-    const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
 
-    const message = encodeURIComponent(
-      `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
-    )
+    let message
+    if (showPrices) {
+      const total = cart.reduce((sum, item) => sum + ((item.unitPrice || item.price) * item.quantity), 0)
+      message = encodeURIComponent(
+        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\n*Total: S/ ${total.toFixed(2)}*\n\nGracias!`
+      )
+    } else {
+      message = encodeURIComponent(
+        `¡Hola! Me gustaría hacer un pedido:\n\n${items}\n\nGracias!`
+      )
+    }
 
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
   }
