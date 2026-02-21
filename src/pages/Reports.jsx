@@ -290,8 +290,8 @@ export default function Reports() {
       if (invoice.convertedTo) {
         return false
       }
-      // Si el documento está anulado, no contar
-      if (invoice.status === 'cancelled' || invoice.status === 'voided') {
+      // Si el documento está anulado o en proceso de anulación SUNAT, no contar
+      if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') {
         return false
       }
       // Filtrar por sucursal
@@ -409,6 +409,9 @@ export default function Reports() {
     return invoices
       .filter(invoice => {
         if (!invoice.createdAt) return false
+        // Excluir anuladas y en proceso de anulación
+        if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
+        if (invoice.convertedTo) return false
         const invoiceDate = invoice.createdAt.toDate
           ? invoice.createdAt.toDate()
           : new Date(invoice.createdAt)
@@ -1608,24 +1611,23 @@ export default function Reports() {
           </Select>
           {dateRange === 'custom' && (
             <>
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
                 <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={e => setCustomStartDate(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none w-full min-w-0"
                   title="Desde"
                 />
               </div>
-              <span className="hidden sm:inline text-gray-500">-</span>
-              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+              <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm w-full sm:w-auto">
                 <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={e => setCustomEndDate(e.target.value)}
-                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
+                  className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none w-full min-w-0"
                   title="Hasta"
                 />
               </div>
