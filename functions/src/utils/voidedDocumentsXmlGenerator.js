@@ -25,12 +25,17 @@
  * @returns {string} XML generado
  */
 export function generateVoidedDocumentsXML(data) {
-  const { id, referenceDate, issueDate, supplier, documents } = data
+  const { id, referenceDate, issueDate, supplier, documents, customizationId } = data
 
   // Validaciones básicas
   if (!id || !referenceDate || !issueDate || !supplier || !documents?.length) {
     throw new Error('Faltan datos requeridos para generar XML de baja')
   }
+
+  // Determinar CustomizationID
+  // v1.0: Facturas (01), NC (07), ND (08) - endpoint estándar
+  // v2.0: Incluye GRE (09), Retenciones (20), GRT (31), Percepciones (40)
+  const version = customizationId || '1.0'
 
   // Generar líneas de documentos a dar de baja (sin espacios adicionales)
   const documentLines = documents.map(doc =>
@@ -58,7 +63,7 @@ export function generateVoidedDocumentsXML(data) {
     `</ext:UBLExtension>` +
     `</ext:UBLExtensions>` +
     `<cbc:UBLVersionID>2.0</cbc:UBLVersionID>` +
-    `<cbc:CustomizationID>1.0</cbc:CustomizationID>` +
+    `<cbc:CustomizationID>${version}</cbc:CustomizationID>` +
     `<cbc:ID>${id}</cbc:ID>` +
     `<cbc:ReferenceDate>${referenceDate}</cbc:ReferenceDate>` +
     `<cbc:IssueDate>${issueDate}</cbc:IssueDate>` +

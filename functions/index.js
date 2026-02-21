@@ -8419,7 +8419,8 @@ export const voidDispatchGuide = onRequest(
           series: guideSeries,
           number: guideNumber,
           reason: reason || 'ANULACION DE GUIA DE REMISION'
-        }]
+        }],
+        customizationId: '2.0' // v2.0 requerido para tipos 09, 20, 31, 40
       }
 
       const voidedXml = generateVoidedDocumentsXML(voidedXmlData)
