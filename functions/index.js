@@ -11,6 +11,7 @@ import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, 
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse } from './src/services/qpseService.js'
+import { sendSummaryGRE, getStatusGRE } from './src/utils/sunatClientGRE.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -8209,6 +8210,406 @@ export const migrateProductsIgvRate = onRequest(
     } catch (error) {
       console.error('❌ [MIGRATE-IGV] Error:', error)
       res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+/**
+ * Anula una Guía de Remisión Electrónica mediante Comunicación de Baja a SUNAT
+ * Usa el endpoint GRE (ol-ti-itemision-guia-gem) con sendSummary/getStatus
+ */
+export const voidDispatchGuide = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 300,
+    memory: '512MiB',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' })
+      return
+    }
+
+    try {
+      // Verificar autenticación
+      const authHeader = req.headers.authorization
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No autorizado - Token no proporcionado' })
+        return
+      }
+
+      const idToken = authHeader.split('Bearer ')[1]
+      let decodedToken
+
+      try {
+        decodedToken = await auth.verifyIdToken(idToken)
+      } catch (authError) {
+        console.error('❌ [GRE-VOID] Error al verificar token:', authError)
+        res.status(401).json({ error: 'Token inválido o expirado' })
+        return
+      }
+
+      const authenticatedUserId = decodedToken.uid
+
+      const { userId, guideId, reason } = req.body
+
+      if (!userId || !guideId) {
+        res.status(400).json({ error: 'userId y guideId son requeridos' })
+        return
+      }
+
+      // Verificar autorización
+      if (authenticatedUserId !== userId) {
+        const userDoc = await db.collection('users').doc(authenticatedUserId).get()
+        if (!userDoc.exists || userDoc.data().ownerId !== userId) {
+          res.status(403).json({ error: 'No autorizado para esta operación' })
+          return
+        }
+      }
+
+      console.log(`🚛 [GRE-VOID] Iniciando anulación - Usuario: ${userId}, Guía: ${guideId}`)
+
+      // 1. Obtener datos de la guía de remisión
+      const guideRef = db.collection('businesses').doc(userId).collection('dispatchGuides').doc(guideId)
+      const guideDoc = await guideRef.get()
+
+      if (!guideDoc.exists) {
+        res.status(404).json({ error: 'Guía de remisión no encontrada' })
+        return
+      }
+
+      const guideData = guideDoc.data()
+
+      // 2. Validar que se puede anular
+      const validStatuses = ['accepted', 'ACEPTADO', 'voiding']
+      if (!validStatuses.includes(guideData.sunatStatus)) {
+        res.status(400).json({
+          error: 'Solo se pueden anular guías aceptadas por SUNAT',
+          canVoid: false
+        })
+        return
+      }
+
+      // Validar plazo de 7 días
+      const dateSource = guideData.transferDate || guideData.issueDate || guideData.createdAt
+      let issueDate
+      if (typeof dateSource === 'string') {
+        issueDate = new Date(dateSource + 'T12:00:00')
+      } else if (dateSource?.toDate) {
+        issueDate = dateSource.toDate()
+      } else if (dateSource?._seconds) {
+        issueDate = new Date(dateSource._seconds * 1000)
+      } else {
+        issueDate = new Date()
+      }
+
+      const today = new Date()
+      const diffTime = Math.abs(today - issueDate)
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+      if (diffDays > 7) {
+        res.status(400).json({
+          error: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días.`,
+          canVoid: false
+        })
+        return
+      }
+
+      // 3. Obtener datos del negocio
+      const businessDoc = await db.collection('businesses').doc(userId).get()
+      if (!businessDoc.exists) {
+        res.status(404).json({ error: 'Negocio no encontrado' })
+        return
+      }
+
+      const businessData = businessDoc.data()
+
+      const emissionConfig = businessData.emissionConfig || {}
+      const sunatConfig = emissionConfig.sunat || businessData.sunat || {}
+
+      if (!sunatConfig.solUser || !sunatConfig.solPassword) {
+        res.status(400).json({ error: 'Faltan credenciales SOL de SUNAT' })
+        return
+      }
+
+      const certificate = sunatConfig.certificateData || sunatConfig.certificate
+      if (!certificate) {
+        res.status(400).json({ error: 'Falta certificado digital para firmar' })
+        return
+      }
+
+      const sunatCredentials = {
+        solUser: sunatConfig.solUser,
+        solPassword: sunatConfig.solPassword,
+        certificate,
+        certificatePassword: sunatConfig.certificatePassword || '',
+        environment: sunatConfig.environment || 'beta'
+      }
+
+      // 4. Generar correlativo para la comunicación de baja
+      // Usar zona horaria de Perú (UTC-5)
+      const nowUTC = new Date()
+      const peruOffset = -5 * 60
+      const peruNow = new Date(nowUTC.getTime() + (peruOffset - nowUTC.getTimezoneOffset()) * 60000)
+
+      const voidedDocsRef = db.collection('businesses').doc(userId).collection('voidedDocuments')
+      const todayStr = `${peruNow.getFullYear()}${String(peruNow.getMonth() + 1).padStart(2, '0')}${String(peruNow.getDate()).padStart(2, '0')}`
+
+      const counterDocRef = voidedDocsRef.doc(`counter_${todayStr}`)
+      let correlativo = 1
+      const counterDoc = await counterDocRef.get()
+      if (counterDoc.exists) {
+        correlativo = (counterDoc.data().lastCorrelativo || 0) + 1
+      }
+
+      await counterDocRef.set({
+        dateStr: todayStr,
+        lastCorrelativo: correlativo,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      const voidedDocId = generateVoidedDocumentId(peruNow, correlativo)
+      console.log(`📄 [GRE-VOID] Generando comunicación de baja: ${voidedDocId}`)
+
+      // 5. Determinar referenceDate (fecha de emisión de la guía)
+      let referenceDateStr
+      const refDateSource = guideData.transferDate || guideData.issueDate
+
+      if (typeof refDateSource === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(refDateSource)) {
+        referenceDateStr = refDateSource
+      } else if (refDateSource?.toDate) {
+        const d = refDateSource.toDate()
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
+      } else if (refDateSource?._seconds) {
+        const d = new Date(refDateSource._seconds * 1000)
+        const dPeru = new Date(d.getTime() + (peruOffset - d.getTimezoneOffset()) * 60000)
+        referenceDateStr = `${dPeru.getFullYear()}-${String(dPeru.getMonth() + 1).padStart(2, '0')}-${String(dPeru.getDate()).padStart(2, '0')}`
+      } else {
+        referenceDateStr = `${peruNow.getFullYear()}-${String(peruNow.getMonth() + 1).padStart(2, '0')}-${String(peruNow.getDate()).padStart(2, '0')}`
+      }
+
+      const issueDateStr = `${peruNow.getFullYear()}-${String(peruNow.getMonth() + 1).padStart(2, '0')}-${String(peruNow.getDate()).padStart(2, '0')}`
+
+      // 6. Generar XML de baja con DocumentTypeCode = 09
+      // Extraer serie y número de la guía (formato T001-00000001)
+      const guideParts = guideData.number?.split('-') || []
+      const guideSeries = guideParts[0] || 'T001'
+      const guideNumber = parseInt(guideParts[1]) || 1
+
+      const voidedXmlData = {
+        id: voidedDocId,
+        referenceDate: referenceDateStr,
+        issueDate: issueDateStr,
+        supplier: {
+          ruc: businessData.ruc,
+          name: businessData.businessName || businessData.name
+        },
+        documents: [{
+          lineId: 1,
+          documentType: '09', // Guía de Remisión Remitente
+          series: guideSeries,
+          number: guideNumber,
+          reason: reason || 'ANULACION DE GUIA DE REMISION'
+        }]
+      }
+
+      const voidedXml = generateVoidedDocumentsXML(voidedXmlData)
+      console.log('✅ [GRE-VOID] XML de baja generado')
+
+      // 7. Firmar XML
+      const signedXml = await signXML(voidedXml, {
+        certificate: sunatCredentials.certificate,
+        certificatePassword: sunatCredentials.certificatePassword
+      })
+      console.log('✅ [GRE-VOID] XML firmado')
+
+      // 8. Enviar a SUNAT via endpoint GRE
+      const environment = sunatCredentials.environment
+
+      const sendResult = await sendSummaryGRE(signedXml, {
+        ruc: businessData.ruc,
+        solUser: sunatCredentials.solUser,
+        solPassword: sunatCredentials.solPassword,
+        environment,
+        fileName: voidedDocId
+      })
+
+      if (!sendResult.success) {
+        console.error('❌ [GRE-VOID] Error al enviar a SUNAT:', sendResult.error)
+
+        await voidedDocsRef.add({
+          voidedDocId,
+          dateStr: todayStr,
+          correlativo,
+          guideId,
+          guideSeries,
+          guideNumber,
+          documentType: 'guia_remision',
+          reason: reason || 'ANULACION DE GUIA DE REMISION',
+          status: 'failed',
+          error: sendResult.error,
+          rawResponse: sendResult.rawResponse || null,
+          createdAt: FieldValue.serverTimestamp()
+        })
+
+        res.status(500).json({
+          error: sendResult.error || 'Error al enviar comunicación de baja GRE a SUNAT',
+          rawResponse: sendResult.rawResponse || null
+        })
+        return
+      }
+
+      console.log(`🎫 [GRE-VOID] Ticket recibido: ${sendResult.ticket}`)
+
+      // 9. Guardar documento de baja con ticket
+      const voidedDocRef = await voidedDocsRef.add({
+        voidedDocId,
+        dateStr: todayStr,
+        correlativo,
+        guideId,
+        guideSeries,
+        guideNumber,
+        documentType: 'guia_remision',
+        reason: reason || 'ANULACION DE GUIA DE REMISION',
+        status: 'pending',
+        ticket: sendResult.ticket,
+        xmlSent: voidedXml,
+        createdAt: FieldValue.serverTimestamp()
+      })
+
+      // 10. Marcar guía como "anulando"
+      await guideRef.update({
+        sunatStatus: 'voiding',
+        voidingTicket: sendResult.ticket,
+        voidedDocumentId: voidedDocRef.id,
+        voidReason: reason || 'ANULACION DE GUIA DE REMISION',
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      // 11. Polling getStatusGRE
+      const MAX_RETRIES = 6
+      const RETRY_INTERVAL = 10000
+      let statusResult = null
+      let retryCount = 0
+
+      console.log('⏳ [GRE-VOID] Consultando estado del ticket...')
+
+      while (retryCount < MAX_RETRIES) {
+        const waitTime = retryCount === 0 ? 5000 : RETRY_INTERVAL
+        console.log(`⏳ [GRE-VOID] Esperando ${waitTime / 1000}s (intento ${retryCount + 1}/${MAX_RETRIES})...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+
+        statusResult = await getStatusGRE(sendResult.ticket, {
+          ruc: businessData.ruc,
+          solUser: sunatCredentials.solUser,
+          solPassword: sunatCredentials.solPassword,
+          environment
+        })
+
+        console.log(`📋 [GRE-VOID] Resultado intento ${retryCount + 1}:`, JSON.stringify(statusResult))
+
+        if (!statusResult.pending) {
+          console.log('✅ [GRE-VOID] SUNAT respondió con resultado final')
+          break
+        }
+
+        retryCount++
+      }
+
+      // Si sigue pendiente después de todos los reintentos
+      if (statusResult.pending) {
+        console.log('⚠️ [GRE-VOID] Timeout: SUNAT no respondió')
+        res.status(202).json({
+          success: true,
+          status: 'pending',
+          ticket: sendResult.ticket,
+          voidedDocumentId: voidedDocRef.id,
+          message: 'La comunicación de baja está siendo procesada por SUNAT. Consulte el estado más tarde.'
+        })
+        return
+      }
+
+      if (statusResult.success && statusResult.accepted) {
+        // Baja aceptada - guardar archivos en Storage
+        let voidXmlStorageUrl = null
+        let voidCdrStorageUrl = null
+
+        try {
+          voidXmlStorageUrl = await saveToStorage(userId, guideId, `${voidedDocId}-BAJA-GRE.xml`, signedXml)
+          if (statusResult.cdrData) {
+            voidCdrStorageUrl = await saveToStorage(userId, guideId, `${voidedDocId}-CDR-BAJA-GRE.xml`, statusResult.cdrData)
+          }
+        } catch (storageError) {
+          console.error('⚠️ [GRE-VOID] Error guardando archivos en Storage:', storageError.message)
+        }
+
+        await voidedDocsRef.doc(voidedDocRef.id).update({
+          status: 'accepted',
+          cdrData: statusResult.cdrData || null,
+          responseCode: statusResult.code || null,
+          responseDescription: statusResult.description || null,
+          voidXmlStorageUrl: voidXmlStorageUrl || null,
+          voidCdrStorageUrl: voidCdrStorageUrl || null,
+          processedAt: FieldValue.serverTimestamp()
+        })
+
+        // Actualizar guía: estado anulada
+        await guideRef.update({
+          sunatStatus: 'voided',
+          voidedAt: FieldValue.serverTimestamp(),
+          voidCdrData: statusResult.cdrData || null,
+          voidXmlStorageUrl: voidXmlStorageUrl || null,
+          voidCdrStorageUrl: voidCdrStorageUrl || null,
+        })
+
+        console.log(`✅ [GRE-VOID] Guía ${guideData.number} anulada exitosamente`)
+
+        res.status(200).json({
+          success: true,
+          status: 'voided',
+          message: 'Guía de remisión anulada exitosamente en SUNAT',
+          voidedDocumentId: voidedDocRef.id
+        })
+        return
+      }
+
+      // Error en la baja
+      const errorMsg = statusResult.error || statusResult.description || 'SUNAT rechazó la comunicación de baja'
+      const errorCode = statusResult.code || null
+
+      console.error(`❌ [GRE-VOID] Baja rechazada: code=${errorCode}, msg=${errorMsg}`)
+
+      await voidedDocsRef.doc(voidedDocRef.id).update({
+        status: 'rejected',
+        error: errorMsg,
+        responseCode: errorCode,
+        processedAt: FieldValue.serverTimestamp()
+      })
+
+      await guideRef.update({
+        sunatStatus: 'accepted', // Volver al estado anterior
+        voidingTicket: null,
+        voidError: errorMsg,
+        updatedAt: FieldValue.serverTimestamp()
+      })
+
+      res.status(400).json({
+        success: false,
+        error: `SUNAT rechazó la anulación (código ${errorCode}): ${errorMsg}`
+      })
+
+    } catch (error) {
+      console.error('❌ [GRE-VOID] Error al anular guía:', error)
+      res.status(500).json({ error: error.message || 'Error interno del servidor' })
     }
   }
 )

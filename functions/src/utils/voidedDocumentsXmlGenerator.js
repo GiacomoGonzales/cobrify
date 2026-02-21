@@ -120,7 +120,9 @@ export function getDocumentTypeCode(documentType) {
     'nota_credito': '07',
     'credit_note': '07',
     'nota_debito': '08',
-    'debit_note': '08'
+    'debit_note': '08',
+    'guia_remision': '09',
+    'dispatch_guide': '09'
   }
 
   return codes[documentType?.toLowerCase()] || '01'

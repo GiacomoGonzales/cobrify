@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, RotateCcw } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -10,6 +10,8 @@ import EditDispatchGuideModal from '@/components/EditDispatchGuideModal'
 import DispatchGuideTicket from '@/components/DispatchGuideTicket'
 import { generateDispatchGuidePDF, previewDispatchGuidePDF, shareDispatchGuidePDF } from '@/utils/dispatchGuidePdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
+import { voidDispatchGuide, canVoidDispatchGuide } from '@/services/sunatService'
+import { getAuth } from 'firebase/auth'
 import { Capacitor } from '@capacitor/core'
 
 const TRANSFER_REASONS = {
@@ -100,6 +102,11 @@ export default function DispatchGuides() {
   const [branches, setBranches] = useState([])
   const [filterBranch, setFilterBranch] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Estado para anulación de guías
+  const [voidingGuide, setVoidingGuide] = useState(null) // Guía seleccionada para anular
+  const [isVoidingGuide, setIsVoidingGuide] = useState(false) // Proceso en curso
+  const [voidGuideReason, setVoidGuideReason] = useState('ANULACION DE GUIA DE REMISION')
 
   // Estado para dropdown menu de acciones
   const [openMenuId, setOpenMenuId] = useState(null)
@@ -337,6 +344,54 @@ export default function DispatchGuides() {
     }, 100)
   }
 
+  // Anular guía de remisión en SUNAT
+  const handleVoidGuide = async () => {
+    if (!voidingGuide || isVoidingGuide) return
+
+    setIsVoidingGuide(true)
+    try {
+      if (isDemoMode) {
+        toast.info(`Anulando guía ${voidingGuide.number} en SUNAT...`)
+        await new Promise(resolve => setTimeout(resolve, 1500))
+        setGuides(prev => prev.map(g =>
+          g.id === voidingGuide.id ? { ...g, sunatStatus: 'voided' } : g
+        ))
+        toast.success(`Guía ${voidingGuide.number} anulada exitosamente (Demo)`)
+        setVoidingGuide(null)
+        setVoidGuideReason('ANULACION DE GUIA DE REMISION')
+        setIsVoidingGuide(false)
+        return
+      }
+
+      const businessId = getBusinessId()
+      toast.info(`Anulando guía ${voidingGuide.number} en SUNAT...`)
+
+      const auth = getAuth()
+      const idToken = await auth.currentUser.getIdToken()
+
+      const result = await voidDispatchGuide(businessId, voidingGuide.id, voidGuideReason, idToken)
+
+      if (result.success) {
+        if (result.status === 'voided') {
+          toast.success(`Guía ${voidingGuide.number} anulada exitosamente en SUNAT`)
+        } else if (result.status === 'pending') {
+          toast.warning('La anulación está siendo procesada por SUNAT. Consulte el estado más tarde.')
+        }
+      } else {
+        toast.error(`Error al anular: ${result.error || 'Error desconocido'}`)
+      }
+
+      await loadGuides()
+    } catch (error) {
+      console.error('Error al anular guía:', error)
+      toast.error(`Error al anular guía: ${error.message}`)
+    } finally {
+      setVoidingGuide(null)
+      setVoidGuideReason('ANULACION DE GUIA DE REMISION')
+      setIsVoidingGuide(false)
+    }
+  }
+
   // Filtrar guías
   const filteredGuides = guides.filter(guide => {
     // Filtrar por búsqueda
@@ -372,6 +427,24 @@ export default function DispatchGuides() {
   }
 
   const getStatusBadge = (status, sunatStatus) => {
+    if (sunatStatus === 'voided') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
+          <Ban className="w-3 h-3" />
+          Anulada
+        </span>
+      )
+    }
+
+    if (sunatStatus === 'voiding') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Anulando
+        </span>
+      )
+    }
+
     if (sunatStatus === 'accepted') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
@@ -886,8 +959,8 @@ export default function DispatchGuides() {
                     <div className="border-t border-gray-100 my-1" />
                   )}
 
-                  {/* Editar - Solo si no está aceptada */}
-                  {guide.sunatStatus !== 'accepted' && (
+                  {/* Editar - Solo si no está aceptada, anulada o anulando */}
+                  {guide.sunatStatus !== 'accepted' && guide.sunatStatus !== 'voided' && guide.sunatStatus !== 'voiding' && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -900,8 +973,8 @@ export default function DispatchGuides() {
                     </button>
                   )}
 
-                  {/* Enviar a SUNAT - Solo si no está aceptada */}
-                  {guide.sunatStatus !== 'accepted' && (
+                  {/* Enviar a SUNAT - Solo si no está aceptada y no está anulada */}
+                  {guide.sunatStatus !== 'accepted' && guide.sunatStatus !== 'voided' && guide.sunatStatus !== 'voiding' && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -916,6 +989,37 @@ export default function DispatchGuides() {
                         <Send className="w-4 h-4" />
                       )}
                       <span>{sendingToSunat === guide.id ? 'Enviando...' : 'Enviar a SUNAT'}</span>
+                    </button>
+                  )}
+
+                  {/* Anular en SUNAT - Solo si está aceptada y dentro del plazo */}
+                  {guide.sunatStatus === 'accepted' && (() => {
+                    const validation = canVoidDispatchGuide(guide)
+                    return validation.canVoid
+                  })() && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        setVoidingGuide(guide)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3 text-red-600"
+                    >
+                      <Ban className="w-4 h-4" />
+                      <span>Anular en SUNAT</span>
+                    </button>
+                  )}
+
+                  {/* Reintentar anulación - Solo si está en estado voiding */}
+                  {guide.sunatStatus === 'voiding' && (
+                    <button
+                      onClick={() => {
+                        setOpenMenuId(null)
+                        setVoidingGuide(guide)
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-3 text-amber-600"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Reintentar anulación</span>
                     </button>
                   )}
                 </>
@@ -975,6 +1079,116 @@ export default function DispatchGuides() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Void Guide Confirmation Modal */}
+      {voidingGuide && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 rounded-t-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg">
+                  <Ban className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Anular Guía de Remisión</h2>
+                  <p className="text-red-100 text-sm">{voidingGuide.number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setVoidingGuide(null)
+                  setVoidGuideReason('ANULACION DE GUIA DE REMISION')
+                }}
+                disabled={isVoidingGuide}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-semibold mb-1">Esta acción no se puede deshacer</p>
+                    <p>La comunicación de baja será enviada a SUNAT y la guía quedará anulada permanentemente.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Motivo de anulación
+                </label>
+                <select
+                  value={voidGuideReason}
+                  onChange={(e) => setVoidGuideReason(e.target.value)}
+                  disabled={isVoidingGuide}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:opacity-50"
+                >
+                  <option value="ANULACION DE GUIA DE REMISION">Anulación de guía de remisión</option>
+                  <option value="ERROR EN DATOS DE LA GUIA">Error en datos de la guía</option>
+                  <option value="TRASLADO CANCELADO">Traslado cancelado</option>
+                  <option value="DUPLICIDAD DE DOCUMENTO">Duplicidad de documento</option>
+                  <option value="ERROR EN DATOS DEL DESTINATARIO">Error en datos del destinatario</option>
+                  <option value="ERROR EN DATOS DEL TRANSPORTE">Error en datos del transporte</option>
+                </select>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-500">Número:</span>
+                    <p className="font-medium">{voidingGuide.number}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Fecha traslado:</span>
+                    <p className="font-medium">{formatTransferDate(voidingGuide.transferDate)}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Destino:</span>
+                    <p className="font-medium truncate">{voidingGuide.destination?.address || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t px-6 py-4 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setVoidingGuide(null)
+                  setVoidGuideReason('ANULACION DE GUIA DE REMISION')
+                }}
+                disabled={isVoidingGuide}
+              >
+                Cancelar
+              </Button>
+              <button
+                onClick={handleVoidGuide}
+                disabled={isVoidingGuide}
+                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+              >
+                {isVoidingGuide ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Anulando...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4" />
+                    Confirmar Anulación
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Guide Modal */}
       <CreateDispatchGuideModal
