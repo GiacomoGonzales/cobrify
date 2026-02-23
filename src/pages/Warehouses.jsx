@@ -911,7 +911,7 @@ export default function Warehouses() {
                     {deleteError.products.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell className="text-right">{product.stock}</TableCell>
+                        <TableCell className="text-right">{product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((sum, v) => sum + (v.stock || 0), 0) : product.stock}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

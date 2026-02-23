@@ -445,7 +445,7 @@ function BatchControl() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">Stock: {product.stock || 0}</p>
+                        <p className="text-sm font-medium text-gray-900">Stock: {product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : (product.stock || 0)}</p>
                         <p className="text-xs text-gray-500">{product.batches?.length || 0} lotes</p>
                       </div>
                       {product.batches && product.batches.length > 0 && (

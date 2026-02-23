@@ -255,7 +255,7 @@ function Navbar() {
                   >
                     <p className="font-medium text-gray-900">{product.name}</p>
                     <p className="text-sm text-gray-600">Código: {product.code || 'N/A'}</p>
-                    <p className="text-sm text-gray-500">{formatCurrency(product.price)}</p>
+                    <p className="text-sm text-gray-500">{formatCurrency(product.hasVariants ? (product.basePrice || 0) : product.price)}</p>
                   </button>
                 ))}
               </div>

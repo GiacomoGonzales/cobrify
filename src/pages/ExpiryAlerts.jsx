@@ -198,7 +198,12 @@ function ExpiryAlerts() {
       const status = getExpirationStatus(p.expirationDate)?.status
       return ['expired', '30days', '60days', '90days'].includes(status)
     })
-    .reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0)
+    .reduce((sum, p) => {
+      if (p.hasVariants && p.variants?.length > 0) {
+        return sum + p.variants.reduce((vs, v) => vs + ((v.price || 0) * (v.stock || 0)), 0)
+      }
+      return sum + ((p.price || 0) * (p.stock || 0))
+    }, 0)
 
   // Exportar a CSV
   const exportToCSV = () => {
@@ -210,9 +215,9 @@ function ExpiryAlerts() {
       p.batchNumber || '',
       formatDate(p.expirationDate),
       p.expirationInfo?.days || 0,
-      p.stock || 0,
-      p.price || 0,
-      (p.price || 0) * (p.stock || 0)
+      p.hasVariants && p.variants?.length > 0 ? p.variants.reduce((s, v) => s + (v.stock || 0), 0) : (p.stock || 0),
+      p.hasVariants ? (p.basePrice || 0) : (p.price || 0),
+      p.hasVariants && p.variants?.length > 0 ? p.variants.reduce((s, v) => s + ((v.price || 0) * (v.stock || 0)), 0) : ((p.price || 0) * (p.stock || 0))
     ])
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
@@ -459,8 +464,8 @@ function ExpiryAlerts() {
                     <span className="text-gray-500">Vence: {formatDate(product.expirationDate)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Stock: {product.stock || 0}</span>
-                    <span className="font-medium">{formatCurrency((product.price || 0) * (product.stock || 0))}</span>
+                    <span className="text-gray-500">Stock: {product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : (product.stock || 0)}</span>
+                    <span className="font-medium">{formatCurrency(product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + ((v.price || 0) * (v.stock || 0)), 0) : ((product.price || 0) * (product.stock || 0)))}</span>
                   </div>
                 </div>
 
@@ -509,10 +514,10 @@ function ExpiryAlerts() {
                     </p>
                   </div>
                   <div className="col-span-1 text-sm text-gray-900">
-                    {product.stock || 0}
+                    {product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : (product.stock || 0)}
                   </div>
                   <div className="col-span-2 text-sm font-medium text-gray-900">
-                    {formatCurrency((product.price || 0) * (product.stock || 0))}
+                    {formatCurrency(product.hasVariants && product.variants?.length > 0 ? product.variants.reduce((s, v) => s + ((v.price || 0) * (v.stock || 0)), 0) : ((product.price || 0) * (product.stock || 0)))}
                   </div>
                   <div className="col-span-1">
                     <Badge variant={

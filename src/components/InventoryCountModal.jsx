@@ -90,6 +90,10 @@ export default function InventoryCountModal({
     if (warehouseId) {
       return getWarehouseStock(product, warehouseId)
     }
+    // Productos con variantes: sumar stock de todas las variantes
+    if (product.hasVariants && product.variants?.length > 0) {
+      return product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+    }
     // Si no, retornar la suma total
     const warehouseStocks = product.warehouseStocks || []
     if (warehouseStocks.length > 0) {
@@ -105,7 +109,7 @@ export default function InventoryCountModal({
   const initializeCountData = (warehouseId) => {
     const initialCountData = {}
     products.forEach(product => {
-      if (product.stock !== null && product.stock !== undefined) {
+      if (product.stock !== null && product.stock !== undefined || (product.hasVariants && product.variants?.length > 0)) {
         // Usar el stock del almacén seleccionado
         const warehouseStock = getWarehouseStock(product, warehouseId)
 
@@ -116,7 +120,7 @@ export default function InventoryCountModal({
           category: product.category,
           systemStock: warehouseStock,
           physicalCount: '',
-          price: product.price || 0,
+          price: product.hasVariants ? (product.basePrice || 0) : (product.price || 0),
           isIngredient: product.isIngredient || false,
           // Guardar warehouseStocks original para actualizar correctamente
           warehouseStocks: product.warehouseStocks || [],
