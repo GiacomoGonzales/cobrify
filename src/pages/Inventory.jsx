@@ -89,6 +89,11 @@ const getCategoryPath = (categories, categoryId) => {
 
 // Función para obtener el stock real de un item (suma de warehouseStocks o stock general)
 const getRealStockValue = (item) => {
+  // Productos con variantes: sumar stock de todas las variantes
+  if (item.hasVariants && item.variants?.length > 0) {
+    return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+  }
+
   // Si no tiene control de stock, retornar null
   if (item.stock === null || item.stock === undefined) {
     return null
@@ -239,6 +244,11 @@ export default function Inventory() {
 
   // Calcular stock considerando los filtros de sucursal y almacén
   const getStockForBranch = React.useCallback((item) => {
+    // Productos con variantes: sumar stock de todas las variantes
+    if (item.hasVariants && item.variants?.length > 0) {
+      return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+    }
+
     // Si no tiene control de stock, retornar null
     if (item.stock === null || item.stock === undefined) {
       return null
@@ -1236,11 +1246,17 @@ export default function Inventory() {
     })
     const outOfStockItems = itemsWithStock.filter(i => getStockForBranch(i) === 0)
     const totalValue = itemsWithStock.reduce((sum, i) => {
+      if (i.hasVariants && i.variants?.length > 0) {
+        return sum + i.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.price || 0), 0)
+      }
       const branchStock = getStockForBranch(i) || 0
       const price = i.itemType === 'ingredient' ? (i.averageCost || 0) : (i.price || 0)
       return sum + (branchStock * price)
     }, 0)
     const totalCostValue = itemsWithStock.reduce((sum, i) => {
+      if (i.hasVariants && i.variants?.length > 0) {
+        return sum + i.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || v.price || 0), 0)
+      }
       const branchStock = getStockForBranch(i) || 0
       const cost = i.itemType === 'ingredient' ? (i.averageCost || 0) : (parseFloat(i.cost) || 0)
       return sum + (branchStock * cost)
@@ -1893,9 +1909,9 @@ export default function Inventory() {
                                 {realStock} uds
                               </span>
                             )}
-                            <span className="text-sm text-gray-700">{formatCurrency(isProduct ? item.price : (item.averageCost || 0))}</span>
+                            <span className="text-sm text-gray-700">{formatCurrency(isProduct ? (item.hasVariants ? item.basePrice : item.price) : (item.averageCost || 0))}</span>
                             {realStock !== null && (
-                              <span className="text-sm font-semibold">{formatCurrency(realStock * (isProduct ? item.price : (item.averageCost || 0)))}</span>
+                              <span className="text-sm font-semibold">{formatCurrency(isProduct && item.hasVariants ? item.variants?.reduce((sum, v) => sum + (v.stock || 0) * (v.price || 0), 0) || 0 : realStock * (isProduct ? item.price : (item.averageCost || 0)))}</span>
                             )}
                           </div>
                           <Badge variant={stockStatus.variant} className="text-xs whitespace-nowrap">
@@ -2158,15 +2174,18 @@ export default function Inventory() {
                         </TableCell>
                         <TableCell className="text-right lg:w-[8%]">
                           <span className="text-sm">
-                            {formatCurrency(isProduct ? item.price : (item.averageCost || 0))}
+                            {formatCurrency(isProduct ? (item.hasVariants ? item.basePrice : item.price) : (item.averageCost || 0))}
                           </span>
                         </TableCell>
                         <TableCell className="text-right lg:w-[10%]">
                           {(() => {
                             const realStock = getRealStock(item)
+                            const inventoryValue = isProduct && item.hasVariants
+                              ? item.variants?.reduce((sum, v) => sum + (v.stock || 0) * (v.price || 0), 0) || 0
+                              : realStock * (isProduct ? item.price : (item.averageCost || 0))
                             return realStock !== null ? (
                               <span className="font-semibold text-sm">
-                                {formatCurrency(realStock * (isProduct ? item.price : (item.averageCost || 0)))}
+                                {formatCurrency(inventoryValue)}
                               </span>
                             ) : (
                               <span className="text-sm text-gray-500">-</span>
