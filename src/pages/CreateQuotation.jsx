@@ -104,9 +104,10 @@ export default function CreateQuotation() {
   const [isEditing, setIsEditing] = useState(false)
   const [editingQuotationNumber, setEditingQuotationNumber] = useState('')
 
-  // Estados para selección de precio múltiple y presentaciones
+  // Estados para selección de precio múltiple, presentaciones y variantes
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [showPresentationModal, setShowPresentationModal] = useState(false)
+  const [showVariantModal, setShowVariantModal] = useState(false)
   const [pendingProductSelection, setPendingProductSelection] = useState(null) // { index, product }
   const [selectedPriceLevel, setSelectedPriceLevel] = useState(null)
 
@@ -370,7 +371,15 @@ export default function CreateQuotation() {
     setQuotationItems(newItems)
   }
 
-  const selectProduct = (index, product, selectedPrice = null, selectedPresentation = null) => {
+  const selectProduct = (index, product, selectedPrice = null, selectedPresentation = null, selectedVariant = null) => {
+    // Si tiene variantes (talla, color, etc.) y no se ha seleccionado una, mostrar modal
+    if (product.hasVariants && product.variants?.length > 0 && !selectedVariant) {
+      setPendingProductSelection({ index, product })
+      setShowVariantModal(true)
+      setShowProductSearch(null)
+      return
+    }
+
     // Verificar si tiene presentaciones habilitadas
     const hasPresentations = businessSettings?.presentationsEnabled &&
                              product.presentations &&
@@ -410,6 +419,13 @@ export default function CreateQuotation() {
     let finalName = product.name
     let finalUnit = product.unit || 'UNIDAD'
     let presentationInfo = ''
+
+    // Si se seleccionó una variante (talla, color, etc.)
+    if (selectedVariant) {
+      finalPrice = selectedVariant.price
+      const attrs = Object.entries(selectedVariant.attributes || {}).map(([k, v]) => v).join(' / ')
+      finalName = `${product.name} (${attrs})`
+    }
 
     // Si se seleccionó una presentación
     if (selectedPresentation) {
@@ -451,6 +467,15 @@ export default function CreateQuotation() {
 
     setShowPriceModal(false)
     selectProduct(index, product, selectedPrice, null)
+  }
+
+  // Manejar selección de variante desde el modal
+  const handleVariantSelection = (variant) => {
+    if (!pendingProductSelection) return
+
+    const { index, product } = pendingProductSelection
+    setShowVariantModal(false)
+    selectProduct(index, product, null, null, variant)
   }
 
   // Manejar selección de presentación desde el modal
@@ -1297,6 +1322,8 @@ export default function CreateQuotation() {
                                                                product.presentations?.length > 0
                                       const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
                                                                 (product.price2 || product.price3 || product.price4)
+                                      const hasVariants = product.hasVariants && product.variants?.length > 0
+                                      const displayPrice = hasVariants ? product.basePrice : product.price
                                       return (
                                         <button
                                           key={product.id}
@@ -1307,6 +1334,11 @@ export default function CreateQuotation() {
                                           <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-1.5">
                                               <p className="font-medium text-sm truncate">{product.name}</p>
+                                              {hasVariants && (
+                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700 flex-shrink-0">
+                                                  Variantes
+                                                </span>
+                                              )}
                                               {hasMultiplePrices && (
                                                 <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 flex-shrink-0">
                                                   <Tag className="w-2.5 h-2.5 mr-0.5" />
@@ -1325,7 +1357,7 @@ export default function CreateQuotation() {
                                             )}
                                           </div>
                                           <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
-                                            {formatCurrency(product.price)}
+                                            {hasVariants ? `Desde ${formatCurrency(Math.min(...product.variants.map(v => v.price)))}` : formatCurrency(displayPrice)}
                                           </span>
                                         </button>
                                       )
@@ -1465,6 +1497,8 @@ export default function CreateQuotation() {
                                                          product.presentations?.length > 0
                                 const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
                                                           (product.price2 || product.price3 || product.price4)
+                                const hasVariants = product.hasVariants && product.variants?.length > 0
+                                const displayPrice = hasVariants ? product.basePrice : product.price
                                 return (
                                   <button
                                     key={product.id}
@@ -1475,6 +1509,11 @@ export default function CreateQuotation() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-1.5">
                                         <p className="font-medium text-sm truncate">{product.name}</p>
+                                        {hasVariants && (
+                                          <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700 flex-shrink-0">
+                                            Variantes
+                                          </span>
+                                        )}
                                         {hasMultiplePrices && (
                                           <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 flex-shrink-0">
                                             <Tag className="w-2.5 h-2.5 mr-0.5" />
@@ -1493,7 +1532,7 @@ export default function CreateQuotation() {
                                       )}
                                     </div>
                                     <span className="text-sm font-semibold text-primary-600 ml-2 flex-shrink-0">
-                                      {formatCurrency(product.price)}
+                                      {hasVariants ? `Desde ${formatCurrency(Math.min(...product.variants.map(v => v.price)))}` : formatCurrency(displayPrice)}
                                     </span>
                                   </button>
                                 )
@@ -1845,6 +1884,59 @@ export default function CreateQuotation() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal: Selección de Variante */}
+      <Modal
+        isOpen={showVariantModal}
+        onClose={() => {
+          setShowVariantModal(false)
+          setPendingProductSelection(null)
+        }}
+        title={`Seleccionar variante - ${pendingProductSelection?.product?.name || ''}`}
+        maxWidth="md"
+      >
+        {pendingProductSelection?.product && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Selecciona la variante del producto:
+            </p>
+            <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
+              {pendingProductSelection.product.variants?.map((variant, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleVariantSelection(variant)}
+                  className="p-4 border-2 border-gray-200 rounded-lg text-left transition-all hover:border-primary-500 hover:bg-primary-50"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      {variant.sku && (
+                        <p className="font-mono text-xs text-gray-500 mb-1">{variant.sku}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {Object.entries(variant.attributes || {}).map(([key, value]) => (
+                          <span key={key} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                            {key}: {value}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-lg font-bold text-primary-600">
+                        {formatCurrency(variant.price)}
+                      </p>
+                    </div>
+                    <Plus className="w-5 h-5 text-primary-600 flex-shrink-0" />
+                  </div>
+                </button>
+              ))}
+            </div>
+            {pendingProductSelection.product.variants?.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No hay variantes disponibles.</p>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
 
       {/* Modal: Selección de Precio */}
