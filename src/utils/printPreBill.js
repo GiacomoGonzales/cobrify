@@ -1,3 +1,46 @@
+import { Capacitor } from '@capacitor/core'
+
+/**
+ * Helper: imprime HTML usando iframe oculto (nativo) o window.open (web)
+ */
+const printHTML = (html) => {
+  if (Capacitor.isNativePlatform()) {
+    // En iOS/Android: usar iframe oculto para evitar bloqueo de popups
+    const existing = document.getElementById('print-iframe')
+    if (existing) existing.remove()
+
+    const iframe = document.createElement('iframe')
+    iframe.id = 'print-iframe'
+    iframe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;border:none;visibility:hidden;'
+    document.body.appendChild(iframe)
+
+    const doc = iframe.contentDocument || iframe.contentWindow.document
+    doc.open()
+    doc.write(html)
+    doc.close()
+
+    // Esperar a que cargue el contenido y luego imprimir
+    iframe.contentWindow.onload = () => {
+      iframe.contentWindow.print()
+      setTimeout(() => iframe.remove(), 1000)
+    }
+    // Fallback si onload no dispara
+    setTimeout(() => {
+      try { iframe.contentWindow.print() } catch (e) { /* ya se imprimió */ }
+      setTimeout(() => iframe.remove(), 1000)
+    }, 500)
+  } else {
+    // En web: usar ventana emergente
+    const printWindow = window.open('', '_blank', 'width=300,height=600')
+    if (!printWindow) {
+      alert('Por favor permite las ventanas emergentes para imprimir')
+      return
+    }
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+}
+
 /**
  * Utility para imprimir precuenta de restaurante
  *
@@ -12,13 +55,6 @@
  */
 export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, itemFilter = null, personLabel = null, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false, overrideTotal = null) => {
   console.log('🖨️ printPreBill - Parámetros recibidos:', { paperWidth, webPrintLegible, itemFilter, personLabel, overrideTotal })
-  // Crear una ventana temporal para imprimir
-  const printWindow = window.open('', '_blank', 'width=300,height=600')
-
-  if (!printWindow) {
-    alert('Por favor permite las ventanas emergentes para imprimir')
-    return
-  }
 
   const currentDate = new Date()
   const dateStr = currentDate.toLocaleDateString('es-PE', {
@@ -505,20 +541,13 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
     </html>
   `
 
-  printWindow.document.write(html)
-  printWindow.document.close()
+  printHTML(html)
 }
 
 /**
  * Imprimir todas las precuentas divididas en un solo documento
  */
 export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}, taxConfig = { igvRate: 18, igvExempt: false }, paperWidth = 80, webPrintLegible = false, recargoConsumoConfig = { enabled: false, rate: 10 }, compactPrint = false) => {
-  const printWindow = window.open('', '_blank', 'width=300,height=600')
-
-  if (!printWindow) {
-    alert('Por favor permite las ventanas emergentes para imprimir')
-    return
-  }
 
   const currentDate = new Date()
   const dateStr = currentDate.toLocaleDateString('es-PE', { year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -683,6 +712,5 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
     </html>
   `
 
-  printWindow.document.write(html)
-  printWindow.document.close()
+  printHTML(html)
 }

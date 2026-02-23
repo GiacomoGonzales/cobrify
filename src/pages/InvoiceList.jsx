@@ -146,6 +146,8 @@ export default function InvoiceList() {
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState(new Set())
   const [isBulkPrinting, setIsBulkPrinting] = useState(false)
   const [bulkPrintProgress, setBulkPrintProgress] = useState({ current: 0, total: 0 })
+  const [isBulkDownloadingPDF, setIsBulkDownloadingPDF] = useState(false)
+  const [bulkPDFProgress, setBulkPDFProgress] = useState({ current: 0, total: 0 })
 
   // Estados para anulación de notas de venta
   const [voidingInvoice, setVoidingInvoice] = useState(null)
@@ -306,6 +308,52 @@ export default function InvoiceList() {
     } else {
       // Impresión web: window.print() renderiza el contenedor bulk
       window.print()
+    }
+  }
+
+  // === Descarga masiva de PDFs A4 ===
+  const handleBulkDownloadPDFs = async () => {
+    if (selectedInvoiceIds.size === 0 || !companySettings) return
+
+    const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
+
+    setIsBulkDownloadingPDF(true)
+    setBulkPDFProgress({ current: 0, total: selectedInvoices.length })
+
+    try {
+      let downloaded = 0
+      let errors = 0
+
+      for (let i = 0; i < selectedInvoices.length; i++) {
+        setBulkPDFProgress({ current: i + 1, total: selectedInvoices.length })
+
+        try {
+          await generateInvoicePDF(selectedInvoices[i], companySettings, true, branding, branches)
+          downloaded++
+        } catch (error) {
+          console.error('Error generando PDF:', error)
+          errors++
+        }
+
+        // Delay entre descargas para evitar bloqueo del navegador
+        if (i < selectedInvoices.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+        }
+      }
+
+      if (errors === 0) {
+        toast.success(`${downloaded} PDF(s) descargados correctamente`)
+      } else {
+        toast.error(`${downloaded} descargados, ${errors} con error`)
+      }
+
+      clearSelection()
+    } catch (error) {
+      console.error('Error en descarga masiva de PDFs:', error)
+      toast.error('Error al descargar PDFs: ' + error.message)
+    } finally {
+      setIsBulkDownloadingPDF(false)
+      setBulkPDFProgress({ current: 0, total: 0 })
     }
   }
 
@@ -774,13 +822,44 @@ Gracias por tu preferencia.`
         setVoidSunatReason('')
         loadInvoices()
       } else if (result.status === 'pending') {
-        const pendingMsg = voidingSunatInvoice.documentType === 'nota_credito'
-          ? 'La anulación está siendo procesada. La factura original será restaurada cuando SUNAT confirme.'
-          : 'La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos.'
-        toast.info(pendingMsg)
+        // Polling automático: reintentar checkVoidStatus hasta que SUNAT responda
+        toast.info('SUNAT está procesando la anulación. Consultando estado...')
+        const voidedDocumentId = result.voidedDocumentId
+        if (voidedDocumentId) {
+          let pollAttempts = 0
+          const maxPollAttempts = 6 // 6 intentos x 15s = 90s más
+          const pollInterval = 15000
+
+          const pollStatus = async () => {
+            pollAttempts++
+            try {
+              const statusResult = await checkVoidStatus(businessId, voidedDocumentId, idToken)
+              if (statusResult.status === 'voided') {
+                toast.success(`${docTypeName} anulada exitosamente en SUNAT.`)
+                loadInvoices()
+                return
+              } else if (statusResult.status === 'rejected' || statusResult.error) {
+                toast.error(statusResult.error || 'SUNAT rechazó la anulación')
+                loadInvoices()
+                return
+              } else if (pollAttempts < maxPollAttempts) {
+                setTimeout(pollStatus, pollInterval)
+                return
+              }
+            } catch (e) {
+              console.warn('Error consultando estado:', e)
+            }
+            // Timeout final
+            toast.info('La anulación sigue en proceso. Recarga la página en unos minutos para ver el estado actualizado.')
+            loadInvoices()
+          }
+          setTimeout(pollStatus, pollInterval)
+        } else {
+          toast.info('La anulación está siendo procesada por SUNAT. Consulte el estado en unos minutos.')
+          loadInvoices()
+        }
         setVoidingSunatInvoice(null)
         setVoidSunatReason('')
-        loadInvoices()
       } else {
         throw new Error(result.error || `Error al anular la ${docTypeName.toLowerCase()}`)
       }
@@ -2012,7 +2091,7 @@ Gracias por tu preferencia.`
           <div className="w-px h-6 bg-gray-600" />
           <Button
             onClick={handleBulkPrintTickets}
-            disabled={isBulkPrinting}
+            disabled={isBulkPrinting || isBulkDownloadingPDF}
             className="bg-white text-gray-900 hover:bg-gray-100 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
           >
             {isBulkPrinting ? (
@@ -2027,9 +2106,26 @@ Gracias por tu preferencia.`
               </>
             )}
           </Button>
+          <Button
+            onClick={handleBulkDownloadPDFs}
+            disabled={isBulkPrinting || isBulkDownloadingPDF}
+            className="bg-blue-500 text-white hover:bg-blue-600 text-sm px-3 py-1.5 rounded-lg font-medium flex items-center gap-2"
+          >
+            {isBulkDownloadingPDF ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Descargando {bulkPDFProgress.current} de {bulkPDFProgress.total}...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Descargar PDFs
+              </>
+            )}
+          </Button>
           <button
             onClick={clearSelection}
-            disabled={isBulkPrinting}
+            disabled={isBulkPrinting || isBulkDownloadingPDF}
             className="text-gray-400 hover:text-white transition-colors p-1"
             title="Cancelar selección"
           >

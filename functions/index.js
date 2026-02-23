@@ -4834,7 +4834,7 @@ export const voidInvoice = onRequest(
       // 10. Consultar estado del ticket con reintentos automáticos
       // SUNAT procesa las comunicaciones de baja de forma asíncrona
       // Reintentamos cada 10 segundos hasta obtener respuesta final o timeout
-      const MAX_RETRIES = 6 // Máximo 6 intentos (60 segundos total)
+      const MAX_RETRIES = 12 // Máximo 12 intentos (~2 minutos total)
       const RETRY_INTERVAL = 10000 // 10 segundos entre intentos
       let statusResult = null
       let retryCount = 0
@@ -5566,7 +5566,7 @@ export const voidBoleta = onRequest(
       })
 
       // 14. Consultar estado del ticket con reintentos automáticos
-      const MAX_RETRIES = 6
+      const MAX_RETRIES = 12
       const RETRY_INTERVAL = 10000
       let statusResult = null
       let retryCount = 0
