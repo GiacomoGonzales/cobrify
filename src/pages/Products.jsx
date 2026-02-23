@@ -144,6 +144,11 @@ const getCategoryById = (categories, id) => {
 
 // Función para obtener el stock real de un producto (suma de warehouseStocks o stock general)
 const getRealStockValue = (product) => {
+  // Productos con variantes: sumar stock de todas las variantes
+  if (product.hasVariants && product.variants?.length > 0) {
+    return product.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+  }
+
   // Si no tiene control de stock, retornar null
   if (product.stock === null || product.stock === undefined) {
     return null
@@ -2113,6 +2118,9 @@ export default function Products() {
   // Calcular estadísticas (optimizado con useMemo)
   const statistics = React.useMemo(() => {
     const totalValue = products.reduce((sum, product) => {
+      if (product.hasVariants && product.variants?.length > 0) {
+        return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.price || 0), 0)
+      }
       const realStock = getRealStockValue(product)
       if (realStock && product.price) {
         return sum + realStock * product.price

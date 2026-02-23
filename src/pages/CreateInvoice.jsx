@@ -159,7 +159,7 @@ export default function CreateInvoice() {
       const product = products.find(p => p.id === value)
       if (product) {
         newItems[index].name = product.name
-        newItems[index].unitPrice = product.price
+        newItems[index].unitPrice = product.hasVariants ? (product.basePrice || 0) : product.price
         newItems[index].unit = product.unit || 'UNIDAD'
       }
     }
@@ -460,7 +460,7 @@ export default function CreateInvoice() {
                         <option value="">-- Manual --</option>
                         {products.map(product => (
                           <option key={product.id} value={product.id}>
-                            {product.name} - {formatCurrency(product.price)}
+                            {product.name} - {formatCurrency(product.hasVariants ? (product.basePrice || 0) : product.price)}
                           </option>
                         ))}
                       </Select>

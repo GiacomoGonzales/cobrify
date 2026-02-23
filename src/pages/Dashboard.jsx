@@ -210,7 +210,13 @@ export default function Dashboard() {
   const pendingInvoices = branchFilteredInvoices.filter(inv => inv.status === 'pending')
 
   // Productos con stock bajo (< 4)
-  const lowStockProducts = products.filter(p => p.stock !== null && p.stock < 4)
+  const lowStockProducts = products.filter(p => {
+    if (p.hasVariants && p.variants?.length > 0) {
+      const totalStock = p.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+      return totalStock < 4
+    }
+    return p.stock !== null && p.stock < 4
+  })
 
   // Datos de ventas de los últimos 7 días con comparativa de semana anterior
   const salesData = []
@@ -493,8 +499,8 @@ export default function Dashboard() {
               >
                 <span className="font-medium text-sm">{product.name}</span>
                 <span className="text-red-600 font-semibold text-xs sm:text-sm">
-                  Stock: {product.stock}
-                  {product.stock === 0 && ' - ¡Agotado!'}
+                  Stock: {product.hasVariants ? product.variants?.reduce((s, v) => s + (v.stock || 0), 0) : product.stock}
+                  {(product.hasVariants ? product.variants?.reduce((s, v) => s + (v.stock || 0), 0) === 0 : product.stock === 0) && ' - ¡Agotado!'}
                 </span>
               </div>
             ))}
