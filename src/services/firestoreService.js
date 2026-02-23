@@ -1355,8 +1355,9 @@ export const saveProductCategories = async (userId, categories) => {
  * Obtener sesión de caja actual (abierta)
  * @param {string} userId - ID del negocio
  * @param {string|null} branchId - ID de la sucursal (null = Sucursal Principal)
+ * @param {string|null} userUid - Firebase UID del usuario (para filtrar caja por usuario)
  */
-export const getCashRegisterSession = async (userId, branchId = null) => {
+export const getCashRegisterSession = async (userId, branchId = null, userUid = null) => {
   try {
     // Construir query base
     let q
@@ -1389,6 +1390,15 @@ export const getCashRegisterSession = async (userId, branchId = null) => {
       })
     }
 
+    // Filtrar por usuario si se proporciona userUid
+    if (userUid) {
+      filteredDocs = filteredDocs.filter(doc => {
+        const data = doc.data()
+        // Compatibilidad: sesiones antiguas sin openedByUserId se muestran a todos
+        return !data.openedByUserId || data.openedByUserId === userUid
+      })
+    }
+
     if (filteredDocs.length === 0) {
       return { success: true, data: null }
     }
@@ -1417,15 +1427,49 @@ export const getCashRegisterSession = async (userId, branchId = null) => {
 }
 
 /**
+ * Obtener todas las sesiones de caja abiertas en una sucursal
+ * @param {string} businessId - ID del negocio
+ * @param {string|null} branchId - ID de la sucursal (null = Sucursal Principal)
+ * @returns {Promise<{success: boolean, data?: Array}>}
+ */
+export const getOpenCashSessions = async (businessId, branchId = null) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', businessId, 'cashSessions'),
+      where('status', '==', 'open')
+    )
+    const snapshot = await getDocs(q)
+
+    // Filtrar por sucursal en el cliente
+    const sessions = snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(session => {
+        if (branchId) {
+          return session.branchId === branchId
+        } else {
+          return !session.branchId || session.branchId === null
+        }
+      })
+
+    return { success: true, data: sessions }
+  } catch (error) {
+    console.error('Error al obtener sesiones abiertas:', error)
+    return { success: false, error: error.message, data: [] }
+  }
+}
+
+/**
  * Abrir caja
  * @param {string} userId - ID del negocio
  * @param {number} openingAmount - Monto inicial
  * @param {string|null} branchId - ID de la sucursal (null = Sucursal Principal)
+ * @param {string|null} userUid - Firebase UID del usuario que abre la caja
+ * @param {string|null} userName - Nombre del usuario que abre la caja
  */
-export const openCashRegister = async (userId, openingAmount, branchId = null) => {
+export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null) => {
   try {
-    // Verificar que no haya una caja abierta para esta sucursal
-    const currentSession = await getCashRegisterSession(userId, branchId)
+    // Verificar que no haya una caja abierta para esta sucursal Y este usuario
+    const currentSession = await getCashRegisterSession(userId, branchId, userUid)
     if (currentSession.success && currentSession.data) {
       return { success: false, error: 'Ya hay una caja abierta para esta sucursal' }
     }
@@ -1443,6 +1487,12 @@ export const openCashRegister = async (userId, openingAmount, branchId = null) =
       sessionData.branchId = branchId
     }
 
+    // Guardar datos del usuario que abre la caja
+    if (userUid) {
+      sessionData.openedByUserId = userUid
+      sessionData.openedByName = userName || ''
+    }
+
     const docRef = await addDoc(collection(db, 'businesses', userId, 'cashSessions'), sessionData)
 
     return { success: true, id: docRef.id }
@@ -1454,8 +1504,13 @@ export const openCashRegister = async (userId, openingAmount, branchId = null) =
 
 /**
  * Cerrar caja
+ * @param {string} userId - ID del negocio
+ * @param {string} sessionId - ID de la sesión de caja
+ * @param {object} closingData - Datos de cierre
+ * @param {string|null} userUid - Firebase UID del usuario que cierra la caja
+ * @param {string|null} userName - Nombre del usuario que cierra la caja
  */
-export const closeCashRegister = async (userId, sessionId, closingData) => {
+export const closeCashRegister = async (userId, sessionId, closingData, userUid = null, userName = null) => {
   try {
     // Verificar que la sesión no esté ya cerrada (protección contra doble clic)
     const sessionRef = doc(db, 'businesses', userId, 'cashSessions', sessionId)
@@ -1467,7 +1522,7 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
     const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, totalIncome, totalExpense, expectedAmount, difference, invoiceCount } = closingData
     const closingAmount = cash + card + transfer + (yape || 0) + (plin || 0) + (rappi || 0) + (pedidosYa || 0) + (diDiFood || 0)
 
-    await updateDoc(sessionRef, {
+    const updateData = {
       closingAmount,
       closingCash: cash,
       closingCard: card,
@@ -1495,7 +1550,15 @@ export const closeCashRegister = async (userId, sessionId, closingData) => {
       expectedAmount: expectedAmount || 0,
       difference: difference || 0,
       invoiceCount: invoiceCount || 0,
-    })
+    }
+
+    // Guardar datos del usuario que cierra la caja
+    if (userUid) {
+      updateData.closedByUserId = userUid
+      updateData.closedByName = userName || ''
+    }
+
+    await updateDoc(sessionRef, updateData)
 
     return { success: true }
   } catch (error) {
@@ -1728,7 +1791,7 @@ export const deleteCashMovement = async (userId, movementId) => {
  */
 export const getCashRegisterHistory = async (userId, options = {}) => {
   try {
-    const { limit: maxResults = 30, branchId = null } = options
+    const { limit: maxResults = 30, branchId = null, userUid = null } = options
 
     // Query simple sin orderBy para evitar necesitar índice compuesto
     const q = query(
@@ -1737,7 +1800,7 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
     )
     const snapshot = await getDocs(q)
 
-    // Filtrar por sucursal y ordenar en el cliente por closedAt descendente
+    // Filtrar por sucursal, usuario y ordenar en el cliente por closedAt descendente
     const sessions = snapshot.docs
       .map(doc => ({
         id: doc.id,
@@ -1747,11 +1810,17 @@ export const getCashRegisterHistory = async (userId, options = {}) => {
         // Filtrar por sucursal
         if (branchId) {
           // Sucursal específica
-          return session.branchId === branchId
+          if (session.branchId !== branchId) return false
         } else {
           // Sucursal Principal (sin branchId)
-          return !session.branchId
+          if (session.branchId) return false
         }
+        // Filtrar por usuario si se proporciona (sub-usuarios ven solo sus sesiones)
+        if (userUid) {
+          // Compatibilidad: sesiones antiguas sin openedByUserId se muestran a todos
+          if (session.openedByUserId && session.openedByUserId !== userUid) return false
+        }
+        return true
       })
       .sort((a, b) => {
         const dateA = a.closedAt?.toDate?.() || new Date(0)

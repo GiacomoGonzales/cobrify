@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2 } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
@@ -21,13 +21,15 @@ import {
   getCompanySettings,
   getCashRegisterHistory,
   updateCashSession, // TEMPORAL: Para editar historial
+  getOpenCashSessions,
 } from '@/services/firestoreService'
+import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
 import CashClosureTicket from '@/components/CashClosureTicket'
 import { Capacitor } from '@capacitor/core'
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions } = useAppContext()
   const toast = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [currentSession, setCurrentSession] = useState(null)
@@ -38,6 +40,11 @@ export default function CashRegister() {
   const [branches, setBranches] = useState([])
   const [selectedBranch, setSelectedBranch] = useState(null) // null = Sucursal Principal
   const [hasMainAccess, setHasMainAccess] = useState(true) // Acceso a Sucursal Principal
+
+  // Selector de usuario (owner ve cajas de sub-usuarios)
+  const [subUsers, setSubUsers] = useState([])
+  const [selectedCashUser, setSelectedCashUser] = useState(null) // null = mi caja, 'all' = todos, o uid del sub-usuario
+  const [openSessions, setOpenSessions] = useState([]) // sesiones abiertas en la sucursal
 
   // Tab state: 'current' o 'history'
   const [activeTab, setActiveTab] = useState('current')
@@ -107,18 +114,40 @@ export default function CashRegister() {
   const [isPrintingThermal, setIsPrintingThermal] = useState(false)
   const isNative = Capacitor.isNativePlatform()
 
+  // Es owner (no sub-usuario)
+  const isOwner = !userPermissions?.ownerId
+
   useEffect(() => {
     if (user?.uid) {
       loadBranches()
     }
   }, [user])
 
-  // Recargar datos cuando cambia la sucursal seleccionada
+  // Recargar datos cuando cambia la sucursal seleccionada o el usuario seleccionado
   useEffect(() => {
     if (user?.uid) {
       loadData()
     }
-  }, [user, selectedBranch])
+  }, [user, selectedBranch, selectedCashUser])
+
+  // Función para cargar sesiones abiertas (para el selector de usuario)
+  const refreshOpenSessions = async () => {
+    if (!user?.uid || isDemoMode || !isOwner || subUsers.length === 0) return
+    try {
+      const branchId = selectedBranch?.id || null
+      const result = await getOpenCashSessions(getBusinessId(), branchId)
+      if (result.success) {
+        setOpenSessions(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error al cargar sesiones abiertas:', error)
+    }
+  }
+
+  // Cargar sesiones abiertas cuando cambia la sucursal (para el selector de usuario)
+  useEffect(() => {
+    refreshOpenSessions()
+  }, [user, selectedBranch, subUsers, isDemoMode])
 
   // Cargar configuración de impresora térmica (para impresión Bluetooth/WiFi)
   useEffect(() => {
@@ -168,6 +197,14 @@ export default function CashRegister() {
         // Verificar acceso a principal aunque no haya sucursales adicionales
         const mainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
         setHasMainAccess(mainAccess)
+      }
+
+      // Cargar sub-usuarios si es owner
+      if (isOwner) {
+        const usersResult = await getManagedUsers(getBusinessId())
+        if (usersResult.success && usersResult.data.length > 0) {
+          setSubUsers(usersResult.data)
+        }
       }
     } catch (error) {
       console.error('Error al cargar sucursales:', error)
@@ -223,40 +260,56 @@ export default function CashRegister() {
         return
       }
 
-      // Obtener sesión actual para la sucursal seleccionada
-      const branchId = selectedBranch?.id || null
-      const sessionResult = await getCashRegisterSession(getBusinessId(), branchId)
-      if (sessionResult.success && sessionResult.data) {
-        setCurrentSession(sessionResult.data)
+      // Determinar el usuario objetivo: si hay selectedCashUser, usar ese; si no, usar user.uid
+      const targetUserUid = selectedCashUser && selectedCashUser !== 'all' ? selectedCashUser : user.uid
+      const isViewingAll = selectedCashUser === 'all'
 
-        // Obtener movimientos de la sesión
-        const movementsResult = await getCashMovements(getBusinessId(), sessionResult.data.id)
-        if (movementsResult.success) {
-          setMovements(movementsResult.data || [])
-        }
-      } else {
+      // Obtener sesión actual para la sucursal seleccionada y el usuario objetivo
+      const branchId = selectedBranch?.id || null
+
+      if (isViewingAll) {
+        // Modo "Todos": no mostrar sesión individual, solo se usa en historial
         setCurrentSession(null)
         setMovements([])
-      }
-
-      // Obtener facturas de la sesión actual (desde apertura hasta ahora)
-      // Filtrar por sucursal directamente desde el servicio
-      const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId)
-      if (invoicesResult.success && sessionResult.success && sessionResult.data) {
-        const sessionOpenedAt = sessionResult.data.openedAt?.toDate
-          ? sessionResult.data.openedAt.toDate()
-          : new Date(sessionResult.data.openedAt)
-        const now = new Date()
-
-        // Solo filtrar por período de sesión (el filtro de sucursal ya viene aplicado)
-        const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
-          const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
-          return invoiceDate >= sessionOpenedAt && invoiceDate <= now
-        })
-        setTodayInvoices(sessionInvoicesList)
-      } else if (invoicesResult.success) {
-        // Si no hay sesión abierta, no mostrar facturas
         setTodayInvoices([])
+      } else {
+        const sessionResult = await getCashRegisterSession(getBusinessId(), branchId, targetUserUid)
+        if (sessionResult.success && sessionResult.data) {
+          setCurrentSession(sessionResult.data)
+
+          // Obtener movimientos de la sesión
+          const movementsResult = await getCashMovements(getBusinessId(), sessionResult.data.id)
+          if (movementsResult.success) {
+            setMovements(movementsResult.data || [])
+          }
+        } else {
+          setCurrentSession(null)
+          setMovements([])
+        }
+
+        // Obtener facturas de la sesión actual (desde apertura hasta ahora)
+        // Filtrar por sucursal directamente desde el servicio
+        const invoicesResult = await getInvoicesByBranch(getBusinessId(), branchId)
+        if (invoicesResult.success && sessionResult.success && sessionResult.data) {
+          const sessionOpenedAt = sessionResult.data.openedAt?.toDate
+            ? sessionResult.data.openedAt.toDate()
+            : new Date(sessionResult.data.openedAt)
+          const now = new Date()
+
+          // Filtrar por período de sesión y por usuario que creó la factura
+          const sessionInvoicesList = (invoicesResult.data || []).filter(invoice => {
+            const invoiceDate = invoice.createdAt?.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
+            if (invoiceDate < sessionOpenedAt || invoiceDate > now) return false
+            // Filtrar por usuario: solo mostrar facturas del usuario objetivo
+            // Compatibilidad: facturas antiguas sin createdBy se muestran a todos
+            if (invoice.createdBy && invoice.createdBy !== targetUserUid) return false
+            return true
+          })
+          setTodayInvoices(sessionInvoicesList)
+        } else if (invoicesResult.success) {
+          // Si no hay sesión abierta, no mostrar facturas
+          setTodayInvoices([])
+        }
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)
@@ -327,7 +380,22 @@ export default function CashRegister() {
       }
 
       const branchId = selectedBranch?.id || null
-      const result = await getCashRegisterHistory(getBusinessId(), { branchId })
+      // Determinar filtro de usuario para historial
+      const isSubUser = userPermissions && userPermissions.ownerId
+      let historyUserUid = null
+      if (isSubUser) {
+        // Sub-usuario: siempre ve solo sus propias sesiones
+        historyUserUid = user.uid
+      } else if (selectedCashUser && selectedCashUser !== 'all') {
+        // Owner viendo caja de un sub-usuario específico
+        historyUserUid = selectedCashUser
+      }
+      // Si selectedCashUser es null (Mi Caja) y es owner, mostrar solo las del owner
+      if (!isSubUser && !selectedCashUser) {
+        historyUserUid = user.uid
+      }
+      // Si selectedCashUser es 'all', historyUserUid queda null -> muestra todas
+      const result = await getCashRegisterHistory(getBusinessId(), { branchId, userUid: historyUserUid })
       if (result.success) {
         setHistoryData(result.data || [])
       } else {
@@ -456,12 +524,12 @@ export default function CashRegister() {
     }
   }
 
-  // Cargar historial cuando se cambia a esa pestaña o cuando cambia la sucursal
+  // Cargar historial cuando se cambia a esa pestaña o cuando cambia la sucursal/usuario
   useEffect(() => {
     if (activeTab === 'history' && user?.uid) {
       loadHistory()
     }
-  }, [activeTab, user?.uid, selectedBranch])
+  }, [activeTab, user?.uid, selectedBranch, selectedCashUser])
 
   const handleOpenCashRegister = async () => {
     if (isOpening) return
@@ -493,12 +561,13 @@ export default function CashRegister() {
       }
 
       const branchId = selectedBranch?.id || null
-      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId)
+      const result = await openCashRegister(getBusinessId(), parseFloat(openingAmount), branchId, user.uid, user.displayName || user.email || 'Usuario')
       if (result.success) {
         toast.success('Caja abierta correctamente')
         setShowOpenModal(false)
         setOpeningAmount('')
         loadData()
+        refreshOpenSessions()
       } else {
         toast.error(result.error || 'Error al abrir la caja')
       }
@@ -591,7 +660,7 @@ export default function CashRegister() {
         expectedAmount: totals.expected,
         difference: cash - totals.expected,
         invoiceCount: todayInvoices.length,
-      })
+      }, user.uid, user.displayName || user.email || 'Usuario')
       if (result.success) {
         // Guardar datos y mostrar pantalla de éxito
         setClosedSessionData(closedData)
@@ -786,6 +855,7 @@ export default function CashRegister() {
     // Recargar datos
     setTimeout(() => {
       loadData()
+      refreshOpenSessions()
     }, 500)
   }
 
@@ -1215,6 +1285,16 @@ export default function CashRegister() {
 
   const totals = calculateTotals()
 
+  // Modo solo-lectura: cuando el owner ve la caja de otro usuario
+  const isViewingOtherUser = selectedCashUser && selectedCashUser !== 'all' && selectedCashUser !== user.uid
+  const isViewingAll = selectedCashUser === 'all'
+  const viewingUserName = isViewingOtherUser
+    ? subUsers.find(u => u.uid === selectedCashUser || u.id === selectedCashUser)?.displayName || 'Usuario'
+    : null
+
+  // Mostrar selector solo si es owner y tiene sub-usuarios
+  const showUserSelector = isOwner && subUsers.length > 0 && !isDemoMode
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1232,35 +1312,78 @@ export default function CashRegister() {
           <p className="text-sm sm:text-base text-gray-600 mt-1">Gestiona los movimientos de efectivo del día</p>
         </div>
 
-        {/* Selector de Sucursal - Solo mostrar si hay más de una opción */}
-        {(branches.length > 0 || !hasMainAccess) && (
-          <div className="flex items-center gap-2">
-            <Store className="w-4 h-4 text-gray-500" />
-            <select
-              value={selectedBranch?.id || ''}
-              onChange={e => {
-                if (e.target.value === '') {
-                  setSelectedBranch(null)
-                } else {
-                  const branch = branches.find(b => b.id === e.target.value)
-                  setSelectedBranch(branch)
-                }
-                // El useEffect recargará datos automáticamente al cambiar selectedBranch
-              }}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {/* Solo mostrar Sucursal Principal si el usuario tiene acceso */}
-              {hasMainAccess && <option value="">Sucursal Principal</option>}
-              {branches.map(branch => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* Selector de Sucursal - Solo mostrar si hay más de una opción */}
+          {(branches.length > 0 || !hasMainAccess) && (
+            <div className="flex items-center gap-2">
+              <Store className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedBranch?.id || ''}
+                onChange={e => {
+                  if (e.target.value === '') {
+                    setSelectedBranch(null)
+                  } else {
+                    const branch = branches.find(b => b.id === e.target.value)
+                    setSelectedBranch(branch)
+                  }
+                  // El useEffect recargará datos automáticamente al cambiar selectedBranch
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {/* Solo mostrar Sucursal Principal si el usuario tiene acceso */}
+                {hasMainAccess && <option value="">Sucursal Principal</option>}
+                {branches.map(branch => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Selector de Usuario - Solo visible para owner con sub-usuarios */}
+          {showUserSelector && (
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-gray-500" />
+              <select
+                value={selectedCashUser || ''}
+                onChange={e => {
+                  const val = e.target.value
+                  setSelectedCashUser(val === '' ? null : val)
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Mi Caja</option>
+                {subUsers.map(su => {
+                  const suUid = su.uid || su.id
+                  const hasOpen = openSessions.some(s => s.openedByUserId === suUid)
+                  return (
+                    <option key={suUid} value={suUid}>
+                      {su.displayName || su.email}{hasOpen ? ' (Caja abierta)' : ''}
+                    </option>
+                  )
+                })}
+                <option value="all">Todos</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Badge cuando se ve caja ajena */}
+        {isViewingOtherUser && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+            <Eye className="w-4 h-4 text-amber-600" />
+            <span className="text-sm text-amber-700 font-medium">Viendo caja de {viewingUserName}</span>
+          </div>
+        )}
+        {isViewingAll && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+            <Eye className="w-4 h-4 text-blue-600" />
+            <span className="text-sm text-blue-700 font-medium">Viendo todas las cajas</span>
           </div>
         )}
 
-        {activeTab === 'current' && (
+        {activeTab === 'current' && !isViewingOtherUser && !isViewingAll && (
           !currentSession ? (
             <Button onClick={() => setShowOpenModal(true)} className="w-full sm:w-auto">
               <Unlock className="w-4 h-4 mr-2" />
@@ -1565,23 +1688,25 @@ export default function CashRegister() {
                               {getDateFromTimestamp(movement.createdAt) ? formatDate(getDateFromTimestamp(movement.createdAt)) : 'Hoy'}
                             </p>
                           </div>
-                          {/* Botones de editar/eliminar */}
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity sm:ml-2">
-                            <button
-                              onClick={() => handleEditMovement(movement)}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Editar"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setShowDeleteMovementConfirm(movement.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Eliminar"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          {/* Botones de editar/eliminar (ocultos en modo lectura) */}
+                          {!isViewingOtherUser && (
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity sm:ml-2">
+                              <button
+                                onClick={() => handleEditMovement(movement)}
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setShowDeleteMovementConfirm(movement.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1598,14 +1723,32 @@ export default function CashRegister() {
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Lock className="w-8 h-8 text-gray-400" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Caja Cerrada</h3>
-              <p className="text-gray-600 mb-6">
-                Para comenzar a registrar ventas y movimientos, abre la caja con el monto inicial
-              </p>
-              <Button onClick={() => setShowOpenModal(true)}>
-                <Unlock className="w-4 h-4 mr-2" />
-                Abrir Caja
-              </Button>
+              {isViewingOtherUser ? (
+                <>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No hay caja abierta</h3>
+                  <p className="text-gray-600">
+                    {viewingUserName} no tiene una caja abierta en esta sucursal
+                  </p>
+                </>
+              ) : isViewingAll ? (
+                <>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Vista General</h3>
+                  <p className="text-gray-600">
+                    Selecciona la pestaña "Historial" para ver todas las sesiones de caja
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Caja Cerrada</h3>
+                  <p className="text-gray-600 mb-6">
+                    Para comenzar a registrar ventas y movimientos, abre la caja con el monto inicial
+                  </p>
+                  <Button onClick={() => setShowOpenModal(true)}>
+                    <Unlock className="w-4 h-4 mr-2" />
+                    Abrir Caja
+                  </Button>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1725,6 +1868,9 @@ export default function CashRegister() {
                               <p className="text-sm text-gray-500">
                                 {openedAt ? openedAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''} - {closedAt ? closedAt.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''}
                               </p>
+                              {session.openedByName && (
+                                <p className="text-xs text-gray-400">{session.openedByName}</p>
+                              )}
                             </div>
                           </div>
 
