@@ -2128,6 +2128,15 @@ export default function Products() {
       return sum
     }, 0)
 
+    const totalCostValue = products.reduce((sum, product) => {
+      if (product.hasVariants && product.variants?.length > 0) {
+        return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || v.price || 0), 0)
+      }
+      const realStock = getRealStockValue(product)
+      const cost = product.itemType === 'ingredient' ? (product.averageCost || 0) : (parseFloat(product.cost) || 0)
+      return sum + (realStock * cost)
+    }, 0)
+
     const lowStockCount = products.filter(product => {
       const realStock = getRealStockValue(product)
       return realStock !== null && realStock < 4
@@ -2139,10 +2148,10 @@ export default function Products() {
       return expStatus && (expStatus.status === 'expired' || expStatus.status === 'warning')
     }).length
 
-    return { totalValue, lowStockCount, expiringProductsCount }
+    return { totalValue, totalCostValue, lowStockCount, expiringProductsCount }
   }, [products])
 
-  const { totalValue, lowStockCount, expiringProductsCount } = statistics
+  const { totalValue, totalCostValue, lowStockCount, expiringProductsCount } = statistics
 
   // Calcular qué columnas tienen datos (para ocultar columnas vacías)
   const columnsWithData = React.useMemo(() => ({
@@ -2490,6 +2499,7 @@ export default function Products() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Valor Inventario</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(totalValue)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Costo: {formatCurrency(totalCostValue)}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-lg">
                 <DollarSign className="w-6 h-6 text-green-600" />
