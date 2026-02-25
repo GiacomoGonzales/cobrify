@@ -422,6 +422,9 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Color de acento dinámico (configurado por el usuario)
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
+  // Modo espaciado amplio (configurado por el usuario en Preferencias)
+  const spacious = companySettings?.pdfSpacious === true
+
   // Márgenes y dimensiones - A4: 595pt x 842pt
   const MARGIN_LEFT = 20
   const MARGIN_RIGHT = 20
@@ -766,18 +769,18 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const numberY = documentLine2 ? titleY + 30 : titleY + 16
   doc.text(invoice.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  currentY += headerHeight + 15
+  currentY += headerHeight + (spacious ? 25 : 15)
 
   // ========== 2. DATOS DEL CLIENTE (DOS COLUMNAS) ==========
 
-  doc.setFontSize(9)
+  doc.setFontSize(spacious ? 10 : 9)
   doc.setTextColor(...BLACK)
 
   // Configuración de dos columnas
   const colLeftX = MARGIN_LEFT
   const colRightX = MARGIN_LEFT + CONTENT_WIDTH * 0.5 + 10
   const colWidth = CONTENT_WIDTH * 0.5 - 10
-  const dataLineHeight = 12
+  const dataLineHeight = spacious ? 15 : 12
 
   // Calcular anchos de etiquetas para cada columna
   const leftLabels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:', 'VENDEDOR:']
@@ -1046,7 +1049,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   }
 
   // Las cuotas se mostrarán en la sección del QR
-  currentY = Math.max(leftY, rightY) + 10
+  currentY = Math.max(leftY, rightY) + (spacious ? 20 : 10)
 
   // ========== PREPARAR DATOS ==========
 
@@ -1088,17 +1091,17 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const BANK_TABLE_HEIGHT = bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) + DETRACTION_INFO_HEIGHT : DETRACTION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
   const TOTALS_SECTION_HEIGHT = 55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0)
-  const SON_SECTION_HEIGHT = 22
+  const SON_SECTION_HEIGHT = spacious ? 28 : 22
 
   // Posición Y donde termina el área de productos (empieza el pie fijo)
-  const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_TEXT_HEIGHT - Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) - 10 - TOTALS_SECTION_HEIGHT - SON_SECTION_HEIGHT - 15
+  const FOOTER_AREA_START = PAGE_HEIGHT - MARGIN_BOTTOM - FOOTER_TEXT_HEIGHT - Math.max(QR_BOX_HEIGHT, BANK_TABLE_HEIGHT) - 10 - TOTALS_SECTION_HEIGHT - SON_SECTION_HEIGHT - (spacious ? 22 : 15)
 
   // ========== 3. TABLA DE PRODUCTOS ==========
 
   const tableY = currentY
-  const headerRowHeight = 18
-  const minProductRowHeight = 15
-  const lineHeight = 9 // Altura por línea de texto
+  const headerRowHeight = spacious ? 22 : 18
+  const minProductRowHeight = spacious ? 22 : 15
+  const lineHeight = spacious ? 10 : 9 // Altura por línea de texto
 
   // Solo mostrar las filas que tienen productos (sin filas vacías)
   const items = invoice.items || []
@@ -1183,7 +1186,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     // Usar el ancho de descripción correcto según si hay descuentos
     const descWidth = hasAnyItemDiscount ? colWidths.desc - 6 : colWidths.desc - 10
     const descLines = doc.splitTextToSize(itemDesc, descWidth)
-    const baseHeight = descLines.length * lineHeight + 6
+    const baseHeight = descLines.length * lineHeight + (spacious ? 10 : 6)
     const calculatedHeight = Math.max(minProductRowHeight, baseHeight)
     return { height: calculatedHeight, descLines }
   }
@@ -1204,7 +1207,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(255, 255, 255)
 
-  const headerTextY = tableY + 12
+  const headerTextY = tableY + (spacious ? 15 : 12)
   doc.text('CANT.', cols.cant + colWidths.cant / 2, headerTextY, { align: 'center' })
   doc.text('U.M.', cols.um + colWidths.um / 2, headerTextY, { align: 'center' })
   doc.text('DESCRIPCIÓN', cols.desc + 5, headerTextY)
@@ -1258,7 +1261,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
     // Descripción - múltiples líneas desde arriba
     doc.setFontSize(8)
-    const descStartY = dataRowY + 10
+    const descStartY = dataRowY + (spacious ? 13 : 10)
     descLines.forEach((line, lineIdx) => {
       doc.text(line, cols.desc + 4, descStartY + (lineIdx * lineHeight))
     })
@@ -1297,7 +1300,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
 
   // ========== 4. PIE DE PÁGINA FIJO ==========
 
-  let footerY = tableY + tableHeight + 8
+  let footerY = tableY + tableHeight + (spacious ? 15 : 8)
 
   // ========== SON: (MONTO EN LETRAS) ==========
   const montoEnLetras = numeroALetras(invoice.total || 0) + ' SOLES'
@@ -1315,7 +1318,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const letrasLines = doc.splitTextToSize(montoEnLetras, CONTENT_WIDTH - 35)
   doc.text(letrasLines[0], MARGIN_LEFT + 28, footerY + 14)
 
-  footerY += SON_SECTION_HEIGHT + 5
+  footerY += SON_SECTION_HEIGHT + (spacious ? 12 : 5)
 
   // ========== FILA: BANCOS (izq) + TOTALES (der) ==========
 

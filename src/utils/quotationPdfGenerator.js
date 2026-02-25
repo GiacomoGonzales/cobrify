@@ -290,6 +290,9 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // Color de acento dinámico (configurado por el usuario)
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
+  // Modo espaciado amplio (configurado por el usuario en Preferencias)
+  const spacious = companySettings?.pdfSpacious === true
+
   // Márgenes y dimensiones - A4: 595pt x 842pt
   const MARGIN_LEFT = 20
   const MARGIN_RIGHT = 20
@@ -554,17 +557,17 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const numberY = titleY + 20
   doc.text(quotation.number || 'N/A', docBoxX + docColumnWidth / 2, numberY, { align: 'center' })
 
-  currentY += headerHeight + 15
+  currentY += headerHeight + (spacious ? 25 : 15)
 
   // ========== 2. DATOS DEL CLIENTE (DOS COLUMNAS) ==========
 
-  doc.setFontSize(9)
+  doc.setFontSize(spacious ? 10 : 9)
   doc.setTextColor(...BLACK)
 
   const colLeftX = MARGIN_LEFT
   const colRightX = MARGIN_LEFT + CONTENT_WIDTH * 0.5 + 10
   const colWidth = CONTENT_WIDTH * 0.5 - 10
-  const dataLineHeight = 12
+  const dataLineHeight = spacious ? 15 : 12
 
   const leftLabels = ['RAZÓN SOCIAL:', 'RUC:', 'DIRECCIÓN:']
   const rightLabels = ['EMISIÓN:', 'VÁLIDO HASTA:', 'MONEDA:']
@@ -704,7 +707,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     rightY += dataLineHeight
   }
 
-  currentY = Math.max(leftY, rightY) + 10
+  currentY = Math.max(leftY, rightY) + (spacious ? 20 : 10)
 
   // ========== PREPARAR DATOS ==========
 
@@ -734,8 +737,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // ========== 3. TABLA DE PRODUCTOS ==========
 
   const tableY = currentY
-  const headerRowHeight = 18
-  const productRowHeight = 15
+  const headerRowHeight = spacious ? 22 : 18
+  const productRowHeight = spacious ? 22 : 15
   const PAGE_BOTTOM = PAGE_HEIGHT - MARGIN_BOTTOM - 20
 
   // Detectar modo farmacia para mostrar columna LABORATORIO
@@ -791,7 +794,8 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
     const totalLines = nameLines.length + descLines.length
     const minHeight = baseHeight
-    const calculatedHeight = Math.max(minHeight, 10 + (totalLines * 9))
+    const lineH = spacious ? 10 : 9
+    const calculatedHeight = Math.max(minHeight, (spacious ? 14 : 10) + (totalLines * lineH))
 
     return { height: calculatedHeight, nameLines, descLines }
   }
@@ -806,7 +810,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(255, 255, 255)
-    const hTextY = y + 12
+    const hTextY = y + (spacious ? 15 : 12)
     doc.text('CANT.', cols.cant + colWidths.cant / 2, hTextY, { align: 'center' })
     doc.text('U.M.', cols.um + colWidths.um / 2, hTextY, { align: 'center' })
     doc.text('DESCRIPCIÓN', cols.desc + 5, hTextY)
@@ -847,7 +851,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
     const precioConIGV = item.unitPrice || item.price || 0
     const importeConIGV = item.quantity * precioConIGV
-    const textY = dataRowY + 10
+    const textY = dataRowY + (spacious ? 13 : 10)
 
     doc.setTextColor(...BLACK)
     doc.setFontSize(7)
@@ -862,10 +866,11 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     // Nombre del producto (puede ser múltiples líneas)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
+    const descLineH = spacious ? 10 : 9
     let currentDescY = textY
     nameLines.forEach((line) => {
       doc.text(line, cols.desc + 4, currentDescY)
-      currentDescY += 9
+      currentDescY += descLineH
     })
 
     // Descripción del producto (debajo del nombre, en gris)
@@ -875,7 +880,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.setTextColor(...MEDIUM_GRAY)
       descLines.forEach((line) => {
         doc.text(line, cols.desc + 4, currentDescY)
-        currentDescY += 9
+        currentDescY += descLineH
       })
       doc.setTextColor(...BLACK)
     }
@@ -902,13 +907,13 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // ========== 4. PIE DE PÁGINA ==========
 
   // Estimar altura del footer para verificar si cabe en la página actual
-  const SON_SECTION_HEIGHT = 22
+  const SON_SECTION_HEIGHT = spacious ? 28 : 22
   const bankEstRows = Math.max(bankAccountsArray.length, 2)
   const bankEstHeight = bankAccountsArray.length > 0 ? (14 + bankEstRows * 13) : 0
   const totalsEstHeight = 60
   const termsEstHeight = quotation.terms ? 65 : 0
   const notesEstHeight = quotation.notes ? 45 : 0
-  const footerEstimatedHeight = SON_SECTION_HEIGHT + 15 + Math.max(bankEstHeight, totalsEstHeight) + termsEstHeight + notesEstHeight + 50
+  const footerEstimatedHeight = SON_SECTION_HEIGHT + (spacious ? 22 : 15) + Math.max(bankEstHeight, totalsEstHeight) + termsEstHeight + notesEstHeight + 50
 
   // Si el footer no cabe en la página actual, agregar nueva página
   if (dataRowY + footerEstimatedHeight > PAGE_HEIGHT - MARGIN_BOTTOM) {
@@ -916,7 +921,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
     dataRowY = MARGIN_TOP
   }
 
-  let footerY = dataRowY + 8
+  let footerY = dataRowY + (spacious ? 15 : 8)
 
   // ========== SON: (MONTO EN LETRAS) ==========
   const montoEnLetras = numeroALetras(quotation.total || 0) + ' SOLES'
@@ -933,7 +938,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   const letrasLines = doc.splitTextToSize(montoEnLetras, CONTENT_WIDTH - 35)
   doc.text(letrasLines[0], MARGIN_LEFT + 28, footerY + 14)
 
-  footerY += SON_SECTION_HEIGHT + 5
+  footerY += SON_SECTION_HEIGHT + (spacious ? 12 : 5)
 
   // ========== FILA: BANCOS (izq) + TOTALES (der) ==========
 
@@ -1114,7 +1119,7 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // ========== TÉRMINOS Y NOTAS ==========
 
-  footerY = totalsStartY + totalsRowHeight * 3 + 15
+  footerY = totalsStartY + totalsRowHeight * 3 + (spacious ? 22 : 15)
 
   if (quotation.terms) {
     doc.setFontSize(7)

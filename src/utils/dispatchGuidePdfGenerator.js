@@ -247,6 +247,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const LIGHT_GRAY = [200, 200, 200]
   const ACCENT_COLOR = hexToRgb(companySettings?.pdfAccentColor || '#464646')
 
+  // Modo espaciado amplio (configurado por el usuario en Preferencias)
+  const spacious = companySettings?.pdfSpacious === true
+
   // Márgenes y dimensiones
   const MARGIN_LEFT = 30
   const MARGIN_RIGHT = 30
@@ -523,7 +526,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text(`N° ${guide.number || 'T001-00000001'}`, docBoxX + docBoxWidth/2, docBoxY + 72, { align: 'center' })
 
-  currentY += headerHeight + 15
+  currentY += headerHeight + (spacious ? 25 : 15)
 
   // ========== 2. DATOS PRINCIPALES ==========
 
@@ -531,16 +534,16 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setDrawColor(...BLACK)
   doc.setLineWidth(0.5)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-  currentY += 12
+  currentY += spacious ? 16 : 12
 
   // Fecha de inicio de traslado
-  doc.setFontSize(8)
+  doc.setFontSize(spacious ? 9 : 8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
   doc.text('Fecha de inicio de traslado:', MARGIN_LEFT, currentY)
   doc.setFont('helvetica', 'normal')
   doc.text(formatDate(guide.transferDate), MARGIN_LEFT + 115, currentY)
-  currentY += 14
+  currentY += spacious ? 18 : 14
 
   // Fila: Destinatario | Punto de partida
   const colMidX = MARGIN_LEFT + CONTENT_WIDTH * 0.45
@@ -555,7 +558,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFont('helvetica', 'normal')
     doc.text(originUbigeo, colMidX + 85, currentY)
   }
-  currentY += 11
+  currentY += spacious ? 14 : 11
 
   // Nombre destinatario | Dirección partida
   const recipientName = recipient.name || recipient.businessName || '-'
@@ -571,7 +574,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   const originAddress = guide.origin?.address || companySettings?.address || '-'
   const originLines = doc.splitTextToSize(originAddress, CONTENT_WIDTH * 0.5)
   doc.text(originLines[0], colMidX, currentY)
-  currentY += 11
+  currentY += spacious ? 14 : 11
 
   // RUC destinatario | Punto de llegada
   doc.setFont('helvetica', 'bold')
@@ -589,7 +592,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFont('helvetica', 'normal')
     doc.text(destUbigeo, colMidX + 85, currentY)
   }
-  currentY += 11
+  currentY += spacious ? 14 : 11
 
   // Número doc destinatario | Dirección llegada
   doc.setFont('helvetica', 'normal')
@@ -602,30 +605,31 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     currentY += 10
     doc.text(destLines[1], colMidX, currentY)
   }
-  currentY += 18
+  currentY += spacious ? 22 : 18
 
   // Línea divisoria
   doc.setLineWidth(0.5)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-  currentY += 12
+  currentY += spacious ? 16 : 12
 
   // ========== 3. MOTIVO DE TRASLADO (CHECKBOXES) ==========
 
-  doc.setFontSize(8)
+  doc.setFontSize(spacious ? 9 : 8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
   doc.text('Motivo de traslado', MARGIN_LEFT, currentY)
-  currentY += 12
+  currentY += spacious ? 16 : 12
 
   // Dibujar checkboxes en 3 columnas
   const checkboxSize = 8
   const colWidth = CONTENT_WIDTH / 3
+  const checkRowHeight = spacious ? 17 : 14
   let checkCol = 0
   let checkRow = 0
 
   TRANSFER_REASONS_FULL.forEach((reason, index) => {
     const x = MARGIN_LEFT + (checkCol * colWidth)
-    const y = currentY + (checkRow * 14)
+    const y = currentY + (checkRow * checkRowHeight)
 
     const isChecked = guide.transferReason === reason.code
     drawCheckbox(doc, x, y - 6, checkboxSize, isChecked)
@@ -641,19 +645,19 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     }
   })
 
-  currentY += (Math.ceil(TRANSFER_REASONS_FULL.length / 3) * 14) + 10
+  currentY += (Math.ceil(TRANSFER_REASONS_FULL.length / 3) * checkRowHeight) + (spacious ? 15 : 10)
 
   // Línea divisoria
   doc.setLineWidth(0.5)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-  currentY += 12
+  currentY += spacious ? 16 : 12
 
   // ========== 4. TABLA DE BIENES ==========
 
-  doc.setFontSize(8)
+  doc.setFontSize(spacious ? 9 : 8)
   doc.setFont('helvetica', 'bold')
   doc.text('Datos del bien transportado', MARGIN_LEFT, currentY)
-  currentY += 12
+  currentY += spacious ? 16 : 12
 
   // Encabezado de tabla
   const tableX = MARGIN_LEFT
@@ -677,57 +681,59 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
 
   // Filas de datos con altura dinámica y PAGINACIÓN
   const items = guide.items || []
-  const minRowHeight = 20
-  const lineHeight = 9 // Altura por línea de texto
+  const minRowHeight = spacious ? 26 : 20
+  const lineHeight = spacious ? 10 : 9 // Altura por línea de texto
 
   // Función para calcular altura dinámica de cada item
   const calculateItemHeight = (item) => {
     const itemDesc = item.description || item.name || '-'
     doc.setFontSize(8)
     const descLines = doc.splitTextToSize(itemDesc, colWidths.desc - 10)
-    const calculatedHeight = Math.max(minRowHeight, descLines.length * lineHeight + 8)
+    const calculatedHeight = Math.max(minRowHeight, descLines.length * lineHeight + (spacious ? 12 : 8))
     return { height: calculatedHeight, descLines }
   }
 
   // Función para dibujar el encabezado de la tabla (se usa en cada página)
+  const tableHeaderHeight = spacious ? 22 : 18
+  const tableHeaderTextY = spacious ? 15 : 12
   const drawTableHeader = () => {
     doc.setFillColor(...ACCENT_COLOR)
-    doc.rect(tableX, currentY, tableWidth, 18, 'F')
+    doc.rect(tableX, currentY, tableWidth, tableHeaderHeight, 'F')
     doc.setDrawColor(...BLACK)
     doc.setLineWidth(0.5)
-    doc.rect(tableX, currentY, tableWidth, 18)
+    doc.rect(tableX, currentY, tableWidth, tableHeaderHeight)
 
     doc.setFontSize(7)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(255, 255, 255)
 
     let hColX = tableX
-    doc.text('N°', hColX + colWidths.num/2, currentY + 12, { align: 'center' })
-    doc.line(hColX + colWidths.num, currentY, hColX + colWidths.num, currentY + 18)
+    doc.text('N°', hColX + colWidths.num/2, currentY + tableHeaderTextY, { align: 'center' })
+    doc.line(hColX + colWidths.num, currentY, hColX + colWidths.num, currentY + tableHeaderHeight)
     hColX += colWidths.num
 
-    doc.text('CÓDIGO', hColX + colWidths.code/2, currentY + 12, { align: 'center' })
-    doc.line(hColX + colWidths.code, currentY, hColX + colWidths.code, currentY + 18)
+    doc.text('CÓDIGO', hColX + colWidths.code/2, currentY + tableHeaderTextY, { align: 'center' })
+    doc.line(hColX + colWidths.code, currentY, hColX + colWidths.code, currentY + tableHeaderHeight)
     hColX += colWidths.code
 
     if (isPharmacy) {
-      doc.text('MARCA', hColX + colWidths.marca/2, currentY + 12, { align: 'center' })
-      doc.line(hColX + colWidths.marca, currentY, hColX + colWidths.marca, currentY + 18)
+      doc.text('MARCA', hColX + colWidths.marca/2, currentY + tableHeaderTextY, { align: 'center' })
+      doc.line(hColX + colWidths.marca, currentY, hColX + colWidths.marca, currentY + tableHeaderHeight)
       hColX += colWidths.marca
     }
 
-    doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + 12, { align: 'center' })
-    doc.line(hColX + colWidths.desc, currentY, hColX + colWidths.desc, currentY + 18)
+    doc.text('DESCRIPCIÓN', hColX + colWidths.desc/2, currentY + tableHeaderTextY, { align: 'center' })
+    doc.line(hColX + colWidths.desc, currentY, hColX + colWidths.desc, currentY + tableHeaderHeight)
     hColX += colWidths.desc
 
-    doc.text('CANTIDAD', hColX + colWidths.qty/2, currentY + 12, { align: 'center' })
-    doc.line(hColX + colWidths.qty, currentY, hColX + colWidths.qty, currentY + 18)
+    doc.text('CANTIDAD', hColX + colWidths.qty/2, currentY + tableHeaderTextY, { align: 'center' })
+    doc.line(hColX + colWidths.qty, currentY, hColX + colWidths.qty, currentY + tableHeaderHeight)
     hColX += colWidths.qty
 
-    doc.text('UNIDAD DE', hColX + colWidths.unit/2, currentY + 7, { align: 'center' })
-    doc.text('DESPACHO', hColX + colWidths.unit/2, currentY + 14, { align: 'center' })
+    doc.text('UNIDAD DE', hColX + colWidths.unit/2, currentY + (spacious ? 9 : 7), { align: 'center' })
+    doc.text('DESPACHO', hColX + colWidths.unit/2, currentY + (spacious ? 17 : 14), { align: 'center' })
 
-    currentY += 18
+    currentY += tableHeaderHeight
     doc.setTextColor(...BLACK)
   }
 
@@ -774,7 +780,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     }
 
     // Descripción - múltiples líneas
-    const descStartY = currentY + 10
+    const descStartY = currentY + (spacious ? 13 : 10)
     descLines.forEach((line, lineIdx) => {
       doc.text(line, itemColX + 5, descStartY + (lineIdx * lineHeight))
     })
@@ -827,7 +833,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     currentY += 40
   }
 
-  currentY += 15
+  currentY += spacious ? 22 : 15
 
   // ========== 5. DATOS DE TRANSPORTE ==========
 
@@ -837,9 +843,9 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-  currentY += 10
+  currentY += spacious ? 14 : 10
 
-  doc.setFontSize(8)
+  doc.setFontSize(spacious ? 9 : 8)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
 
@@ -849,7 +855,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   if (isPublicTransport) {
     // ========== TRANSPORTE PÚBLICO - Mostrar datos del transportista ==========
     doc.text('DATOS DEL TRANSPORTISTA', MARGIN_LEFT, currentY)
-    currentY += 14
+    currentY += spacious ? 18 : 14
 
     doc.setDrawColor(...BLACK)
     doc.setLineWidth(0.5)
@@ -874,7 +880,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFont('helvetica', 'normal')
     doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
 
-    currentY += 16
+    currentY += spacious ? 20 : 16
 
     // Fila 2: RUC del Transportista
     doc.setFont('helvetica', 'bold')
@@ -884,7 +890,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     const carrierRuc = carrier.ruc || guide.carrier?.ruc || '-'
     doc.text(carrierRuc, leftValueX + 5, currentY)
 
-    currentY += 16
+    currentY += spacious ? 20 : 16
 
     // Fila 3: Razón Social del Transportista
     doc.setFont('helvetica', 'bold')
@@ -895,11 +901,11 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     const carrierNameLines = doc.splitTextToSize(carrierName, leftBoxWidth + 90)
     doc.text(carrierNameLines[0], leftValueX + 5, currentY)
 
-    currentY += 18
+    currentY += spacious ? 22 : 18
   } else {
     // ========== TRANSPORTE PRIVADO - Mostrar datos del vehículo y conductor ==========
     doc.text('UNIDAD DE TRANSPORTE Y CONDUCTOR', MARGIN_LEFT, currentY)
-    currentY += 14
+    currentY += spacious ? 18 : 14
 
     // Valores
     const plateValue = vehicle.plate || '-'
@@ -931,7 +937,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFont('helvetica', 'bold')
     doc.text('TRANSPORTE PRIVADO', rightValueX, currentY)
 
-    currentY += 16
+    currentY += spacious ? 20 : 16
 
     // Fila 1.5: Indicador vehículo M1 o L (si aplica)
     doc.setFont('helvetica', 'normal')
@@ -947,7 +953,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
       doc.setFontSize(7)
     }
 
-    currentY += 16
+    currentY += spacious ? 20 : 16
 
     // Fila 2: DNI del Conductor | Peso Total
     doc.setFont('helvetica', 'normal')
@@ -961,7 +967,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.setFont('helvetica', 'bold')
     doc.text(`${guide.totalWeight || '0'}`, rightValueX, currentY)
 
-    currentY += 16
+    currentY += spacious ? 20 : 16
 
     // Fila 3: Nombre del Conductor | Licencia
     doc.setFont('helvetica', 'normal')
@@ -977,7 +983,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     const licenseDisplay = (!driver.license || driver.license === '-') && guide.isM1LVehicle ? 'N/A' : (driver.license || '-')
     doc.text(licenseDisplay, rightValueX, currentY)
 
-    currentY += 18
+    currentY += spacious ? 22 : 18
   }
 
   // ========== 6. OBSERVACIONES ==========
@@ -988,13 +994,13 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   doc.setLineWidth(0.5)
   doc.setDrawColor(...BLACK)
   doc.line(MARGIN_LEFT, currentY, PAGE_WIDTH - MARGIN_RIGHT, currentY)
-  currentY += 10
+  currentY += spacious ? 14 : 10
 
-  doc.setFontSize(7)
+  doc.setFontSize(spacious ? 8 : 7)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...BLACK)
   doc.text('Observaciones', MARGIN_LEFT, currentY)
-  currentY += 10
+  currentY += spacious ? 14 : 10
 
   // Información adicional (observaciones del usuario)
   if (guide.additionalInfo && guide.additionalInfo.trim()) {
@@ -1033,7 +1039,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
     doc.text(`${docTypeName}:${refNumber}`, MARGIN_LEFT + 65, currentY)
   }
 
-  currentY += 20
+  currentY += spacious ? 26 : 20
 
   // ========== 7. PIE DE PÁGINA - QR Y FIRMA ==========
 

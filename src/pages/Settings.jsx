@@ -136,6 +136,9 @@ export default function Settings() {
   // Estado para mostrar códigos de producto en cotizaciones PDF
   const [showProductCodeInQuotation, setShowProductCodeInQuotation] = useState(false)
 
+  // Estado para espaciado amplio en PDF
+  const [pdfSpacious, setPdfSpacious] = useState(false)
+
   // Estados para configuración de inventario
   const [allowNegativeStock, setAllowNegativeStock] = useState(false)
   const [allowCustomProducts, setAllowCustomProducts] = useState(false)
@@ -687,6 +690,11 @@ export default function Settings() {
           setShowProductCodeInQuotation(businessData.showProductCodeInQuotation)
         }
 
+        // Cargar flag de espaciado amplio en PDF
+        if (businessData.pdfSpacious !== undefined) {
+          setPdfSpacious(businessData.pdfSpacious)
+        }
+
         // Cargar cuentas bancarias estructuradas
         if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
           setBankAccounts(businessData.bankAccountsList)
@@ -1157,6 +1165,7 @@ export default function Settings() {
         pdfAccentColor: pdfAccentColor,
         companySlogan: companySlogan || '',
         showProductCodeInQuotation: showProductCodeInQuotation,
+        pdfSpacious: pdfSpacious,
         businessMode: businessMode,
         restaurantConfig: restaurantConfig,
         posCustomFields: posCustomFields,
@@ -2636,6 +2645,29 @@ export default function Settings() {
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
+              {/* Espaciado amplio en PDF */}
+              <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={pdfSpacious}
+                  onChange={(e) => setPdfSpacious(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-gray-900 group-hover:text-primary-900">
+                    Espaciado amplio en PDF
+                  </span>
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                    {pdfSpacious
+                      ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
+                      : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
               {/* Imágenes de productos */}
               <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
                 <input
@@ -3065,6 +3097,7 @@ export default function Settings() {
                       termsTemplates: termsTemplates,
                       pdfAccentColor: pdfAccentColor,
                       showProductCodeInQuotation: showProductCodeInQuotation,
+                      pdfSpacious: pdfSpacious,
                       updatedAt: serverTimestamp(),
                     }, { merge: true })
                     if (refreshBusinessSettings) await refreshBusinessSettings()
