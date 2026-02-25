@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Loader2, ArrowRight, Check } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -25,9 +25,32 @@ export default function SplitTableModal({
     }
   }, [isOpen])
 
-  if (!table || !order) return null
+  const items = order?.items || []
 
-  const items = order.items || []
+  // Expandir items con cantidad > 1 en unidades individuales
+  const expandedItems = useMemo(() => {
+    const result = []
+    items.forEach((item, originalIndex) => {
+      const qty = item.quantity || 1
+      if (qty <= 1) {
+        result.push({ ...item, _origIdx: originalIndex })
+      } else {
+        const unitPrice = Math.round((item.total || 0) / qty * 100) / 100
+        for (let i = 0; i < qty; i++) {
+          const isLast = i === qty - 1
+          result.push({
+            ...item,
+            quantity: 1,
+            total: isLast ? (item.total || 0) - unitPrice * (qty - 1) : unitPrice,
+            _origIdx: originalIndex,
+          })
+        }
+      }
+    })
+    return result
+  }, [items])
+
+  if (!table || !order) return null
 
   // Tables that can receive items: available or occupied (except the source table)
   const destinationTables = tables.filter(
@@ -43,25 +66,25 @@ export default function SplitTableModal({
   }
 
   const selectAll = () => {
-    if (selectedItems.length === items.length) {
+    if (selectedItems.length === expandedItems.length) {
       setSelectedItems([])
     } else {
-      setSelectedItems(items.map((_, i) => i))
+      setSelectedItems(expandedItems.map((_, i) => i))
     }
   }
 
   const selectedTotal = selectedItems.reduce((sum, idx) => {
-    const item = items[idx]
-    return sum + (item?.total || item?.price * item?.quantity || 0)
+    const item = expandedItems[idx]
+    return sum + (item?.total || 0)
   }, 0)
 
-  const remainingTotal = items.reduce((sum, item, idx) => {
+  const remainingTotal = expandedItems.reduce((sum, item, idx) => {
     if (selectedItems.includes(idx)) return sum
-    return sum + (item?.total || item?.price * item?.quantity || 0)
+    return sum + (item?.total || 0)
   }, 0)
 
   const canConfirm = selectedItems.length > 0 &&
-    selectedItems.length < items.length &&
+    selectedItems.length < expandedItems.length &&
     selectedDestTable
 
   const handleConfirm = async () => {
@@ -69,8 +92,41 @@ export default function SplitTableModal({
 
     setIsLoading(true)
     try {
+      // Convertir selección de items expandidos a items con cantidades correctas
+      const moveCountByOriginal = {}
+      selectedItems.forEach(expandedIdx => {
+        const origIdx = expandedItems[expandedIdx]._origIdx
+        moveCountByOriginal[origIdx] = (moveCountByOriginal[origIdx] || 0) + 1
+      })
+
+      const itemsToMove = []
+      const itemsToKeep = []
+      items.forEach((item, origIdx) => {
+        const qty = item.quantity || 1
+        const moveCount = moveCountByOriginal[origIdx] || 0
+        const keepCount = qty - moveCount
+        const unitPrice = (item.total || 0) / qty
+
+        if (moveCount > 0) {
+          const { _origIdx, ...cleanItem } = item
+          itemsToMove.push({
+            ...cleanItem,
+            quantity: moveCount,
+            total: Math.round(unitPrice * moveCount * 100) / 100,
+          })
+        }
+        if (keepCount > 0) {
+          const { _origIdx, ...cleanItem } = item
+          itemsToKeep.push({
+            ...cleanItem,
+            quantity: keepCount,
+            total: Math.round(unitPrice * keepCount * 100) / 100,
+          })
+        }
+      })
+
       const destTable = destinationTables.find(t => t.id === selectedDestTable)
-      await onConfirm(table.id, selectedDestTable, selectedItems, destTable)
+      await onConfirm(table.id, selectedDestTable, { itemsToMove, itemsToKeep }, destTable)
     } catch (error) {
       console.error('Error al dividir mesa:', error)
     } finally {
@@ -100,16 +156,16 @@ export default function SplitTableModal({
               onClick={selectAll}
               className="text-xs text-primary-600 hover:text-primary-700 font-medium"
             >
-              {selectedItems.length === items.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+              {selectedItems.length === expandedItems.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
             </button>
           </div>
 
-          <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-3">
-            {items.map((item, idx) => {
+          <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3">
+            {expandedItems.map((item, idx) => {
               const isSelected = selectedItems.includes(idx)
               return (
                 <button
-                  key={item.itemId || idx}
+                  key={idx}
                   type="button"
                   onClick={() => toggleItem(idx)}
                   className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
@@ -129,11 +185,10 @@ export default function SplitTableModal({
                       </div>
                       <div>
                         <span className="font-medium text-gray-900">{item.name}</span>
-                        <span className="text-gray-500 text-sm ml-2">x{item.quantity}</span>
                       </div>
                     </div>
                     <span className="font-semibold text-gray-900">
-                      S/ {(item.total || item.price * item.quantity || 0).toFixed(2)}
+                      S/ {(item.total || 0).toFixed(2)}
                     </span>
                   </div>
                   {item.modifiers && item.modifiers.length > 0 && (
@@ -151,7 +206,7 @@ export default function SplitTableModal({
             })}
           </div>
 
-          {selectedItems.length > 0 && selectedItems.length === items.length && (
+          {selectedItems.length > 0 && selectedItems.length === expandedItems.length && (
             <p className="text-sm text-amber-600 mt-2">
               No puedes mover todos los items. Usa "Cambiar Mesa" para mover la orden completa.
             </p>
@@ -159,12 +214,12 @@ export default function SplitTableModal({
         </div>
 
         {/* Summary */}
-        {selectedItems.length > 0 && selectedItems.length < items.length && (
+        {selectedItems.length > 0 && selectedItems.length < expandedItems.length && (
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-xs text-gray-500 mb-1">Se queda en Mesa {table.number}</p>
               <p className="text-sm font-bold text-gray-900">
-                {items.length - selectedItems.length} items - S/ {remainingTotal.toFixed(2)}
+                {expandedItems.length - selectedItems.length} items - S/ {remainingTotal.toFixed(2)}
               </p>
             </div>
             <div className="bg-primary-50 rounded-lg p-3">

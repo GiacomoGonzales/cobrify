@@ -18,6 +18,28 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
   const totalAmount = order?.total || 0
   const orderItems = order?.items || []
 
+  // Expandir items con cantidad > 1 en unidades individuales para división por items
+  const expandedItems = useMemo(() => {
+    const result = []
+    orderItems.forEach((item) => {
+      const qty = item.quantity || 1
+      if (qty <= 1) {
+        result.push(item)
+      } else {
+        const unitPrice = Math.round((item.total || 0) / qty * 100) / 100
+        for (let i = 0; i < qty; i++) {
+          const isLast = i === qty - 1
+          result.push({
+            ...item,
+            quantity: 1,
+            total: isLast ? (item.total || 0) - unitPrice * (qty - 1) : unitPrice,
+          })
+        }
+      }
+    })
+    return result
+  }, [orderItems])
+
   // Calcular totales por persona para división por items
   const personTotals = useMemo(() => {
     if (splitMethod !== 'items') return []
@@ -27,22 +49,29 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
       totals[i] = { personNumber: i, items: [], total: 0 }
     }
 
-    orderItems.forEach((item, index) => {
+    expandedItems.forEach((item, index) => {
       const assignedPerson = itemAssignments[index]
       if (assignedPerson && totals[assignedPerson]) {
-        totals[assignedPerson].items.push({ ...item, originalIndex: index })
+        // Re-agregar items iguales para que la impresión muestre "3x Menú" en vez de 3 filas separadas
+        const existing = totals[assignedPerson].items.find(i => i.name === item.name && Math.abs((i.total / i.quantity) - item.total) < 0.02)
+        if (existing) {
+          existing.quantity += 1
+          existing.total += item.total || 0
+        } else {
+          totals[assignedPerson].items.push({ ...item })
+        }
         totals[assignedPerson].total += item.total || 0
       }
     })
 
     return Object.values(totals)
-  }, [splitMethod, itemsNumberOfPeople, orderItems, itemAssignments])
+  }, [splitMethod, itemsNumberOfPeople, expandedItems, itemAssignments])
 
   // Verificar si todos los items están asignados
   const allItemsAssigned = useMemo(() => {
     if (splitMethod !== 'items') return true
-    return orderItems.every((_, index) => itemAssignments[index] !== undefined)
-  }, [splitMethod, orderItems, itemAssignments])
+    return expandedItems.every((_, index) => itemAssignments[index] !== undefined)
+  }, [splitMethod, expandedItems, itemAssignments])
 
   // Total asignado en división por items
   const totalAssignedItems = useMemo(() => {
@@ -396,8 +425,8 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Asignar Items a Personas
               </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-2">
-                {orderItems.map((item, index) => (
+              <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
+                {expandedItems.map((item, index) => (
                   <div
                     key={index}
                     className={`flex items-center justify-between p-2 rounded-lg ${
@@ -408,7 +437,7 @@ export default function SplitBillModal({ isOpen, onClose, table, order, onConfir
                   >
                     <div className="flex-1 min-w-0 mr-2">
                       <div className="text-sm font-medium text-gray-900 truncate">
-                        {item.quantity}x {item.name}
+                        {item.name}
                       </div>
                       <div className="text-xs text-gray-600">
                         S/ {item.total.toFixed(2)}

@@ -586,14 +586,14 @@ export default function Tables() {
     setIsSplitTableModalOpen(true)
   }
 
-  const handleConfirmSplitTable = async (sourceTableId, destTableId, selectedItemIndices, destTable) => {
+  const handleConfirmSplitTable = async (sourceTableId, destTableId, splitItems, destTable) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
       return
     }
 
     try {
-      const result = await splitTableItems(getBusinessId(), sourceTableId, destTableId, selectedItemIndices)
+      const result = await splitTableItems(getBusinessId(), sourceTableId, destTableId, splitItems)
       if (result.success) {
         const destStatus = destTable?.status === 'occupied' ? 'agregados a' : 'movidos a'
         toast.success(`Items ${destStatus} Mesa ${destTable?.number}`)

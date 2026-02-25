@@ -403,7 +403,7 @@ export const moveOrderToTable = async (businessId, sourceTableId, destinationTab
  * Si la mesa destino está disponible, la ocupa con una nueva orden
  * Si la mesa destino ya está ocupada, agrega los items a la orden existente
  */
-export const splitTableItems = async (businessId, sourceTableId, destTableId, selectedItemIndices, sourceWaiter) => {
+export const splitTableItems = async (businessId, sourceTableId, destTableId, splitItems, sourceWaiter) => {
   try {
     // Obtener datos de la mesa origen
     const sourceTableRef = doc(db, 'businesses', businessId, 'tables', sourceTableId)
@@ -445,8 +445,16 @@ export const splitTableItems = async (businessId, sourceTableId, destTableId, se
     const allItems = sourceOrderData.items || []
 
     // Separar items: los que se mueven y los que se quedan
-    const itemsToMove = selectedItemIndices.map(i => allItems[i]).filter(Boolean)
-    const itemsToKeep = allItems.filter((_, i) => !selectedItemIndices.includes(i))
+    let itemsToMove, itemsToKeep
+    if (splitItems && splitItems.itemsToMove && splitItems.itemsToKeep) {
+      // Nuevo formato: items pre-construidos con cantidades parciales
+      itemsToMove = splitItems.itemsToMove
+      itemsToKeep = splitItems.itemsToKeep
+    } else {
+      // Legacy: índices simples
+      itemsToMove = splitItems.map(i => allItems[i]).filter(Boolean)
+      itemsToKeep = allItems.filter((_, i) => !splitItems.includes(i))
+    }
 
     if (itemsToMove.length === 0) {
       return { success: false, error: 'No se seleccionaron items para mover' }
