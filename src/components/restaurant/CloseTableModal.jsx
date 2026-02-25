@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, ShoppingCart, Loader2, CheckCircle, X } from 'lucide-react'
+import { FileText, ShoppingCart, Loader2, CheckCircle, X, UserMinus } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
@@ -10,6 +10,7 @@ export default function CloseTableModal({
   table,
   order,
   onConfirm,
+  onIndividualPayment,
   taxConfig = { igvRate: 18, igvExempt: false }
 }) {
   const navigate = useNavigate()
@@ -74,7 +75,7 @@ export default function CloseTableModal({
       isOpen={isOpen}
       onClose={handleClose}
       title={`Cerrar Cuenta - Mesa ${table.number}`}
-      size="md"
+      size="lg"
     >
       <div className="space-y-6">
         {/* Resumen de la cuenta */}
@@ -150,7 +151,7 @@ export default function CloseTableModal({
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 ¿Cómo desea cerrar la cuenta?
               </label>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <button
                   onClick={handleCreateReceipt}
                   className="p-6 border-2 border-primary-200 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-center"
@@ -159,6 +160,16 @@ export default function CloseTableModal({
                   <div className="font-semibold text-gray-900 mb-1">Crear Comprobante</div>
                   <div className="text-xs text-gray-600">
                     Ir al POS para generar Boleta, Factura o Nota de Venta
+                  </div>
+                </button>
+                <button
+                  onClick={() => { if (onIndividualPayment) onIndividualPayment() }}
+                  className="p-6 border-2 border-orange-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors text-center"
+                >
+                  <UserMinus className="w-10 h-10 mx-auto mb-3 text-orange-600" />
+                  <div className="font-semibold text-gray-900 mb-1">Cobro Individual</div>
+                  <div className="text-xs text-gray-600">
+                    Cobrar items parciales, mesa sigue abierta
                   </div>
                 </button>
                 <button

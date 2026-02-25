@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2 } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -13,6 +14,7 @@ import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import SplitTableModal from '@/components/restaurant/SplitTableModal'
+import IndividualPaymentModal from '@/components/restaurant/IndividualPaymentModal'
 import CloseTableModal from '@/components/restaurant/CloseTableModal'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
@@ -42,6 +44,8 @@ import { db } from '@/lib/firebase'
 export default function Tables() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [tables, setTables] = useState([])
   const [stats, setStats] = useState({
@@ -66,6 +70,7 @@ export default function Tables() {
   const [isSplitBillModalOpen, setIsSplitBillModalOpen] = useState(false)
   const [isCloseTableModalOpen, setIsCloseTableModalOpen] = useState(false)
   const [isSplitTableModalOpen, setIsSplitTableModalOpen] = useState(false)
+  const [isIndividualPaymentModalOpen, setIsIndividualPaymentModalOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
   // Estado para división de cuenta por items
@@ -607,6 +612,39 @@ export default function Tables() {
       console.error('Error al dividir mesa:', error)
       toast.error('Error al dividir mesa')
     }
+  }
+
+  const handleIndividualPayment = () => {
+    setIsCloseTableModalOpen(false)
+    setIsIndividualPaymentModalOpen(true)
+  }
+
+  const handleConfirmIndividualPayment = (selectedItems, remainingItems) => {
+    // Detectar ruta correcta del POS según modo demo
+    const isDemoRestaurant = location.pathname.startsWith('/demorestaurant')
+    const isDemo = location.pathname.startsWith('/demo')
+    let posPath = '/app/pos'
+    if (isDemoRestaurant) {
+      posPath = '/demorestaurant/pos'
+    } else if (isDemo) {
+      posPath = '/demo/pos'
+    }
+
+    navigate(posPath, {
+      state: {
+        fromTable: true,
+        partialClose: true,
+        tableId: selectedTable.id,
+        tableNumber: selectedTable.number,
+        orderId: selectedOrder.id,
+        orderNumber: selectedOrder.orderNumber,
+        items: selectedItems,
+        remainingItems: remainingItems,
+        waiterId: selectedTable.waiterId || selectedOrder.waiterId || null,
+        waiterName: selectedTable.waiter || selectedOrder.waiterName || null,
+      }
+    })
+    setIsIndividualPaymentModalOpen(false)
   }
 
   const handlePrintPreBill = async (itemFilter = null, personLabel = null, overrideTotal = null) => {
@@ -1451,7 +1489,20 @@ export default function Tables() {
         table={selectedTable}
         order={selectedOrder}
         onConfirm={handleConfirmCloseTable}
+        onIndividualPayment={handleIndividualPayment}
         taxConfig={taxConfig}
+      />
+
+      {/* Modal para cobro individual (parcial) */}
+      <IndividualPaymentModal
+        isOpen={isIndividualPaymentModalOpen}
+        onClose={() => {
+          setIsIndividualPaymentModalOpen(false)
+          setIsActionModalOpen(true)
+        }}
+        table={selectedTable}
+        order={selectedOrder}
+        onConfirm={handleConfirmIndividualPayment}
       />
 
       {/* Modal para imprimir precuenta dividida por items */}

@@ -65,9 +65,9 @@ import { getRecipeByProductId } from '@/services/recipeService'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement } from '@/services/warehouseService'
 import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
-import { releaseTable } from '@/services/tableService'
+import { releaseTable, updateTableAmount } from '@/services/tableService'
 import { getSellers } from '@/services/sellerService'
-import { markOrderAsPaid } from '@/services/orderService'
+import { markOrderAsPaid, updateOrder } from '@/services/orderService'
 import { markQuotationAsConverted } from '@/services/quotationService'
 import { markNotaVentaAsConverted } from '@/services/firestoreService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -591,9 +591,12 @@ export default function POS() {
       setOrderType('dine-in') // Establecer automáticamente como "En Mesa"
 
       // Si la mesa tiene una orden asociada, guardarla para marcarla como pagada al completar
+      // En cobro parcial (partialClose) NO marcar la orden como pagada porque sigue activa
       if (tableInfo.orderId) {
         setPendingOrderId(tableInfo.orderId)
-        setMarkOrderPaidOnComplete(true)
+        if (!tableInfo.partialClose) {
+          setMarkOrderPaidOnComplete(true)
+        }
       }
 
       // Cargar items de la mesa al carrito
@@ -3227,8 +3230,24 @@ export default function POS() {
         }
       }
 
-      // 6. Si viene de una mesa, liberar la mesa automáticamente
-      if (tableData?.tableId) {
+      // 6. Si viene de una mesa, liberar la mesa o actualizar orden (cobro parcial)
+      if (tableData?.tableId && tableData?.partialClose) {
+        // Cobro parcial: actualizar orden con items restantes, NO liberar mesa
+        try {
+          const remaining = tableData.remainingItems || []
+          const newTotal = remaining.reduce((sum, item) => sum + (item.total || 0), 0)
+
+          await updateOrder(businessId, tableData.orderId, {
+            items: remaining,
+            total: newTotal,
+          })
+          await updateTableAmount(businessId, tableData.tableId, newTotal)
+          setTableData(null)
+        } catch (error) {
+          console.error('Error al actualizar orden parcial:', error)
+          toast.warning('Comprobante generado, pero no se pudo actualizar la orden de la mesa')
+        }
+      } else if (tableData?.tableId) {
         try {
           const releaseResult = await releaseTable(businessId, tableData.tableId)
           if (releaseResult.success) {
