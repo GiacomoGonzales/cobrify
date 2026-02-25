@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ListOrdered, Clock, CheckCircle, XCircle, AlertCircle, AlertTriangle, Users, DollarSign, Loader2, ChevronRight, Plus, Receipt, Bike, ShoppingBag, Smartphone, User, Printer, X, ShoppingCart, Truck, PackageCheck } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
@@ -22,6 +23,7 @@ export default function Orders() {
   const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
 
   const [orders, setOrders] = useState([])
   const [stats, setStats] = useState(null)
@@ -404,7 +406,7 @@ export default function Orders() {
     if (!orderToClose) return
 
     // Navegar al POS con los items de la orden precargados
-    navigate('/app/pos', {
+    appNavigate('pos', {
       state: {
         fromOrder: true,
         orderId: orderToClose.id,
@@ -555,7 +557,7 @@ export default function Orders() {
 
   // Ir al POS para cobrar una orden
   const handleGoToPayment = (order) => {
-    navigate('/app/pos', {
+    appNavigate('pos', {
       state: {
         fromOrder: true,
         orderId: order.id,

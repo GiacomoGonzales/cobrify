@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Plus, Trash2, Search } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -37,6 +38,7 @@ const CREDIT_NOTE_REASONS = [
 export default function CreateCreditNote() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const [searchParams] = useSearchParams()
   const invoiceIdParam = searchParams.get('invoiceId')
 
@@ -393,7 +395,7 @@ export default function CreateCreditNote() {
         await updateDocumentSeries(user.uid, updatedSeries)
 
         setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente' })
-        setTimeout(() => navigate('/app/facturas'), 2000)
+        setTimeout(() => appNavigate('facturas'), 2000)
       } else {
         throw new Error(result.error)
       }
@@ -581,7 +583,7 @@ export default function CreateCreditNote() {
         }
 
         setMessage({ type: 'success', text: 'Nota de Crédito creada exitosamente. Stock restaurado.' })
-        setTimeout(() => navigate('/app/facturas'), 2000)
+        setTimeout(() => appNavigate('facturas'), 2000)
       } else {
         throw new Error(result.error)
       }

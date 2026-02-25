@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning'
-import { Link } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -116,6 +116,7 @@ export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings } = useAppContext()
   const { filterWarehousesByAccess } = useAuth()
   const toast = useToast()
+  const appNavigate = useAppNavigate()
   const [products, setProducts] = useState([])
   const [ingredients, setIngredients] = useState([])
   const [productCategories, setProductCategories] = useState([])
@@ -1528,11 +1529,11 @@ export default function Inventory() {
               ? 'Hay productos sin stock. Es urgente reabastecer para evitar ventas perdidas.'
               : 'Algunos productos tienen stock bajo. Considera reabastecer pronto.'}
           </p>
-          <Link to="/app/productos" className="inline-block mt-2">
-            <Button variant="outline" size="sm">
+          <div className="inline-block mt-2">
+            <Button variant="outline" size="sm" onClick={() => appNavigate('productos')}>
               Gestionar Productos
             </Button>
-          </Link>
+          </div>
         </Alert>
       )}
 

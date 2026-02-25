@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -93,6 +94,7 @@ export default function CreateQuotation() {
   const { user } = useAuth()
   const { businessSettings } = useAppContext()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
   const [searchParams] = useSearchParams()
   const cloneId = searchParams.get('clone') // Si hay clone, duplicar cotización
@@ -272,7 +274,7 @@ export default function CreateQuotation() {
           }
         } else {
           toast.error('No se encontró la cotización')
-          navigate('/app/cotizaciones')
+          appNavigate('cotizaciones')
         }
       }
 
@@ -831,6 +833,9 @@ export default function CreateQuotation() {
           sellerId: selectedSeller?.id || null,
           sellerName: selectedSeller?.name || null,
           sellerCode: selectedSeller?.code || null,
+          createdBy: user.uid,
+          createdByName: user.displayName || user.email || 'Usuario',
+          createdByEmail: user.email || '',
         }
 
         const result = await createQuotation(user.uid, quotationData)
@@ -842,7 +847,7 @@ export default function CreateQuotation() {
       }
 
       setTimeout(() => {
-        navigate('/app/cotizaciones')
+        appNavigate('cotizaciones')
       }, 1500)
     } catch (error) {
       console.error('Error al guardar cotización:', error)
@@ -870,7 +875,7 @@ export default function CreateQuotation() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <button
-              onClick={() => navigate('/app/cotizaciones')}
+              onClick={() => appNavigate('cotizaciones')}
               className="text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-5 h-5" />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ArrowLeft, Loader2, Search, X, PackagePlus, Package, Beaker, Store } from 'lucide-react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -47,6 +48,7 @@ export default function CreatePurchase() {
   const { user } = useAuth()
   const { getBusinessId, businessMode } = useAppContext()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const location = useLocation()
   const { purchaseId } = useParams() // Para modo edición
   const toast = useToast()
@@ -349,7 +351,7 @@ export default function CreatePurchase() {
           }
         } else {
           toast.error('No se pudo cargar la compra')
-          navigate('/app/compras')
+          appNavigate('compras')
         }
       }
     } catch (error) {
@@ -1336,7 +1338,7 @@ export default function CreatePurchase() {
       // 5. Mostrar éxito y redirigir
       toast.success(isEditMode ? 'Compra actualizada exitosamente' : 'Compra registrada exitosamente. Stock y costos actualizados')
       setTimeout(() => {
-        navigate('/app/compras')
+        appNavigate('compras')
       }, 1500)
     } catch (error) {
       console.error('Error al guardar compra:', error)
@@ -1367,7 +1369,7 @@ export default function CreatePurchase() {
         <div>
           <Button
             variant="outline"
-            onClick={() => navigate('/app/compras')}
+            onClick={() => appNavigate('compras')}
             className="mb-4"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1581,7 +1583,7 @@ export default function CreatePurchase() {
             <Alert type="warning" className="mt-4">
               No tienes proveedores registrados.{' '}
               <button
-                onClick={() => navigate('/app/proveedores')}
+                onClick={() => appNavigate('proveedores')}
                 className="underline font-medium"
               >
                 Crear proveedor
@@ -2045,14 +2047,14 @@ export default function CreatePurchase() {
             <Alert type="warning" className="mt-4">
               No tienes productos ni ingredientes registrados.{' '}
               <button
-                onClick={() => navigate('/app/productos')}
+                onClick={() => appNavigate('productos')}
                 className="underline font-medium"
               >
                 Crear producto
               </button>
               {' o '}
               <button
-                onClick={() => navigate('/app/ingredientes')}
+                onClick={() => appNavigate('ingredientes')}
                 className="underline font-medium"
               >
                 Crear ingrediente
@@ -2063,7 +2065,7 @@ export default function CreatePurchase() {
             <Alert type="info" className="mt-4">
               No tienes productos registrados. Cambia a "Ingredientes" para ver tus ingredientes o{' '}
               <button
-                onClick={() => navigate('/app/productos')}
+                onClick={() => appNavigate('productos')}
                 className="underline font-medium"
               >
                 crea un producto
@@ -2074,7 +2076,7 @@ export default function CreatePurchase() {
             <Alert type="info" className="mt-4">
               No tienes ingredientes registrados. Cambia a "Productos" para ver tus productos o{' '}
               <button
-                onClick={() => navigate('/app/ingredientes')}
+                onClick={() => appNavigate('ingredientes')}
                 className="underline font-medium"
               >
                 crea un ingrediente
@@ -2115,7 +2117,7 @@ export default function CreatePurchase() {
             <div className="flex justify-end gap-3">
               <Button
                 variant="outline"
-                onClick={() => navigate('/app/compras')}
+                onClick={() => appNavigate('compras')}
                 disabled={isSaving}
               >
                 Cancelar

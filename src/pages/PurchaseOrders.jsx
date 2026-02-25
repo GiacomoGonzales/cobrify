@@ -18,6 +18,7 @@ import {
   ArrowRightCircle,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -40,6 +41,7 @@ export default function PurchaseOrders() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const [orders, setOrders] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -495,7 +497,7 @@ export default function PurchaseOrders() {
                         onClick={() => {
                           setOpenMenuId(null)
                           // Navegar a crear compra con los datos de la orden
-                          navigate('/app/compras/nueva', {
+                          appNavigate('compras/nueva', {
                             state: { fromPurchaseOrder: order }
                           })
                         }}

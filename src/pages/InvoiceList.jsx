@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
   Plus,
   Search,
@@ -67,6 +68,7 @@ export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, filterBranchesByAccess } = useAppContext()
   const { branding } = useBranding()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -880,7 +882,7 @@ Gracias por tu preferencia.`
 
     setViewingInvoice(null)
 
-    navigate('/app/pos', {
+    appNavigate('pos', {
       state: {
         fromNotaVenta: true,
         notaVentaId: invoice.id,
@@ -1505,7 +1507,7 @@ Gracias por tu preferencia.`
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
-            onClick={() => navigate('/app/nota-credito')}
+            onClick={() => appNavigate('nota-credito')}
             className="w-full sm:w-auto"
             title="Crear nota de crédito"
           >
@@ -1779,12 +1781,10 @@ Gracias por tu preferencia.`
                 : 'Comienza creando tu primer comprobante desde el Punto de Venta'}
             </p>
             {!searchTerm && filterStatus === 'all' && filterType === 'all' && (
-              <Link to="/app/pos">
-                <Button>
+              <Button onClick={() => appNavigate('pos')}>
                   <Plus className="w-4 h-4 mr-2" />
                   Ir al Punto de Venta
                 </Button>
-              </Link>
             )}
           </CardContent>
         ) : (
@@ -2166,7 +2166,7 @@ Gracias por tu preferencia.`
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
-                        navigate(`/app/pos?editInvoiceId=${invoice.id}`)
+                        appNavigate(`pos?editInvoiceId=${invoice.id}`)
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3"
                     >
@@ -2180,7 +2180,7 @@ Gracias por tu preferencia.`
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
-                        navigate(`/app/pos?duplicateInvoiceId=${invoice.id}`)
+                        appNavigate(`pos?duplicateInvoiceId=${invoice.id}`)
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-purple-50 flex items-center gap-3"
                     >
@@ -2280,7 +2280,7 @@ Gracias por tu preferencia.`
                       <button
                         onClick={() => {
                           setOpenMenuId(null)
-                          navigate(`/app/nota-credito?invoiceId=${invoice.id}`)
+                          appNavigate(`nota-credito?invoiceId=${invoice.id}`)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >
@@ -2291,7 +2291,7 @@ Gracias por tu preferencia.`
                       <button
                         onClick={() => {
                           setOpenMenuId(null)
-                          navigate(`/app/nota-debito?invoiceId=${invoice.id}`)
+                          appNavigate(`nota-debito?invoiceId=${invoice.id}`)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                       >

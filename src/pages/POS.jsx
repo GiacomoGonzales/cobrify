@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
   Search,
   Plus,
@@ -257,6 +258,7 @@ export default function POS() {
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const ticketRef = useRef(null)
   const { isOnline, isOffline } = useOnlineStatus()
 
@@ -846,7 +848,7 @@ export default function POS() {
 
       if (!invoiceSnap.exists()) {
         toast.error('No se pudo cargar el documento para editar')
-        navigate('/app/facturas')
+        appNavigate('facturas')
         return
       }
 
@@ -855,7 +857,7 @@ export default function POS() {
       // Verificar que no haya sido aceptado por SUNAT
       if (invoice.sunatStatus === 'accepted') {
         toast.error('Este documento ya fue aceptado por SUNAT y no puede editarse')
-        navigate('/app/facturas')
+        appNavigate('facturas')
         return
       }
 
@@ -944,12 +946,12 @@ export default function POS() {
       toast.info(`Editando ${invoice.documentType === 'factura' ? 'Factura' : 'Boleta'} ${invoice.series}-${invoice.number}`)
 
       // Limpiar URL sin recargar
-      navigate('/app/pos', { replace: true })
+      appNavigate('pos', { replace: true })
 
     } catch (error) {
       console.error('Error al cargar documento para editar:', error)
       toast.error('Error al cargar el documento')
-      navigate('/app/facturas')
+      appNavigate('facturas')
     } finally {
       setIsLoading(false)
     }
@@ -969,7 +971,7 @@ export default function POS() {
 
       if (!invoiceSnap.exists()) {
         toast.error('No se pudo cargar el documento para duplicar')
-        navigate('/app/facturas')
+        appNavigate('facturas')
         return
       }
 
@@ -1049,12 +1051,12 @@ export default function POS() {
       toast.success(`Comprobante duplicado. Revisa los datos y emite el nuevo ${docName}.`)
 
       // Limpiar URL sin recargar
-      navigate('/app/pos', { replace: true })
+      appNavigate('pos', { replace: true })
 
     } catch (error) {
       console.error('Error al duplicar documento:', error)
       toast.error('Error al cargar el documento para duplicar')
-      navigate('/app/facturas')
+      appNavigate('facturas')
     } finally {
       setIsLoading(false)
     }

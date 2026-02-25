@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
   Plus,
   Search,
@@ -45,6 +46,7 @@ import { getActiveBranches } from '@/services/branchService'
 export default function Quotations() {
   const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess } = useAppContext()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const toast = useToast()
   const [quotations, setQuotations] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
@@ -198,7 +200,7 @@ export default function Quotations() {
         console.log('🎭 MODO DEMO: Navegando a POS con datos de cotización...')
 
         // Navegar a POS con los datos de la cotización
-        navigate('/demo/pos', {
+        appNavigate('pos', {
           state: {
             fromQuotation: true,
             quotationId: convertingQuotation.id,
@@ -223,7 +225,7 @@ export default function Quotations() {
       const quotationData = convertResult.data
 
       // Navegar a POS con los datos de la cotización prellenados
-      navigate('/app/pos', {
+      appNavigate('pos', {
         state: {
           fromQuotation: true,
           quotationId: convertingQuotation.id,
@@ -378,12 +380,10 @@ export default function Quotations() {
             Gestiona tus cotizaciones y conviértelas en facturas
           </p>
         </div>
-        <Link to="/app/cotizaciones/nueva" className="w-full sm:w-auto">
-          <Button className="w-full sm:w-auto">
+        <Button className="w-full sm:w-auto" onClick={() => appNavigate('cotizaciones/nueva')}>
             <Plus className="w-4 h-4 mr-2" />
             Nueva Cotización
           </Button>
-        </Link>
       </div>
 
       {/* Stats */}
@@ -505,12 +505,10 @@ export default function Quotations() {
                 : 'Comienza creando tu primera cotización'}
             </p>
             {!searchTerm && filterStatus === 'all' && filterBranch === 'all' && (
-              <Link to="/app/cotizaciones/nueva">
-                <Button>
+              <Button onClick={() => appNavigate('cotizaciones/nueva')}>
                   <Plus className="w-4 h-4 mr-2" />
                   Nueva Cotización
                 </Button>
-              </Link>
             )}
           </CardContent>
         ) : (
@@ -599,7 +597,7 @@ export default function Quotations() {
                         </button>
                         {quotation.status !== 'converted' && (
                           <button
-                            onClick={() => { setOpenMenuId(null); navigate(`/app/cotizaciones/editar/${quotation.id}`) }}
+                            onClick={() => { setOpenMenuId(null); appNavigate(`cotizaciones/editar/${quotation.id}`) }}
                             className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                           >
                             <Edit className="w-4 h-4 text-amber-600" />
@@ -621,7 +619,7 @@ export default function Quotations() {
                           <span>Descargar PDF</span>
                         </button>
                         <button
-                          onClick={() => { setOpenMenuId(null); navigate(`/app/cotizaciones/nueva?clone=${quotation.id}`) }}
+                          onClick={() => { setOpenMenuId(null); appNavigate(`cotizaciones/nueva?clone=${quotation.id}`) }}
                           className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                         >
                           <Copy className="w-4 h-4 text-cyan-600" />
@@ -770,7 +768,7 @@ export default function Quotations() {
                                   <button
                                     onClick={() => {
                                       setOpenMenuId(null)
-                                      navigate(`/app/cotizaciones/editar/${quotation.id}`)
+                                      appNavigate(`cotizaciones/editar/${quotation.id}`)
                                     }}
                                     className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                   >
@@ -807,7 +805,7 @@ export default function Quotations() {
                                 <button
                                   onClick={() => {
                                     setOpenMenuId(null)
-                                    navigate(`/app/cotizaciones/nueva?clone=${quotation.id}`)
+                                    appNavigate(`cotizaciones/nueva?clone=${quotation.id}`)
                                   }}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
                                 >

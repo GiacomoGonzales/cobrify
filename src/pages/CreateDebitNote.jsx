@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Send } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -26,6 +27,7 @@ const DEBIT_NOTE_REASONS = [
 export default function CreateDebitNote() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const [searchParams] = useSearchParams()
   const invoiceIdParam = searchParams.get('invoiceId')
 
@@ -246,13 +248,13 @@ export default function CreateDebitNote() {
           type: 'success',
           text: `Nota de Débito ${debitNoteNumber} aceptada por SUNAT`
         })
-        setTimeout(() => navigate('/app/facturas'), 2000)
+        setTimeout(() => appNavigate('facturas'), 2000)
       } else if (sunatResponse.ok && sunatResult.status === 'signed') {
         setMessage({
           type: 'warning',
           text: `Nota de Débito ${debitNoteNumber} firmada pero pendiente de envío a SUNAT. ${sunatResult.message || ''}`
         })
-        setTimeout(() => navigate('/app/facturas'), 3000)
+        setTimeout(() => appNavigate('facturas'), 3000)
       } else {
         // El documento fue creado pero rechazado por SUNAT
         setMessage({

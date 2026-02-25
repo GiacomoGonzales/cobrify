@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
   Plus,
   Search,
@@ -53,6 +54,7 @@ export default function Purchases() {
   const { user, isDemoMode, demoData, getBusinessId } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
+  const appNavigate = useAppNavigate()
   const [purchases, setPurchases] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -748,12 +750,10 @@ export default function Purchases() {
             Gestiona tus órdenes de compra y entrada de mercadería
           </p>
         </div>
-        <Link to="/app/compras/nueva" className="w-full sm:w-auto">
-          <Button className="w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Compra
-          </Button>
-        </Link>
+        <Button className="w-full sm:w-auto" onClick={() => appNavigate('compras/nueva')}>
+          <Plus className="w-4 h-4 mr-2" />
+          Nueva Compra
+        </Button>
       </div>
 
       {/* Search and Filters */}
@@ -973,12 +973,10 @@ export default function Purchases() {
                 : 'Comienza registrando tu primera compra'}
             </p>
             {!searchTerm && (
-              <Link to="/app/compras/nueva">
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Crear Primera Compra
-                </Button>
-              </Link>
+              <Button onClick={() => appNavigate('compras/nueva')}>
+                <Plus className="w-4 h-4 mr-2" />
+                Crear Primera Compra
+              </Button>
             )}
           </CardContent>
         ) : (
@@ -1223,7 +1221,7 @@ export default function Purchases() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => navigate(`/app/compras/editar/${purchase.id}`)}
+                              onClick={() => appNavigate(`compras/editar/${purchase.id}`)}
                               className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                               title="Editar"
                             >
@@ -1293,7 +1291,7 @@ export default function Purchases() {
                     )}
                     {!menuPurchase._isIngredientPurchase && (
                       <button
-                        onClick={() => { navigate(`/app/compras/editar/${menuPurchase.id}`); setOpenMenuId(null) }}
+                        onClick={() => { appNavigate(`compras/editar/${menuPurchase.id}`); setOpenMenuId(null) }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50"
                       >
                         <Edit2 className="w-4 h-4" />
