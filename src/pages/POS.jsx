@@ -3321,7 +3321,7 @@ export default function POS() {
 
       // 9. Auto-imprimir ticket si está habilitado
       if (companySettings?.autoPrintTicket) {
-        setTimeout(() => handlePrintTicket(), 500)
+        setTimeout(() => handlePrintTicket(invoiceData), 500)
       }
     } catch (error) {
       console.error('Error al procesar venta:', error)
@@ -3331,13 +3331,14 @@ export default function POS() {
     }
   }
 
-  const handlePrintTicket = async () => {
+  const handlePrintTicket = async (invoiceDataParam) => {
     const isNative = Capacitor.isNativePlatform()
     setIsPrintingTicket(true)
+    const invoiceToprint = invoiceDataParam || lastInvoiceData
 
     try {
       // Si es móvil, intentar imprimir en impresora térmica
-      if (isNative && lastInvoiceData && companySettings) {
+      if (isNative && invoiceToprint && companySettings) {
         try {
           // Obtener configuración de impresora
           const { getPrinterConfig, connectPrinter, printInvoiceTicket } = await import('@/services/thermalPrinterService')
@@ -3352,7 +3353,7 @@ export default function POS() {
               toast.info('Usando impresión estándar...')
             } else {
               // Imprimir en impresora térmica (80mm por defecto)
-              const result = await printInvoiceTicket(lastInvoiceData, companySettings, printerConfigResult.config.paperWidth || 80)
+              const result = await printInvoiceTicket(invoiceToprint, companySettings, printerConfigResult.config.paperWidth || 80)
 
               if (result.success) {
                 toast.success('Comprobante impreso en ticketera')
