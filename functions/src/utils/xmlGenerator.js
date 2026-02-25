@@ -398,9 +398,16 @@ export function generateInvoiceXML(invoiceData, businessData) {
     }
   }
 
-  // === FIRMA DIGITAL ===
-  // La firma XMLDSig se insertará en ext:UBLExtensions por xmlSigner.js
-  // No se requiere el elemento cac:Signature para SUNAT
+  // === FIRMA DIGITAL (Referencia UBL) ===
+  // La firma XMLDSig real se insertará en ext:UBLExtensions por QPSE o xmlSigner.js
+  // El bloque cac:Signature es la referencia UBL requerida por OSE
+  const signature = root.ele('cac:Signature')
+  signature.ele('cbc:ID').txt('SignatureSP')
+  const signatoryParty = signature.ele('cac:SignatoryParty')
+  signatoryParty.ele('cac:PartyIdentification').ele('cbc:ID').txt(businessData.ruc)
+  signatoryParty.ele('cac:PartyName').ele('cbc:Name').txt(businessData.businessName || businessData.name || '')
+  const digitalSigAttachment = signature.ele('cac:DigitalSignatureAttachment')
+  digitalSigAttachment.ele('cac:ExternalReference').ele('cbc:URI').txt('SignatureSP')
 
   // === PROVEEDOR (Emisor) ===
   const accountingSupplierParty = root.ele('cac:AccountingSupplierParty')
@@ -1124,6 +1131,15 @@ export function generateCreditNoteXML(creditNoteData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
   }).txt(creditNoteData.referencedDocumentType || '01') // 01=Factura, 03=Boleta
 
+  // === FIRMA DIGITAL (Referencia UBL) ===
+  const signatureCN = root.ele('cac:Signature')
+  signatureCN.ele('cbc:ID').txt('SignatureSP')
+  const signatoryPartyCN = signatureCN.ele('cac:SignatoryParty')
+  signatoryPartyCN.ele('cac:PartyIdentification').ele('cbc:ID').txt(businessData.ruc)
+  signatoryPartyCN.ele('cac:PartyName').ele('cbc:Name').txt(businessData.businessName || businessData.name || '')
+  const digitalSigAttachmentCN = signatureCN.ele('cac:DigitalSignatureAttachment')
+  digitalSigAttachmentCN.ele('cac:ExternalReference').ele('cbc:URI').txt('SignatureSP')
+
   // === PROVEEDOR (Emisor) ===
   const accountingSupplierParty = root.ele('cac:AccountingSupplierParty')
   const supplierParty = accountingSupplierParty.ele('cac:Party')
@@ -1593,6 +1609,15 @@ export function generateDebitNoteXML(debitNoteData, businessData) {
     'listName': 'Tipo de Documento',
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
   }).txt(debitNoteData.referencedDocumentType || '01') // 01=Factura, 03=Boleta
+
+  // === FIRMA DIGITAL (Referencia UBL) ===
+  const signatureDN = root.ele('cac:Signature')
+  signatureDN.ele('cbc:ID').txt('SignatureSP')
+  const signatoryPartyDN = signatureDN.ele('cac:SignatoryParty')
+  signatoryPartyDN.ele('cac:PartyIdentification').ele('cbc:ID').txt(businessData.ruc)
+  signatoryPartyDN.ele('cac:PartyName').ele('cbc:Name').txt(businessData.businessName || businessData.name || '')
+  const digitalSigAttachmentDN = signatureDN.ele('cac:DigitalSignatureAttachment')
+  digitalSigAttachmentDN.ele('cac:ExternalReference').ele('cbc:URI').txt('SignatureSP')
 
   // === PROVEEDOR (Emisor) ===
   const accountingSupplierParty = root.ele('cac:AccountingSupplierParty')
