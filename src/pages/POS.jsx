@@ -5474,64 +5474,86 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       .filter(Boolean)
                     const isAvailable = (val) => !usedMethods.includes(val)
 
+                    // Métodos filtrados por permisos y modo de negocio
+                    const methodDefs = [
+                      ['CASH', 'Efectivo', 'cash'],
+                      ['CARD', 'Tarjeta', 'card'],
+                      ['TRANSFER', 'Transferencia', 'transfer'],
+                      ['YAPE', 'Yape', 'yape'],
+                      ['PLIN', 'Plin', 'plin'],
+                      ...(businessMode === 'restaurant' ? [
+                        ['RAPPI', 'Rappi', 'rappiPay'],
+                        ['PEDIDOSYA', 'PedidosYa', 'pedidosYa'],
+                        ['DIDIFOOD', 'DiDiFood', 'didifood'],
+                      ] : [])
+                    ].filter(([, , permKey]) =>
+                      !allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes(permKey)
+                    )
+
                     return (
-                    <div key={index} className="flex items-center gap-2">
-                      {/* Método de pago */}
-                      <Select
-                        value={payment.method}
-                        onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
-                        className="flex-1 text-sm"
-                        disabled={lastInvoiceData !== null}
-                      >
-                        <option value="">Seleccionar</option>
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('cash')) && (payment.method === 'CASH' || isAvailable('CASH')) && (
-                          <option value="CASH">Efectivo</option>
-                        )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('card')) && (payment.method === 'CARD' || isAvailable('CARD')) && (
-                          <option value="CARD">Tarjeta</option>
-                        )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('transfer')) && (payment.method === 'TRANSFER' || isAvailable('TRANSFER')) && (
-                          <option value="TRANSFER">Transferencia</option>
-                        )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('yape')) && (payment.method === 'YAPE' || isAvailable('YAPE')) && (
-                          <option value="YAPE">Yape</option>
-                        )}
-                        {(!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('plin')) && (payment.method === 'PLIN' || isAvailable('PLIN')) && (
-                          <option value="PLIN">Plin</option>
-                        )}
-                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('rappiPay')) && (payment.method === 'RAPPI' || isAvailable('RAPPI')) && (
-                          <option value="RAPPI">Rappi</option>
-                        )}
-                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('pedidosYa')) && (payment.method === 'PEDIDOSYA' || isAvailable('PEDIDOSYA')) && (
-                          <option value="PEDIDOSYA">PedidosYa</option>
-                        )}
-                        {businessMode === 'restaurant' && (!allowedPaymentMethods || allowedPaymentMethods.length === 0 || allowedPaymentMethods.includes('didifood')) && (payment.method === 'DIDIFOOD' || isAvailable('DIDIFOOD')) && (
-                          <option value="DIDIFOOD">DiDiFood</option>
-                        )}
-                      </Select>
+                    <div key={index} className="flex flex-col gap-2">
+                      {/* Tablet/Desktop: botones tocables */}
+                      <div className="hidden md:grid grid-cols-3 gap-1.5">
+                        {methodDefs.map(([key, label]) => {
+                          const selected = payment.method === key
+                          const unavailable = !isAvailable(key) && !selected
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => handlePaymentMethodChange(index, key)}
+                              disabled={unavailable || lastInvoiceData !== null}
+                              className={`py-2 px-3 text-sm rounded-lg border-2 transition-colors
+                                ${selected
+                                  ? 'border-primary-500 bg-primary-50 text-primary-700 font-semibold'
+                                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}
+                                ${unavailable ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
 
-                      {/* Monto */}
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={payment.amount}
-                        onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
-                        placeholder="0.00"
-                        disabled={!payment.method || lastInvoiceData !== null}
-                        className="w-24 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
-                      />
-
-                      {/* Botón eliminar */}
-                      {payments.length > 1 && (
-                        <button
-                          onClick={() => handleRemovePaymentMethod(index)}
-                          className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                          disabled={isProcessing || lastInvoiceData !== null}
+                      <div className="flex items-center gap-2">
+                        {/* Celular: dropdown */}
+                        <Select
+                          value={payment.method}
+                          onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
+                          className="flex-1 text-sm md:hidden"
+                          disabled={lastInvoiceData !== null}
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                          <option value="">Seleccionar</option>
+                          {methodDefs
+                            .filter(([key]) => payment.method === key || isAvailable(key))
+                            .map(([key, label]) => (
+                              <option key={key} value={key}>{label}</option>
+                            ))}
+                        </Select>
+
+                        {/* Monto */}
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={payment.amount}
+                          onChange={(e) => handlePaymentAmountChange(index, e.target.value)}
+                          placeholder="0.00"
+                          disabled={!payment.method || lastInvoiceData !== null}
+                          className="w-24 px-2 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                        />
+
+                        {/* Botón eliminar */}
+                        {payments.length > 1 && (
+                          <button
+                            onClick={() => handleRemovePaymentMethod(index)}
+                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                            disabled={isProcessing || lastInvoiceData !== null}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     )
                   })}
