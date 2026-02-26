@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -18,8 +18,16 @@ export default function Login() {
   const [isLoadingBranding, setIsLoadingBranding] = useState(true) // Empezar en true para esperar la detección
   const [searchParams] = useSearchParams()
   const { login, isAuthenticated, isLoading: isAuthLoading } = useAuth()
+  const navigate = useNavigate()
 
   const refId = searchParams.get('ref')
+
+  // Redirigir al dashboard si el usuario ya está autenticado
+  useEffect(() => {
+    if (isAuthenticated && !isAuthLoading) {
+      navigate('/app/dashboard', { replace: true })
+    }
+  }, [isAuthenticated, isAuthLoading, navigate])
 
   // Cargar branding del reseller por hostname (subdominio o dominio personalizado) o por parámetro ref
   useEffect(() => {
@@ -85,7 +93,7 @@ export default function Login() {
     }
   }
 
-  // Mostrar splash mientras carga el branding, auth está procesando, o usuario ya autenticado
+  // Mostrar splash mientras carga el branding o auth está procesando
   const showSplash = isLoadingBranding || isAuthLoading || isAuthenticated || isLoading
 
   if (showSplash && Capacitor.isNativePlatform()) {
