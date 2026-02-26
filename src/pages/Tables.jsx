@@ -42,7 +42,7 @@ import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/fi
 import { db } from '@/lib/firebase'
 
 export default function Tables() {
-  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, userPermissions } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
@@ -79,6 +79,12 @@ export default function Tables() {
 
   // Tax configuration
   const [taxConfig, setTaxConfig] = useState({ igvRate: 18, igvExempt: false })
+
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, tableId: null, tableNumber: '' })
+  const [deleteInput, setDeleteInput] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const isOwner = !userPermissions?.ownerId
 
   // Estado para impresión de comanda web
   const [companySettings, setCompanySettings] = useState(null)
@@ -440,16 +446,21 @@ export default function Tables() {
     }
   }
 
-  const handleDelete = async (tableId) => {
+  const handleDeleteRequest = (table) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
       return
     }
+    setDeleteConfirm({ isOpen: true, tableId: table.id, tableNumber: String(table.number) })
+    setDeleteInput('')
+  }
 
-    if (!window.confirm('¿Estás seguro de eliminar esta mesa?')) return
+  const handleDeleteConfirm = async () => {
+    if (deleteInput !== deleteConfirm.tableNumber) return
 
+    setIsDeleting(true)
     try {
-      const result = await deleteTable(getBusinessId(), tableId)
+      const result = await deleteTable(getBusinessId(), deleteConfirm.tableId)
       if (result.success) {
         toast.success('Mesa eliminada exitosamente')
         loadTables()
@@ -459,6 +470,10 @@ export default function Tables() {
     } catch (error) {
       console.error('Error al eliminar mesa:', error)
       toast.error('Error al eliminar mesa')
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirm({ isOpen: false, tableId: null, tableNumber: '' })
+      setDeleteInput('')
     }
   }
 
@@ -1293,7 +1308,7 @@ export default function Tables() {
                           )}
                         </div>
 
-                        {/* Botones de edición/eliminación */}
+                        {/* Botones de edición/eliminación - solo owner puede eliminar */}
                         {table.status === 'available' && (
                           <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                             <Button
@@ -1307,17 +1322,19 @@ export default function Tables() {
                             >
                               <Edit className="w-3 h-3" />
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDelete(table.id)
-                              }}
-                              className="bg-white shadow-md text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+                            {isOwner && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteRequest(table)
+                                }}
+                                className="bg-white shadow-md text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1585,6 +1602,61 @@ export default function Tables() {
               className="flex-1"
             >
               Cerrar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de confirmación de eliminación de mesa */}
+      <Modal
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => {
+          setDeleteConfirm({ isOpen: false, tableId: null, tableNumber: '' })
+          setDeleteInput('')
+        }}
+        title="Eliminar Mesa"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800 font-medium">
+              Esta acción eliminará permanentemente la Mesa {deleteConfirm.tableNumber}.
+            </p>
+            <p className="text-sm text-red-700 mt-1">
+              Para confirmar, escribe el número de la mesa:
+            </p>
+          </div>
+          <Input
+            value={deleteInput}
+            onChange={(e) => setDeleteInput(e.target.value)}
+            placeholder={`Escribe "${deleteConfirm.tableNumber}" para confirmar`}
+            autoFocus
+          />
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteConfirm({ isOpen: false, tableId: null, tableNumber: '' })
+                setDeleteInput('')
+              }}
+              className="flex-1"
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleDeleteConfirm}
+              disabled={deleteInput !== deleteConfirm.tableNumber || isDeleting}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                'Eliminar Mesa'
+              )}
             </Button>
           </div>
         </div>
