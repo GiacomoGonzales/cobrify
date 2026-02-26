@@ -467,8 +467,8 @@ export const splitTableItems = async (businessId, sourceTableId, destTableId, sp
     // Obtener configuración fiscal del negocio
     const businessRef = doc(db, 'businesses', businessId)
     const businessSnap = await getDoc(businessRef)
-    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
-      ? businessSnap.data().taxConfig
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
     const igvRate = taxConfig.igvRate || 18
     const igvMultiplier = 1 + (igvRate / 100)

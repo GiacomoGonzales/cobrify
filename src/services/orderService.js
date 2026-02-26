@@ -306,8 +306,8 @@ export const addOrderItems = async (businessId, orderId, newItems) => {
     // Obtener configuración fiscal del negocio
     const businessRef = doc(db, 'businesses', businessId)
     const businessSnap = await getDoc(businessRef)
-    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
-      ? businessSnap.data().taxConfig
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
     // Recalcular totales usando función helper con taxConfig dinámico
@@ -432,8 +432,8 @@ export const removeOrderItem = async (businessId, orderId, itemIndex) => {
     // Obtener configuración fiscal del negocio
     const businessRef = doc(db, 'businesses', businessId)
     const businessSnap = await getDoc(businessRef)
-    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
-      ? businessSnap.data().taxConfig
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
     // Recalcular totales usando función helper con taxConfig dinámico
@@ -499,8 +499,8 @@ export const updateOrderItemQuantity = async (businessId, orderId, itemIndex, ne
     // Obtener configuración fiscal del negocio
     const businessRef = doc(db, 'businesses', businessId)
     const businessSnap = await getDoc(businessRef)
-    const taxConfig = businessSnap.exists() && businessSnap.data().taxConfig
-      ? businessSnap.data().taxConfig
+    const taxConfig = businessSnap.exists() && businessSnap.data().emissionConfig?.taxConfig
+      ? businessSnap.data().emissionConfig.taxConfig
       : { igvRate: 18, igvExempt: false }
 
     // Recalcular totales usando función helper con taxConfig dinámico
