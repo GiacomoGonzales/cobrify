@@ -1335,8 +1335,11 @@ export default function CashRegister() {
     ? subUsers.find(u => u.uid === selectedCashUser || u.id === selectedCashUser)?.displayName || 'Usuario'
     : null
 
-  // Mostrar selector solo si es owner y tiene sub-usuarios
-  const showUserSelector = isOwner && subUsers.length > 0 && !isDemoMode
+  // Sub-usuarios con caja independiente (los únicos que aparecen como opción en el selector)
+  const independentSubUsers = subUsers.filter(u => u.independentCashRegister)
+
+  // Mostrar selector solo si es owner y tiene sub-usuarios con caja independiente
+  const showUserSelector = isOwner && independentSubUsers.length > 0 && !isDemoMode
 
   if (isLoading) {
     return (
@@ -1397,7 +1400,7 @@ export default function CashRegister() {
                 className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">Mi Caja</option>
-                {subUsers.map(su => {
+                {independentSubUsers.map(su => {
                   const suUid = su.uid || su.id
                   const hasOpen = openSessions.some(s => s.openedByUserId === suUid)
                   return (
