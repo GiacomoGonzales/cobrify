@@ -181,15 +181,8 @@ export default function OrderItemsModal({
       return
     }
 
-    // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
-    const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (product.price2 || product.price3 || product.price4)
-    if (hasMultiplePrices && selectedPrice === null) {
-      setProductForPriceSelection(product)
-      setShowPriceModal(true)
-      return
-    }
-
-    const price = selectedPrice ?? product.price ?? 0
+    // En mesas siempre usar precio principal (precio 1), no mostrar selector de precios
+    const price = product.price ?? 0
 
     // Si no tiene modificadores, agregar directamente al carrito
     const existingItem = cart.find((item) => item.productId === product.id && !item.modifiers && item.price === price)
@@ -467,11 +460,6 @@ export default function OrderItemsModal({
                           <span className="font-semibold text-primary-600">
                             S/ {(product.price || 0).toFixed(2)}
                           </span>
-                          {businessSettings?.multiplePricesEnabled && product.price2 && (
-                            <span className="ml-2 font-semibold text-green-600">
-                              / S/ {product.price2.toFixed(2)}
-                            </span>
-                          )}
                         </div>
                         {product.stock !== undefined && (
                           <div className="text-xs text-gray-500">Stock: {product.stock}</div>
