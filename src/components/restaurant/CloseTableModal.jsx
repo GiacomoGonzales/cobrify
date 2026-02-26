@@ -23,6 +23,13 @@ export default function CloseTableModal({
 
   if (!table || !order) return null
 
+  // Recalcular subtotal e IGV a partir del total actual (puede diferir del original por pagos individuales)
+  const currentTotal = order.total || 0
+  const igvRate = taxConfig.igvRate || 18
+  const igvMultiplier = 1 + (igvRate / 100)
+  const displaySubtotal = taxConfig.igvExempt ? currentTotal : currentTotal / igvMultiplier
+  const displayTax = taxConfig.igvExempt ? 0 : currentTotal - displaySubtotal
+
   const handleClose = () => {
     onClose()
   }
@@ -91,11 +98,11 @@ export default function CloseTableModal({
               <>
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>S/ {(order.subtotal || 0).toFixed(2)}</span>
+                  <span>S/ {displaySubtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>IGV ({taxConfig.igvRate}%):</span>
-                  <span>S/ {(order.tax || 0).toFixed(2)}</span>
+                  <span>S/ {displayTax.toFixed(2)}</span>
                 </div>
               </>
             )}
