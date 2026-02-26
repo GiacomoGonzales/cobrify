@@ -73,6 +73,14 @@
 }
 
 @layer components {
+  /* Deshabilitar hover en dispositivos táctiles (evita hover al hacer scroll) */
+  @media (hover: none) {
+    .touch-no-hover:hover {
+      border-color: inherit !important;
+      box-shadow: none !important;
+    }
+  }
+
   /* Safe area padding for mobile devices */
   .pt-safe {
     padding-top: env(safe-area-inset-top);

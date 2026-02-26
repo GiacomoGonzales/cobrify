@@ -7,6 +7,19 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 const logoCache = new Map();
 
+/**
+ * Valida si una URL es válida para hacer peticiones HTTP
+ */
+const isValidHttpUrl = (string) => {
+  if (!string || typeof string !== 'string' || string.trim() === '') return false
+  try {
+    const url = new URL(string)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export const LOGO_SPECS = {
   58: {
     maxWidth: 384,
@@ -31,6 +44,13 @@ export async function urlToBase64(url, maxWidth = 384, applyDithering = true) {
   // Si estamos en plataforma nativa, usar Capacitor HTTP para evitar CORS
   if (Capacitor.isNativePlatform()) {
     console.log('📱 Plataforma nativa detectada, usando Capacitor HTTP para evitar CORS');
+
+    // Validar URL antes de llamar a CapacitorHttp (evita crash en iOS)
+    if (!isValidHttpUrl(url)) {
+      console.warn('⚠️ URL inválida para CapacitorHttp:', url);
+      throw new Error('URL inválida');
+    }
+
     try {
       // Descargar imagen con Capacitor HTTP (bypasses CORS)
       const response = await CapacitorHttp.get({

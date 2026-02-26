@@ -168,11 +168,24 @@ export const invalidateLogoCache = () => {
 }
 
 /**
+ * Valida si una URL es válida para hacer peticiones HTTP
+ */
+const isValidHttpUrl = (string) => {
+  if (!string || typeof string !== 'string' || string.trim() === '') return false
+  try {
+    const url = new URL(string)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
  * Pre-carga el logo en caché para que esté disponible instantáneamente
  * Llamar esta función cuando se carga la configuración de la empresa
  */
 export const preloadLogo = async (logoUrl) => {
-  if (!logoUrl) return null
+  if (!logoUrl || !isValidHttpUrl(logoUrl)) return null
 
   try {
     // Si ya está en caché, no hacer nada
@@ -258,6 +271,12 @@ const loadImageAsBase64 = async (url) => {
           const storageRef = ref(storage, storagePath)
           downloadUrl = await getDownloadURL(storageRef)
           console.log('🔗 URL de descarga obtenida')
+        }
+
+        // Validar URL antes de llamar a CapacitorHttp (evita crash en iOS)
+        if (!isValidHttpUrl(downloadUrl)) {
+          console.warn('⚠️ URL inválida para CapacitorHttp:', downloadUrl)
+          throw new Error('URL inválida')
         }
 
         // Usar CapacitorHttp para descargar la imagen

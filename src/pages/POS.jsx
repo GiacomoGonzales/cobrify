@@ -3799,7 +3799,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
             </Card>
           ) : (
             <>
-              <div className={`columns-2 sm:columns-3 md:columns-4 lg:grid lg:grid-cols-3 gap-3 lg:gap-4 ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`columns-2 sm:columns-3 md:columns-4 lg:grid lg:grid-cols-3 gap-3 lg:gap-4 [&>*]:overflow-visible ${saleCompleted ? 'opacity-50 pointer-events-none' : ''}`} style={{ overflow: 'visible' }}>
                 {displayedProducts.map(product => {
                   // Determinar si el producto debe estar deshabilitado
                   // Si allowNegativeStock es true, nunca deshabilitar por stock
@@ -3826,7 +3826,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                   key={product.id}
                   onClick={() => addToCart(product)}
                   disabled={isDisabled}
-                  className={`w-full p-3 lg:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 lg:mb-0 ${
+                  style={{ overflow: 'visible' }}
+                  className={`w-full p-3 lg:p-4 bg-white border-2 rounded-lg transition-all text-left relative break-inside-avoid mb-3 lg:mb-0 touch-no-hover mt-2 ml-2 ${
                     isExpired
                       ? 'border-red-300 bg-red-50 opacity-60 cursor-not-allowed'
                       : isOutOfStock

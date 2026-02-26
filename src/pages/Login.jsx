@@ -17,7 +17,7 @@ export default function Login() {
   const [customBranding, setCustomBranding] = useState(null) // null = usar Cobrify
   const [isLoadingBranding, setIsLoadingBranding] = useState(true) // Empezar en true para esperar la detección
   const [searchParams] = useSearchParams()
-  const { login } = useAuth()
+  const { login, isAuthenticated, isLoading: isAuthLoading } = useAuth()
 
   const refId = searchParams.get('ref')
 
@@ -76,15 +76,19 @@ export default function Login() {
       const result = await login(data.email, data.password)
       if (!result.success) {
         setError(result.error || 'Error al iniciar sesión')
+        setIsLoading(false)
       }
-      // Si es exitoso, el navigate en AuthContext se encargará de la navegación
-    } finally {
+      // Si es exitoso, mantener loading mientras AuthContext procesa y navega
+    } catch (err) {
+      setError('Error al iniciar sesión')
       setIsLoading(false)
     }
   }
 
-  // Mostrar splash mientras carga el branding (solo en móvil)
-  if (isLoadingBranding && Capacitor.isNativePlatform()) {
+  // Mostrar splash mientras carga el branding, auth está procesando, o usuario ya autenticado
+  const showSplash = isLoadingBranding || isAuthLoading || isAuthenticated || isLoading
+
+  if (showSplash && Capacitor.isNativePlatform()) {
     return (
       <div className="fixed inset-0 bg-[#2563EB] flex items-center justify-center">
         <img src="/logo.png" alt="Cobrify" className="w-[140px] h-[140px] object-contain" />
@@ -93,7 +97,7 @@ export default function Login() {
   }
 
   // En web, esperar sin mostrar nada mientras carga
-  if (isLoadingBranding) {
+  if (showSplash) {
     return null
   }
 
