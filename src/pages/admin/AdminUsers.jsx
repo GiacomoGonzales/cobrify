@@ -1657,10 +1657,9 @@ export default function AdminUsers() {
         updatedAt: Timestamp.now()
       })
 
-      // Enviar notificación al usuario (ocultar monto si tiene vendedor asignado)
+      // Enviar notificación al usuario
       try {
-        const hideAmount = !!currentData.vendedorId
-        await notifyPaymentReceived(userId, parseFloat(amount), plan.name, newEndDate, hideAmount)
+        await notifyPaymentReceived(userId, parseFloat(amount), plan.name, newEndDate)
         console.log('✅ Notificación de pago enviada al usuario')
       } catch (notifError) {
         console.error('Error al enviar notificación:', notifError)

@@ -397,19 +397,16 @@ export const checkAndCreateSubscriptionNotifications = async (userId, subscripti
 };
 
 // Crear notificación de pago recibido
-// hideAmount: si true, no muestra el monto en la notificación (para clientes de vendedores)
-export const notifyPaymentReceived = async (userId, amount, plan, newExpiryDate, hideAmount = false) => {
+export const notifyPaymentReceived = async (userId, amount, plan, newExpiryDate) => {
   try {
-    const message = hideAmount
-      ? `Tu suscripción ${plan} ha sido activada${newExpiryDate ? ` hasta el ${new Date(newExpiryDate).toLocaleDateString('es-PE')}` : ''}.`
-      : `Hemos recibido tu pago de S/ ${amount}. Tu suscripción ${plan} ha sido activada hasta el ${new Date(newExpiryDate).toLocaleDateString('es-PE')}.`;
+    const message = `Tu suscripción ${plan} ha sido activada${newExpiryDate ? ` hasta el ${new Date(newExpiryDate).toLocaleDateString('es-PE')}` : ''}.`;
 
     await createNotification(
       userId,
       NOTIFICATION_TYPES.PAYMENT_RECEIVED,
       'Pago Recibido',
       message,
-      { amount: hideAmount ? undefined : amount, plan, newExpiryDate }
+      { plan, newExpiryDate }
     );
   } catch (error) {
     console.error('Error al crear notificación de pago:', error);
