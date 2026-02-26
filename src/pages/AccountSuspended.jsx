@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getVendedor } from '@/services/vendedorService';
-import { AlertTriangle, Copy, Check, Smartphone, Building2, MessageCircle } from 'lucide-react';
+import { AlertTriangle, Copy, Check, Smartphone, Building2, MessageCircle, Loader2 } from 'lucide-react';
 
 const DEFAULT_WHATSAPP = '51900434988';
 
@@ -45,12 +45,16 @@ function CopyButton({ text }) {
 export default function AccountSuspended() {
   const { user, subscription, logout } = useAuth();
   const [vendedor, setVendedor] = useState(null);
+  const [loadingVendedor, setLoadingVendedor] = useState(!!subscription?.vendedorId);
 
   useEffect(() => {
     if (subscription?.vendedorId) {
+      setLoadingVendedor(true);
       getVendedor(subscription.vendedorId).then(result => {
         if (result.success) setVendedor(result.data);
-      });
+      }).finally(() => setLoadingVendedor(false));
+    } else {
+      setLoadingVendedor(false);
     }
   }, [subscription?.vendedorId]);
 
@@ -86,6 +90,11 @@ export default function AccountSuspended() {
 
           <div className="p-6 sm:p-8">
             {/* Datos de pago */}
+            {loadingVendedor ? (
+              <div className="flex items-center justify-center py-8 mb-6">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : (
             <div className="space-y-3 mb-6">
               {/* Yape */}
               {paymentInfo.yape.number && (
@@ -131,6 +140,7 @@ export default function AccountSuspended() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Botones */}
             <div className="flex flex-col gap-3">

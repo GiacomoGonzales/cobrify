@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, MessageCircle, Copy, Check, Smartphone, Building2 } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Copy, Check, Smartphone, Building2, Loader2 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { getVendedor } from '@/services/vendedorService'
@@ -47,12 +47,16 @@ function CopyButton({ text }) {
 export default function SubscriptionBlockedModal({ isOpen, subscription, businessName }) {
   const email = subscription?.email || ''
   const [vendedor, setVendedor] = useState(null)
+  const [loadingVendedor, setLoadingVendedor] = useState(!!subscription?.vendedorId)
 
   useEffect(() => {
     if (subscription?.vendedorId) {
+      setLoadingVendedor(true)
       getVendedor(subscription.vendedorId).then(result => {
         if (result.success) setVendedor(result.data)
-      })
+      }).finally(() => setLoadingVendedor(false))
+    } else {
+      setLoadingVendedor(false)
     }
   }, [subscription?.vendedorId])
 
@@ -94,6 +98,11 @@ export default function SubscriptionBlockedModal({ isOpen, subscription, busines
         </div>
 
         {/* Datos de pago */}
+        {loadingVendedor ? (
+          <div className="mb-5 flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        ) : (
         <div className="mb-5 space-y-3">
           {/* Yape */}
           {paymentInfo.yape.number && (
@@ -139,6 +148,7 @@ export default function SubscriptionBlockedModal({ isOpen, subscription, busines
             </div>
           )}
         </div>
+        )}
 
         {/* Botón de WhatsApp */}
         <Button
